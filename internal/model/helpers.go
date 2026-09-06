@@ -11,6 +11,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/derailed/k9s/internal"
+	"github.com/derailed/k9s/internal/certmanager"
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/dao"
 	"github.com/derailed/k9s/internal/flux"
@@ -31,6 +32,9 @@ func getMeta(ctx context.Context, gvr *client.GVR) (ResourceMeta, error) {
 }
 
 func resourceMeta(gvr *client.GVR) ResourceMeta {
+	if certmanager.Supported(gvr) {
+		return ResourceMeta{DAO: new(dao.Resource), Renderer: &render.CertManager{Resource: gvr.R()}}
+	}
 	if flux.Supported(gvr) {
 		return ResourceMeta{DAO: new(dao.Resource), Renderer: new(render.Flux)}
 	}

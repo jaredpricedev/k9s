@@ -77,11 +77,7 @@ func (b *Browser) Init(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	colorerFn := model1.DefaultColorer
-	if r, ok := model.Registry[b.GVR()]; ok && r.Renderer != nil {
-		colorerFn = r.Renderer.ColorerFunc()
-	}
-	b.GetTable().SetColorerFn(colorerFn)
+	b.GetTable().SetColorerFn(model.ColorerFor(b.GVR()))
 
 	if e := b.Table.Init(ctx); e != nil {
 		return e

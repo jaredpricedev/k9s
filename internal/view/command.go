@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/derailed/k9s/internal/certmanager"
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/dao"
 	"github.com/derailed/k9s/internal/flux"
@@ -331,6 +332,8 @@ func (c *Command) viewMetaFor(p *cmd.Interpreter) (*client.GVR, *MetaViewer, *cm
 		v = mv
 	} else if flux.Supported(gvr) {
 		v.viewerFn = NewFlux
+	} else if certmanager.Supported(gvr) {
+		v.viewerFn = NewCertManager
 	}
 
 	return gvr, &v, p, nil

@@ -4,12 +4,14 @@
 package view
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/dao"
 	"github.com/derailed/k9s/internal/flux"
+	"github.com/derailed/k9s/internal/model1"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
 	"github.com/stretchr/testify/assert"
@@ -64,4 +66,29 @@ func TestSyntheticBrowserDoesNotAuthorizeOrWatchSyntheticResource(t *testing.T) 
 	synced, err := b.cacheSynced()
 	require.NoError(t, err)
 	assert.True(t, synced)
+}
+
+func TestFluxStatusBindingAvailableInAllModes(t *testing.T) {
+	for _, gvr := range []*client.GVR{client.FluxGVR, client.NewGVR("source.toolkit.fluxcd.io/v1/gitrepositories")} {
+		v := NewFlux(gvr).(*Flux)
+		v.GetTable().app = &App{App: &ui.App{Configurator: ui.Configurator{Config: &config.Config{K9s: &config.K9s{ReadOnly: true}}}}}
+		aa := ui.NewKeyActions()
+		v.bindKeys(aa)
+		action, ok := aa.Get(ui.KeyI)
+		require.True(t, ok)
+		assert.True(t, action.Opts.Visible)
+		assert.False(t, action.Opts.Dangerous)
+	}
+}
+
+func TestFluxStatusDetailsPreservesFullMessageAndCustomColumnOrder(t *testing.T) {
+	message := "[red]dependency not ready\n" + strings.Repeat("retry after source reconciliation ", 100)
+	header := model1.Header{{Name: "MESSAGE", Attrs: model1.Attrs{Wide: true}}, {Name: "PRIVATE"}, {Name: "STATUS"}, {Name: "NAME"}, {Name: "KIND"}}
+	row := &model1.Row{ID: "source.toolkit.fluxcd.io/v1/gitrepositories|apps/<restricted>", Fields: model1.Fields{message, "do not include custom data", "Restricted", "<restricted>", "GitRepository"}}
+	details := fluxStatusDetails(header, row)
+	assert.Contains(t, details, "STATUS: Restricted")
+	assert.Contains(t, details, "[red[]dependency not ready\n"+strings.Repeat("retry after source reconciliation ", 100))
+	assert.NotContains(t, details, "do not include custom data")
+	assert.Empty(t, fluxStatusDetails(header, nil))
+	assert.NotPanics(t, func() { fluxStatusDetails(header, &model1.Row{}) })
 }

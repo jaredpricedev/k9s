@@ -9,7 +9,7 @@ for changes and offers subsequent commands to interact with your observed resour
 
 ## Fork improvements
 
-This fork includes native Flux views (`:flux`, OCI sources, health and source/dependency navigation), confirmed Flux operations, safer Flux plugins, read-only fixes and measured table performance improvements. See [Flux workflows](docs/flux.md) and the [review findings](docs/review-2026-09-06.md) for usage and verification.
+This fork includes native Flux views (`:flux`, OCI sources, health and source/dependency navigation), confirmed Flux operations, native cert-manager diagnostics, safer CLI plugins, read-only fixes and measured table performance improvements. Shared shortcut spacing, breadcrumbs, Unicode table alignment and responsive selection dialogs add a light UI polish pass. See [certificate workflows](docs/certificates.md), [Flux workflows](docs/flux.md) and the [review findings](docs/review-2026-09-06.md) for usage and verification.
 
 ### Flux screenshots
 
@@ -17,7 +17,7 @@ Captured from the running TUI using a local demo API with synthetic resources. N
 
 **Combined Flux dashboard — `:flux all`**
 
-See Kustomizations, HelmReleases and sources together, with health, suspension, revision and controller messages.
+See Kustomizations, HelmReleases and sources together, with health, suspension and revision. Press `i` for the complete controller message; MESSAGE is also available in wide mode.
 
 ![Combined Flux dashboard showing Ready, Failed, Reconciling and Suspended resources across namespaces](assets/screenshots/flux-overview.png)
 
@@ -31,13 +31,38 @@ Inspect reconciliation status and OCI source references. Native actions appear i
 
 Jump from a resource to its OCI source or an explicit dependency without looking up the resource kind and namespace manually.
 
-![Flux relationships dialog listing the selected Kustomization's OCI source and infrastructure and monitoring dependencies](assets/screenshots/flux-relationships.png)
+![Flux relationships dialog listing the selected Kustomization's OCI source and infrastructure dependency](assets/screenshots/flux-relationships.png)
 
 **Confirmed reconciliation — `Shift-R`**
 
 The confirmation identifies the resource, namespace and context before submitting the request. Native write actions are unavailable in read-only mode.
 
 ![Flux reconciliation confirmation naming Kustomization flux-system/apps in context demo-dev, with Cancel selected](assets/screenshots/flux-reconcile.png)
+
+
+### Certificate screenshots
+
+These are captures of the running TUI with synthetic cert-manager resources from the same local demo API.
+
+**Certificate health — `:certificates all`**
+
+Scan expiry, renewal time, issuer and target Secret. Expired and expiring certificates remain visible even when an old Ready condition is still true.
+
+![Certificate dashboard showing expired, expiring, renewal due, issuing and ready certificates](assets/screenshots/certificates-overview.png)
+
+**Issuance navigation — `g`**
+
+Follow the issuer, target Secret and owned CertificateRequests, then continue to ACME Orders and Challenges. Relationships use explicit references and owner identities.
+
+![Certificate relationship picker showing issuer, target Secret and owned request](assets/screenshots/certificate-relationships.png)
+
+**Complete status — `i`**
+
+Read the complete controller message and certificate timing in a scrollable dialog. Native diagnostics use cached API status; optional cmctl actions provide status, inspection and confirmed renewal.
+
+![Certificate status dialog showing expiry and renewal details](assets/screenshots/certificate-status.png)
+
+Reproduce all seven screenshots with `python scripts/capture-demo.py --binary /path/to/k9s` after installing Python packages `Pillow` and `pyte`. See [certificate workflows](docs/certificates.md) for commands and limitations.
 
 ---
 

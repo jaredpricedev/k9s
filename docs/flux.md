@@ -12,6 +12,7 @@ This fork adds native Flux resource views using the current k9s Kubernetes conne
 | `Enter` in `:flux` | Open the selected resource in its native kind view |
 | `:ocirepositories`, `:kustomizations`, `:helmreleases` | Open native per-kind views directly, using discovered aliases |
 | `/` | Use normal k9s filtering; search status, kind, name or revision |
+| `i` in either Flux view | Open the complete status message for the selected row |
 | `g` in a native kind view | Choose the source or an explicit `dependsOn` dependency and navigate to it |
 | `y`, `d` in a native kind view | Standard k9s YAML and describe |
 | `Shift-R` in a supported native kind view | Confirm a reconciliation request |
@@ -19,7 +20,7 @@ This fork adds native Flux resource views using the current k9s Kubernetes conne
 
 Normal namespace shortcuts, context switching and custom column settings remain available. Open the concrete resource before editing or deleting it; the combined view does not expose those actions on its synthetic rows.
 
-Columns include namespace, name, kind, status, suspension, revision, source, controller message and age. Source navigation understands direct HelmRelease OCI `chartRef`, legacy chart source references, generated HelmChart references and explicit cross-namespace references. It resolves the resource group and available API version in the current context.
+Compact columns emphasize namespace, name, status, suspension, revision, source and age. KIND stays visible in the combined view and moves to wide mode in per-kind views. MESSAGE is available in wide mode; press `i` for the complete selected status without widening the table. Custom column settings can show either field in compact mode. STATUS sorting puts failed and restricted resources first, with healthy resources last; reversing the sort reverses that order. Health colors follow the active skin. Source navigation understands direct HelmRelease OCI `chartRef`, legacy chart source references, generated HelmChart references and explicit cross-namespace references. It resolves the resource group and available API version in the current context.
 
 The combined view lists one served version per resource kind and reuses the existing watch cache. It does not launch a CLI per row or fetch each object's full state on each refresh. Initial cache synchronization may briefly produce an empty view. A denied kind appears as a `Restricted` row while accessible kinds remain visible. Missing CRDs are skipped; discovery/RBAC limitations can affect which kinds are visible.
 

@@ -51,17 +51,26 @@ func NewModalList(title string, list *tview.List) *ModalList {
 // Draw draws this primitive onto the screen.
 func (m *ModalList) Draw(screen tcell.Screen) {
 	// Calculate the width of this modal.
-	width := 0
+	width := tview.TaggedStringWidth(m.frame.GetTitle()) + 2
 	for i := range m.list.GetItemCount() {
 		main, secondary := m.list.GetItemText(i)
-		width = max(width, len(main)+len(secondary)+2)
+		width = max(width, max(tview.TaggedStringWidth(main), tview.TaggedStringWidth(secondary))+4)
 	}
 
 	screenWidth, screenHeight := screen.Size()
 
 	// Set the modal's position and size.
 	height := m.list.GetItemCount() + 4
-	width += 2
+	// Retain a small margin when possible. The embedded List scrolls the
+	// selection into view when a long list exceeds the available height.
+	maxWidth, maxHeight := screenWidth, screenHeight
+	if screenWidth > 8 {
+		maxWidth -= 4
+	}
+	if screenHeight > 6 {
+		maxHeight -= 2
+	}
+	width, height = min(width, maxWidth), min(height, maxHeight)
 	x := (screenWidth - width) / 2
 	y := (screenHeight - height) / 2
 	m.SetRect(x, y, width, height)

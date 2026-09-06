@@ -12,9 +12,11 @@ import (
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/dao"
 	"github.com/derailed/k9s/internal/flux"
+	"github.com/derailed/k9s/internal/model1"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/k9s/internal/ui/dialog"
 	"github.com/derailed/tcell/v2"
+	"github.com/derailed/tview"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/version"
@@ -25,6 +27,7 @@ type Flux struct{ ResourceViewer }
 
 func NewFlux(gvr *client.GVR) ResourceViewer {
 	f := &Flux{ResourceViewer: NewBrowser(gvr)}
+	f.GetTable().SetLiteralFields(true)
 	f.AddBindKeysFn(f.bindKeys)
 	if gvr == client.FluxGVR {
 		f.GetTable().SetEnterFn(f.openResource)
@@ -46,6 +49,7 @@ func (f *Flux) selectedEnv() Env {
 }
 
 func (f *Flux) bindKeys(aa *ui.KeyActions) {
+	aa.Add(ui.KeyI, ui.NewKeyAction("Status Details", f.statusCmd, true))
 	aa.Add(ui.KeyShiftK, ui.NewKeyAction("Sort Kind", f.GetTable().SortColCmd("KIND", true), false))
 	if f.GVR() == client.FluxGVR {
 		aa.Delete(ui.KeyN, ui.KeyW)
@@ -57,6 +61,38 @@ func (f *Flux) bindKeys(aa *ui.KeyActions) {
 	}
 	aa.Add(ui.KeyShiftR, ui.NewKeyActionWithOpts("Reconcile", f.reconcileCmd, ui.ActionOpts{Visible: true, Dangerous: true}))
 	aa.Add(ui.KeyShiftT, ui.NewKeyActionWithOpts("Suspend/Resume", f.suspendCmd, ui.ActionOpts{Visible: true, Dangerous: true}))
+}
+
+// statusCmd shows the complete selected summary, including wide-only MESSAGE.
+// Reading the existing row also supports synthetic restricted/unavailable rows.
+func (f *Flux) statusCmd(evt *tcell.EventKey) *tcell.EventKey {
+	table := f.GetTable()
+	path := table.GetSelectedItem()
+	row := table.GetSelectedRow(path)
+	if row == nil {
+		return evt
+	}
+	details := NewDetails(f.App(), "Flux Status", path, contentTXT, false).
+		Update(fluxStatusDetails(table.GetModel().Peek().Header(), row))
+	if err := f.App().inject(details, false); err != nil {
+		f.App().Flash().Err(err)
+	}
+	return nil
+}
+
+func fluxStatusDetails(header model1.Header, row *model1.Row) string {
+	if row == nil {
+		return ""
+	}
+	var text strings.Builder
+	for _, name := range []string{"NAMESPACE", "NAME", "KIND", "STATUS", "SUSPEND", "REVISION", "SOURCE", "MESSAGE"} {
+		index, ok := header.IndexOf(name, true)
+		if !ok || index >= len(row.Fields) {
+			continue
+		}
+		fmt.Fprintf(&text, "%s: %s\n", name, row.Fields[index])
+	}
+	return tview.Escape(text.String())
 }
 
 func parseFluxPath(path string) (*client.GVR, string, bool) {

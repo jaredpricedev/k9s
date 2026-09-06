@@ -109,6 +109,11 @@ func (t *TableData) Sort(sc SortColumn) {
 	if idx < 0 {
 		return
 	}
+	if t.gvr == client.FluxGVR && sc.Name == "STATUS" {
+		t.rowEvents.sortFluxStatus(idx, sc.ASC)
+		return
+	}
+
 	t.rowEvents.Sort(
 		t.GetNamespace(),
 		idx,

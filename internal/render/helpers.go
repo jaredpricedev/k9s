@@ -180,7 +180,7 @@ func boolToStr(b bool) string {
 	case true:
 		return "true"
 	default:
-		return "false"
+		return falseStr
 	}
 }
 

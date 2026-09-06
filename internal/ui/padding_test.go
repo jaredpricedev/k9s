@@ -75,7 +75,7 @@ func TestMaxColumn(t *testing.T) {
 				),
 			),
 			"A",
-			MaxyPad{32, 6},
+			MaxyPad{30, 6},
 		},
 	}
 

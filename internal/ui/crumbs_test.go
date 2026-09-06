@@ -15,11 +15,50 @@ import (
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
 func init() {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
+}
+
+func TestCrumbsKeepCurrentViewVisibleWhenResized(t *testing.T) {
+	v := ui.NewCrumbs(config.NewStyles())
+	for _, name := range []string{"Deployments", "A very long production deployment", "Replica Sets", "Pod Logs"} {
+		v.StackPushed(makeComponent(name))
+	}
+	screen := tcell.NewSimulationScreen("")
+	require.NoError(t, screen.Init())
+	t.Cleanup(screen.Fini)
+	for _, width := range []int{36, 160, 36} {
+		screen.SetSize(width, 1)
+		v.SetRect(0, 0, width, 1)
+		v.Draw(screen)
+		line := menuScreenLine(screen, width)
+		assert.Contains(t, line, "<pod logs>")
+		if width == 36 {
+			assert.Contains(t, line, "…")
+			assert.NotContains(t, line, "deployments")
+		} else {
+			assert.Contains(t, line, "a very long production deployment")
+			assert.NotContains(t, line, "…")
+		}
+	}
+}
+
+func TestCrumbsTruncateLiteralUnicodeLabel(t *testing.T) {
+	v := ui.NewCrumbs(config.NewStyles())
+	v.StackPushed(makeComponent("[red] 日本語 certificate status details"))
+	screen := tcell.NewSimulationScreen("")
+	require.NoError(t, screen.Init())
+	t.Cleanup(screen.Fini)
+	screen.SetSize(30, 1)
+	v.SetRect(0, 0, 30, 1)
+	v.Draw(screen)
+	line := menuScreenLine(screen, 30)
+	assert.Contains(t, line, "<[red] 日本語")
+	assert.Contains(t, line, "…>")
 }
 
 func TestNewCrumbs(t *testing.T) {
