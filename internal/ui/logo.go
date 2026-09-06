@@ -20,6 +20,8 @@ type Logo struct {
 	logo, status *tview.TextView
 	styles       *config.Styles
 	mx           sync.Mutex
+	compact      bool
+	color        config.Color
 }
 
 // NewLogo returns a new logo.
@@ -101,10 +103,31 @@ func (l *Logo) refreshStatus(msg string, c config.Color) {
 	)
 }
 
+// SetCompact uses the single-line brand when shortcuts need the header space.
+func (l *Logo) SetCompact(compact bool) {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+	if l.compact == compact {
+		return
+	}
+	l.compact = compact
+	l.renderLogo()
+}
+
 func (l *Logo) refreshLogo(c config.Color) {
 	l.mx.Lock()
 	defer l.mx.Unlock()
-	l.logo.SetText(styledLogo(c, l.styles.Body().FgColor))
+	l.color = c
+	l.renderLogo()
+}
+
+// renderLogo is called with mx held, retaining severity color across resizes.
+func (l *Logo) renderLogo() {
+	if l.compact {
+		l.logo.SetText(fmt.Sprintf("[%s::b]%s", l.color, tview.Escape("[k9+]")))
+		return
+	}
+	l.logo.SetText(styledLogo(l.color, l.styles.Body().FgColor))
 }
 
 func logo() *tview.TextView {

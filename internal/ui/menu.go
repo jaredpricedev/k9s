@@ -30,9 +30,10 @@ var menuRX = regexp.MustCompile(`\d`)
 type Menu struct {
 	*tview.Table
 
-	styles *config.Styles
-	hints  model.MenuHints
-	width  int
+	styles       *config.Styles
+	hints        model.MenuHints
+	width        int
+	naturalWidth int
 }
 
 // NewMenu returns a new menu.
@@ -85,6 +86,15 @@ func (m *Menu) HydrateMenu(hh model.MenuHints) {
 	if m.hasDigits(hh) {
 		colCount++
 	}
+	if m.width > 0 {
+		visible := 0
+		for _, hint := range hh {
+			if hint.Visible {
+				visible++
+			}
+		}
+		colCount = max(1, (visible+maxRows-1)/maxRows)
+	}
 	for row := range maxRows {
 		table[row] = make(model.MenuHints, colCount)
 	}
@@ -101,6 +111,9 @@ func (m *Menu) HydrateMenu(hh model.MenuHints) {
 		}
 	}
 }
+
+// NaturalWidth reports how much space the untruncated shortcut labels need.
+func (m *Menu) NaturalWidth() int { return m.naturalWidth }
 
 // Draw fits descriptions again after a resize, keeping shortcut columns intact.
 func (m *Menu) Draw(screen tcell.Screen) {
@@ -125,7 +138,7 @@ func (*Menu) hasDigits(hh model.MenuHints) bool {
 
 func (m *Menu) buildMenuTable(hh model.MenuHints, table []model.MenuHints, colCount int) [][]string {
 	var row, col int
-	firstCmd := true
+	firstCmd := m.width == 0
 	maxKeys := make([]int, colCount)
 	for _, h := range hh {
 		if !h.Visible {
@@ -171,6 +184,7 @@ func (m *Menu) layout(table []model.MenuHints, mm []int, out [][]string) {
 			columns++
 		}
 	}
+	m.naturalWidth = total + columns
 	// Leave the table's separator and each cell's trailing space intact. Share
 	// only description space; a long label must not push later keys offscreen.
 	if m.width > 0 && total+columns > m.width {

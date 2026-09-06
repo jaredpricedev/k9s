@@ -37,7 +37,8 @@ func NewFlux(gvr *client.GVR) ResourceViewer {
 	f.AddBindKeysFn(f.bindKeys)
 	if gvr == client.FluxGVR {
 		f.GetTable().SetEnterFn(f.openResource)
-		f.GetTable().SetSortCol("STATUS", true)
+		// Stable names keep status transitions from moving rows during normal work.
+		f.GetTable().SetSortCol("NAME", true)
 		f.SetEnvFn(f.selectedEnv)
 	}
 	return f
@@ -60,7 +61,7 @@ func (f *Flux) bindKeys(aa *ui.KeyActions) {
 	if f.GVR() == client.FluxGVR {
 		aa.Delete(ui.KeyN, ui.KeyW)
 	}
-	aa.Add(ui.KeyG, ui.NewKeyAction("Source/Dependencies", f.relatedCmd, true))
+	aa.Add(ui.KeyG, ui.NewKeyAction("Related resources", f.relatedCmd, true))
 	if f.App().Config.IsReadOnly() || (f.GVR() != client.FluxGVR && !dao.FluxNativeActions(f.GVR())) {
 		return
 	}

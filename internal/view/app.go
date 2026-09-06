@@ -38,8 +38,7 @@ var ExitStatus = ""
 const (
 	splashDelay      = 1 * time.Second
 	clusterRefresh   = 15 * time.Second
-	clusterInfoWidth = 50
-	clusterInfoPad   = 15
+	clusterInfoWidth = 24
 )
 
 // App represents an application view.
@@ -312,17 +311,31 @@ func (a *App) buildHeader() tview.Primitive {
 		return header
 	}
 
-	clWidth := clusterInfoWidth
-	if a.Conn() != nil && a.Conn().ConnectionOK() {
-		n, err := a.Conn().Config().CurrentClusterName()
-		if err == nil {
-			size := len(n) + clusterInfoPad
-			if size > clWidth {
-				clWidth = size
+	info := a.clusterInfo()
+	header.AddItem(info, clusterInfoWidth, 1, false)
+	// Measure the rendered context, user and version values on every draw so
+	// short names release their unused space and context changes resize safely.
+	header.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		natural := clusterInfoWidth
+		for row := 0; row < info.GetRowCount(); row++ {
+			label, value := info.GetCell(row, 0), info.GetCell(row, 1)
+			if label != nil && value != nil {
+				natural = max(natural, tview.TaggedStringWidth(label.Text)+tview.TaggedStringWidth(value.Text)+4)
 			}
 		}
-	}
-	header.AddItem(a.clusterInfo(), clWidth, 1, false)
+		infoWidth := min(natural, max(1, width/3))
+		header.ResizeItem(info, infoWidth, 1)
+		if a.showLogo {
+			compact := width-infoWidth-ui.LogoWidth < a.Menu().NaturalWidth()
+			logoWidth := ui.LogoWidth
+			if compact {
+				logoWidth = 7
+			}
+			a.Logo().SetCompact(compact)
+			header.ResizeItem(a.Logo(), logoWidth, 1)
+		}
+		return x, y, width, height
+	})
 	header.AddItem(a.Menu(), 0, 1, false)
 
 	if a.showLogo {

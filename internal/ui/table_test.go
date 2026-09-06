@@ -134,3 +134,20 @@ func makeContext() context.Context {
 
 	return ctx
 }
+
+// A live status refresh must keep the resource selected, not its old row number.
+func TestTableKeepsResourceSelectedAfterReordering(t *testing.T) {
+	v := ui.NewTable(client.NewGVR("test"))
+	v.Init(makeContext())
+	v.SetModel(new(mockModel))
+	data := makeTableData()
+	cdata := v.Update(data, false)
+	v.SetSortCol("C", true)
+	v.UpdateUI(cdata, data)
+	v.SelectRow(1, 0, true)
+	assert.Equal(t, "r1", v.GetSelectedItem())
+	v.SetSortCol("C", false)
+	v.UpdateUI(cdata, data)
+	assert.Equal(t, "r1", v.GetSelectedItem(), "sorting must retain the selected resource")
+	assert.Equal(t, 2, v.GetSelectedRowIndex())
+}
