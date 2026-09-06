@@ -184,6 +184,10 @@ func loadNonResource(m ResourceMetas) {
 }
 
 func loadK9s(m ResourceMetas) {
+	m[client.FluxGVR] = &metav1.APIResource{
+		Name: "flux", Kind: "Flux", SingularName: "flux",
+		Namespaced: true, Categories: []string{k9sCat}, Verbs: []string{},
+	}
 	m[client.WkGVR] = &metav1.APIResource{
 		Name:         "workloads",
 		Kind:         "Workload",

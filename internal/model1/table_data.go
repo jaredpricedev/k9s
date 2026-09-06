@@ -177,16 +177,28 @@ func (t *TableData) rxFilter(q string, inverse bool) (*RowEvents, error) {
 	}
 
 	vidx := t.header.FilterColIndices(t.namespace, true)
+	cols := make([]int, 0, len(vidx))
+	for idx := range t.header {
+		if vidx.Has(idx) {
+			cols = append(cols, idx)
+		}
+	}
 	rr := NewRowEvents(t.RowCount() / 2)
+	fields := make([]byte, 0, 128)
 	t.rowEvents.Range(func(_ int, re RowEvent) bool {
-		ff := make([]string, 0, len(re.Row.Fields))
-		for idx, r := range re.Row.Fields {
-			if !vidx.Has(idx) {
+		fields = fields[:0]
+		first := true
+		for _, idx := range cols {
+			if idx >= len(re.Row.Fields) {
 				continue
 			}
-			ff = append(ff, r)
+			if !first {
+				fields = append(fields, spacer...)
+			}
+			first = false
+			fields = append(fields, re.Row.Fields[idx]...)
 		}
-		match := rx.MatchString(strings.Join(ff, spacer))
+		match := rx.Match(fields)
 		if (inverse && !match) || (!inverse && match) {
 			rr.Add(re)
 		}

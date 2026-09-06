@@ -14,6 +14,7 @@ import (
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/dao"
+	"github.com/derailed/k9s/internal/flux"
 	"github.com/derailed/k9s/internal/model"
 	"github.com/derailed/k9s/internal/slogs"
 	"github.com/derailed/k9s/internal/view/cmd"
@@ -328,6 +329,8 @@ func (c *Command) viewMetaFor(p *cmd.Interpreter) (*client.GVR, *MetaViewer, *cm
 	}
 	if mv, ok := customViewers[gvr]; ok {
 		v = mv
+	} else if flux.Supported(gvr) {
+		v.viewerFn = NewFlux
 	}
 
 	return gvr, &v, p, nil

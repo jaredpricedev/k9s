@@ -4,14 +4,70 @@
 package model1
 
 import (
+	"fmt"
 	"log/slog"
 	"testing"
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
+
+func BenchmarkTableDataRegexFilter10K(b *testing.B) {
+	const rowCount = 10_000
+	events := NewRowEvents(rowCount)
+	for i := range rowCount {
+		id := fmt.Sprintf("row-%05d", i)
+		events.Add(RowEvent{Row: Row{
+			ID:     id,
+			Fields: Fields{id, "ready", "42", "1m", "node-a", "extra"},
+		}})
+	}
+	table := NewTableDataWithRows(
+		client.NewGVR("test"),
+		Header{
+			HeaderColumn{Name: "NAME"},
+			HeaderColumn{Name: "STATUS"},
+			HeaderColumn{Name: "RESTARTS"},
+			HeaderColumn{Name: "AGE"},
+			HeaderColumn{Name: "NODE"},
+			HeaderColumn{Name: "EXTRA"},
+		},
+		events,
+	)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		_ = table.Filter(FilterOpts{Filter: "row-09.*ready"})
+	}
+}
+
+func TestTableDataRegexFilterUsesJoinedVisibleFields(t *testing.T) {
+	table := NewTableDataWithRows(
+		client.NewGVR("test"),
+		Header{
+			HeaderColumn{Name: "NAME"},
+			HeaderColumn{Name: "STATUS"},
+			HeaderColumn{Name: "SECRET", Attrs: Attrs{Hide: true}},
+			HeaderColumn{Name: "AGE"},
+		},
+		NewRowEventsWithEvts(
+			RowEvent{Row: Row{ID: "A", Fields: Fields{"alpha", "beta", "secret", "1m"}}},
+			RowEvent{Row: Row{ID: "B", Fields: Fields{"alpha", "gamma", "hidden", "2m"}}},
+		),
+	)
+
+	joined := table.Filter(FilterOpts{Filter: "alpha.*beta"})
+	require.Equal(t, 1, joined.RowCount())
+	_, found := joined.FindRow("A")
+	assert.True(t, found)
+
+	hidden := table.Filter(FilterOpts{Filter: "secret"})
+	assert.Zero(t, hidden.RowCount())
+}
 
 func init() {
 	slog.SetDefault(slog.New(slog.DiscardHandler))

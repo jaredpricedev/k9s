@@ -60,6 +60,7 @@ func coreViewers(vv MetaViewers) {
 }
 
 func miscViewers(vv MetaViewers) {
+	vv[client.FluxGVR] = MetaViewer{viewerFn: NewFlux}
 	vv[client.WkGVR] = MetaViewer{
 		viewerFn: NewWorkload,
 	}

@@ -312,7 +312,7 @@ func (b *Browser) TableNoData(mdata *model1.TableData) {
 
 	// While the informer cache hasn't synced yet, show a neutral status
 	// instead of a misleading "no resources found" warning.
-	if synced, err := b.app.factory.HasSynced(b.GVR(), b.GetNamespace()); !synced {
+	if synced, err := b.cacheSynced(); !synced {
 		b.app.QueueUpdateDraw(func() {
 			if err != nil {
 				b.app.Flash().Warnf("Unable to sync %s: %s", b.GVR(), err)
@@ -587,11 +587,7 @@ func (b *Browser) switchNamespaceCmd(evt *tcell.EventKey) *tcell.EventKey {
 	}
 	ns := b.namespaces[i]
 
-	auth, err := b.App().factory.Client().CanI(ns, b.GVR(), "", client.ListAccess)
-	if !auth {
-		if err == nil {
-			err = fmt.Errorf("access denied for user on: %s/%s", ns, b.GVR())
-		}
+	if err := b.canSwitchNamespace(ns); err != nil {
 		b.App().Flash().Err(err)
 		return nil
 	}
@@ -615,6 +611,28 @@ func (b *Browser) switchNamespaceCmd(evt *tcell.EventKey) *tcell.EventKey {
 	}
 
 	return nil
+}
+
+func (b *Browser) canSwitchNamespace(ns string) error {
+	if dao.IsK9sMeta(b.meta) {
+		// Combined views authorize each underlying resource when listing it.
+		return nil
+	}
+	auth, err := b.App().factory.Client().CanI(ns, b.GVR(), "", client.ListAccess)
+	if err != nil {
+		return err
+	}
+	if !auth {
+		return fmt.Errorf("access denied for user on: %s/%s", ns, b.GVR())
+	}
+	return nil
+}
+
+func (b *Browser) cacheSynced() (bool, error) {
+	if dao.IsK9sMeta(b.meta) {
+		return true, nil
+	}
+	return b.app.factory.HasSynced(b.GVR(), b.GetNamespace())
 }
 
 // ----------------------------------------------------------------------------

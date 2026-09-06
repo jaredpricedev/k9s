@@ -7,6 +7,10 @@ The aim of this project is to make it easier to navigate, observe and manage
 your applications in the wild. K9s continually watches Kubernetes
 for changes and offers subsequent commands to interact with your observed resources.
 
+## Fork improvements
+
+This fork includes native Flux views (`:flux`, OCI sources, health and source/dependency navigation), confirmed Flux operations, safer Flux plugins, read-only fixes and measured table performance improvements. See [Flux workflows](docs/flux.md) and the [review findings](docs/review-2026-09-06.md) for usage and verification.
+
 ---
 
 ## Note...

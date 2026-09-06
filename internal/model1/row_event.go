@@ -121,7 +121,7 @@ func (r *RowEvents) reindex() {
 }
 
 func (r *RowEvents) At(i int) (RowEvent, bool) {
-	if i < 0 || i > len(r.events) {
+	if i < 0 || i >= len(r.events) {
 		return RowEvent{}, false
 	}
 
@@ -129,7 +129,11 @@ func (r *RowEvents) At(i int) (RowEvent, bool) {
 }
 
 func (r *RowEvents) Set(i int, re RowEvent) {
+	oldID := r.events[i].Row.ID
 	r.events[i] = re
+	if oldID != re.Row.ID {
+		delete(r.index, oldID)
+	}
 	r.index[re.Row.ID] = i
 }
 
@@ -160,12 +164,12 @@ func (r *RowEvents) Labelize(cols []int, labelCol int, labels []string) *RowEven
 
 // Customize returns custom row events based on columns layout.
 func (r *RowEvents) Customize(cols []int) *RowEvents {
-	ee := make([]RowEvent, 0, len(cols))
+	out := NewRowEvents(len(r.events))
 	for _, re := range r.events {
-		ee = append(ee, re.Customize(cols))
+		out.Add(re.Customize(cols))
 	}
 
-	return NewRowEventsWithEvts(ee...)
+	return out
 }
 
 // Diff returns true if the event changed.
@@ -207,7 +211,10 @@ func (r *RowEvents) Delete(fqn string) error {
 	if !ok {
 		return fmt.Errorf("unable to delete row with fqn: %q", fqn)
 	}
-	r.events = append(r.events[0:victim], r.events[victim+1:]...)
+	last := len(r.events) - 1
+	copy(r.events[victim:], r.events[victim+1:])
+	r.events[last] = RowEvent{}
+	r.events = r.events[:last]
 	delete(r.index, fqn)
 	r.reindex()
 
@@ -224,6 +231,7 @@ func (r *RowEvents) Empty() bool {
 
 // Clear delete all row events.
 func (r *RowEvents) Clear() {
+	clear(r.events)
 	r.events = r.events[:0]
 	for k := range r.index {
 		delete(r.index, k)

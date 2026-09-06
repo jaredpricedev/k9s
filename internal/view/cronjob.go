@@ -78,14 +78,32 @@ func jobCtx(fqn, uid string) ContextFunc {
 	}
 }
 
-func (c *CronJob) bindKeys(aa *ui.KeyActions) {
+func (c *CronJob) bindDangerousKeys(aa *ui.KeyActions) {
 	aa.Bulk(ui.KeyMap{
-		ui.KeyT: ui.NewKeyAction("Trigger", c.triggerCmd, true),
-		ui.KeyS: ui.NewKeyAction("Suspend/Resume", c.toggleSuspendCmd, true),
+		ui.KeyT: ui.NewKeyActionWithOpts("Trigger", c.triggerCmd,
+			ui.ActionOpts{
+				Visible:   true,
+				Dangerous: true,
+			}),
+		ui.KeyS: ui.NewKeyActionWithOpts("Suspend/Resume", c.toggleSuspendCmd,
+			ui.ActionOpts{
+				Visible:   true,
+				Dangerous: true,
+			}),
 	})
 }
 
+func (c *CronJob) bindKeys(aa *ui.KeyActions) {
+	if !c.App().Config.IsReadOnly() {
+		c.bindDangerousKeys(aa)
+	}
+}
+
 func (c *CronJob) triggerCmd(evt *tcell.EventKey) *tcell.EventKey {
+	if c.App().Config.IsReadOnly() {
+		return evt
+	}
+
 	fqns := c.GetTable().GetSelectedItems()
 	if len(fqns) == 0 {
 		return evt
@@ -120,6 +138,10 @@ func (c *CronJob) triggerCmd(evt *tcell.EventKey) *tcell.EventKey {
 }
 
 func (c *CronJob) toggleSuspendCmd(evt *tcell.EventKey) *tcell.EventKey {
+	if c.App().Config.IsReadOnly() {
+		return evt
+	}
+
 	table := c.GetTable()
 	sel := table.GetSelectedItem()
 

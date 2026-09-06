@@ -25,6 +25,7 @@ plugins:
     command: bash
     confirm: true
     background: false
+    dangerous: true
     args:
       - -c
       - "kubectl cnpg backup $NAME -n $NAMESPACE --context \"$CONTEXT\" 2>&1 | less -R"
@@ -46,6 +47,7 @@ plugins:
       - cluster
     command: bash
     background: false
+    dangerous: true
     args:
       - -c
       - "kubectl cnpg hibernate on $NAME -n $NAMESPACE --context \"$CONTEXT\" 2>&1 | less -R"
@@ -57,6 +59,7 @@ plugins:
       - namespace
     command: bash
     background: false
+    dangerous: true
     args:
       - -c
       - "kubectl cnpg hibernate off $NAME -n $NAME --context \"$CONTEXT\" 2>&1 | less -R"
@@ -87,6 +90,7 @@ plugins:
       - cluster
     command: bash
     background: false
+    dangerous: true
     args:
       - -c
       - "kubectl cnpg psql $NAME -n $NAMESPACE --context $CONTEXT"
@@ -98,6 +102,7 @@ plugins:
       - cluster
     command: bash
     background: false
+    dangerous: true
     args:
       - -c
       - "kubectl cnpg reload $NAME -n $NAMESPACE --context \"$CONTEXT\" 2>&1 | less -R"
@@ -109,6 +114,7 @@ plugins:
       - cluster
     command: bash
     background: false
+    dangerous: true
     args:
       - -c
       - "kubectl cnpg restart $NAME -n $NAMESPACE --context \"$CONTEXT\" 2>&1 | less -R"
