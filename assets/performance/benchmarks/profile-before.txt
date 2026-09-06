@@ -1,0 +1,29 @@
+File: ui.test
+Build ID: cb3741d2951a8a2caf7a16c49940bc5886a88690
+Type: cpu
+Time: 2026-09-06 22:44:22 AEST
+Duration: 2.83s, Total samples = 2940ms (103.93%)
+Showing nodes accounting for 1870ms, 63.61% of 2940ms total
+Dropped 87 nodes (cum <= 14.70ms)
+Showing top 20 nodes out of 144
+      flat  flat%   sum%        cum   cum%
+     340ms 11.56% 11.56%      350ms 11.90%  github.com/rivo/uniseg.propertySearch[go.shape.[3]int] (inline)
+     280ms  9.52% 21.09%      280ms  9.52%  runtime.memclrNoHeapPointers
+     150ms  5.10% 26.19%      470ms 15.99%  github.com/rivo/uniseg.transitionLineBreakState
+     150ms  5.10% 31.29%      340ms 11.56%  runtime.scanobject
+     100ms  3.40% 34.69%     1380ms 46.94%  github.com/rivo/uniseg.StepString
+      90ms  3.06% 37.76%       90ms  3.06%  github.com/rivo/uniseg.grTransitions
+      80ms  2.72% 40.48%      260ms  8.84%  github.com/rivo/uniseg.transitionSentenceBreakState
+      80ms  2.72% 43.20%      130ms  4.42%  runtime.(*_panic).nextDefer
+      70ms  2.38% 45.58%      330ms 11.22%  github.com/rivo/uniseg.transitionWordBreakState
+      60ms  2.04% 47.62%     2060ms 70.07%  github.com/derailed/tview.decomposeString
+      60ms  2.04% 49.66%       60ms  2.04%  runtime.(*mspan).heapBitsSmallForAddr
+      50ms  1.70% 51.36%       50ms  1.70%  github.com/mattn/go-runewidth.(*Condition).RuneWidth
+      50ms  1.70% 53.06%      400ms 13.61%  github.com/rivo/uniseg.property (inline)
+      50ms  1.70% 54.76%      140ms  4.76%  github.com/rivo/uniseg.transitionGraphemeState
+      50ms  1.70% 56.46%       50ms  1.70%  runtime.deferprocStack
+      50ms  1.70% 58.16%       50ms  1.70%  unicode/utf8.DecodeRuneInString
+      40ms  1.36% 59.52%      230ms  7.82%  runtime.convTslice
+      40ms  1.36% 60.88%       40ms  1.36%  runtime.futex
+      40ms  1.36% 62.24%       50ms  1.70%  runtime.mallocgcTiny
+      40ms  1.36% 63.61%       40ms  1.36%  runtime.memmove

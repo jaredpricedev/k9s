@@ -1,0 +1,9 @@
+goos: linux
+goarch: amd64
+pkg: github.com/derailed/k9s/internal/ui
+cpu: INTEL(R) XEON(R) PLATINUM 8573C
+BenchmarkPerformancePadding/1000-4   	    3837	     62532 ns/op	     128 B/op	       1 allocs/op
+BenchmarkPerformancePadding/10000-4  	     357	    853543 ns/op	     128 B/op	       1 allocs/op
+BenchmarkPerformanceTableRefresh/1000-4         	      42	   6872486 ns/op	 1508264 B/op	   27381 allocs/op
+BenchmarkPerformanceTableRefresh/10000-4        	       9	  24304568 ns/op	14398157 B/op	  225401 allocs/op
+PASS

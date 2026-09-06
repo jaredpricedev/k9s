@@ -1,0 +1,767 @@
+[
+  {
+    "time": 9028.884861429,
+    "method": "GET",
+    "path": "/api"
+  },
+  {
+    "time": 9028.888350273,
+    "method": "GET",
+    "path": "/apis"
+  },
+  {
+    "time": 9028.891668662,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"
+  },
+  {
+    "time": 9028.892679486,
+    "method": "GET",
+    "path": "/api/v1/namespaces"
+  },
+  {
+    "time": 9028.89538574,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9028.897286005,
+    "method": "GET",
+    "path": "/api?timeout=32s"
+  },
+  {
+    "time": 9028.897658103,
+    "method": "GET",
+    "path": "/version?timeout=32s"
+  },
+  {
+    "time": 9028.900068811,
+    "method": "GET",
+    "path": "/apis?timeout=32s"
+  },
+  {
+    "time": 9028.901197716,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9028.901903987,
+    "method": "GET",
+    "path": "/api/v1?timeout=32s"
+  },
+  {
+    "time": 9028.902323755,
+    "method": "GET",
+    "path": "/api/v1/nodes?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=437&watch=true"
+  },
+  {
+    "time": 9028.903768051,
+    "method": "GET",
+    "path": "/apis/authorization.k8s.io/v1?timeout=32s"
+  },
+  {
+    "time": 9028.906548743,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9028.907305028,
+    "method": "GET",
+    "path": "/apis/apiextensions.k8s.io/v1/customresourcedefinitions?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=447&watch=true"
+  },
+  {
+    "time": 9029.00931562,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9029.009759545,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9029.010327378,
+    "method": "GET",
+    "path": "/api/v1/namespaces/default/configmaps?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=405&watch=true"
+  },
+  {
+    "time": 9036.194783048,
+    "method": "GET",
+    "path": "/api"
+  },
+  {
+    "time": 9036.198546267,
+    "method": "GET",
+    "path": "/apis"
+  },
+  {
+    "time": 9036.207454675,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"
+  },
+  {
+    "time": 9036.208460977,
+    "method": "GET",
+    "path": "/api/v1/namespaces"
+  },
+  {
+    "time": 9036.213476577,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9036.215848311,
+    "method": "GET",
+    "path": "/version?timeout=32s"
+  },
+  {
+    "time": 9036.217211747,
+    "method": "GET",
+    "path": "/api?timeout=32s"
+  },
+  {
+    "time": 9036.218024042,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9036.218645751,
+    "method": "GET",
+    "path": "/apis?timeout=32s"
+  },
+  {
+    "time": 9036.219224143,
+    "method": "GET",
+    "path": "/api/v1/nodes?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=582&watch=true"
+  },
+  {
+    "time": 9036.220533773,
+    "method": "GET",
+    "path": "/apis/authorization.k8s.io/v1?timeout=32s"
+  },
+  {
+    "time": 9036.22080908,
+    "method": "GET",
+    "path": "/api/v1?timeout=32s"
+  },
+  {
+    "time": 9036.223995594,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9036.224825442,
+    "method": "GET",
+    "path": "/apis/apiextensions.k8s.io/v1/customresourcedefinitions?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=581&watch=true"
+  },
+  {
+    "time": 9036.32731907,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9036.32812121,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9036.328494142,
+    "method": "GET",
+    "path": "/api/v1/namespaces/default/configmaps?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=546&watch=true"
+  },
+  {
+    "time": 9044.849192854,
+    "method": "GET",
+    "path": "/api"
+  },
+  {
+    "time": 9044.851316492,
+    "method": "GET",
+    "path": "/apis"
+  },
+  {
+    "time": 9044.853455107,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"
+  },
+  {
+    "time": 9044.85594448,
+    "method": "GET",
+    "path": "/api/v1/namespaces"
+  },
+  {
+    "time": 9044.873144502,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9044.875019877,
+    "method": "GET",
+    "path": "/version?timeout=32s"
+  },
+  {
+    "time": 9044.876187973,
+    "method": "GET",
+    "path": "/api?timeout=32s"
+  },
+  {
+    "time": 9044.877707799,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9044.878339057,
+    "method": "GET",
+    "path": "/apis?timeout=32s"
+  },
+  {
+    "time": 9044.878690706,
+    "method": "GET",
+    "path": "/api/v1/nodes?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=488&watch=true"
+  },
+  {
+    "time": 9044.880360106,
+    "method": "GET",
+    "path": "/api/v1?timeout=32s"
+  },
+  {
+    "time": 9044.8817265,
+    "method": "GET",
+    "path": "/apis/authorization.k8s.io/v1?timeout=32s"
+  },
+  {
+    "time": 9044.884378638,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9044.885089015,
+    "method": "GET",
+    "path": "/apis/apiextensions.k8s.io/v1/customresourcedefinitions?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=542&watch=true"
+  },
+  {
+    "time": 9044.998886819,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9045.001726094,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9045.007398209,
+    "method": "GET",
+    "path": "/api/v1/namespaces/default/configmaps?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=550&watch=true"
+  },
+  {
+    "time": 9051.13461169,
+    "method": "GET",
+    "path": "/api"
+  },
+  {
+    "time": 9051.135530154,
+    "method": "GET",
+    "path": "/apis"
+  },
+  {
+    "time": 9051.13710862,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"
+  },
+  {
+    "time": 9051.137914176,
+    "method": "GET",
+    "path": "/api/v1/namespaces"
+  },
+  {
+    "time": 9051.140462822,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9051.142056103,
+    "method": "GET",
+    "path": "/api?timeout=32s"
+  },
+  {
+    "time": 9051.142479463,
+    "method": "GET",
+    "path": "/version?timeout=32s"
+  },
+  {
+    "time": 9051.143506252,
+    "method": "GET",
+    "path": "/apis?timeout=32s"
+  },
+  {
+    "time": 9051.143929103,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9051.145169159,
+    "method": "GET",
+    "path": "/apis/authorization.k8s.io/v1?timeout=32s"
+  },
+  {
+    "time": 9051.145612985,
+    "method": "GET",
+    "path": "/api/v1/nodes?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=431&watch=true"
+  },
+  {
+    "time": 9051.146944476,
+    "method": "GET",
+    "path": "/api/v1?timeout=32s"
+  },
+  {
+    "time": 9051.148661774,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9051.149338197,
+    "method": "GET",
+    "path": "/apis/apiextensions.k8s.io/v1/customresourcedefinitions?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=496&watch=true"
+  },
+  {
+    "time": 9051.251155177,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9051.251686209,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9051.252373949,
+    "method": "GET",
+    "path": "/api/v1/namespaces/default/configmaps?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=510&watch=true"
+  },
+  {
+    "time": 9059.753730705,
+    "method": "GET",
+    "path": "/api"
+  },
+  {
+    "time": 9059.755247212,
+    "method": "GET",
+    "path": "/apis"
+  },
+  {
+    "time": 9059.756692746,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"
+  },
+  {
+    "time": 9059.757651944,
+    "method": "GET",
+    "path": "/api/v1/namespaces"
+  },
+  {
+    "time": 9059.773294679,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9059.775013294,
+    "method": "GET",
+    "path": "/version?timeout=32s"
+  },
+  {
+    "time": 9059.77547078,
+    "method": "GET",
+    "path": "/api?timeout=32s"
+  },
+  {
+    "time": 9059.776526122,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9059.776990917,
+    "method": "GET",
+    "path": "/apis?timeout=32s"
+  },
+  {
+    "time": 9059.777601155,
+    "method": "GET",
+    "path": "/api/v1/nodes?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=528&watch=true"
+  },
+  {
+    "time": 9059.779101474,
+    "method": "GET",
+    "path": "/api/v1?timeout=32s"
+  },
+  {
+    "time": 9059.779465636,
+    "method": "GET",
+    "path": "/apis/authorization.k8s.io/v1?timeout=32s"
+  },
+  {
+    "time": 9059.781285463,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9059.781857883,
+    "method": "GET",
+    "path": "/apis/apiextensions.k8s.io/v1/customresourcedefinitions?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=457&watch=true"
+  },
+  {
+    "time": 9059.883475361,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9059.884214037,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9059.885042368,
+    "method": "GET",
+    "path": "/api/v1/namespaces/default/configmaps?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=576&watch=true"
+  },
+  {
+    "time": 9067.433499935,
+    "method": "GET",
+    "path": "/api"
+  },
+  {
+    "time": 9067.436233513,
+    "method": "GET",
+    "path": "/apis"
+  },
+  {
+    "time": 9067.438039348,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"
+  },
+  {
+    "time": 9067.440402524,
+    "method": "GET",
+    "path": "/api/v1/namespaces"
+  },
+  {
+    "time": 9067.447376034,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9067.45056571,
+    "method": "GET",
+    "path": "/api?timeout=32s"
+  },
+  {
+    "time": 9067.451063168,
+    "method": "GET",
+    "path": "/version?timeout=32s"
+  },
+  {
+    "time": 9067.452126803,
+    "method": "GET",
+    "path": "/apis?timeout=32s"
+  },
+  {
+    "time": 9067.453815905,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9067.455531848,
+    "method": "GET",
+    "path": "/api/v1?timeout=32s"
+  },
+  {
+    "time": 9067.457751285,
+    "method": "GET",
+    "path": "/apis/authorization.k8s.io/v1?timeout=32s"
+  },
+  {
+    "time": 9067.458567715,
+    "method": "GET",
+    "path": "/api/v1/nodes?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=548&watch=true"
+  },
+  {
+    "time": 9067.461306747,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9067.462082137,
+    "method": "GET",
+    "path": "/apis/apiextensions.k8s.io/v1/customresourcedefinitions?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=329&watch=true"
+  },
+  {
+    "time": 9067.563543583,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9067.57086369,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9067.579547126,
+    "method": "GET",
+    "path": "/api/v1/namespaces/default/configmaps?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=478&watch=true"
+  },
+  {
+    "time": 9075.663662377,
+    "method": "GET",
+    "path": "/api"
+  },
+  {
+    "time": 9075.665514824,
+    "method": "GET",
+    "path": "/apis"
+  },
+  {
+    "time": 9075.668103368,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"
+  },
+  {
+    "time": 9075.669076271,
+    "method": "GET",
+    "path": "/api/v1/namespaces"
+  },
+  {
+    "time": 9075.68765146,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9075.69033395,
+    "method": "GET",
+    "path": "/api?timeout=32s"
+  },
+  {
+    "time": 9075.691132299,
+    "method": "GET",
+    "path": "/version?timeout=32s"
+  },
+  {
+    "time": 9075.69172151,
+    "method": "GET",
+    "path": "/apis?timeout=32s"
+  },
+  {
+    "time": 9075.692358058,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9075.693389734,
+    "method": "GET",
+    "path": "/api/v1?timeout=32s"
+  },
+  {
+    "time": 9075.693629901,
+    "method": "GET",
+    "path": "/apis/authorization.k8s.io/v1?timeout=32s"
+  },
+  {
+    "time": 9075.697931845,
+    "method": "GET",
+    "path": "/api/v1/nodes?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=486&watch=true"
+  },
+  {
+    "time": 9075.699475032,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9075.700205062,
+    "method": "GET",
+    "path": "/apis/apiextensions.k8s.io/v1/customresourcedefinitions?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=505&watch=true"
+  },
+  {
+    "time": 9075.802823678,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9075.804660385,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9075.805173512,
+    "method": "GET",
+    "path": "/api/v1/namespaces/default/configmaps?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=323&watch=true"
+  },
+  {
+    "time": 9082.698731605,
+    "method": "GET",
+    "path": "/api"
+  },
+  {
+    "time": 9082.699920145,
+    "method": "GET",
+    "path": "/apis"
+  },
+  {
+    "time": 9082.701525891,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"
+  },
+  {
+    "time": 9082.702741768,
+    "method": "GET",
+    "path": "/api/v1/namespaces"
+  },
+  {
+    "time": 9082.707325039,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9082.709008138,
+    "method": "GET",
+    "path": "/api?timeout=32s"
+  },
+  {
+    "time": 9082.709518858,
+    "method": "GET",
+    "path": "/version?timeout=32s"
+  },
+  {
+    "time": 9082.710300008,
+    "method": "GET",
+    "path": "/apis?timeout=32s"
+  },
+  {
+    "time": 9082.710955016,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9082.71123655,
+    "method": "GET",
+    "path": "/apis/authorization.k8s.io/v1?timeout=32s"
+  },
+  {
+    "time": 9082.711611085,
+    "method": "GET",
+    "path": "/api/v1?timeout=32s"
+  },
+  {
+    "time": 9082.71443612,
+    "method": "GET",
+    "path": "/api/v1/nodes?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=469&watch=true"
+  },
+  {
+    "time": 9082.71691474,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9082.719016311,
+    "method": "GET",
+    "path": "/apis/apiextensions.k8s.io/v1/customresourcedefinitions?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=560&watch=true"
+  },
+  {
+    "time": 9082.820142741,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9082.820841805,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9082.821451358,
+    "method": "GET",
+    "path": "/api/v1/namespaces/default/configmaps?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=544&watch=true"
+  },
+  {
+    "time": 9090.004925458,
+    "method": "GET",
+    "path": "/api"
+  },
+  {
+    "time": 9090.006051163,
+    "method": "GET",
+    "path": "/apis"
+  },
+  {
+    "time": 9090.007767701,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"
+  },
+  {
+    "time": 9090.008572421,
+    "method": "GET",
+    "path": "/api/v1/namespaces"
+  },
+  {
+    "time": 9090.013640374,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9090.015576085,
+    "method": "GET",
+    "path": "/api?timeout=32s"
+  },
+  {
+    "time": 9090.016171696,
+    "method": "GET",
+    "path": "/version?timeout=32s"
+  },
+  {
+    "time": 9090.017139154,
+    "method": "GET",
+    "path": "/apis?timeout=32s"
+  },
+  {
+    "time": 9090.017944166,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9090.018393427,
+    "method": "GET",
+    "path": "/api/v1?timeout=32s"
+  },
+  {
+    "time": 9090.018954682,
+    "method": "GET",
+    "path": "/apis/authorization.k8s.io/v1?timeout=32s"
+  },
+  {
+    "time": 9090.019610327,
+    "method": "GET",
+    "path": "/api/v1/nodes?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=565&watch=true"
+  },
+  {
+    "time": 9090.02148713,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9090.022205702,
+    "method": "GET",
+    "path": "/apis/apiextensions.k8s.io/v1/customresourcedefinitions?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=525&watch=true"
+  },
+  {
+    "time": 9090.123646344,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 9090.125070908,
+    "method": "GET",
+    "path": "/version?timeout=2m0s"
+  },
+  {
+    "time": 9090.143862118,
+    "method": "GET",
+    "path": "/api/v1/namespaces/default/configmaps?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=334&watch=true"
+  }
+]

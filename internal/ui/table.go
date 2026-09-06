@@ -528,6 +528,7 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 	marked := t.IsMarked(re.Row.ID)
 	var col int
 	ns := t.GetModel().GetNamespace()
+	var fgColor tcell.Color
 	for c, field := range re.Row.Fields {
 		if c >= len(h) {
 			slog.Error("Field/header overflow detected. Check your mappings!",
@@ -539,6 +540,13 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 		}
 		if t.shouldExcludeColumn(h[c]) {
 			continue
+		}
+
+		if col == 0 {
+			fgColor = color(ns, h, &re)
+			if marked {
+				fgColor = t.styles.Table().MarkColor.Color()
+			}
 		}
 
 		original := field
@@ -567,11 +575,7 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 		cell := tview.NewTableCell(field)
 		cell.SetExpansion(1)
 		cell.SetAlign(h[c].Align)
-		fgColor := color(ns, h, &re)
 		cell.SetTextColor(fgColor)
-		if marked {
-			cell.SetTextColor(t.styles.Table().MarkColor.Color())
-		}
 		if col == 0 {
 			cell.SetReference(re.Row.ID)
 		}

@@ -11,6 +11,14 @@ for changes and offers subsequent commands to interact with your observed resour
 
 This fork includes native Flux views (`:flux`, OCI sources, health and source/dependency navigation), confirmed Flux operations, native cert-manager diagnostics, safer CLI plugins, read-only fixes and measured table performance improvements. Shared shortcut spacing, breadcrumbs, Unicode table alignment and responsive selection dialogs add a light UI polish pass. See [certificate workflows](docs/certificates.md), [Flux workflows](docs/flux.md) and the [review findings](docs/review-2026-09-06.md) for usage and verification.
 
+### Performance comparison
+
+[Watch the short three-build video](assets/performance/comparison.mp4) or read the [full results and reproduction steps](docs/performance-2026-09-06.md).
+
+[![Upstream, previous fork and updated fork running the same 10,000-resource workload](assets/performance/comparison.png)](assets/performance/comparison.mp4)
+
+The new pass makes bulk row removal linear, reduces snapshot allocations and fixes an ASCII-rendering regression from the earlier UI polish. In five-round local microbenchmarks, removing 5,000 of 10,000 rows fell from 835 ms upstream to 1.6 ms; table rebuild plus simulated drawing fell from 33.2 ms to 25.8 ms. These are individual CPU workloads. The real-terminal demo is close to upstream for the selected filter interaction, and the report includes slower cases and timing variation.
+
 ### Flux screenshots
 
 Captured from the running TUI using a local demo API with synthetic resources. Names, revisions and cluster details are examples; these captures do not represent live-cluster validation. Click an image to view it at full size.

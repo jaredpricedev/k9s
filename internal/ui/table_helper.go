@@ -13,7 +13,6 @@ import (
 	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/slogs"
-	"github.com/derailed/tview"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
@@ -109,5 +108,5 @@ func columnIndicator(sort, selected, asc bool, style *config.Table, name string)
 
 func formatCell(field string, padding int) string {
 	// Table.Draw clips to the viewport without splitting tags or Unicode clusters.
-	return field + strings.Repeat(" ", max(0, padding-tview.TaggedStringWidth(field)))
+	return field + strings.Repeat(" ", max(0, padding-displayWidth(field)))
 }

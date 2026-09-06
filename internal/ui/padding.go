@@ -24,24 +24,22 @@ func computeMaxColumns(pads MaxyPad, sortColName string, t *model1.TableData, li
 	const colPadding = 1
 
 	for i, n := range t.ColumnNames(true) {
-		pads[i] = tview.TaggedStringWidth(n)
+		pads[i] = displayWidth(n)
 		if n == sortColName {
 			pads[i] += 2
 		}
 	}
 
-	var row int
 	t.RowsRange(func(_ int, re model1.RowEvent) bool {
 		for index, field := range re.Row.Fields {
 			if literalFields {
 				field = tview.Escape(field)
 			}
-			width := tview.TaggedStringWidth(field) + colPadding
+			width := displayWidth(field) + colPadding
 			if index < len(pads) && width > pads[index] {
 				pads[index] = width
 			}
 		}
-		row++
 		return true
 	})
 }

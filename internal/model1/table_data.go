@@ -488,14 +488,7 @@ func (t *TableData) Delete(newKeys sets.Set[string]) {
 		return true
 	})
 
-	for _, id := range victims.UnsortedList() {
-		if err := t.rowEvents.Delete(id); err != nil {
-			slog.Error("Table delete failed",
-				slogs.Error, err,
-				slogs.Message, id,
-			)
-		}
-	}
+	t.rowEvents.deleteAll(victims)
 }
 
 // Diff checks if two tables are equal.

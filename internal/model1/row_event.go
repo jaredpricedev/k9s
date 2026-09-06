@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 type ReRangeFn func(int, RowEvent) bool
@@ -188,12 +190,12 @@ func (r *RowEvents) Diff(re *RowEvents, ageCol int) bool {
 
 // Clone returns a deep copy.
 func (r *RowEvents) Clone() *RowEvents {
-	re := make([]RowEvent, 0, len(r.events))
+	re := NewRowEvents(len(r.events))
 	for _, e := range r.events {
-		re = append(re, e.Clone())
+		re.Add(e.Clone())
 	}
 
-	return NewRowEventsWithEvts(re...)
+	return re
 }
 
 // Upsert add or update a row if it exists.
@@ -219,6 +221,29 @@ func (r *RowEvents) Delete(fqn string) error {
 	r.reindex()
 
 	return nil
+}
+
+// deleteAll removes indexed rows in one stable pass, then rebuilds their indexes.
+func (r *RowEvents) deleteAll(ids sets.Set[string]) {
+	if len(ids) == 0 {
+		return
+	}
+
+	next := 0
+	for i, event := range r.events {
+		// Match Delete's handling of duplicate IDs: remove only the indexed row.
+		if ids.Has(event.Row.ID) && r.index[event.Row.ID] == i {
+			continue
+		}
+		r.events[next] = event
+		next++
+	}
+	clear(r.events[next:])
+	r.events = r.events[:next]
+	for id := range ids {
+		delete(r.index, id)
+	}
+	r.reindex()
 }
 
 func (r *RowEvents) Len() int {

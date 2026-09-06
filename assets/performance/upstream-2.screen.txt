@@ -1,0 +1,27 @@
+ Context: perf-local [R]                           <0> all       <d>     … ____  __ ________
+ Cluster: perf-local                               <1> default   <?>      |    |/  /   __   \______
+ User:    perf-local                                             <shift-j>|       /\____    /  ___/
+ K9s Rev: v0.0.0                                                 <u>      |    \   \  /    /\___  \
+ K8s Rev: v1.34.0                                                <w>      |____|\__ \/____//____  /
+ CPU:     n/a                                                    <y>               \/           \/
+ MEM:     n/a
+┌────────────────────────────────── configmaps(default)[10,000] ───────────────────────────────────┐
+│ NAME↑                                    DATA                       AGE                          │
+│ perf-config-00000                        2                          248d                         │
+│ perf-config-00001                        2                          248d                         │
+│ perf-config-00002                        2                          248d                         │
+│ perf-config-00003                        2                          248d                         │
+│ perf-config-00004                        2                          248d                         │
+│ perf-config-00005                        2                          248d                         │
+│ perf-config-00006                        2                          248d                         │
+│ perf-config-00007                        2                          248d                         │
+│ perf-config-00008                        2                          248d                         │
+│ perf-config-00009                        2                          248d                         │
+│ perf-config-00010                        2                          248d                         │
+│ perf-config-00011                        2                          248d                         │
+│ perf-config-00012                        2                          248d                         │
+│ perf-config-00013                        2                          248d                         │
+│ perf-config-00014                        2                          248d                         │
+│ perf-config-00015                        2                          248d                         │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+  <configmap>
