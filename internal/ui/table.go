@@ -485,6 +485,11 @@ func (t *Table) shouldExcludeColumn(h model1.HeaderColumn) bool {
 }
 
 func (t *Table) UpdateUI(cdata, data *model1.TableData) {
+	// Capture the raw resource ID before replacing the cells. Remembering only
+	// the row index changes the selected object when a watched field is sorted.
+	selectedID, _ := t.GetRowID(t.GetSelectedRowIndex())
+	_, selectedCol := t.GetSelection()
+	selectedRow := -1
 	t.Clear()
 	fg := t.styles.Table().Header.FgColor.Color()
 	bg := t.styles.Table().Header.BgColor.Color()
@@ -511,11 +516,18 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 			return true
 		}
 		t.buildRow(row+1, re, ore, cdata.Header(), pads)
+		if selectedID != "" && re.Row.ID == selectedID {
+			selectedRow = row + 1
+		}
 
 		return true
 	})
 
-	t.updateSelection(true)
+	if selectedRow >= 0 {
+		t.SelectRow(selectedRow, selectedCol, true)
+	} else {
+		t.updateSelection(true)
+	}
 	t.UpdateTitle()
 }
 

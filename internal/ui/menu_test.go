@@ -121,3 +121,24 @@ func TestActionHints(t *testing.T) {
 		})
 	}
 }
+
+func TestMenuSharesShortNamespaceColumnAtNarrowWidths(t *testing.T) {
+	v := ui.NewMenu(config.NewStyles())
+	hints := model.MenuHints{{Mnemonic: "0", Description: "all", Visible: true}, {Mnemonic: "1", Description: "default", Visible: true}}
+	for i := range 15 {
+		hints = append(hints, model.MenuHint{Mnemonic: string(rune('a' + i)), Description: "Reconcile resource", Visible: true})
+	}
+	v.HydrateMenu(hints)
+	screen := tcell.NewSimulationScreen("")
+	require.NoError(t, screen.Init())
+	defer screen.Fini()
+	screen.SetSize(96, 6)
+	v.SetRect(0, 0, 96, 6)
+	v.Draw(screen)
+	require.LessOrEqual(t, v.GetColumnCount(), 3, "namespace shortcuts should not reserve an almost empty column")
+	for row := 0; row < 6; row++ {
+		for col := 0; col < v.GetColumnCount(); col++ {
+			assert.NotContains(t, v.GetCell(row, col).Text, "…")
+		}
+	}
+}
