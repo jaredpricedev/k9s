@@ -151,11 +151,17 @@ func patchFlux(ctx context.Context, resource dynamic.ResourceInterface, name str
 	if o.GetResourceVersion() == "" {
 		return fmt.Errorf("resource %s has no resource version", name)
 	}
+	if flux.IsStaticHelmRepository(o) {
+		return fmt.Errorf("OCI HelmRepository %s is static; reconcile its HelmChart or use an OCIRepository", name)
+	}
 	meta := map[string]any{"resourceVersion": o.GetResourceVersion(), "uid": string(expectedUID)}
 	patch := map[string]any{"metadata": meta}
 	if action == fluxReconcile {
 		if flux.Suspended(o) {
 			return fmt.Errorf("resource %s is suspended; resume it before reconciling", name)
+		}
+		if flux.ReconcilePending(o) {
+			return fmt.Errorf("reconciliation for %s is already queued; watch STATUS for controller progress", name)
 		}
 		meta["annotations"] = map[string]string{"reconcile.fluxcd.io/requestedAt": now.Format(time.RFC3339Nano)}
 	} else {

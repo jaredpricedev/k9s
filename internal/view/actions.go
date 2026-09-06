@@ -10,7 +10,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
+	"github.com/derailed/k9s/internal/dao"
 	"github.com/derailed/k9s/internal/slogs"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/k9s/internal/ui/dialog"
@@ -147,30 +149,33 @@ func pluginActions(r Runner, aa *ui.KeyActions) error {
 			errs = errors.Join(errs, err)
 			continue
 		}
-		if _, ok := aa.Get(key); ok {
-			if !pp.Plugins[k].Override {
-				errs = errors.Join(errs, fmt.Errorf("duplicate plugin key found for %q in %q", pp.Plugins[k].ShortCut, k))
-				continue
-			}
-			slog.Debug("Plugin overrode action shortcut",
-				slogs.Plugin, k,
-				slogs.Key, pp.Plugins[k].ShortCut,
-			)
-		}
-
 		plugin := pp.Plugins[k]
-		aa.Add(key, ui.NewKeyActionWithOpts(
-			pp.Plugins[k].Description,
-			pluginAction(r, &plugin),
-			ui.ActionOpts{
-				Visible:   true,
-				Plugin:    true,
-				Dangerous: plugin.Dangerous,
-			},
-		))
+		errs = errors.Join(errs, bindPluginAction(r, aa, k, key, &plugin))
 	}
 
 	return errs
+}
+
+// Native Flux mutations stay inline even when an older plugin file requests an
+// override. Optional CLI workflows can use other keys; other views retain their
+// normal override semantics. Reserve the keys in read-only mode as well.
+func bindPluginAction(r Runner, aa *ui.KeyActions, name string, key tcell.Key, plugin *config.Plugin) error {
+	if resource, ok := r.(interface{ GVR() *client.GVR }); ok &&
+		(resource.GVR() == client.FluxGVR || dao.FluxNativeActions(resource.GVR())) &&
+		(key == ui.KeyShiftR || key == ui.KeyShiftT) {
+		slog.Debug("Native Flux shortcut retained; assign CLI plugins another key", slogs.Plugin, name, slogs.Key, plugin.ShortCut)
+		return nil
+	}
+	if _, ok := aa.Get(key); ok {
+		if !plugin.Override {
+			return fmt.Errorf("duplicate plugin key found for %q in %q", plugin.ShortCut, name)
+		}
+		slog.Debug("Plugin overrode action shortcut", slogs.Plugin, name, slogs.Key, plugin.ShortCut)
+	}
+	aa.Add(key, ui.NewKeyActionWithOpts(plugin.Description, pluginAction(r, plugin), ui.ActionOpts{
+		Visible: true, Plugin: true, Dangerous: plugin.Dangerous,
+	}))
+	return nil
 }
 
 func pluginAction(r Runner, p *config.Plugin) ui.ActionHandler {

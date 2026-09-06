@@ -59,6 +59,46 @@ func TestPatchFlux(t *testing.T) {
 	}
 }
 
+func TestReconcileReturnsOnAcceptanceAndDoesNotQueueDuplicate(t *testing.T) {
+	gvr := client.NewGVR("helm.toolkit.fluxcd.io/v2/helmreleases")
+	o := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": gvr.GV().String(), "kind": "HelmRelease",
+		"metadata": map[string]any{"name": "apps", "namespace": "team", "resourceVersion": "12", "uid": "original"},
+		"status":   map[string]any{"conditions": []any{map[string]any{"type": "Ready", "status": "False"}}},
+	}}
+	c := fake.NewSimpleDynamicClient(runtime.NewScheme(), o)
+	resource := c.Resource(gvr.GVR()).Namespace("team")
+	// This fake has no controller. A request must finish at API acceptance,
+	// without polling or waiting for Ready, and preserve the old conditions.
+	require.NoError(t, patchFlux(t.Context(), resource, "apps", "original", "reconcile", time.Now()))
+	require.Len(t, c.Actions(), 2)
+	assert.Equal(t, "get", c.Actions()[0].GetVerb())
+	assert.Equal(t, "patch", c.Actions()[1].GetVerb())
+	c.ClearActions()
+	err := patchFlux(t.Context(), resource, "apps", "original", "reconcile", time.Now())
+	require.ErrorContains(t, err, "already queued")
+	require.Len(t, c.Actions(), 1)
+	assert.Equal(t, "get", c.Actions()[0].GetVerb())
+}
+
+func TestFluxActionsRejectStaticOCIHelmRepository(t *testing.T) {
+	gvr := client.NewGVR("source.toolkit.fluxcd.io/v1/helmrepositories")
+	o := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": gvr.GV().String(), "kind": "HelmRepository",
+		"metadata": map[string]any{"name": "charts", "namespace": "team", "resourceVersion": "12", "uid": "original"},
+		"spec":     map[string]any{"type": "oci", "url": "oci://example.test/charts"},
+	}}
+	for _, action := range []string{"reconcile", "suspend", "resume"} {
+		t.Run(action, func(t *testing.T) {
+			c := fake.NewSimpleDynamicClient(runtime.NewScheme(), o)
+			err := patchFlux(t.Context(), c.Resource(gvr.GVR()).Namespace("team"), "charts", "original", action, time.Now())
+			require.ErrorContains(t, err, "static")
+			require.Len(t, c.Actions(), 1)
+			assert.Equal(t, "get", c.Actions()[0].GetVerb())
+		})
+	}
+}
+
 func TestPatchFluxRejectsChangedIdentityAndUnknownAction(t *testing.T) {
 	gvr := client.NewGVR("source.toolkit.fluxcd.io/v1/ocirepositories")
 	o := &unstructured.Unstructured{}

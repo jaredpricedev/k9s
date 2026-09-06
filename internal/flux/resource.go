@@ -14,15 +14,17 @@ import (
 )
 
 const (
-	sourceGroup    = "source.toolkit.fluxcd.io"
-	kustomizeGroup = "kustomize.toolkit.fluxcd.io"
-	helmGroup      = "helm.toolkit.fluxcd.io"
-	imageGroup     = "image.toolkit.fluxcd.io"
-	operatorGroup  = "fluxcd.controlplane.io"
-	listErrorKey   = "k9scli.io/flux-list-error"
-	stateUnknown   = "Unknown"
-	statePending   = "Pending"
-	conditionTrue  = "True"
+	sourceGroup      = "source.toolkit.fluxcd.io"
+	kustomizeGroup   = "kustomize.toolkit.fluxcd.io"
+	helmGroup        = "helm.toolkit.fluxcd.io"
+	imageGroup       = "image.toolkit.fluxcd.io"
+	operatorGroup    = "fluxcd.controlplane.io"
+	listErrorKey     = "k9scli.io/flux-list-error"
+	stateUnknown     = "Unknown"
+	statePending     = "Pending"
+	stateReconciling = "Reconciling"
+	stateReady       = "Ready"
+	conditionTrue    = "True"
 )
 
 // Reference identifies another Kubernetes object used by a Flux resource.
@@ -91,42 +93,77 @@ func GVRFor(o *unstructured.Unstructured) *client.GVR {
 	return client.NewGVR(gv.Group + "/" + gv.Version + "/" + resource)
 }
 
+// IsStaticHelmRepository identifies Flux OCI HelmRepositories, which are data
+// containers for HelmCharts and do not reconcile or report controller status.
+func IsStaticHelmRepository(o *unstructured.Unstructured) bool {
+	if o == nil || o.GetKind() != "HelmRepository" {
+		return false
+	}
+	repositoryType, _ := nestedString(o, "spec", "type")
+	if repositoryType != "oci" {
+		return false
+	}
+	gv, err := schema.ParseGroupVersion(o.GetAPIVersion())
+	return err == nil && gv.Group == sourceGroup && gv.Version != ""
+}
+
 // Suspended reports the common Flux spec.suspend flag. A missing or malformed
-// field is treated as false.
+// field, or a static OCI HelmRepository where suspension does not apply, is false.
 func Suspended(o *unstructured.Unstructured) bool {
-	if o == nil {
+	if o == nil || IsStaticHelmRepository(o) {
 		return false
 	}
 	suspended, found, err := unstructured.NestedBool(o.Object, "spec", "suspend")
 	if err == nil && found && suspended {
 		return true
 	}
+	reconcile, _ := nestedString(o, "metadata", "annotations", operatorGroup+"/reconcile")
+	if !strings.EqualFold(strings.TrimSpace(reconcile), "disabled") {
+		return false
+	}
 	gvr := GVRFor(o)
-	return gvr != client.NoGVR && gvr.G() == operatorGroup &&
-		strings.EqualFold(strings.TrimSpace(o.GetAnnotations()[operatorGroup+"/reconcile"]), "disabled")
+	return gvr != client.NoGVR && gvr.G() == operatorGroup
+}
+
+// ReconcilePending reports a non-empty reconcile request the controller has
+// not yet acknowledged. Tokens are opaque strings, not ordered timestamps.
+// Acknowledgement does not imply completion; Flux conditions report progress.
+// Static OCI HelmRepositories do not reconcile and never have pending requests.
+func ReconcilePending(o *unstructured.Unstructured) bool {
+	if o == nil || IsStaticHelmRepository(o) {
+		return false
+	}
+	requested, _ := nestedString(o, "metadata", "annotations", "reconcile.fluxcd.io/requestedAt")
+	if requested == "" {
+		return false
+	}
+	handled, _ := nestedString(o, "status", "lastHandledReconcileAt")
+	return requested != handled
 }
 
 // Status returns a small, stable state vocabulary and the most relevant Flux
-// condition message. Condition selection follows Flux's priority: suspension,
-// terminal stalls, active reconciliation, then readiness.
+// condition message. Suspension and pending requests take priority over prior
+// outcomes; acknowledged requests follow Flux's condition priority: terminal
+// stalls, active reconciliation, then readiness. Static OCI HelmRepositories
+// are ready for use without controller conditions.
 func Status(o *unstructured.Unstructured) (state, message string) {
 	if o == nil {
 		return stateUnknown, ""
 	}
+	if IsStaticHelmRepository(o) {
+		return stateReady, "OCI HelmRepository is a static source; reconcile its HelmChart or use an OCIRepository"
+	}
 	if Suspended(o) {
 		return "Suspended", "Reconciliation is suspended"
 	}
-	if listErr := o.GetAnnotations()[listErrorKey]; listErr != "" {
+	if listErr, _ := nestedString(o, "metadata", "annotations", listErrorKey); listErr != "" {
 		if o.GetName() == "<restricted>" {
 			return "Restricted", listErr
 		}
 		return stateUnknown, listErr
 	}
 
-	conditions, found := nestedSlice(o, "status", "conditions")
-	if !found {
-		return statePending, ""
-	}
+	conditions, _ := nestedSlice(o, "status", "conditions")
 	var ready, reconciling, stalled map[string]any
 	for _, value := range conditions {
 		condition, ok := value.(map[string]any)
@@ -135,9 +172,9 @@ func Status(o *unstructured.Unstructured) (state, message string) {
 		}
 		typeName, _ := condition["type"].(string)
 		switch typeName {
-		case "Ready":
+		case stateReady:
 			ready = condition
-		case "Reconciling":
+		case stateReconciling:
 			if conditionStatus(condition) == conditionTrue {
 				reconciling = condition
 			}
@@ -148,11 +185,19 @@ func Status(o *unstructured.Unstructured) (state, message string) {
 		}
 	}
 
+	if ReconcilePending(o) {
+		// Controllers can publish progress before acknowledging the request
+		// in their final patch. Preserve that progress instead of old outcomes.
+		if reconciling != nil {
+			return stateReconciling, conditionMessage(reconciling)
+		}
+		return stateReconciling, "Waiting for controller to handle reconciliation request"
+	}
 	if stalled != nil {
 		return "Failed", conditionMessage(stalled)
 	}
 	if reconciling != nil {
-		return "Reconciling", conditionMessage(reconciling)
+		return stateReconciling, conditionMessage(reconciling)
 	}
 	if ready == nil {
 		return statePending, ""
@@ -163,7 +208,7 @@ func Status(o *unstructured.Unstructured) (state, message string) {
 	}
 	switch conditionStatus(ready) {
 	case conditionTrue:
-		return "Ready", message
+		return stateReady, message
 	case "False":
 		return "Failed", message
 	default:

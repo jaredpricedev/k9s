@@ -1,0 +1,166 @@
+[
+  {
+    "time": 1.1130520319984498,
+    "method": "GET",
+    "path": "/api",
+    "operation": "discovery-or-other"
+  },
+  {
+    "time": 1.1146845489984116,
+    "method": "GET",
+    "path": "/apis",
+    "operation": "discovery-or-other"
+  },
+  {
+    "time": 1.1179646989985486,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews"
+  },
+  {
+    "time": 1.1189987349989678,
+    "method": "GET",
+    "path": "/api/v1/namespaces",
+    "operation": "discovery-or-other"
+  },
+  {
+    "time": 1.129249241999787,
+    "method": "GET",
+    "path": "/version?timeout=2m0s",
+    "operation": "discovery-or-other"
+  },
+  {
+    "time": 1.1325141849993088,
+    "method": "GET",
+    "path": "/api?timeout=32s",
+    "operation": "discovery-or-other"
+  },
+  {
+    "time": 1.1330599199991411,
+    "method": "GET",
+    "path": "/version?timeout=32s",
+    "operation": "discovery-or-other"
+  },
+  {
+    "time": 1.137961489999725,
+    "method": "GET",
+    "path": "/apis?timeout=32s",
+    "operation": "discovery-or-other"
+  },
+  {
+    "time": 1.139136392999717,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 1.1411513919993013,
+    "method": "GET",
+    "path": "/api/v1?timeout=32s",
+    "operation": "discovery-or-other"
+  },
+  {
+    "time": 1.1421910159988329,
+    "method": "GET",
+    "path": "/apis/authorization.k8s.io/v1?timeout=32s",
+    "operation": "discovery-or-other"
+  },
+  {
+    "time": 1.1429592669992417,
+    "method": "GET",
+    "path": "/apis/helm.toolkit.fluxcd.io/v2?timeout=32s",
+    "operation": "discovery-or-other"
+  },
+  {
+    "time": 1.144356845999937,
+    "method": "GET",
+    "path": "/api/v1/nodes?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=514&watch=true",
+    "operation": "discovery-or-other"
+  },
+  {
+    "time": 1.2035059349982475,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 1.2044920929984073,
+    "method": "GET",
+    "path": "/apis/apiextensions.k8s.io/v1/customresourcedefinitions?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=408&watch=true",
+    "operation": "discovery-or-other"
+  },
+  {
+    "time": 1.3071444489996793,
+    "method": "GET",
+    "path": "/version?timeout=2m0s",
+    "operation": "discovery-or-other"
+  },
+  {
+    "time": 1.3074290929998824,
+    "method": "POST",
+    "path": "/apis/authorization.k8s.io/v1/selfsubjectaccessreviews?timeout=2m0s"
+  },
+  {
+    "time": 1.309310230999472,
+    "method": "GET",
+    "path": "/apis/helm.toolkit.fluxcd.io/v2/namespaces/default/helmreleases?allowWatchBookmarks=true&resourceVersionMatch=NotOlderThan&sendInitialEvents=true&timeoutSeconds=334&watch=true",
+    "operation": "watch",
+    "resource": "helmreleases",
+    "name": null
+  },
+  {
+    "time": 4.91686324299917,
+    "method": "GET",
+    "path": "/apis/helm.toolkit.fluxcd.io/v2/namespaces/default/helmreleases/release-00000",
+    "operation": "get",
+    "resource": "helmreleases",
+    "name": "release-00000"
+  },
+  {
+    "time": 4.924483995999253,
+    "method": "PATCH",
+    "path": "/apis/helm.toolkit.fluxcd.io/v2/namespaces/default/helmreleases/release-00000?fieldManager=k9s",
+    "operation": "patch",
+    "resource": "helmreleases",
+    "name": "release-00000",
+    "content_type": "application/merge-patch+json",
+    "body": {
+      "metadata": {
+        "annotations": {
+          "reconcile.fluxcd.io/requestedAt": "2026-09-06T13:39:44.86271413Z"
+        },
+        "resourceVersion": "100",
+        "uid": "release-00000"
+      }
+    }
+  },
+  {
+    "time": 16.209221824999986,
+    "method": "GET",
+    "path": "/apis/helm.toolkit.fluxcd.io/v2/namespaces/default/helmreleases/release-00001",
+    "operation": "get",
+    "resource": "helmreleases",
+    "name": "release-00001"
+  },
+  {
+    "time": 16.218356477998896,
+    "method": "PATCH",
+    "path": "/apis/helm.toolkit.fluxcd.io/v2/namespaces/default/helmreleases/release-00001?fieldManager=k9s",
+    "operation": "patch",
+    "resource": "helmreleases",
+    "name": "release-00001",
+    "content_type": "application/merge-patch+json",
+    "body": {
+      "metadata": {
+        "annotations": {
+          "reconcile.fluxcd.io/requestedAt": "2026-09-06T13:39:56.18907744Z"
+        },
+        "resourceVersion": "100",
+        "uid": "release-00001"
+      }
+    }
+  },
+  {
+    "time": 16.316158189998532,
+    "method": "GET",
+    "path": "/version?timeout=2m0s",
+    "operation": "discovery-or-other"
+  }
+]

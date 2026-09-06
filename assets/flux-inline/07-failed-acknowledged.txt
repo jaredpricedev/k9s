@@ -1,0 +1,28 @@
+ Context: scripted-local [RW]                      <0> all       <d>       Describe            <i>       Status Details      ____  __ ________
+ Cluster: scripted-local                           <1> default   <e>       Edit                <shift-t> Suspend/Resume     |    |/  /   __   \______
+ User:    scripted-local                                         <?>       Help                <w>       Warp To Namespace  |       /\____    /  ___/
+ K9s Rev: v0.0.0                                                 <shift-r> Reconcile           <y>       YAML               |    \   \  /    /\___  \
+ K8s Rev: v1.34.0                                                <shift-u> Sentinel probe                                   |____|\__ \/____//____  /
+ CPU:     n/a                                                    <g>       Source/Dependenc…                                         \/           \/
+ MEM:     n/a
+┌──────────────────────────────────────────────────── helmreleases(default)[1] </release-00001> ─────────────────────────────────────────────────────┐
+│ NAME↑                     STATUS              SUSPEND             REVISION             SOURCE                                  AGE                 │
+│ release-00001             Failed              false               1.0.0                OCIRepository:default/apps              5d13h               │
+│                                                                                                                                                    │
+│                                                                                                                                                    │
+│                                                                                                                                                    │
+│                                                                                                                                                    │
+│                                                                                                                                                    │
+│                                                                                                                                                    │
+│                                                                                                                                                    │
+│                                                                                                                                                    │
+│                                                                                                                                                    │
+│                                                                                                                                                    │
+│                                                                                                                                                    │
+│                                                                                                                                                    │
+│                                                                                                                                                    │
+│                                                                                                                                                    │
+│                                                                                                                                                    │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  <helmrelease>
+                                  😎 Flux reconcile requested for default/release-00001; watch STATUS for completion

@@ -48,6 +48,39 @@ func TestFluxBindingsRespectReadOnly(t *testing.T) {
 	}
 }
 
+func TestFluxDashboardOffersInlineActions(t *testing.T) {
+	for _, ro := range []bool{false, true} {
+		v := NewFlux(client.FluxGVR).(*Flux)
+		v.GetTable().app = &App{App: &ui.App{Configurator: ui.Configurator{Config: &config.Config{K9s: &config.K9s{ReadOnly: ro}}}}}
+		aa := ui.NewKeyActions()
+		v.bindKeys(aa)
+		for _, key := range []tcell.Key{ui.KeyShiftR, ui.KeyShiftT} {
+			action, ok := aa.Get(key)
+			assert.Equal(t, !ro, ok)
+			if ok {
+				assert.True(t, action.Opts.Dangerous)
+			}
+		}
+		_, ok := aa.Get(ui.KeyG)
+		assert.True(t, ok)
+	}
+}
+
+func TestLegacyFluxPluginsCannotReplaceInlineActions(t *testing.T) {
+	for _, resource := range []string{"helm.toolkit.fluxcd.io/v2/helmreleases", "kustomize.toolkit.fluxcd.io/v1/kustomizations", "apps/v1/deployments"} {
+		b := NewBrowser(client.NewGVR(resource)).(*Browser)
+		for _, key := range []tcell.Key{ui.KeyShiftR, ui.KeyShiftT, ui.KeyShiftZ} {
+			aa := ui.NewKeyActions()
+			aa.Add(key, ui.NewKeyAction("Native", func(e *tcell.EventKey) *tcell.EventKey { return e }, true))
+			p := &config.Plugin{Override: true, Description: "Legacy CLI", Command: "false"}
+			require.NoError(t, bindPluginAction(b, aa, "legacy-flux", key, p))
+			action, _ := aa.Get(key)
+			protected := resource != "apps/v1/deployments" && key != ui.KeyShiftZ
+			assert.Equal(t, !protected, action.Opts.Plugin)
+		}
+	}
+}
+
 func TestFluxReferenceResolutionUsesGroupAndStableVersion(t *testing.T) {
 	m := dao.NewMeta()
 	m.RegisterMeta("source.toolkit.fluxcd.io/v1beta2/ocirepositories", &metav1.APIResource{Kind: "OCIRepository"})

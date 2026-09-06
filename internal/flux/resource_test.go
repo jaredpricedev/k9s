@@ -143,6 +143,199 @@ func TestSuspendedSupportsFluxOperatorReconcileAnnotation(t *testing.T) {
 	assert.False(t, Suspended(core))
 }
 
+func TestStatusTracksReconcileRequestLifecycle(t *testing.T) {
+	for _, previous := range []struct {
+		name       string
+		conditions []any
+	}{
+		{"ready", []any{condition("Ready", "True", 3, "UpgradeSucceeded", "previous release succeeded")}},
+		{"failed", []any{condition("Ready", "False", 3, "UpgradeFailed", "previous release failed")}},
+		{"stalled", []any{condition("Stalled", "True", 3, "RetriesExceeded", "previous retries exhausted")}},
+	} {
+		t.Run(previous.name, func(t *testing.T) {
+			o := object("helm.toolkit.fluxcd.io/v2", "HelmRelease", "apps", "demo")
+			o.SetGeneration(3)
+			o.SetAnnotations(map[string]string{"reconcile.fluxcd.io/requestedAt": "retry-2"})
+			status := map[string]any{
+				"lastHandledReconcileAt": "retry-1",
+				"conditions":             previous.conditions,
+			}
+			o.Object["status"] = status
+
+			// A metadata-only request does not change generation, so previous
+			// conditions cannot report whether the new request has finished.
+			state, msg := Status(o)
+			assert.Equal(t, "Reconciling", state)
+			assert.Contains(t, msg, "Waiting for controller")
+
+			status["conditions"] = []any{
+				condition("Ready", "True", 3, "UpgradeSucceeded", "previous release succeeded"),
+				condition("Reconciling", "True", 3, "Progressing", "running Helm tests"),
+			}
+			state, msg = Status(o)
+			assert.Equal(t, "Reconciling", state)
+			assert.Equal(t, "running Helm tests", msg)
+
+			// Acknowledgement may be patched while retries are still in progress.
+			status["lastHandledReconcileAt"] = "retry-2"
+			state, msg = Status(o)
+			assert.Equal(t, "Reconciling", state)
+			assert.Equal(t, "running Helm tests", msg)
+
+			for _, outcome := range []struct {
+				condition map[string]any
+				state     string
+				message   string
+			}{
+				{condition("Ready", "True", 3, "TestSucceeded", "tests passed"), "Ready", "tests passed"},
+				{condition("Ready", "False", 3, "UpgradeFailed", "upgrade failed"), "Failed", "upgrade failed"},
+				{condition("Stalled", "True", 3, "RetriesExceeded", "retries exhausted"), "Failed", "retries exhausted"},
+			} {
+				status["conditions"] = []any{outcome.condition}
+				state, msg = Status(o)
+				assert.Equal(t, outcome.state, state)
+				assert.Equal(t, outcome.message, msg)
+			}
+
+			o.SetAnnotations(map[string]string{"reconcile.fluxcd.io/requestedAt": "retry-3"})
+			state, msg = Status(o)
+			assert.Equal(t, "Reconciling", state)
+			assert.Contains(t, msg, "Waiting for controller")
+		})
+	}
+}
+
+func TestStaticOCIHelmRepositoryDoesNotWaitForReconciliation(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		suspended   bool
+		requestedAt string
+		conditions  []any
+	}{
+		{name: "new repository without status"},
+		{name: "ignored reconcile annotation", requestedAt: "request-2"},
+		{name: "ignored suspension", suspended: true, requestedAt: "request-2"},
+		{name: "historical failure", conditions: []any{condition("Ready", "False", 1, "Failed", "old failure")}},
+		{name: "historical stall", conditions: []any{condition("Stalled", "True", 1, "Failed", "old stall")}},
+		{name: "historical progress", requestedAt: "request-2", conditions: []any{condition("Reconciling", "True", 1, "Progressing", "old progress")}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			o := object("source.toolkit.fluxcd.io/v1", "HelmRepository", "apps", "oci-charts")
+			o.SetGeneration(2)
+			o.SetAnnotations(map[string]string{"reconcile.fluxcd.io/requestedAt": tt.requestedAt})
+			o.Object["spec"] = map[string]any{"type": "oci", "url": "oci://ghcr.io/example/charts", "suspend": tt.suspended}
+			if tt.conditions != nil {
+				o.Object["status"] = map[string]any{"conditions": tt.conditions, "lastHandledReconcileAt": "request-1"}
+			}
+			before := o.DeepCopy()
+			state, message := Status(o)
+			assert.Equal(t, "Ready", state)
+			assert.Contains(t, message, "static source")
+			assert.Contains(t, message, "HelmChart")
+			assert.False(t, Suspended(o), "suspension is not applicable to static repositories")
+			assert.False(t, ReconcilePending(o), "static repositories never acknowledge reconciliation requests")
+			assert.Equal(t, before, o, "static-source checks must not mutate informer objects")
+		})
+	}
+}
+
+func TestIsStaticHelmRepositoryRequiresFluxKindAndOCIType(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		apiVersion string
+		kind       string
+		spec       any
+		static     bool
+	}{
+		{"stable OCI HelmRepository", "source.toolkit.fluxcd.io/v1", "HelmRepository", map[string]any{"type": "oci"}, true},
+		{"beta OCI HelmRepository", "source.toolkit.fluxcd.io/v1beta2", "HelmRepository", map[string]any{"type": "oci"}, true},
+		{"unrelated API group", "example.com/v1", "HelmRepository", map[string]any{"type": "oci"}, false},
+		{"missing API group", "v1", "HelmRepository", map[string]any{"type": "oci"}, false},
+		{"missing API version", "source.toolkit.fluxcd.io/", "HelmRepository", map[string]any{"type": "oci"}, false},
+		{"malformed API version", "source.toolkit.fluxcd.io/v1/invalid", "HelmRepository", map[string]any{"type": "oci"}, false},
+		{"OCIRepository has a reconciler", "source.toolkit.fluxcd.io/v1", "OCIRepository", map[string]any{"type": "oci"}, false},
+		{"default type has a reconciler", "source.toolkit.fluxcd.io/v1", "HelmRepository", map[string]any{"type": "default"}, false},
+		{"URL alone does not select OCI type", "source.toolkit.fluxcd.io/v1", "HelmRepository", map[string]any{"url": "oci://ghcr.io/example/charts"}, false},
+		{"type is case sensitive", "source.toolkit.fluxcd.io/v1", "HelmRepository", map[string]any{"type": "OCI"}, false},
+		{"malformed type", "source.toolkit.fluxcd.io/v1", "HelmRepository", map[string]any{"type": true}, false},
+		{"malformed spec", "source.toolkit.fluxcd.io/v1", "HelmRepository", "invalid", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			o := object(tt.apiVersion, tt.kind, "apps", "charts")
+			o.Object["spec"] = tt.spec
+			assert.Equal(t, tt.static, IsStaticHelmRepository(o))
+			state, _ := Status(o)
+			if tt.static {
+				assert.Equal(t, "Ready", state)
+			} else {
+				assert.Equal(t, "Pending", state, "only static sources are ready without conditions")
+			}
+		})
+	}
+	assert.False(t, IsStaticHelmRepository(nil))
+	assert.False(t, IsStaticHelmRepository(&unstructured.Unstructured{}))
+}
+
+func TestReconcilePendingUsesOpaqueRequestTokens(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		annotations any
+		status      any
+		pending     bool
+	}{
+		{name: "absent annotations"},
+		{name: "malformed annotations", annotations: "invalid"},
+		{name: "malformed token", annotations: map[string]any{"reconcile.fluxcd.io/requestedAt": int64(2)}},
+		{name: "empty token", annotations: map[string]any{"reconcile.fluxcd.io/requestedAt": ""}},
+		{name: "first request", annotations: map[string]any{"reconcile.fluxcd.io/requestedAt": "retry"}, pending: true},
+		{name: "malformed status", annotations: map[string]any{"reconcile.fluxcd.io/requestedAt": "retry"}, status: "invalid", pending: true},
+		{name: "malformed handled token", annotations: map[string]any{"reconcile.fluxcd.io/requestedAt": "retry"}, status: map[string]any{"lastHandledReconcileAt": true}, pending: true},
+		{name: "handled request", annotations: map[string]any{"reconcile.fluxcd.io/requestedAt": "retry"}, status: map[string]any{"lastHandledReconcileAt": "retry"}},
+		{name: "tokens have no temporal ordering", annotations: map[string]any{"reconcile.fluxcd.io/requestedAt": "a"}, status: map[string]any{"lastHandledReconcileAt": "z"}, pending: true},
+		{name: "tokens preserve whitespace", annotations: map[string]any{"reconcile.fluxcd.io/requestedAt": " retry "}, status: map[string]any{"lastHandledReconcileAt": "retry"}, pending: true},
+		{name: "unrelated malformed annotation", annotations: map[string]any{"reconcile.fluxcd.io/requestedAt": "retry", "invalid": true}, pending: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			o := object("helm.toolkit.fluxcd.io/v2", "HelmRelease", "apps", "demo")
+			o.Object["metadata"].(map[string]any)["annotations"] = tt.annotations
+			o.Object["status"] = tt.status
+			assert.Equal(t, tt.pending, ReconcilePending(o))
+		})
+	}
+	assert.False(t, ReconcilePending(nil))
+	assert.False(t, ReconcilePending(&unstructured.Unstructured{}))
+	assert.False(t, ReconcilePending(&unstructured.Unstructured{Object: map[string]any{"metadata": "invalid"}}))
+}
+
+func TestStatusPendingRequestRespectsSuspensionAndListErrors(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		apiVersion string
+		kind       string
+		spec       map[string]any
+		annotation string
+		value      string
+		wantState  string
+		wantMsg    string
+	}{
+		{name: "no conditions", apiVersion: "helm.toolkit.fluxcd.io/v2", kind: "HelmRelease", wantState: "Reconciling", wantMsg: "Waiting for controller"},
+		{name: "spec suspended", apiVersion: "helm.toolkit.fluxcd.io/v2", kind: "HelmRelease", spec: map[string]any{"suspend": true}, wantState: "Suspended", wantMsg: "Reconciliation is suspended"},
+		{name: "operator suspended", apiVersion: "fluxcd.controlplane.io/v1", kind: "ResourceSet", annotation: "fluxcd.controlplane.io/reconcile", value: " Disabled ", wantState: "Suspended", wantMsg: "Reconciliation is suspended"},
+		{name: "list unavailable", apiVersion: "helm.toolkit.fluxcd.io/v2", kind: "HelmRelease", annotation: "k9scli.io/flux-list-error", value: "service unavailable", wantState: "Unknown", wantMsg: "service unavailable"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			o := object(tt.apiVersion, tt.kind, "apps", "demo")
+			o.SetAnnotations(map[string]string{"reconcile.fluxcd.io/requestedAt": "retry", tt.annotation: tt.value})
+			o.Object["spec"] = tt.spec
+			before := o.DeepCopy()
+			state, msg := Status(o)
+			assert.Equal(t, tt.wantState, state)
+			assert.Contains(t, msg, tt.wantMsg)
+			assert.Equal(t, before, o, "status reads must not mutate informer objects")
+		})
+	}
+}
+
 func TestStatusHandlesSyntheticListErrorsAndMalformedData(t *testing.T) {
 	restricted := object("helm.toolkit.fluxcd.io/v2", "HelmRelease", "apps", "<restricted>")
 	restricted.SetAnnotations(map[string]string{"k9scli.io/flux-list-error": "helmreleases is forbidden"})

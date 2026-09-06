@@ -18,12 +18,17 @@ import (
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/version"
 )
 
 // Flux presents the unified Flux browser and native per-kind Flux operations.
 type Flux struct{ ResourceViewer }
+
+// Only accessed on the UI thread. Cluster and identity keep submissions separate
+// across navigation, context switches and objects recreated with the same name.
+type fluxActionKey struct {
+	context, resource, path, uid string
+}
 
 func NewFlux(gvr *client.GVR) ResourceViewer {
 	f := &Flux{ResourceViewer: NewBrowser(gvr)}
@@ -53,10 +58,9 @@ func (f *Flux) bindKeys(aa *ui.KeyActions) {
 	aa.Add(ui.KeyShiftK, ui.NewKeyAction("Sort Kind", f.GetTable().SortColCmd("KIND", true), false))
 	if f.GVR() == client.FluxGVR {
 		aa.Delete(ui.KeyN, ui.KeyW)
-		return // Open a concrete resource before invoking resource actions.
 	}
 	aa.Add(ui.KeyG, ui.NewKeyAction("Source/Dependencies", f.relatedCmd, true))
-	if f.App().Config.IsReadOnly() || !dao.FluxNativeActions(f.GVR()) {
+	if f.App().Config.IsReadOnly() || (f.GVR() != client.FluxGVR && !dao.FluxNativeActions(f.GVR())) {
 		return
 	}
 	aa.Add(ui.KeyShiftR, ui.NewKeyActionWithOpts("Reconcile", f.reconcileCmd, ui.ActionOpts{Visible: true, Dangerous: true}))
@@ -120,7 +124,15 @@ func (f *Flux) selected() (*unstructured.Unstructured, string, error) {
 	if fqn == "" {
 		return nil, "", fmt.Errorf("select a Flux resource")
 	}
-	o, err := f.App().factory.Get(f.GVR(), fqn, true, labels.Everything())
+	gvr := f.GVR()
+	if gvr == client.FluxGVR {
+		var ok bool
+		gvr, fqn, ok = parseFluxPath(fqn)
+		if !ok {
+			return nil, "", fmt.Errorf("select an available Flux resource")
+		}
+	}
+	o, err := f.App().factory.CachedGet(gvr, f.GetTable().GetNamespace(), fqn)
 	if err != nil {
 		return nil, "", err
 	}
@@ -149,6 +161,10 @@ func (f *Flux) confirmAction(evt *tcell.EventKey, action string) *tcell.EventKey
 		app.Flash().Err(err)
 		return evt
 	}
+	if flux.IsStaticHelmRepository(o) {
+		app.Flash().Warn("OCI HelmRepositories are static; reconcile their HelmChart or use an OCIRepository")
+		return nil
+	}
 	if action == "toggle" {
 		action = "suspend"
 		if flux.Suspended(o) {
@@ -159,12 +175,21 @@ func (f *Flux) confirmAction(evt *tcell.EventKey, action string) *tcell.EventKey
 		app.Flash().Warn("Resume this resource before reconciling it")
 		return nil
 	}
-	operation, err := dao.PrepareFluxAction(app.Conn(), f.GVR(), fqn, o.GetUID(), action)
+	contextName := app.Config.ActiveContextName()
+	key := fluxActionKey{contextName, flux.GVRFor(o).String(), fqn, string(o.GetUID())}
+	if _, busy := app.fluxActions[key]; busy {
+		app.Flash().Infof("A Flux action is already being submitted for %s", fqn)
+		return nil
+	}
+	if action == "reconcile" && flux.ReconcilePending(o) {
+		app.Flash().Infof("Flux reconciliation already queued for %s; watch STATUS for controller progress", fqn)
+		return nil
+	}
+	operation, err := dao.PrepareFluxAction(app.Conn(), flux.GVRFor(o), fqn, o.GetUID(), action)
 	if err != nil {
 		app.Flash().Err(err)
 		return nil
 	}
-	contextName := app.Config.ActiveContextName()
 	timeout := app.Conn().Config().CallTimeout()
 	if timeout <= 0 {
 		timeout = 10 * time.Second
@@ -176,6 +201,13 @@ func (f *Flux) confirmAction(evt *tcell.EventKey, action string) *tcell.EventKey
 			app.Flash().Warn("Context or read-only mode changed; confirm the action again")
 			return
 		}
+		if _, busy := app.fluxActions[key]; busy {
+			return
+		}
+		if app.fluxActions == nil {
+			app.fluxActions = make(map[fluxActionKey]struct{})
+		}
+		app.fluxActions[key] = struct{}{}
 		app.Flash().Infof("Requesting Flux %s for %s", action, fqn)
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -185,6 +217,10 @@ func (f *Flux) confirmAction(evt *tcell.EventKey, action string) *tcell.EventKey
 				return
 			}
 			app.QueueUpdateDraw(func() {
+				delete(app.fluxActions, key)
+				if app.Config.ActiveContextName() != contextName {
+					return
+				}
 				if err != nil {
 					app.Flash().Errf("Flux %s failed for %s: %v", action, fqn, err)
 					return

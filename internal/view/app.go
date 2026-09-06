@@ -52,6 +52,7 @@ type App struct {
 	clusterModel  *model.ClusterInfo
 	cmdHistory    *model.History
 	filterHistory *model.History
+	fluxActions   map[fluxActionKey]struct{}
 	conRetry      int32
 	showHeader    bool
 	showLogo      bool

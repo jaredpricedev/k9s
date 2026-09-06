@@ -19,6 +19,16 @@ This fork includes native Flux views (`:flux`, OCI sources, health and source/de
 
 The new pass makes bulk row removal linear, reduces snapshot allocations and fixes an ASCII-rendering regression from the earlier UI polish. In five-round local microbenchmarks, removing 5,000 of 10,000 rows fell from 835 ms upstream to 1.6 ms; table rebuild plus simulated drawing fell from 33.2 ms to 25.8 ms. These are individual CPU workloads. The real-terminal demo is close to upstream for the selected filter interaction, and the report includes slower cases and timing variation.
 
+### Inline Flux reconciliation
+
+Press `Shift-R` in `:helmreleases` or `:flux` to confirm a background reconcile request, then keep filtering and navigating. STATUS becomes Reconciling while the request is waiting for Flux, follows controller progress, and shows the eventual result. `Shift-T` suspends/resumes inline. Older Flux plugins cannot replace these native keys; optional CLI workflows move to separate shortcuts.
+
+[![Reconciliation pending in the running k9s UI with 10,000 HelmReleases](assets/flux-inline/reconciling.png)](assets/flux-inline/inline-reconcile.mp4)
+
+[Watch the inline demo](assets/flux-inline/inline-reconcile.mp4) · [Reproduce the demo and inspect its checks](assets/flux-inline/README.md)
+
+The real TUI stays interactive while the disposable API deliberately holds its PATCH response and its simulated controller waits. This demonstrates responsiveness, not faster Helm deployments. The status-only benchmark over 10,000 releases with 64 annotations each improved from 110.5 ms to 10.0 ms median, eliminating 51.44 MB and 80,000 allocations per scan. [Raw five-round results and limits](docs/flux-status-benchmark-2026-09-06.txt).
+
 ### Flux screenshots
 
 Captured from the running TUI using a local demo API with synthetic resources. Names, revisions and cluster details are examples; these captures do not represent live-cluster validation. Click an image to view it at full size.

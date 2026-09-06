@@ -1,0 +1,28 @@
+ Context: scripted-local [RW]                      <0> all       <d>       Describe            <i>       Status Details      ____  __ ________
+ Cluster: scripted-local                           <1> default   <e>       Edit                <shift-t> Suspend/Resume     |    |/  /   __   \______
+ User:    scripted-local                                         <?>       Help                <w>       Warp To Namespace  |       /\____    /  ___/
+ K9s Rev: v0.0.0                                                 <shift-r> Reconcile           <y>       YAML               |    \   \  /    /\___  \
+ K8s Rev: v1.34.0                                                <shift-u> Sentinel probe                                   |____|\__ \/____//____  /
+ CPU:     n/a                                                    <g>       Source/Dependenc…                                         \/           \/
+ MEM:     n/a
+┌──────────────────────────────────────────────────── helmreleases(default)[100] </release-000> ─────────────────────────────────────────────────────┐
+│ NAME↑                     STATUS                  SUSPEND            REVISION            SOURCE                                 AGE                │
+│ release-00000             Reconciling             false              1.0.0               OCIRepository:default/apps             5d13h              │
+│ release-00001             Ready                   false              1.0.0               OCIRepository:default/apps             5d13h              │
+│ release-00002             Ready                   false              1.0.0               OCIRepository:default/apps             5d13h              │
+│ release-00003             Ready                   false              1.0.0               OCIRepository:default/apps             5d13h              │
+│ release-00004             Ready                   false              1.0.0               OCIRepository:default/apps             5d13h              │
+│ release-00005             Ready                   false              1.0.0               OCIRepository:default/apps             5d13h              │
+│ release-00006             Ready                   false              1.0.0               OCIRepository:default/apps             5d13h              │
+│ release-00007             Ready                   false              1.0.0               OCIRepository:default/apps             5d13h              │
+│ release-00008             Ready                   false              1.0.0               OCIRepository:default/apps             5d13h              │
+│ release-00009             Ready                   false              1.0.0               OCIRepository:default/apps             5d13h              │
+│ release-00010             Ready                   false              1.0.0               OCIRepository:default/apps             5d13h              │
+│ release-00011             Ready                   false              1.0.0               OCIRepository:default/apps             5d13h              │
+│ release-00012             Ready                   false              1.0.0               OCIRepository:default/apps             5d13h              │
+│ release-00013             Ready                   false              1.0.0               OCIRepository:default/apps             5d13h              │
+│ release-00014             Ready                   false              1.0.0               OCIRepository:default/apps             5d13h              │
+│ release-00015             Ready                   false              1.0.0               OCIRepository:default/apps             5d13h              │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  <helmrelease>
+                        😎 Flux reconciliation already queued for default/release-00000; watch STATUS for controller progress

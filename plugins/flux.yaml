@@ -1,14 +1,17 @@
 # Copy this file to $XDG_CONFIG_HOME/k9s/plugins/flux.yaml.
 # Requires the Flux CLI. Flux Operator actions also require the flux-operator CLI.
 # Every command uses the context and kubeconfig selected by K9s.
+# Core Flux resources use native Shift-R reconcile and Shift-T suspend/resume
+# without leaving K9s or waiting for reconciliation. Optional CLI workflows use
+# Shift-Z to reconcile and wait (with force/reset/source inputs where supported)
+# and Shift-U to toggle suspend/resume; CLI output opens in a pager.
 plugins:
   toggle-helmrelease:
-    shortCut: Shift-T
-    override: true
+    shortCut: Shift-U
     confirm: true
     dangerous: true
     scopes: [helmreleases]
-    description: Toggle HelmRelease suspend/resume
+    description: "CLI: Toggle HelmRelease suspend/resume"
     command: bash
     background: false
     args:
@@ -25,12 +28,11 @@ plugins:
       - $NAME
 
   toggle-kustomization:
-    shortCut: Shift-T
-    override: true
+    shortCut: Shift-U
     confirm: true
     dangerous: true
     scopes: [kustomizations]
-    description: Toggle Kustomization suspend/resume
+    description: "CLI: Toggle Kustomization suspend/resume"
     command: bash
     background: false
     args:
@@ -47,11 +49,10 @@ plugins:
       - $NAME
 
   reconcile-git:
-    shortCut: Shift-R
-    override: true
+    shortCut: Shift-Z
     confirm: false
     dangerous: true
-    description: Reconcile GitRepository
+    description: "CLI: Reconcile GitRepository (wait)"
     scopes: [gitrepositories]
     command: bash
     background: false
@@ -65,11 +66,10 @@ plugins:
       - $NAME
 
   reconcile-hr:
-    shortCut: Shift-R
-    override: true
+    shortCut: Shift-Z
     confirm: false
     dangerous: true
-    description: Reconcile HelmRelease
+    description: "CLI: Reconcile HelmRelease (wait)"
     scopes: [helmreleases]
     command: bash
     background: false
@@ -98,7 +98,7 @@ plugins:
     shortCut: Shift-Z
     confirm: false
     dangerous: true
-    description: Reconcile HelmRepository
+    description: "CLI: Reconcile HelmRepository (wait)"
     scopes: [helmrepositories]
     command: bash
     background: false
@@ -115,7 +115,7 @@ plugins:
     shortCut: Shift-Z
     confirm: false
     dangerous: true
-    description: Reconcile OCIRepository
+    description: "CLI: Reconcile OCIRepository (wait)"
     scopes: [ocirepositories]
     command: bash
     background: false
@@ -129,11 +129,10 @@ plugins:
       - $NAME
 
   reconcile-ks:
-    shortCut: Shift-R
-    override: true
+    shortCut: Shift-Z
     confirm: false
     dangerous: true
-    description: Reconcile Kustomization
+    description: "CLI: Reconcile Kustomization (wait)"
     scopes: [kustomizations]
     command: bash
     background: false
@@ -311,7 +310,7 @@ plugins:
   trace:
     shortCut: Shift-Q
     confirm: false
-    description: Trace Flux ownership
+    description: "CLI: Trace Flux ownership"
     scopes: [all]
     command: bash
     background: false
@@ -338,7 +337,7 @@ plugins:
   tree-kustomization:
     shortCut: Shift-Y
     confirm: false
-    description: Flux resource tree
+    description: "CLI: Flux resource tree"
     scopes: [kustomizations]
     command: bash
     background: false
@@ -354,7 +353,7 @@ plugins:
   controller-logs:
     shortCut: Shift-L
     confirm: false
-    description: Flux reconciliation logs
+    description: "CLI: Flux reconciliation logs"
     scopes:
       - gitrepositories
       - ocirepositories
@@ -393,7 +392,7 @@ plugins:
     shortCut: Shift-S
     override: true
     confirm: false
-    description: Suspended HelmReleases
+    description: "CLI: Suspended HelmReleases"
     scopes: [helmreleases]
     command: bash
     background: false
@@ -410,7 +409,7 @@ plugins:
     shortCut: Shift-S
     override: true
     confirm: false
-    description: Suspended Kustomizations
+    description: "CLI: Suspended Kustomizations"
     scopes: [kustomizations]
     command: bash
     background: false

@@ -15,7 +15,9 @@ import (
 	"time"
 
 	"github.com/derailed/k9s/internal/config"
+	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/k9s/internal/view"
+	"github.com/derailed/tcell/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -57,9 +59,114 @@ func TestFluxMutationPluginsAreDangerous(t *testing.T) {
 			plugin, ok := pp.Plugins[name]
 			require.True(t, ok, "missing plugin %q", name)
 			assert.True(t, plugin.Dangerous, "mutation plugin must be disabled in read-only mode")
-			if plugin.ShortCut == "Shift-R" || plugin.ShortCut == "Shift-T" {
-				assert.True(t, plugin.Override, "bundled plugin must explicitly override the native Flux action")
+		})
+	}
+}
+
+func TestFluxCorePluginsPreserveNativeShortcuts(t *testing.T) {
+	pp := loadFluxPlugins(t)
+	supportedKeys := make(map[string]tcell.Key, len(tcell.KeyNames))
+	for key, name := range tcell.KeyNames {
+		supportedKeys[name] = key
+	}
+	for _, scope := range []string{
+		"helmreleases", "kustomizations", "gitrepositories", "helmrepositories",
+		"ocirepositories", "helmcharts", "buckets",
+	} {
+		t.Run(scope, func(t *testing.T) {
+			claimedKeys := make(map[tcell.Key]string)
+			for name, plugin := range pp.Plugins {
+				for _, pluginScope := range plugin.Scopes {
+					if pluginScope != scope && pluginScope != "all" {
+						continue
+					}
+					key, ok := supportedKeys[plugin.ShortCut]
+					require.True(t, ok, "%s must use a supported shortcut", name)
+					assert.NotEqual(t, ui.KeyShiftR, key, "%s must preserve native reconcile", name)
+					assert.NotEqual(t, ui.KeyShiftT, key, "%s must preserve native suspend/resume", name)
+					previous, claimed := claimedKeys[key]
+					assert.False(t, claimed, "%s and %s share %s", name, previous, plugin.ShortCut)
+					claimedKeys[key] = name
+					assert.Contains(t, plugin.Description, "CLI", "%s must identify its external command", name)
+					if strings.HasPrefix(name, "reconcile-") {
+						assert.Contains(t, plugin.Description, "wait", "%s must explain that CLI reconciliation waits", name)
+					}
+					break
+				}
 			}
+		})
+	}
+}
+
+func TestFluxOptionalCLIActions(t *testing.T) {
+	requirePluginTestTools(t, "bash")
+	pp := loadFluxPlugins(t)
+	for _, tc := range []struct {
+		name    string
+		plugin  string
+		command []string
+		inputs  view.Env
+		flags   []string
+		state   string
+	}{
+		{name: "git", plugin: "reconcile-git", command: []string{"reconcile", "source", "git"}},
+		{name: "helm repository", plugin: "reconcile-helm-repo", command: []string{"reconcile", "source", "helm"}},
+		{name: "oci", plugin: "reconcile-oci-repo", command: []string{"reconcile", "source", "oci"}},
+		{name: "helmrelease", plugin: "reconcile-hr", command: []string{"reconcile", "helmrelease"}},
+		{name: "helmrelease force", plugin: "reconcile-hr", command: []string{"reconcile", "helmrelease"}, inputs: view.Env{"INPUT_FORCE": "true"}, flags: []string{"--force"}},
+		{name: "helmrelease reset", plugin: "reconcile-hr", command: []string{"reconcile", "helmrelease"}, inputs: view.Env{"INPUT_RESET": "true"}, flags: []string{"--reset"}},
+		{name: "helmrelease source", plugin: "reconcile-hr", command: []string{"reconcile", "helmrelease"}, inputs: view.Env{"INPUT_SOURCE": "true"}, flags: []string{"--with-source"}},
+		{name: "kustomization", plugin: "reconcile-ks", command: []string{"reconcile", "kustomization"}},
+		{name: "kustomization source", plugin: "reconcile-ks", command: []string{"reconcile", "kustomization"}, inputs: view.Env{"INPUT_SOURCE": "true"}, flags: []string{"--with-source"}},
+		{name: "helmrelease suspend", plugin: "toggle-helmrelease", command: []string{"suspend", "helmrelease"}, state: "false"},
+		{name: "helmrelease resume", plugin: "toggle-helmrelease", command: []string{"resume", "helmrelease"}, state: "true"},
+		{name: "kustomization suspend", plugin: "toggle-kustomization", command: []string{"suspend", "kustomization"}, state: "false"},
+		{name: "kustomization resume", plugin: "toggle-kustomization", command: []string{"resume", "kustomization"}, state: "true"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plugin, ok := pp.Plugins[tc.plugin]
+			require.True(t, ok)
+			assert.False(t, plugin.Override, "optional CLI actions must not replace native actions")
+			binDir := t.TempDir()
+			logPath := filepath.Join(t.TempDir(), "flux.log")
+			kubectlLogPath := filepath.Join(t.TempDir(), "kubectl.log")
+			injectionMarker := filepath.Join(t.TempDir(), "injected")
+			writeExecutable(t, binDir, "flux", `printf '%s\0' "${KUBECONFIG-}" "$@" >"$LOG_PATH"`)
+			writeExecutable(t, binDir, "kubectl", `
+printf '%s\0' "${KUBECONFIG-}" "$@" >"$KUBECTL_LOG_PATH"
+printf '%s' "$SUSPEND_STATE"
+`)
+			writeExecutable(t, binDir, "less", "cat")
+			env := view.Env{
+				"CONTEXT":      "selected context; touch " + injectionMarker,
+				"KUBECONFIG":   "/tmp/kube config; touch " + injectionMarker,
+				"NAMESPACE":    "selected namespace; touch " + injectionMarker,
+				"NAME":         "selected name; touch " + injectionMarker,
+				"INPUT_FORCE":  "false",
+				"INPUT_RESET":  "false",
+				"INPUT_SOURCE": "false",
+			}
+			for name, value := range tc.inputs {
+				env[name] = value
+			}
+			require.NoError(t, executePlugin(&plugin, env, append(os.Environ(),
+				"PATH="+binDir+":"+os.Getenv("PATH"),
+				"LOG_PATH="+logPath,
+				"KUBECTL_LOG_PATH="+kubectlLogPath,
+				"SUSPEND_STATE="+tc.state,
+			)))
+			log, err := os.ReadFile(logPath)
+			require.NoError(t, err)
+			want := append([]string{env["KUBECONFIG"]}, tc.command...)
+			want = append(want, "--context", env["CONTEXT"], "-n", env["NAMESPACE"], env["NAME"])
+			want = append(want, tc.flags...)
+			assert.Equal(t, want, strings.Split(strings.TrimSuffix(string(log), "\x00"), "\x00"))
+			if tc.state != "" {
+				log, err := os.ReadFile(kubectlLogPath)
+				require.NoError(t, err)
+				assert.Equal(t, []string{env["KUBECONFIG"], "--context", env["CONTEXT"], "get", tc.command[1], "-n", env["NAMESPACE"], env["NAME"], "-o", "jsonpath={.spec.suspend}"}, strings.Split(strings.TrimSuffix(string(log), "\x00"), "\x00"))
+			}
+			assert.NoFileExists(t, injectionMarker)
 		})
 	}
 }
