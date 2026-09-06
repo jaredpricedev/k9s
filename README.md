@@ -11,6 +11,34 @@ for changes and offers subsequent commands to interact with your observed resour
 
 This fork includes native Flux views (`:flux`, OCI sources, health and source/dependency navigation), confirmed Flux operations, safer Flux plugins, read-only fixes and measured table performance improvements. See [Flux workflows](docs/flux.md) and the [review findings](docs/review-2026-09-06.md) for usage and verification.
 
+### Flux screenshots
+
+Captured from the running TUI using a local demo API with synthetic resources. Names, revisions and cluster details are examples; these captures do not represent live-cluster validation. Click an image to view it at full size.
+
+**Combined Flux dashboard — `:flux all`**
+
+See Kustomizations, HelmReleases and sources together, with health, suspension, revision and controller messages.
+
+![Combined Flux dashboard showing Ready, Failed, Reconciling and Suspended resources across namespaces](assets/screenshots/flux-overview.png)
+
+**Native resource view — `:kustomizations flux-system`**
+
+Inspect reconciliation status and OCI source references. Native actions appear in the shortcut bar, including `Shift-R` to reconcile and `Shift-T` to suspend or resume.
+
+![Native Kustomization view showing OCI revisions and sources, health states, and Flux action shortcuts](assets/screenshots/flux-kustomizations.png)
+
+**Source and dependency navigation — `g`**
+
+Jump from a resource to its OCI source or an explicit dependency without looking up the resource kind and namespace manually.
+
+![Flux relationships dialog listing the selected Kustomization's OCI source and infrastructure and monitoring dependencies](assets/screenshots/flux-relationships.png)
+
+**Confirmed reconciliation — `Shift-R`**
+
+The confirmation identifies the resource, namespace and context before submitting the request. Native write actions are unavailable in read-only mode.
+
+![Flux reconciliation confirmation naming Kustomization flux-system/apps in context demo-dev, with Cancel selected](assets/screenshots/flux-reconcile.png)
+
 ---
 
 ## Note...
