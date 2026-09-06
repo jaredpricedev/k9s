@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package config
 
@@ -13,7 +14,7 @@ import (
 )
 
 const (
-	envPFAddress          = "K9S_DEFAULT_PF_ADDRESS"
+	envPFAddress          = "K9PLUS_DEFAULT_PF_ADDRESS"
 	defaultPortFwdAddress = "localhost"
 )
 

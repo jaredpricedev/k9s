@@ -1,4 +1,5 @@
-name: K9s Test
+# Modified for k9+ by the k9+ contributors; see MODIFICATIONS.md.
+name: k9+ Test
 
 on:
   workflow_dispatch:
@@ -31,3 +32,9 @@ jobs:
         run: make test
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test license collector
+        run: python3 -m unittest discover -s scripts -p test_collect_licenses.py
+
+      - name: Check distribution license bundle
+        run: make licenses

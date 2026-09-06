@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Exercise and film native Flux reconciliation in a real K9s PTY.
+# Modified for k9+; see NOTICE.
+"""Exercise and film native Flux reconciliation in a real k9+ PTY.
 
-  python scripts/flux-inline-demo.py --binary /tmp/k9s-flux-inline
+  python scripts/flux-inline-demo.py --binary /tmp/k9plus-demo
+Use --app k9s for a pre-rebrand fork. New captures default to assets/k9plus/flux-inline.
 
 Requires Python 3, pyte, Pillow, and ffmpeg (unless --no-video). The disposable
 localhost API contains 10,000 HelmReleases. Its PATCH response and fake controller
@@ -209,18 +211,20 @@ class InlineHandler(DEMO.APIHandler):
 
 
 class Capture(PERF.Capture):
-    def __init__(self, binary, directory, port, cols, rows):
+    def __init__(self, binary, directory, port, cols, rows, app="k9plus"):
         root = Path(directory)
-        for name in ["config", "data", "state", "cache", "logs"]:
-            (root / name / "k9s").mkdir(parents=True)
-        (root / "config/k9s/config.yaml").write_text(
+        kubeconfig = root / "kubeconfig"
+        self.app = app
+        self.environment = dict(PERF.ENVIRONMENT)
+        env = DEMO.isolated_runtime(root, app, kubeconfig, self.environment)
+        (root / "config" / app / "config.yaml").write_text(
             "k9s:\n  skipLatestRevCheck: true\n  refreshRate: 2\n  ui:\n    splashless: true\n")
         self.sentinel = root / "unexpected-cli-invocation.txt"
         (root / "bin").mkdir()
         executable = root / "bin/flux"
         executable.write_text('#!/bin/sh\nprintf "legacy plugin invoked\\n" >> "$FLUX_SENTINEL_FILE"\nexit 99\n')
         executable.chmod(0o755)
-        (root / "config/k9s/plugins.yaml").write_text("""plugins:
+        (root / "config" / app / "plugins.yaml").write_text("""plugins:
   legacy-reconcile-hr:
     shortCut: Shift-R
     override: true
@@ -238,7 +242,6 @@ class Capture(PERF.Capture):
     command: flux
     background: false
 """)
-        kubeconfig = root / "kubeconfig"
         kubeconfig.write_text(f"""apiVersion: v1
 kind: Config
 clusters:
@@ -256,13 +259,7 @@ users:
 - name: scripted-local
   user: {{}}
 """)
-        env = {k: v for k, v in os.environ.items() if not k.startswith(("K9S_", "KUBECONFIG", "KUBECACHEDIR", "XDG_", "GODEBUG"))}
-        self.environment = dict(PERF.ENVIRONMENT)
-        env.update(self.environment, KUBECONFIG=str(kubeconfig), K9S_CONFIG_DIR=str(root / "config/k9s"),
-                   K9S_LOGS_DIR=str(root / "logs"), KUBECACHEDIR=str(root / "kube-cache"),
-                   FLUX_SENTINEL_FILE=str(self.sentinel), PATH=str(root / "bin") + os.pathsep + env.get("PATH", ""))
-        for name in ["config", "data", "state", "cache"]:
-            env["XDG_" + name.upper() + "_HOME"] = str(root / name)
+        env.update(FLUX_SENTINEL_FILE=str(self.sentinel), PATH=str(root / "bin") + os.pathsep + env.get("PATH", ""))
         self.master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 
@@ -345,7 +342,7 @@ def apply_filter(capture, query, count):
 def move_down(capture, previous, following):
     before = row_style(capture.screen, previous)
     next_unselected = row_style(capture.screen, following)
-    # K9s highlights each selected row by swapping its own severity colors.
+    # The table highlights each selected row by swapping its own severity colors.
     next_selected = tuple((bg, fg, reverse) for fg, bg, reverse in next_unselected)
     start = capture.key("j")
     end = capture.wait(lambda s: row_style(s, previous) != before and row_style(s, following) == next_selected, 5)
@@ -373,20 +370,20 @@ def capture_run(args):
     api = InlineAPI(args.count)
     api_thread = threading.Thread(target=api.serve_forever, daemon=True)
     api_thread.start()
-    results = {"schema_version": 1, "captured_at": datetime.now(timezone.utc).isoformat(),
+    results = {"schema_version": 1, "runtime": args.app, "captured_at": datetime.now(timezone.utc).isoformat(),
                "binary": {"path": str(args.binary), "sha256": hashlib.sha256(args.binary.read_bytes()).hexdigest()},
                "fixture": {"resource": "HelmRelease", "count": args.count, "namespace": "default",
                            "transport": "disposable localhost HTTP", "controller": "scripted; no Flux controller or CLI is running",
                            "delays": "PATCH response and controller updates wait for explicit harness signals"},
                "terminal": {"columns": args.cols, "rows": args.rows}, "screenshots": {}, "checks": {}, "interactions": [],
-               "method": {"capture": "real K9s PTY; complete tcell frames; terminal output replayed at original pace",
+               "method": {"capture": f"real {args.app} PTY; complete tcell frames; terminal output replayed at original pace",
                           "limit": "Synthetic responsiveness smoke test, not evidence of actual Flux reconciliation speed",
-                          "isolation": "Explicit loopback kubeconfig; isolated K9s, XDG config/data/state/cache and KUBECACHEDIR"}}
+                          "isolation": f"Explicit loopback kubeconfig; isolated {args.app}, XDG config/data/state/cache and KUBECACHEDIR"}}
     capture = None
     error = None
-    with tempfile.TemporaryDirectory(prefix="k9s-flux-inline-") as directory:
+    with tempfile.TemporaryDirectory(prefix=args.app + "-flux-inline-") as directory:
         try:
-            capture = Capture(args.binary, directory, api.server_port, args.cols, args.rows)
+            capture = Capture(args.binary, directory, api.server_port, args.cols, args.rows, args.app)
             capture.wait(lambda s: table_matches(s, args.count), args.timeout)
             ensure("Sentinel probe" in display(capture.screen), "Sentinel plugin config did not load")
             results["checks"]["sentinel_plugin_config_loaded"] = True
@@ -524,7 +521,8 @@ def render(path, results, fps, video):
                 panel = PERF.rasterize(replay.screen, mono, bold, 9, 18)
             image = Image.new("RGB", (width, height), "#10121a")
             draw = ImageDraw.Draw(image)
-            draw.text((16, 12), f"Native Flux reconcile · {results['fixture']['count']:,} HelmReleases", font=title_font, fill="#edf1f8")
+            label = "k9+ · " if results.get("runtime") == "k9plus" else ""
+            draw.text((16, 12), f"{label}Native Flux reconcile · {results['fixture']['count']:,} HelmReleases", font=title_font, fill="#edf1f8")
             draw.text((16, 44), "REAL PACE 1× · Local fake API · Controller timing is scripted, not a Flux speed benchmark", font=label_font, fill="#d9c590")
             image.paste(panel, (16, 76))
             encoder.stdin.write(image.tobytes())
@@ -541,8 +539,9 @@ def render(path, results, fps, video):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--binary", type=Path, default=Path("/tmp/k9s-flux-inline"))
-    parser.add_argument("--output", type=Path, default=Path("assets/flux-inline"))
+    parser.add_argument("--binary", type=Path, default=Path("/tmp/k9plus-demo"))
+    parser.add_argument("--app", choices=["k9plus", "k9s"], default="k9plus", help="runtime environment and storage namespace")
+    parser.add_argument("--output", type=Path, default=Path("assets/k9plus/flux-inline"))
     parser.add_argument("--render-only", type=Path, metavar="RESULTS_JSON")
     parser.add_argument("--no-video", action="store_true")
     parser.add_argument("--count", type=int, default=10000)

@@ -1,0 +1,81 @@
+{
+  "runtime": "k9plus",
+  "binary": "/tmp/k9plus-demo",
+  "binary_sha256": "d3ac18c871cff23956f09b17feb91d6c2534087d012c3f480187efd9813f24da",
+  "terminal": {
+    "columns": 202,
+    "rows": 32
+  },
+  "screenshots": [
+    {
+      "file": "flux-overview.png",
+      "expected": [
+        "flux(all)",
+        "Reconciling",
+        "Suspended",
+        "Failed"
+      ],
+      "captured_at": "2026-09-06T14:12:55.171500+00:00"
+    },
+    {
+      "file": "flux-kustomizations.png",
+      "expected": [
+        "kustomizations(flux-system)",
+        "STATUS",
+        "REVISION"
+      ],
+      "captured_at": "2026-09-06T14:12:57.367967+00:00"
+    },
+    {
+      "file": "flux-relationships.png",
+      "expected": [
+        "Flux relationships",
+        "Source:",
+        "Dependency:"
+      ],
+      "captured_at": "2026-09-06T14:12:58.584632+00:00"
+    },
+    {
+      "file": "flux-reconcile.png",
+      "expected": [
+        "Confirm Flux action",
+        "reconcile Kustomization flux-system/apps in context demo-dev?"
+      ],
+      "captured_at": "2026-09-06T14:13:00.893458+00:00"
+    },
+    {
+      "file": "certificates-overview.png",
+      "expected": [
+        "certificates(all)",
+        "Expired",
+        "Expiring",
+        "Renewal Due",
+        "Issuing",
+        "Ready"
+      ],
+      "captured_at": "2026-09-06T14:13:04.115319+00:00"
+    },
+    {
+      "file": "certificate-relationships.png",
+      "expected": [
+        "Certificate relationships",
+        "ClusterIssuer:",
+        "Secret: apps/api-tls",
+        "CertificateRequest: apps/api-tls-1"
+      ],
+      "captured_at": "2026-09-06T14:13:11.383719+00:00"
+    },
+    {
+      "file": "certificate-status.png",
+      "expected": [
+        "Certificate Status",
+        "apps/api-tls",
+        "DNS NAMES",
+        "api.example.test"
+      ],
+      "captured_at": "2026-09-06T14:13:13.563080+00:00"
+    }
+  ],
+  "method": "Only actual terminal cells from a real PTY against a disposable localhost fixture are rasterized.",
+  "configuration": "Isolated runtime config/logs, XDG directories, and KUBECACHEDIR; no user cluster."
+}

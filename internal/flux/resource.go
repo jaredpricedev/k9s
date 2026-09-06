@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 // Package flux contains bounded, read-only helpers for the Flux resources K9s
 // presents in its native and unified Flux views.

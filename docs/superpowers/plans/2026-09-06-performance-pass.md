@@ -1,3 +1,5 @@
+<!-- Modified for k9+; see NOTICE. -->
+
 # Performance pass and comparison demo
 
 **Goal:** Improve measured shared hot paths and demonstrate the cumulative difference from upstream using identical workloads.

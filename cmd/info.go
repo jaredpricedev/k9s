@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package cmd
 
@@ -19,7 +20,7 @@ import (
 func infoCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "info",
-		Short: "List K9s configurations info",
+		Short: "List k9+ configurations info",
 		RunE:  printInfo,
 	}
 }
@@ -51,6 +52,7 @@ func printLogo(c color.Paint) {
 	for _, l := range ui.LogoSmall {
 		_, _ = fmt.Fprintln(out, color.Colorize(l, c))
 	}
+	_, _ = fmt.Fprintln(out, "Independent fork of k9s • Apache-2.0")
 	_, _ = fmt.Fprintln(out)
 }
 
@@ -62,13 +64,13 @@ func getScreenDumpDirForInfo() string {
 
 	f, err := os.ReadFile(config.AppConfigFile)
 	if err != nil {
-		slog.Error("Unable to reads k9s config file", slogs.Error, err)
+		slog.Error("Unable to reads k9+ config file", slogs.Error, err)
 		return config.AppDumpsDir
 	}
 
 	var cfg config.Config
 	if err := yaml.Unmarshal(f, &cfg); err != nil {
-		slog.Error("Unable to unmarshal k9s config file", slogs.Error, err)
+		slog.Error("Unable to unmarshal k9+ config file", slogs.Error, err)
 		return config.AppDumpsDir
 	}
 	if cfg.K9s == nil {

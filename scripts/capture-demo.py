@@ -1,21 +1,25 @@
 #!/usr/bin/env python3
-"""Capture real K9s screens against a disposable localhost Kubernetes API.
+# Modified for k9+; see NOTICE.
+"""Capture real k9+ screens against a disposable localhost Kubernetes API.
 
 Requires Python 3, Pillow and pyte; no cluster, cmctl, or TLS private keys.
-  python scripts/capture-demo.py --binary /tmp/k9s-cert-demo
+  python scripts/capture-demo.py --binary /tmp/k9plus-demo
+Use --app k9s for an earlier K9s-based fork; upstream lacks the native Flux views.
 The fixtures use dates relative to capture time so health states remain useful.
-Only terminal cells emitted by K9s are rasterized; no UI text is added.
+Only terminal cells emitted by the app are rasterized; no UI text is added.
 """
 
 import argparse
 import codecs
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
 import pty
 import select
 import signal
+import shutil
 import struct
 import subprocess
 import tempfile
@@ -224,6 +228,22 @@ ANSI = {"black": "#000000", "red": "#cd0000", "green": "#00cd00", "brown": "#cdc
         "brightcyan": "#00ffff", "brightwhite": "#ffffff"}
 
 
+def isolated_runtime(root, app, kubeconfig, environment=None):
+    """Select one runtime without inheriting either application's user settings."""
+    if app not in ("k9plus", "k9s"):
+        raise ValueError(f"Unknown app runtime: {app}")
+    for name in ["config", "data", "state", "cache", "logs"]:
+        (root / name / app).mkdir(parents=True, exist_ok=True)
+    env = {k: v for k, v in os.environ.items() if not k.startswith(
+        ("K9PLUS_", "K9S_", "KUBECONFIG", "KUBECACHEDIR", "XDG_", "GODEBUG"))}
+    env.update(environment or {}, KUBECONFIG=str(kubeconfig), KUBECACHEDIR=str(root / "kube-cache"))
+    env[app.upper() + "_CONFIG_DIR"] = str(root / "config" / app)
+    env[app.upper() + "_LOGS_DIR"] = str(root / "logs" / app)
+    for name in ["config", "data", "state", "cache"]:
+        env["XDG_" + name.upper() + "_HOME"] = str(root / name)
+    return env
+
+
 def rasterize(screen, target):
     regular = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf", 16)
     bold = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf", 16)
@@ -248,12 +268,14 @@ def rasterize(screen, target):
 
 
 class Terminal:
-    def __init__(self, binary, directory, port):
+    def __init__(self, binary, directory, port, app="k9plus"):
         root = Path(directory)
-        for name in ["config", "data", "state", "cache"]:
-            (root / name / "k9s").mkdir(parents=True)
-        (root / "config/k9s/config.yaml").write_text("k9s:\n  skipLatestRevCheck: true\n  refreshRate: 1\n  ui:\n    splashless: true\n")
         kubeconfig = root / "kubeconfig"
+        env = isolated_runtime(root, app, kubeconfig, {"TERM": "xterm-256color", "COLORTERM": "truecolor"})
+        # k9+ retains the k9s YAML root for explicit config-copy compatibility.
+        (root / "config" / app / "config.yaml").write_text("k9s:\n  skipLatestRevCheck: true\n  refreshRate: 2\n  ui:\n    splashless: true\n")
+        self.app = app
+        self.captures = []
         kubeconfig.write_text(f"""apiVersion: v1
 kind: Config
 clusters:
@@ -273,9 +295,6 @@ users:
 """)
         self.master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", ROWS, COLS, 0, 0))
-        env = dict(os.environ, TERM="xterm-256color", COLORTERM="truecolor", KUBECONFIG=str(kubeconfig))
-        for name in ["config", "data", "state", "cache"]:
-            env["XDG_" + name.upper() + "_HOME"] = str(root / name)
 
         def control_terminal():
             os.setsid()
@@ -300,7 +319,7 @@ users:
                     break
                 self.stream.feed(self.decoder.decode(data))
         if self.process.poll() is not None:
-            raise RuntimeError("K9s exited before capture:\n" + "\n".join(self.screen.display))
+            raise RuntimeError(f"{self.app} exited before capture:\n" + "\n".join(self.screen.display))
 
     def keys(self, text, wait=1):
         os.write(self.master, text.encode())
@@ -315,6 +334,9 @@ users:
             if phrase not in text:
                 raise RuntimeError(f"{name}: expected {phrase!r} in terminal:\n{text}")
         rasterize(self.screen, output / (name + ".png"))
+        (output / (name + ".txt")).write_text("\n".join(line.rstrip() for line in self.screen.display).rstrip() + "\n")
+        self.captures.append({"file": name + ".png", "expected": expected,
+                              "captured_at": datetime.now(timezone.utc).isoformat()})
         print(name + ".png", flush=True)
 
     def close(self):
@@ -331,15 +353,16 @@ users:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", required=True, type=Path)
-    parser.add_argument("--output", type=Path, default=Path("assets/screenshots"))
+    parser.add_argument("--app", choices=["k9plus", "k9s"], default="k9plus", help="runtime environment and storage namespace")
+    parser.add_argument("--output", type=Path, default=Path("assets/k9plus"))
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     api = DemoAPI()
     threading.Thread(target=api.serve_forever, daemon=True).start()
     terminal = None
     try:
-        with tempfile.TemporaryDirectory(prefix="k9s-capture-") as directory:
-            terminal = Terminal(args.binary.resolve(), directory, api.server_port)
+        with tempfile.TemporaryDirectory(prefix=args.app + "-capture-") as directory:
+            terminal = Terminal(args.binary.resolve(), directory, api.server_port, args.app)
             try:
                 terminal.drain(5)
                 terminal.capture(args.output, "flux-overview", ["flux(all)", "Reconciling", "Suspended", "Failed"])
@@ -365,10 +388,18 @@ def main():
                 terminal.capture(args.output, "certificate-status", ["Certificate Status", "apps/api-tls", "DNS NAMES", "api.example.test"])
             finally:
                 terminal.close()
+                for log in (Path(directory) / "logs" / args.app).glob("*.log"):
+                    shutil.copyfile(log, args.output / log.name)
     finally:
         api.stopped.set()
         api.shutdown()
         api.server_close()
+    (args.output / "capture.json").write_text(json.dumps({
+        "runtime": args.app, "binary": str(args.binary.resolve()),
+        "binary_sha256": hashlib.sha256(args.binary.read_bytes()).hexdigest(),
+        "terminal": {"columns": COLS, "rows": ROWS}, "screenshots": terminal.captures,
+        "method": "Only actual terminal cells from a real PTY against a disposable localhost fixture are rasterized.",
+        "configuration": "Isolated runtime config/logs, XDG directories, and KUBECACHEDIR; no user cluster."}, indent=2) + "\n")
 
 
 if __name__ == "__main__":

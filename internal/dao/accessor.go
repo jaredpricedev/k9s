@@ -1,3 +1,4 @@
+// Modified for k9+; see NOTICE.
 package dao
 
 import (

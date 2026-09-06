@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view
 
@@ -14,8 +15,8 @@ import (
 )
 
 const (
-	clipboardModeEnv = "K9S_CLIPBOARD"
-	osc52MaxEnv      = "K9S_OSC52_MAX"
+	clipboardModeEnv = "K9PLUS_CLIPBOARD"
+	osc52MaxEnv      = "K9PLUS_OSC52_MAX"
 	termEnv          = "TERM"
 	tmuxEnv          = "TMUX"
 

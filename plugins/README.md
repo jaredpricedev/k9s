@@ -1,6 +1,8 @@
-# K9s community plugins
+<!-- Modified for k9+; see NOTICE. -->
 
-K9s plugins extend the tool to provide additional functionality via actions to further help you observe or administer
+# k9+ compatible community plugins
+
+These k9s-compatible plugins extend k9+ to provide additional functionality via actions to further help you observe or administer
 your Kubernetes clusters.
 
 Following is an example of some plugin files in this directory. Other files are not listed in this table.

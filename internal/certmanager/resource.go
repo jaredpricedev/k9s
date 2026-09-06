@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 // Package certmanager interprets cert-manager resource metadata and status.
 // It does not fetch referenced objects or inspect certificate or private key data.

@@ -1,58 +1,57 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package model
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
+	"strings"
+
+	"golang.org/x/mod/semver"
 )
 
-var versionRX = regexp.MustCompile(`\Av(\d+)\.(\d+)\.(\d+)\z`)
-
-// SemVer represents a semantic version.
+// SemVer represents a semantic version, retaining prerelease and build metadata.
 type SemVer struct {
 	Major, Minor, Patch int
+	version             string
 }
 
 // NewSemVer returns a new semantic version.
 func NewSemVer(version string) *SemVer {
-	var v SemVer
-	v.Major, v.Minor, v.Patch = v.parse(NormalizeVersion(version))
-
-	return &v
-}
-
-// String returns version as a string.
-func (v *SemVer) String() string {
-	return fmt.Sprintf("v%d.%d.%d", v.Major, v.Minor, v.Patch)
-}
-
-func (*SemVer) parse(version string) (major, minor, patch int) {
-	mm := versionRX.FindStringSubmatch(version)
-	if len(mm) < 4 {
-		return
+	v := &SemVer{}
+	normalized := NormalizeVersion(version)
+	if !semver.IsValid(normalized) {
+		return v
 	}
-	major, _ = strconv.Atoi(mm[1])
-	minor, _ = strconv.Atoi(mm[2])
-	patch, _ = strconv.Atoi(mm[3])
+	v.version = normalized
+	core := strings.TrimPrefix(semver.Canonical(normalized), "v")
+	core, _, _ = strings.Cut(core, "-")
+	parts := strings.Split(core, ".")
+	v.Major, _ = strconv.Atoi(parts[0])
+	v.Minor, _ = strconv.Atoi(parts[1])
+	v.Patch, _ = strconv.Atoi(parts[2])
+	return v
+}
 
-	return
+// String returns the version with its original prerelease and build metadata.
+func (v *SemVer) String() string {
+	if v.version != "" {
+		return v.version
+	}
+	return fmt.Sprintf("v%d.%d.%d", v.Major, v.Minor, v.Patch)
 }
 
 // NormalizeVersion ensures the version starts with a v.
 func NormalizeVersion(version string) string {
-	if version == "" {
-		return version
-	}
-	if version[0] == 'v' {
+	if version == "" || version[0] == 'v' {
 		return version
 	}
 	return "v" + version
 }
 
-// IsCurrent asserts if at latest release.
+// IsCurrent asserts if at or beyond the latest release in semantic version order.
 func (v *SemVer) IsCurrent(latest *SemVer) bool {
-	return v.Major >= latest.Major && v.Minor >= latest.Minor && v.Patch >= latest.Patch
+	return semver.Compare(v.String(), latest.String()) >= 0
 }

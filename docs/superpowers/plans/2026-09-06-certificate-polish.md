@@ -1,3 +1,5 @@
+<!-- Modified for k9+; see NOTICE. -->
+
 # Certificate diagnostics and shared UI polish implementation plan
 
 **Goal:** Polish shared UI elements throughout k9s, make Flux health easier to scan, and add native cert-manager diagnostics and issuance navigation.

@@ -1,4 +1,5 @@
-# Copy this file to $XDG_CONFIG_HOME/k9s/plugins/flux.yaml.
+# Modified for k9+; see NOTICE.
+# Copy this file to $XDG_CONFIG_HOME/k9plus/plugins/flux.yaml.
 # Requires the Flux CLI. Flux Operator actions also require the flux-operator CLI.
 # Every command uses the context and kubeconfig selected by K9s.
 # Core Flux resources use native Shift-R reconcile and Shift-T suspend/resume

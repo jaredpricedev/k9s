@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package ui
 
@@ -11,25 +12,18 @@ import (
 	"github.com/derailed/tview"
 )
 
-// LogoSmall K9s small log.
+// LogoSmall is the independent k9+ terminal wordmark.
 var LogoSmall = []string{
-	` ____  __ ________       `,
-	`|    |/  /   __   \______`,
-	`|       /\____    /  ___/`,
-	`|    \   \  /    /\___  \`,
-	`|____|\__ \/____//____  /`,
-	`         \/           \/ `,
+	`   _      ___             `,
+	`  | | __ / _ \     _      `,
+	`  | |/ /| (_) |  _| |_    `,
+	`  |   <  \__, | |_   _|   `,
+	`  |_|\_\   /_/    |_|     `,
+	`            k9+           `,
 }
 
-// LogoBig K9s big logo for splash page.
-var LogoBig = []string{
-	` ____  __ ________        _______  ____     ___ `,
-	`|    |/  /   __   \______/   ___ \|    |   |   |`,
-	`|       /\____    /  ___/    \  \/|    |   |   |`,
-	`|    \   \  /    /\___  \     \___|    |___|   |`,
-	`|____|\__ \/____//____  /\______  /_______ \___|`,
-	`         \/           \/        \/        \/    `,
-}
+// LogoBig shares the wordmark so CLI, header and splash use the same identity.
+var LogoBig = append([]string(nil), LogoSmall...)
 
 // Splash represents a splash screen.
 type Splash struct {

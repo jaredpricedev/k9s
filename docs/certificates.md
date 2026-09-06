@@ -1,3 +1,5 @@
+<!-- Modified for k9+; see NOTICE. -->
+
 # Certificate diagnostics
 
 Open `:certificates all` for cert-manager Certificates across namespaces, or `:certificates <namespace>` for a narrower view. Native views also cover CertificateRequests, Issuers, ClusterIssuers, ACME Orders and Challenges. They use discovered resources and the existing watch cache; no cmctl installation or Secret read permission is required to list Certificates.
@@ -31,7 +33,7 @@ The first child lookup may start an informer. If its cache is still loading, clo
 
 ## Optional cmctl actions
 
-Install cmctl separately and copy `plugins/cert-manager.yaml` into the plugin directory reported by `k9s info`.
+Install cmctl separately and copy `plugins/cert-manager.yaml` into the plugin directory reported by `k9plus info`.
 
 | Key | Action |
 | --- | --- |

@@ -1,3 +1,4 @@
+# Modified for k9+; see NOTICE.
 # Manage cert-manager Certificate resources via cmctl.
 # See: https://github.com/cert-manager/cmctl
 # Every command uses the context and kubeconfig selected by K9s.

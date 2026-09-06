@@ -1,6 +1,8 @@
+<!-- Modified for k9+; see NOTICE. -->
+
 # Native Flux workflows
 
-This fork adds native Flux resource views using the current k9s Kubernetes connection. The native features require no Flux CLI or additional Go dependencies.
+This fork adds native Flux resource views using the current k9+ Kubernetes connection. The native features require no Flux CLI or additional Go dependencies.
 
 ## Open and navigate
 
@@ -11,10 +13,10 @@ This fork adds native Flux resource views using the current k9s Kubernetes conne
 | `:flux all` | Combined view across namespaces, subject to your permissions |
 | `Enter` in `:flux` | Open the selected resource in its native kind view |
 | `:ocirepositories`, `:kustomizations`, `:helmreleases` | Open native per-kind views directly, using discovered aliases |
-| `/` | Use normal k9s filtering; search status, kind, name or revision |
+| `/` | Use normal k9+ filtering; search status, kind, name or revision |
 | `i` in either Flux view | Open the complete status message for the selected row |
 | `g` in either Flux view | Choose the source or an explicit `dependsOn` dependency and navigate to it |
-| `y`, `d` in a native kind view | Standard k9s YAML and describe |
+| `y`, `d` in a native kind view | Standard k9+ YAML and describe |
 | `Shift-R` in either Flux view | Confirm an inline reconciliation request for a supported resource |
 | `Shift-T` in either Flux view | Confirm an inline suspend or resume operation for a supported resource |
 
@@ -30,7 +32,7 @@ Suspended resources are identified before interpreting old Ready conditions. Act
 
 Native mutations support Kustomizations, HelmReleases, GitRepositories, OCIRepositories, HTTP/S HelmRepositories, HelmCharts and Buckets. An OCI-type HelmRepository is a static source: it displays Ready with an explanatory message and cannot be reconciled or suspended here. Reconcile its HelmChart, or use the OCIRepository API for watched OCI sources. They are absent in read-only mode and recheck that setting at execution. A confirmation identifies the context, kind and namespace/name. The selected dynamic client is captured, requests have a timeout, Kubernetes authorizes GET/PATCH, and UID/resource-version checks protect against replacing or concurrently changing the selected object. Selection reads only the existing list/watch cache. The GET and PATCH run in the background; confirmation dismisses immediately, so you can filter, navigate, or select another resource even while the API is responding. A successful request means the API accepted the change, not that Flux finished. Resume suspended resources before requesting reconciliation.
 
-An unacknowledged `reconcile.fluxcd.io/requestedAt` token displays **Reconciling**, with a message that the request is waiting for the controller. Once Flux acknowledges it through `status.lastHandledReconcileAt`, controller conditions determine whether it is still reconciling, Ready, Failed or Pending. Acknowledgement alone never forces Ready. These are Flux's [documented request semantics](https://fluxcd.io/flux/components/helm/helmreleases/#triggering-a-reconcile). If a controller is unavailable, the request stays visible as waiting; k9s does not pretend it completed or keep a CLI process waiting. Requests being submitted or still unacknowledged are deduplicated. Failures submitting the API request appear inside k9s.
+An unacknowledged `reconcile.fluxcd.io/requestedAt` token displays **Reconciling**, with a message that the request is waiting for the controller. Once Flux acknowledges it through `status.lastHandledReconcileAt`, controller conditions determine whether it is still reconciling, Ready, Failed or Pending. Acknowledgement alone never forces Ready. These are Flux's [documented request semantics](https://fluxcd.io/flux/components/helm/helmreleases/#triggering-a-reconcile). If a controller is unavailable, the request stays visible as waiting; k9+ does not pretend it completed or keep a CLI process waiting. Requests being submitted or still unacknowledged are deduplicated. Failures submitting the API request appear inside k9+.
 
 The combined dashboard resolves the selected row's concrete API kind, namespace and UID before offering a write. Restricted/unavailable rows and kinds without native action support cannot be mutated. Generic editing and deletion still require opening the concrete view.
 
@@ -44,9 +46,9 @@ Status extraction reads individual annotation fields instead of copying the comp
 
 ## Optional community plugins
 
-Copy only the plugin files you want into the `plugins` directory reported by `k9s info`. Install their external tools separately. This repository does not install them automatically.
+Copy only the plugin files you want into the `plugins` directory reported by `k9plus info`. Install their external tools separately. This repository does not install them automatically.
 
-The updated `plugins/flux.yaml` offers Flux CLI reconcile flags, suspend/resume, ownership trace, a Kustomization tree (`Shift-Y`), resource controller logs (`Shift-L`) and suspended-resource lists (`Shift-S`). It passes the selected context and kubeconfig as data, propagates pipeline failures and marks mutations dangerous so k9s disables them in read-only mode. For core Flux resources, **`Shift-R` and `Shift-T` stay native**, including when an older plugin file sets `override: true`. Other plugin keys and other resource views retain normal override behavior. Replace an existing copy of `flux.yaml` to move optional CLI reconciles and their force/reset/source inputs to `Shift-Z`, and HelmRelease/Kustomization CLI suspend toggles to `Shift-U`. These optional actions are explicitly labeled CLI and may leave the TUI; use the native keys for the inline workflow.
+The updated `plugins/flux.yaml` offers Flux CLI reconcile flags, suspend/resume, ownership trace, a Kustomization tree (`Shift-Y`), resource controller logs (`Shift-L`) and suspended-resource lists (`Shift-S`). It passes the selected context and kubeconfig as data, propagates pipeline failures and marks mutations dangerous so k9+ disables them in read-only mode. For core Flux resources, **`Shift-R` and `Shift-T` stay native**, including when an older plugin file sets `override: true`. Other plugin keys and other resource views retain normal override behavior. Replace an existing copy of `flux.yaml` to move optional CLI reconciles and their force/reset/source inputs to `Shift-Z`, and HelmRelease/Kustomization CLI suspend toggles to `Shift-U`. These optional actions are explicitly labeled CLI and may leave the TUI; use the native keys for the inline workflow.
 
 The upstream [community plugin catalog](https://github.com/derailed/k9s/tree/master/plugins) also includes:
 

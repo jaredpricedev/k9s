@@ -8,11 +8,9 @@ assignees: ''
 ---
 
 
-<img src="https://raw.githubusercontent.com/derailed/k9s/master/assets/k9s_err.png" align="right" width="100" height="auto"/>
+<!-- Modified for k9+ by the k9+ contributors; see MODIFICATIONS.md. -->
 
-<br/>
-<br/>
-<br/>
+This tracker is for k9+, an independent fork of K9s.
 
 **Describe the bug**
 A clear and concise description of what the bug is.
@@ -26,7 +24,7 @@ Steps to reproduce the behavior:
 4. See error
 
 **Historical Documents**
-When applicable please include any supporting artifacts: k9s debug logs, configurations, resource manifests, ...
+When applicable please include any supporting artifacts: k9plus debug logs, configurations, resource manifests, ...
 
 **Expected behavior**
 A clear and concise description of what you expected to happen.
@@ -37,7 +35,7 @@ If applicable, add screenshots to help explain your problem.
 **Versions (please complete the following information):**
 
 - OS: [e.g. OSX]
-- K9s: [e.g. 0.1.0]
+- k9+: [paste `k9plus version`]
 - K8s: [e.g. 1.11.0]
 
 **Additional context**

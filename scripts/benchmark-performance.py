@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Modified for k9+; see NOTICE.
 """Run identical K9s microbenchmarks sequentially across three source trees.
 
 The benchmark fixtures are copied from --fork into detached baseline worktrees;

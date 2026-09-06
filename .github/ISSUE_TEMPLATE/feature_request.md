@@ -7,11 +7,9 @@ assignees: ''
 
 ---
 
-<img src="https://raw.githubusercontent.com/derailed/k9s/master/assets/k9s_small.png" align="right" width="100" height="auto"/>
+<!-- Modified for k9+ by the k9+ contributors; see MODIFICATIONS.md. -->
 
-<br/>
-<br/>
-<br/>
+This tracker is for k9+, an independent fork of K9s.
 
 **Is your feature request related to a problem? Please describe.**
 A clear and concise description of what the problem is.

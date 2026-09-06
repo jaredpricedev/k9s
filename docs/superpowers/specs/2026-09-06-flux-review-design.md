@@ -1,3 +1,5 @@
+<!-- Modified for k9+; see NOTICE. -->
+
 # K9s Flux and reliability review
 
 The fork starts at `2d3ccc6`. It is an unchanged ancestor of upstream `84852e6`, so the working branch first incorporates those 21 upstream commits by fast-forward. The user's request authorizes fixes, performance work and useful Flux/plugin features on a reviewable branch.

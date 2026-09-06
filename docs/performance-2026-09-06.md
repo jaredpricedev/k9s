@@ -1,3 +1,5 @@
+<!-- Modified for k9+; see NOTICE. -->
+
 # Performance comparison — 2026-09-06
 
 This pass fixes quadratic row removal, avoids a duplicate snapshot allocation, computes row color once per visible row, and restores an ASCII fast path while retaining correct Unicode and markup widths. It also fixes an upstream test fixture that used sleep instead of synchronization.

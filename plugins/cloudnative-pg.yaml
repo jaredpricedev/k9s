@@ -1,3 +1,4 @@
+# Modified for k9+; see NOTICE.
 # Move/add to $XDG_CONFIG_HOME/k9s/plugins/cloudnative-pg.yaml
 # Requires the cnpg kubectl plugin. See https://cloudnative-pg.io/docs/devel/kubectl-plugin/
 #

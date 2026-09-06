@@ -1,3 +1,5 @@
+<!-- Modified for k9+; see NOTICE. -->
+
 # Flux and reliability implementation plan
 
 **Goal:** Improve the existing fork with verified fixes, measured table improvements and native Flux operations.

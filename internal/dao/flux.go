@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package dao
 
@@ -171,6 +172,6 @@ func patchFlux(ctx context.Context, resource dynamic.ResourceInterface, name str
 	if err != nil {
 		return err
 	}
-	_, err = resource.Patch(ctx, name, types.MergePatchType, data, metav1.PatchOptions{FieldManager: "k9s"})
+	_, err = resource.Patch(ctx, name, types.MergePatchType, data, metav1.PatchOptions{FieldManager: "k9plus"})
 	return err
 }

@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Measure and film real K9s terminal responses against a disposable local API.
+# Modified for k9+; see NOTICE.
+"""Measure and film real k9+/K9s terminal responses against a disposable local API.
 
 Dependencies: Python 3, pyte, Pillow, ffmpeg, and Go (to verify build metadata).
 Example (compile both revisions with the same Go version and build flags first):
-  python scripts/perf-demo.py --upstream /tmp/k9s-upstream --fork /tmp/k9s-fork
+  python scripts/perf-demo.py --upstream /tmp/k9s-upstream --fork /tmp/k9plus-demo
   python scripts/perf-demo.py --render-only assets/performance/results.json
+Runtime defaults: upstream/before use k9s; fork uses k9plus. Use --fork-app k9s
+to repeat a historical fork comparison. New runs default to assets/k9plus/performance.
 
 Captures run sequentially; rotate build order on successive rounds. A sample
 starts immediately before Enter applies a prepared filter and ends when a complete tcell frame
@@ -104,13 +107,12 @@ def table_matches(screen, expected, query):
 
 
 class Capture:
-    def __init__(self, binary, directory, port, cols, rows, environment):
+    def __init__(self, binary, directory, port, cols, rows, environment, app="k9s"):
         root = Path(directory)
-        for name in ["config", "data", "state", "cache", "logs"]:
-            (root / name / "k9s").mkdir(parents=True)
-        (root / "config/k9s/config.yaml").write_text(
-            "k9s:\n  skipLatestRevCheck: true\n  refreshRate: 2\n  liveViewAutoRefresh: false\n  ui:\n    splashless: true\n")
         kubeconfig = root / "kubeconfig"
+        env = DEMO.isolated_runtime(root, app, kubeconfig, environment)
+        (root / "config" / app / "config.yaml").write_text(
+            "k9s:\n  skipLatestRevCheck: true\n  refreshRate: 2\n  liveViewAutoRefresh: false\n  ui:\n    splashless: true\n")
         kubeconfig.write_text(f"""apiVersion: v1
 kind: Config
 clusters:
@@ -128,12 +130,7 @@ users:
 - name: perf-local
   user: {{}}
 """)
-        # Explicit local kubeconfig and isolated K9s directories select only the fixture.
-        env = {k: v for k, v in os.environ.items() if not k.startswith(("K9S_", "KUBECONFIG", "XDG_", "GODEBUG"))}
-        env.update(environment, KUBECONFIG=str(kubeconfig), K9S_CONFIG_DIR=str(root / "config/k9s"),
-                   K9S_LOGS_DIR=str(root / "logs"), KUBECACHEDIR=str(root / "kube-cache"))
-        for name in ["config", "data", "state", "cache"]:
-            env["XDG_" + name.upper() + "_HOME"] = str(root / name)
+        # Explicit local kubeconfig and one isolated app runtime select only the fixture.
         self.master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 
@@ -142,6 +139,7 @@ users:
             fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
         self.environment = environment
+        self.app = app
         self.origin = time.monotonic()
         self.process = subprocess.Popen([str(binary), "--kubeconfig", str(kubeconfig), "--context", "perf-local",
                                          "--command", "configmaps default", "--readonly"],
@@ -180,7 +178,7 @@ users:
         except queue.Empty:
             return None
         if data is None:
-            raise RuntimeError("K9s exited during capture:\n" + "\n".join(self.screen.display))
+            raise RuntimeError(f"{self.app} exited during capture:\n" + "\n".join(self.screen.display))
         text = self.decoder.decode(data)
         self.events.append([stamp, "o", text])
         self.pending += text
@@ -226,7 +224,7 @@ users:
         opener = gzip.open if path.suffix == ".gz" else open
         with opener(path, "wt", encoding="utf-8") as output:
             output.write(json.dumps({"version": 2, "width": cols, "height": rows,
-                                     "title": "K9s synthetic local API performance", "env": self.environment}) + "\n")
+                                     "title": f"{self.app} synthetic local API terminal capture", "env": self.environment}) + "\n")
             for event in sorted(self.events, key=lambda e: e[0]):
                 output.write(json.dumps(event, ensure_ascii=False) + "\n")
 
@@ -262,7 +260,11 @@ def measure(args):
         binaries["before"] = args.before.resolve()
     binaries["fork"] = args.fork.resolve()
     metadata = {name: dict(binary_metadata(path, args.go_tool),
-                           revision=getattr(args, name + "_revision")) for name, path in binaries.items()}
+                           revision=getattr(args, name + "_revision"),
+                           runtime=getattr(args, name + "_app")) for name, path in binaries.items()}
+    for name, build in metadata.items():
+        build["label"] = "K9+" if build["runtime"] == "k9plus" else {
+            "upstream": "UPSTREAM", "before": "PREVIOUS FORK", "fork": "CUMULATIVE FORK"}[name]
     if len({value["go_version"] for value in metadata.values()}) != 1:
         raise ValueError("Compile every binary with the same Go version before comparing them")
     environment = dict(ENVIRONMENT, GOMAXPROCS=str(args.gomaxprocs))
@@ -299,9 +301,10 @@ def measure(args):
             for name in order:
                 cast_name = f"{name}-{round_number + 1}.cast.gz"
                 capture = None
-                with tempfile.TemporaryDirectory(prefix="k9s-perf-") as directory:
+                with tempfile.TemporaryDirectory(prefix=metadata[name]["runtime"] + "-perf-") as directory:
                     try:
-                        capture = Capture(binaries[name], directory, api.server_port, args.cols, args.rows, environment)
+                        capture = Capture(binaries[name], directory, api.server_port, args.cols, args.rows,
+                                          environment, metadata[name]["runtime"])
                         ready = capture.wait(lambda s: table_matches(s, all_names, ""), args.timeout)
                         results["builds"][name]["startup"].append({"round": round_number, "latency_ms": ready * 1000, "cast": cast_name})
                         capture.settle()
@@ -447,6 +450,8 @@ def benchmark_card(path, builds, labels, width, height):
 def render(path, results, slowdown, fps, benchmarks=None):
     output = path.parent
     labels = {"upstream": "UPSTREAM", "fork": "CUMULATIVE FORK", "before": "PREVIOUS FORK"}
+    # Older result files keep their original labels when re-rendered.
+    labels.update({name: build["label"] for name, build in results["builds"].items() if "label" in build})
     builds = list(results["builds"])
     cols, rows = results["terminal"]["columns"], results["terminal"]["rows"]
     panel_w, term_h, gap = cols * 7, rows * 14, 18
@@ -537,7 +542,9 @@ def main():
     parser.add_argument("--before", type=Path, help="optional third binary; captured and rendered as previous fork")
     for name in ["upstream", "before", "fork"]:
         parser.add_argument("--" + name + "-revision", help="exact git revision, plus dirty-tree description if applicable")
-    parser.add_argument("--output", type=Path, default=Path("assets/performance"))
+        parser.add_argument("--" + name + "-app", choices=["k9plus", "k9s"],
+                            default="k9plus" if name == "fork" else "k9s", help="runtime environment and storage namespace")
+    parser.add_argument("--output", type=Path, default=Path("assets/k9plus/performance"))
     parser.add_argument("--render-only", type=Path, metavar="RESULTS_JSON")
     parser.add_argument("--no-video", action="store_true")
     parser.add_argument("--benchmarks", type=Path, help="offline summary-card source; defaults to sibling benchmarks/results.json if present")

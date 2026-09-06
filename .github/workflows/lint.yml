@@ -1,4 +1,5 @@
-name: K9s Lint
+# Modified for k9+ by the k9+ contributors; see MODIFICATIONS.md.
+name: k9+ Lint
 
 on:
   pull_request:

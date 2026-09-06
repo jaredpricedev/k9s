@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package config
 
@@ -17,16 +18,19 @@ import (
 )
 
 const (
-	// K9sEnvConfigDir represents k9s configuration dir env var.
-	K9sEnvConfigDir = "K9S_CONFIG_DIR"
+	// K9sEnvConfigDir represents the k9+ configuration dir env var.
+	K9sEnvConfigDir = "K9PLUS_CONFIG_DIR"
 
-	// K9sEnvLogsDir represents k9s logs dir env var.
-	K9sEnvLogsDir = "K9S_LOGS_DIR"
+	// K9sEnvLogsDir represents the k9+ logs dir env var.
+	K9sEnvLogsDir = "K9PLUS_LOGS_DIR"
 
-	// AppName tracks k9s app name.
-	AppName = "k9s"
+	// AppName is the portable executable and storage name.
+	AppName = "k9plus"
 
-	K9sLogsFile = "k9s.log"
+	// AppDisplayName is the user-facing application name.
+	AppDisplayName = "k9+"
+
+	K9sLogsFile = "k9plus.log"
 )
 
 var (

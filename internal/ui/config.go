@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package ui
 
@@ -202,14 +203,14 @@ func (c *Configurator) ConfigWatcher(ctx context.Context, s synchronizer) error 
 					slog.Debug("ConfigWatcher file changed", slogs.FileName, evt.Name)
 					if evt.Name == config.AppConfigFile {
 						if err := c.Config.Load(evt.Name, false); err != nil {
-							slog.Error("K9s config reload failed", slogs.Error, err)
-							s.Flash().Warn("k9s config reload failed. Check k9s logs!")
-							s.Logo().Warn("K9s config reload failed!")
+							slog.Error("k9+ config reload failed", slogs.Error, err)
+							s.Flash().Warn("k9+ config reload failed. Check k9+ logs!")
+							s.Logo().Warn("k9+ config reload failed!")
 						}
 					} else {
 						if err := c.Config.K9s.Reload(); err != nil {
-							slog.Error("K9s context config reload failed", slogs.Error, err)
-							s.Flash().Warn("Context config reload failed. Check k9s logs!")
+							slog.Error("k9+ context config reload failed", slogs.Error, err)
+							s.Flash().Warn("Context config reload failed. Check k9+ logs!")
 							s.Logo().Warn("Context config reload failed!")
 						}
 					}
@@ -251,7 +252,7 @@ func (c *Configurator) activeSkin() (string, bool) {
 		return skin, false
 	}
 
-	if env_skin := os.Getenv("K9S_SKIN"); env_skin != "" {
+	if env_skin := os.Getenv("K9PLUS_SKIN"); env_skin != "" {
 		if _, err := os.Stat(config.SkinFileFromName(env_skin)); err == nil {
 			skin = env_skin
 			slog.Debug("Loading env skin", slogs.Skin, skin)
