@@ -1,0 +1,32 @@
+ Context: demo-dev [RW]                            <0> all           <i> Certificate Status    <y> YAML                                                                   ████ ██       ██████        ████
+ Cluster: demo-cluster                             <1> flux-system   <d> Describe                                                                                         ██   ██  ██   ██  ██   ██     ██
+ User:    demo-user                                <2> default       <e> Edit                                                                                             ██   ████     ██████ ██████   ██
+ k9+ Rev: v0.1.0-dev                                                 <?> Help                                                                                             ██   ██  ██       ██   ██     ██
+ K8s Rev: v1.34.0                                                    <g> Issuance/References                                                                              ████ ██    ██ ██████        ████
+ CPU:     0%                                                         <w> Warp To Namespace
+ MEM:     0%
+┌───────────────────────────────────────────────────────────────────────────────────────── certificates(all)[6] ─────────────────────────────────────────────────────────────────────────────────────────┐
+│ NAMESPACE            NAME                      STATUS                 EXPIRES↑                        RENEWAL                         ISSUER                               SECRET                      │
+│ apps                 legacy-tls                Expired                2026-09-05T14:59:45Z            2026-08-06T14:59:45Z            ClusterIssuer:letsencrypt            legacy-tls                  │
+│ apps                 edge-tls                  Expiring               2026-09-11T14:59:45Z            2026-08-12T14:59:45Z            ClusterIssuer:letsencrypt            edge-tls                    │
+│ apps                 web-tls                   Renewal Due            2026-10-01T14:59:45Z            2026-09-01T14:59:45Z            ClusterIssuer:letsencrypt            web-tls                     │
+│ apps                 api-tls                   Ready                  2026-11-05T14:59:45Z            2026-10-06T14:59:45Z            ClusterIssuer:letsencrypt            api-tls                     │
+│ monitoring           grafana-tls               Ready                  2026-11-15T14:59:45Z            2026-10-16T14:59:45Z            ClusterIssuer:letsencrypt            grafana-tls                 │
+│ apps                 new-service-tls           Issuing                <none>                          <none>                          ClusterIssuer:letsencrypt            new-service-tls             │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  <certificate>
+                                                                       😎 Viewing cert-manager.io/v1/certificates in namespace all

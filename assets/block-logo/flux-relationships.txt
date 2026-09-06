@@ -1,0 +1,32 @@
+ Context: demo-dev [RW]                            <0> all           <d>       Describe              <shift-t> Suspend/Resume                                             ████ ██       ██████        ████
+ Cluster: demo-cluster                             <1> flux-system   <e>       Edit                  <w>       Warp To Namespace                                          ██   ██  ██   ██  ██   ██     ██
+ User:    demo-user                                <2> default       <?>       Help                  <y>       YAML                                                       ██   ████     ██████ ██████   ██
+ k9+ Rev: v0.1.0-dev                                                 <shift-r> Reconcile                                                                                  ██   ██  ██       ██   ██     ██
+ K8s Rev: v1.34.0                                                    <g>       Source/Dependencies                                                                        ████ ██    ██ ██████        ████
+ CPU:     0%                                                         <i>       Status Details
+ MEM:     0%
+┌──────────────────────────────────────────────────────────────────────────────────── kustomizations(flux-system)[5] ────────────────────────────────────────────────────────────────────────────────────┐
+│ NAME↑                           STATUS                        SUSPEND                  REVISION                            SOURCE                                               AGE                    │
+│ apps                            Ready                         false                    2.0.0@sha256:c34d                   OCIRepository:flux-system/apps                       12d                    │
+│ infrastructure                  Ready                         false                    2.0.0@sha256:c34d                   OCIRepository:flux-system/platform                   12d                    │
+│ monitoring                      Reconciling                   false                    2.0.0@sha256:c34d                   OCIRepository:flux-system/platform                   12d                    │
+│ payments                        Failed                        false                    2.0.0@sha256:c34d                   OCIRepository:flux-system/apps                       12d                    │
+│ storage                         Suspended                     true     ┌─────────────────<Flux relationships>─────────────────┐epository:flux-system/platform                   12d                    │
+│                                                                        │                                                      │                                                                        │
+│                                                                        │ Source: OCIRepository flux-system/apps               │                                                                        │
+│                                                                        │ Dependency: Kustomization flux-system/infrastructure │                                                                        │
+│                                                                        │                                                      │                                                                        │
+│                                                                        └──────────────────────────────────────────────────────┘                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  <kustomization>
+                                                            😎 Viewing kustomize.toolkit.fluxcd.io/v1/kustomizations in namespace flux-system

@@ -18,6 +18,10 @@ The internal Go module path, compatible configuration keys, schema names and
 Kubernetes annotation conventions remain from k9s to preserve interoperability.
 They identify technical interfaces and provenance, not upstream endorsement.
 
+The selected follow-up logo replaces the outlined ASCII wordmark with a five-row,
+32-column Unicode block `[k9+]`, with skin-aware accents in the header and splash.
+CLI output shares the glyphs; fresh screenshots show the running application.
+
 ## Changed files relative to upstream
 
 This inventory includes additions, modifications and removals on the review
@@ -36,6 +40,22 @@ branch. Generated THIRD_PARTY_LICENSES is assembled separately for distributions
 - `Makefile`
 - `NOTICE`
 - `README.md`
+- `assets/block-logo/README.md`
+- `assets/block-logo/capture.json`
+- `assets/block-logo/certificate-relationships.png`
+- `assets/block-logo/certificate-relationships.txt`
+- `assets/block-logo/certificate-status.png`
+- `assets/block-logo/certificate-status.txt`
+- `assets/block-logo/certificates-overview.png`
+- `assets/block-logo/certificates-overview.txt`
+- `assets/block-logo/flux-kustomizations.png`
+- `assets/block-logo/flux-kustomizations.txt`
+- `assets/block-logo/flux-overview.png`
+- `assets/block-logo/flux-overview.txt`
+- `assets/block-logo/flux-reconcile.png`
+- `assets/block-logo/flux-reconcile.txt`
+- `assets/block-logo/flux-relationships.png`
+- `assets/block-logo/flux-relationships.txt`
 - `assets/flux-inline/01-ready-10000.png`
 - `assets/flux-inline/01-ready-10000.txt`
 - `assets/flux-inline/02-confirm-native.png`
@@ -206,6 +226,7 @@ branch. Generated THIRD_PARTY_LICENSES is assembled separately for distributions
 - `internal/ui/display_width_test.go`
 - `internal/ui/flash_test.go`
 - `internal/ui/indicator.go`
+- `internal/ui/logo.go`
 - `internal/ui/logo_test.go`
 - `internal/ui/menu.go`
 - `internal/ui/menu_test.go`

@@ -1,0 +1,31 @@
+ Context: demo-dev [RW]                            <0> all           <i> Certificate Status    <y> YAML                                                                   ████ ██       ██████        ████
+ Cluster: demo-cluster                             <1> apps          <d> Describe                                                                                         ██   ██  ██   ██  ██   ██     ██
+ User:    demo-user                                <2> flux-system   <e> Edit                                                                                             ██   ████     ██████ ██████   ██
+ k9+ Rev: v0.1.0-dev                               <3> default       <?> Help                                                                                             ██   ██  ██       ██   ██     ██
+ K8s Rev: v1.34.0                                                    <g> Issuance/References                                                                              ████ ██    ██ ██████        ████
+ CPU:     0%                                                         <w> Warp To Namespace
+ MEM:     0%
+┌──────────────────────────────────────────────────────────────────────────────────────── certificates(apps)[5] ─────────────────────────────────────────────────────────────────────────────────────────┐
+│ NAME                          STATUS                    EXPIRES↑                           RENEWAL                            ISSUER                                   SECRET                          │
+│ legacy-tls                    Expired                   2026-09-05T14:59:45Z               2026-08-06T14:59:45Z               ClusterIssuer:letsencrypt                legacy-tls                      │
+│ edge-tls                      Expiring                  2026-09-11T14:59:45Z               2026-08-12T14:59:45Z               ClusterIssuer:letsencrypt                edge-tls                        │
+│ web-tls                       Renewal Due               2026-10-01T14:59:45Z               2026-09-01T14:59:45Z               ClusterIssuer:letsencrypt                web-tls                         │
+│ api-tls                       Ready                     2026-11-05T14:59:45Z    ┌────<Certificate relationships>─────┐        ClusterIssuer:letsencrypt                api-tls                         │
+│ new-service-tls               Issuing                   <none>                  │                                    │        ClusterIssuer:letsencrypt                new-service-tls                 │
+│                                                                                 │ ClusterIssuer: letsencrypt         │                                                                                 │
+│                                                                                 │ Secret: apps/api-tls               │                                                                                 │
+│                                                                                 │ CertificateRequest: apps/api-tls-1 │                                                                                 │
+│                                                                                 │                                    │                                                                                 │
+│                                                                                 └────────────────────────────────────┘                                                                                 │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  <certificate>

@@ -261,7 +261,11 @@ def rasterize(screen, target):
                 fg, bg = bg, fg
             px, py = 18 + x * 10, 18 + y * 21
             draw.rectangle((px, py, px + 9, py + 20), fill=bg)
-            draw.text((px, py - 1), cell.data, font=bold if cell.bold else regular, fill=fg)
+            # U+2588 fills its terminal cell; font bearings can introduce fake seams.
+            if cell.data == "█":
+                draw.rectangle((px, py, px + 9, py + 20), fill=fg)
+            else:
+                draw.text((px, py - 1), cell.data, font=bold if cell.bold else regular, fill=fg)
             if cell.underscore:
                 draw.line((px, py + 19, px + 9, py + 19), fill=fg)
     image.save(target)

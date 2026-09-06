@@ -1,0 +1,32 @@
+ Context: demo-dev [RW]                            <0> all       <?>       Help                                                                                           ████ ██       ██████        ████
+ Cluster: demo-cluster                             <1> default   <shift-r> Reconcile                                                                                      ██   ██  ██   ██  ██   ██     ██
+ User:    demo-user                                              <g>       Source/Dependencies                                                                            ██   ████     ██████ ██████   ██
+ k9+ Rev: v0.1.0-dev                                             <i>       Status Details                                                                                 ██   ██  ██       ██   ██     ██
+ K8s Rev: v1.34.0                                                <shift-t> Suspend/Resume                                                                                 ████ ██    ██ ██████        ████
+ CPU:     0%
+ MEM:     0%
+┌───────────────────────────────────────────────────────────────────────────────────────────── flux(all)[9] ─────────────────────────────────────────────────────────────────────────────────────────────┐
+│ NAMESPACE             NAME                     KIND                     STATUS↑               SUSPEND          REVISION                    SOURCE                                       AGE            │
+│ flux-system           payments                 Kustomization            Failed                false            2.0.0@sha256:c34d           OCIRepository:flux-system/apps               12d            │
+│ flux-system           monitoring               Kustomization            Reconciling           false            2.0.0@sha256:c34d           OCIRepository:flux-system/platform           12d            │
+│ flux-system           storage                  Kustomization            Suspended             true             2.0.0@sha256:c34d           OCIRepository:flux-system/platform           12d            │
+│ monitoring            grafana                  HelmRelease              Ready                 false            10.0.0                      OCIRepository:flux-system/apps               12d            │
+│ flux-system           apps                     Kustomization            Ready                 false            2.0.0@sha256:c34d           OCIRepository:flux-system/apps               12d            │
+│ flux-system           infrastructure           Kustomization            Ready                 false            2.0.0@sha256:c34d           OCIRepository:flux-system/platform           12d            │
+│ flux-system           monitoring               HelmRepository           Ready                 false            sha256:e56f                 <none>                                       12d            │
+│ flux-system           apps                     OCIRepository            Ready                 false            2.0.0@sha256:c34d           <none>                                       12d            │
+│ flux-system           platform                 OCIRepository            Ready                 false            2.0.0@sha256:a12b           <none>                                       12d            │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  <flux>
+                                                                                     😎 Viewing flux in namespace all

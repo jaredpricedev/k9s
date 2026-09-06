@@ -17,8 +17,8 @@ func TestNewLogoView(t *testing.T) {
 	v := ui.NewLogo(config.NewStyles())
 	v.Reset()
 
-	assert.Contains(t, v.Logo().GetText(false), "k9+")
-	assert.Equal(t, 6, strings.Count(v.Logo().GetText(false), "[#ffa500::b]"))
+	assert.Contains(t, v.Logo().GetText(false), "██")
+	assert.Equal(t, 10, strings.Count(v.Logo().GetText(false), "[#ffa500::b]"))
 	assert.Empty(t, v.Status().GetText(false))
 }
 
@@ -55,8 +55,8 @@ func TestLogoStatus(t *testing.T) {
 			case "err":
 				v.Err(u.msg)
 			}
-			assert.Contains(t, v.Logo().GetText(false), "k9+")
-			assert.Equal(t, 6, strings.Count(v.Logo().GetText(false), u.logo))
+			assert.Contains(t, v.Logo().GetText(false), "██")
+			assert.Equal(t, 10, strings.Count(v.Logo().GetText(false), u.logo))
 			assert.Equal(t, u.e, v.Status().GetText(false))
 		})
 	}
