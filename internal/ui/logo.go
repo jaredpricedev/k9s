@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package ui
 
@@ -12,7 +13,7 @@ import (
 	"github.com/derailed/tview"
 )
 
-// Logo represents a K9s logo.
+// Logo represents the k9+ block wordmark and transient status.
 type Logo struct {
 	*tview.Flex
 
@@ -30,7 +31,7 @@ func NewLogo(styles *config.Styles) *Logo {
 		styles: styles,
 	}
 	l.SetDirection(tview.FlexRow)
-	l.AddItem(l.logo, 6, 1, false)
+	l.AddItem(l.logo, len(LogoSmall), 1, false)
 	l.AddItem(l.status, 1, 1, false)
 	l.refreshLogo(styles.Body().LogoColor)
 	l.SetBackgroundColor(styles.BgColor())
@@ -103,13 +104,7 @@ func (l *Logo) refreshStatus(msg string, c config.Color) {
 func (l *Logo) refreshLogo(c config.Color) {
 	l.mx.Lock()
 	defer l.mx.Unlock()
-	l.logo.Clear()
-	for i, s := range LogoSmall {
-		_, _ = fmt.Fprintf(l.logo, "[%s::b]%s", c, s)
-		if i+1 < len(LogoSmall) {
-			_, _ = fmt.Fprintf(l.logo, "\n")
-		}
-	}
+	l.logo.SetText(styledLogo(c, l.styles.Body().FgColor))
 }
 
 func logo() *tview.TextView {

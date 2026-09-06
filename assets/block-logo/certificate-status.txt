@@ -1,0 +1,31 @@
+ Context: demo-dev [RW]                            <c> Copy                                                                                                               ████ ██       ██████        ████
+ Cluster: demo-cluster                             <f> Toggle FullScreen                                                                                                  ██   ██  ██   ██  ██   ██     ██
+ User:    demo-user                                                                                                                                                       ██   ████     ██████ ██████   ██
+ k9+ Rev: v0.1.0-dev                                                                                                                                                      ██   ██  ██       ██   ██     ██
+ K8s Rev: v1.34.0                                                                                                                                                         ████ ██    ██ ██████        ████
+ CPU:     0%
+ MEM:     0%
+┌─────────────────────────────────────────────────────────────────────────────────── Certificate Status(apps/api-tls) ───────────────────────────────────────────────────────────────────────────────────┐
+│ NAMESPACE: apps                                                                                                                                                                                        │
+│ NAME: api-tls                                                                                                                                                                                          │
+│ STATUS: Ready                                                                                                                                                                                          │
+│ EXPIRES: 2026-11-05T14:59:45Z                                                                                                                                                                          │
+│ RENEWAL: 2026-10-06T14:59:45Z                                                                                                                                                                          │
+│ ISSUER: ClusterIssuer:letsencrypt                                                                                                                                                                      │
+│ SECRET: api-tls                                                                                                                                                                                        │
+│ DNS NAMES: api.example.test                                                                                                                                                                            │
+│ MESSAGE: Ready: Certificate is up to date and has not expired                                                                                                                                          │
+│ AGE: 12d                                                                                                                                                                                               │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+│                                                                                                                                                                                                        │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  <certificate>   <certificate status>

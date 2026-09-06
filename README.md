@@ -86,25 +86,25 @@ Captured from the running TUI using a local demo API with synthetic resources. N
 
 See Kustomizations, HelmReleases and sources together, with health, suspension and revision. Press `i` for the complete controller message; MESSAGE is also available in wide mode.
 
-![Combined Flux dashboard showing Ready, Failed, Reconciling and Suspended resources across namespaces](assets/k9plus/flux-overview.png)
+![Combined Flux dashboard showing Ready, Failed, Reconciling and Suspended resources across namespaces](assets/block-logo/flux-overview.png)
 
 **Native resource view — `:kustomizations flux-system`**
 
 Inspect reconciliation status and OCI source references. Native actions appear in the shortcut bar, including `Shift-R` to reconcile and `Shift-T` to suspend or resume.
 
-![Native Kustomization view showing OCI revisions and sources, health states, and Flux action shortcuts](assets/k9plus/flux-kustomizations.png)
+![Native Kustomization view showing OCI revisions and sources, health states, and Flux action shortcuts](assets/block-logo/flux-kustomizations.png)
 
 **Source and dependency navigation — `g`**
 
 Jump from a resource to its OCI source or an explicit dependency without looking up the resource kind and namespace manually.
 
-![Flux relationships dialog listing the selected Kustomization's OCI source and infrastructure dependency](assets/k9plus/flux-relationships.png)
+![Flux relationships dialog listing the selected Kustomization's OCI source and infrastructure dependency](assets/block-logo/flux-relationships.png)
 
 **Confirmed reconciliation — `Shift-R`**
 
 The confirmation identifies the resource, namespace and context before submitting the request. Native write actions are unavailable in read-only mode.
 
-![Flux reconciliation confirmation naming Kustomization flux-system/apps in context demo-dev, with Cancel selected](assets/k9plus/flux-reconcile.png)
+![Flux reconciliation confirmation naming Kustomization flux-system/apps in context demo-dev, with Cancel selected](assets/block-logo/flux-reconcile.png)
 
 
 ## Certificate screenshots
@@ -115,21 +115,21 @@ These are captures of the running TUI with synthetic cert-manager resources from
 
 Scan expiry, renewal time, issuer and target Secret. Expired and expiring certificates remain visible even when an old Ready condition is still true.
 
-![Certificate dashboard showing expired, expiring, renewal due, issuing and ready certificates](assets/k9plus/certificates-overview.png)
+![Certificate dashboard showing expired, expiring, renewal due, issuing and ready certificates](assets/block-logo/certificates-overview.png)
 
 **Issuance navigation — `g`**
 
 Follow the issuer, target Secret and owned CertificateRequests, then continue to ACME Orders and Challenges. Relationships use explicit references and owner identities.
 
-![Certificate relationship picker showing issuer, target Secret and owned request](assets/k9plus/certificate-relationships.png)
+![Certificate relationship picker showing issuer, target Secret and owned request](assets/block-logo/certificate-relationships.png)
 
 **Complete status — `i`**
 
 Read the complete controller message and certificate timing in a scrollable dialog. Native diagnostics use cached API status; optional cmctl actions provide status, inspection and confirmed renewal.
 
-![Certificate status dialog showing expiry and renewal details](assets/k9plus/certificate-status.png)
+![Certificate status dialog showing expiry and renewal details](assets/block-logo/certificate-status.png)
 
-[Capture provenance and checks](assets/k9plus/README.md). Reproduce all seven screenshots with `python scripts/capture-demo.py --binary /path/to/k9plus` after installing Python packages `Pillow` and `pyte`. See [certificate workflows](docs/certificates.md) for commands and limitations.
+[Capture provenance](assets/block-logo/README.md). Reproduce all seven screenshots with `python scripts/capture-demo.py --binary /path/to/k9plus --output assets/block-logo` after installing Python packages `Pillow` and `pyte`. See [certificate workflows](docs/certificates.md) for commands and limitations.
 
 
 ## License and distribution

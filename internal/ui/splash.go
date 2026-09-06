@@ -12,18 +12,31 @@ import (
 	"github.com/derailed/tview"
 )
 
-// LogoSmall is the independent k9+ terminal wordmark.
+// LogoWidth is the terminal cell width of the block wordmark.
+const LogoWidth = 32
+
+// LogoSmall draws [k9+] using terminal block characters, five rows high.
 var LogoSmall = []string{
-	`   _      ___             `,
-	`  | | __ / _ \     _      `,
-	`  | |/ /| (_) |  _| |_    `,
-	`  |   <  \__, | |_   _|   `,
-	`  |_|\_\   /_/    |_|     `,
-	`            k9+           `,
+	`████ ██       ██████        ████`,
+	`██   ██  ██   ██  ██   ██     ██`,
+	`██   ████     ██████ ██████   ██`,
+	`██   ██  ██       ██   ██     ██`,
+	`████ ██    ██ ██████        ████`,
 }
 
 // LogoBig shares the wordmark so CLI, header and splash use the same identity.
 var LogoBig = append([]string(nil), LogoSmall...)
+
+// styledLogo accents the brackets and plus while keeping k9 in the body color.
+func styledLogo(accent, foreground config.Color) string {
+	var lines []string
+	for _, row := range LogoSmall {
+		cells := []rune(row)
+		lines = append(lines, fmt.Sprintf("[%s::b]%s[%s::b]%s[%s::b]%s",
+			accent, string(cells[:5]), foreground, string(cells[5:21]), accent, string(cells[21:])))
+	}
+	return strings.Join(lines, "\n")
+}
 
 // Splash represents a splash screen.
 type Splash struct {
@@ -53,11 +66,7 @@ func NewSplash(styles *config.Styles, version string) *Splash {
 }
 
 func (*Splash) layoutLogo(t *tview.TextView, styles *config.Styles) {
-	logo := strings.Join(LogoBig, fmt.Sprintf("\n[%s::b]", styles.Body().LogoColor))
-	_, _ = fmt.Fprintf(t, "%s[%s::b]%s\n",
-		strings.Repeat("\n", 2),
-		styles.Body().LogoColor,
-		logo)
+	_, _ = fmt.Fprintf(t, "\n\n%s\n", styledLogo(styles.Body().LogoColor, styles.Body().FgColor))
 }
 
 func (*Splash) layoutRev(t *tview.TextView, rev string, styles *config.Styles) {
