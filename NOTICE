@@ -1,0 +1,21 @@
+k9+
+
+k9+ is an independently maintained fork of K9s.
+Original project: https://github.com/derailed/k9s
+Upstream source baseline: 84852e6
+
+K9s copyright and attribution notices are retained in the source files and
+COPYING. In particular, the upstream COPYING notice identifies:
+Copyright © 2019, Imhotep Software LLC <fernand@imhotep.io> and other contributors.
+Source files also identify the Authors of K9s.
+
+k9+ modifications and additions are provided under the Apache License, Version
+2.0. See LICENSE and MODIFICATIONS.md. This fork is maintained independently and
+is not endorsed by or affiliated with the K9s maintainers. References to K9s
+identify the origin of the software; they do not assert ownership of its name
+or grant permission to use its branding.
+
+Third-party components remain under their respective licenses. Binary releases
+include their collected license and attribution files in THIRD_PARTY_LICENSES.
+
+This notice is informational and does not modify any license terms.

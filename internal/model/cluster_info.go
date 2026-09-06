@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package model
 
@@ -7,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -21,7 +23,7 @@ import (
 )
 
 const (
-	k9sGitURL       = "https://api.github.com/repos/derailed/k9s/releases/latest"
+	k9sGitURL       = "https://api.github.com/repos/jaredpricedev/k9s/releases/latest"
 	cacheSize       = 10
 	cacheExpiry     = 1 * time.Hour
 	k9sLatestRevKey = "k9sRev"
@@ -107,7 +109,7 @@ func (c *ClusterInfo) fetchK9sLatestRev() string {
 
 	latestRev, err := fetchLatestRev()
 	if err != nil {
-		slog.Warn("k9s latest rev fetch failed", slogs.Error, err)
+		slog.Warn("k9+ latest rev fetch failed", slogs.Error, err)
 	} else {
 		c.cache.Add(k9sLatestRevKey, latestRev, cacheExpiry)
 	}
@@ -202,7 +204,7 @@ func (c *ClusterInfo) fireNoMetaChanged(data *ClusterMeta) {
 // Helpers...
 
 func fetchLatestRev() (string, error) {
-	slog.Debug("Fetching latest k9s rev...")
+	slog.Debug("Fetching latest k9+ rev...")
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
@@ -220,19 +222,21 @@ func fetchLatestRev() (string, error) {
 		}
 	}()
 
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
+	// An independent fork may not have published its first release yet.
+	if resp.StatusCode == http.StatusNotFound {
+		return "", nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("release lookup returned HTTP %d", resp.StatusCode)
+	}
+	var release struct {
+		Tag string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&release); err != nil {
 		return "", err
 	}
-	m := make(map[string]any, 20)
-	if err := json.Unmarshal(b, &m); err != nil {
-		return "", err
+	if release.Tag == "" {
+		return "", errors.New("no version found")
 	}
-
-	if v, ok := m["name"]; ok {
-		slog.Debug("K9s latest rev", slogs.Revision, v.(string))
-		return v.(string), nil
-	}
-
-	return "", errors.New("no version found")
+	return release.Tag, nil
 }

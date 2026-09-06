@@ -1,10 +1,11 @@
+# Modified for k9+ by the k9+ contributors; see MODIFICATIONS.md.
 .vscode
 *.out
 .idea
 .envrc
 cov.out
 execs
-/k9s
+/k9plus
 /k8s
 dist
 notes
@@ -26,3 +27,6 @@ kind
 /stresser
 __debug_bin*
 fg.yaml
+/THIRD_PARTY_LICENSES/
+/.third-party-licenses-*/
+/scripts/__pycache__/

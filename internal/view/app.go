@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view
 
@@ -52,6 +53,7 @@ type App struct {
 	clusterModel  *model.ClusterInfo
 	cmdHistory    *model.History
 	filterHistory *model.History
+	fluxActions   map[fluxActionKey]struct{}
 	conRetry      int32
 	showHeader    bool
 	showLogo      bool
@@ -160,7 +162,7 @@ func (a *App) initImgScanner(version string) {
 	}(time.Now())
 
 	vul.ImgScanner = vul.NewImageScanner(a.Config.K9s.ImageScans, slog.Default())
-	go vul.ImgScanner.Init("k9s", version)
+	go vul.ImgScanner.Init(config.AppName, version)
 }
 
 func (a *App) layout(ctx context.Context) {
@@ -538,7 +540,7 @@ func (a *App) BailOut(exitCode int) {
 	}()
 
 	if err := nukeK9sShell(a); err != nil {
-		slog.Error("Unable to nuke k9s shell pod", slogs.Error, err)
+		slog.Error("Unable to nuke k9+ shell pod", slogs.Error, err)
 	}
 
 	a.stopImgScanner()

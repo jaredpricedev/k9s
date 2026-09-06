@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package ui
 
@@ -107,9 +108,6 @@ func columnIndicator(sort, selected, asc bool, style *config.Table, name string)
 }
 
 func formatCell(field string, padding int) string {
-	if IsASCII(field) {
-		return Pad(field, padding)
-	}
-
-	return field
+	// Table.Draw clips to the viewport without splitting tags or Unicode clusters.
+	return field + strings.Repeat(" ", max(0, padding-displayWidth(field)))
 }

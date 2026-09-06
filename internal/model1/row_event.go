@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package model1
 
@@ -7,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 type ReRangeFn func(int, RowEvent) bool
@@ -121,7 +124,7 @@ func (r *RowEvents) reindex() {
 }
 
 func (r *RowEvents) At(i int) (RowEvent, bool) {
-	if i < 0 || i > len(r.events) {
+	if i < 0 || i >= len(r.events) {
 		return RowEvent{}, false
 	}
 
@@ -129,7 +132,11 @@ func (r *RowEvents) At(i int) (RowEvent, bool) {
 }
 
 func (r *RowEvents) Set(i int, re RowEvent) {
+	oldID := r.events[i].Row.ID
 	r.events[i] = re
+	if oldID != re.Row.ID {
+		delete(r.index, oldID)
+	}
 	r.index[re.Row.ID] = i
 }
 
@@ -160,12 +167,12 @@ func (r *RowEvents) Labelize(cols []int, labelCol int, labels []string) *RowEven
 
 // Customize returns custom row events based on columns layout.
 func (r *RowEvents) Customize(cols []int) *RowEvents {
-	ee := make([]RowEvent, 0, len(cols))
+	out := NewRowEvents(len(r.events))
 	for _, re := range r.events {
-		ee = append(ee, re.Customize(cols))
+		out.Add(re.Customize(cols))
 	}
 
-	return NewRowEventsWithEvts(ee...)
+	return out
 }
 
 // Diff returns true if the event changed.
@@ -184,12 +191,12 @@ func (r *RowEvents) Diff(re *RowEvents, ageCol int) bool {
 
 // Clone returns a deep copy.
 func (r *RowEvents) Clone() *RowEvents {
-	re := make([]RowEvent, 0, len(r.events))
+	re := NewRowEvents(len(r.events))
 	for _, e := range r.events {
-		re = append(re, e.Clone())
+		re.Add(e.Clone())
 	}
 
-	return NewRowEventsWithEvts(re...)
+	return re
 }
 
 // Upsert add or update a row if it exists.
@@ -207,11 +214,37 @@ func (r *RowEvents) Delete(fqn string) error {
 	if !ok {
 		return fmt.Errorf("unable to delete row with fqn: %q", fqn)
 	}
-	r.events = append(r.events[0:victim], r.events[victim+1:]...)
+	last := len(r.events) - 1
+	copy(r.events[victim:], r.events[victim+1:])
+	r.events[last] = RowEvent{}
+	r.events = r.events[:last]
 	delete(r.index, fqn)
 	r.reindex()
 
 	return nil
+}
+
+// deleteAll removes indexed rows in one stable pass, then rebuilds their indexes.
+func (r *RowEvents) deleteAll(ids sets.Set[string]) {
+	if len(ids) == 0 {
+		return
+	}
+
+	next := 0
+	for i, event := range r.events {
+		// Match Delete's handling of duplicate IDs: remove only the indexed row.
+		if ids.Has(event.Row.ID) && r.index[event.Row.ID] == i {
+			continue
+		}
+		r.events[next] = event
+		next++
+	}
+	clear(r.events[next:])
+	r.events = r.events[:next]
+	for id := range ids {
+		delete(r.index, id)
+	}
+	r.reindex()
 }
 
 func (r *RowEvents) Len() int {
@@ -224,6 +257,7 @@ func (r *RowEvents) Empty() bool {
 
 // Clear delete all row events.
 func (r *RowEvents) Clear() {
+	clear(r.events)
 	r.events = r.events[:0]
 	for k := range r.index {
 		delete(r.index, k)

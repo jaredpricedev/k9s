@@ -1,20 +1,149 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package model1
 
 import (
+	"fmt"
 	"log/slog"
 	"testing"
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
+func BenchmarkTableDataRegexFilter10K(b *testing.B) {
+	const rowCount = 10_000
+	events := NewRowEvents(rowCount)
+	for i := range rowCount {
+		id := fmt.Sprintf("row-%05d", i)
+		events.Add(RowEvent{Row: Row{
+			ID:     id,
+			Fields: Fields{id, "ready", "42", "1m", "node-a", "extra"},
+		}})
+	}
+	table := NewTableDataWithRows(
+		client.NewGVR("test"),
+		Header{
+			HeaderColumn{Name: "NAME"},
+			HeaderColumn{Name: "STATUS"},
+			HeaderColumn{Name: "RESTARTS"},
+			HeaderColumn{Name: "AGE"},
+			HeaderColumn{Name: "NODE"},
+			HeaderColumn{Name: "EXTRA"},
+		},
+		events,
+	)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		_ = table.Filter(FilterOpts{Filter: "row-09.*ready"})
+	}
+}
+
+func TestTableDataRegexFilterUsesJoinedVisibleFields(t *testing.T) {
+	table := NewTableDataWithRows(
+		client.NewGVR("test"),
+		Header{
+			HeaderColumn{Name: "NAME"},
+			HeaderColumn{Name: "STATUS"},
+			HeaderColumn{Name: "SECRET", Attrs: Attrs{Hide: true}},
+			HeaderColumn{Name: "AGE"},
+		},
+		NewRowEventsWithEvts(
+			RowEvent{Row: Row{ID: "A", Fields: Fields{"alpha", "beta", "secret", "1m"}}},
+			RowEvent{Row: Row{ID: "B", Fields: Fields{"alpha", "gamma", "hidden", "2m"}}},
+		),
+	)
+
+	joined := table.Filter(FilterOpts{Filter: "alpha.*beta"})
+	require.Equal(t, 1, joined.RowCount())
+	_, found := joined.FindRow("A")
+	assert.True(t, found)
+
+	hidden := table.Filter(FilterOpts{Filter: "secret"})
+	assert.Zero(t, hidden.RowCount())
+}
+
 func init() {
 	slog.SetDefault(slog.New(slog.DiscardHandler))
+}
+
+func TestTableDataSortWideColumn(t *testing.T) {
+	const (
+		nameColumn      = "NAME"
+		ownerKindColumn = "OWNER_KIND"
+		statefulSetID   = "statefulset"
+		daemonSetID     = "daemonset"
+		jobID           = "job"
+	)
+
+	wideSortColumn := SortColumn{Name: ownerKindColumn, ASC: true}
+	expectedIDs := []string{daemonSetID, jobID, statefulSetID}
+	newTableData := func() *TableData {
+		return NewTableDataWithRows(
+			client.NewGVR("test"),
+			Header{
+				HeaderColumn{Name: nameColumn},
+				HeaderColumn{Name: ownerKindColumn, Attrs: Attrs{Wide: true}},
+			},
+			NewRowEventsWithEvts(
+				RowEvent{Row: Row{ID: statefulSetID, Fields: Fields{statefulSetID, "StatefulSet"}}},
+				RowEvent{Row: Row{ID: daemonSetID, Fields: Fields{daemonSetID, "DaemonSet"}}},
+				RowEvent{Row: Row{ID: jobID, Fields: Fields{jobID, "Job"}}},
+			),
+		)
+	}
+
+	tests := map[string]struct {
+		viewSetting        *config.ViewSetting
+		initialSortColumn  SortColumn
+		manual             bool
+		expectedSortColumn SortColumn
+		expectedIDs        []string
+	}{
+		"sorts selected wide column": {
+			initialSortColumn:  wideSortColumn,
+			expectedSortColumn: wideSortColumn,
+			expectedIDs:        expectedIDs,
+		},
+		"keeps manual sort after wide view is hidden": {
+			viewSetting: &config.ViewSetting{
+				Columns:    []string{nameColumn, ownerKindColumn},
+				SortColumn: "NAME:asc",
+			},
+			initialSortColumn:  wideSortColumn,
+			manual:             true,
+			expectedSortColumn: wideSortColumn,
+			expectedIDs:        expectedIDs,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			data := newTableData()
+			sortColumn := test.initialSortColumn
+			if test.viewSetting != nil {
+				sortColumn = data.ComputeSortCol(test.viewSetting, sortColumn, test.manual)
+			}
+			if !assert.Equal(t, test.expectedSortColumn, sortColumn, "unexpected resolved sort column") {
+				return
+			}
+
+			data.Sort(sortColumn)
+			var ids []string
+			data.RowsRange(func(_ int, re RowEvent) bool {
+				ids = append(ids, re.Row.ID)
+				return true
+			})
+			assert.Equal(t, test.expectedIDs, ids, "unexpected row order after sorting by %q", sortColumn.Name)
+		})
+	}
 }
 
 func TestTableDataComputeSortCol(t *testing.T) {

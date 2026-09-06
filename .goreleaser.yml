@@ -1,20 +1,26 @@
+# Modified for k9+ by the k9+ contributors; see MODIFICATIONS.md.
 version: 2
 
-project_name: k9s
+project_name: k9plus
 
 before:
   hooks:
     - go mod download
     - go generate ./...
+    - make licenses
 
 release:
-  prerelease: false
+  github:
+    owner: jaredpricedev
+    name: k9s
+  prerelease: auto
 
 env:
   - CGO_ENABLED=0
 
 builds:
   - id: linux
+    binary: k9plus
     goos:
       - linux
     goarch:
@@ -33,6 +39,7 @@ builds:
       - -s -w -X github.com/derailed/k9s/cmd.date={{.Date}}
 
   - id: freebsd
+    binary: k9plus
     goos:
       - freebsd
     goarch:
@@ -48,6 +55,7 @@ builds:
       - -s -w -X github.com/derailed/k9s/cmd.date={{.Date}}
 
   - id: osx
+    binary: k9plus
     goos:
       - darwin
     goarch:
@@ -61,6 +69,7 @@ builds:
       - -s -w -X github.com/derailed/k9s/cmd.date={{.Date}}
 
   - id: windows
+    binary: k9plus
     goos:
       - windows
     goarch:
@@ -81,6 +90,18 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
+    files:
+      - LICENSE
+      - COPYING
+      - NOTICE
+      - MODIFICATIONS.md
+      - README.md
+      - docs/licensing.md
+      # The recursive glob covers descendants; name the bundle root files too.
+      - THIRD_PARTY_LICENSES/README.txt
+      - THIRD_PARTY_LICENSES/manifest.json
+      - THIRD_PARTY_LICENSES/go.mod
+      - THIRD_PARTY_LICENSES/**/*
     format_overrides:
       - goos: windows
         formats: ["zip"]
@@ -89,7 +110,7 @@ checksum:
   name_template: "checksums.sha256"
 
 snapshot:
-  version_template: "{{ .Tag }}-next"
+  version_template: "0.1.0-dev-{{ .ShortCommit }}"
 
 changelog:
   sort: asc
@@ -98,25 +119,12 @@ changelog:
       - "^docs:"
       - "^test:"
 
-brews:
-  - name: k9s
-    repository:
-      owner: derailed
-      name: homebrew-k9s
-    commit_author:
-      name: derailed
-      email: fernand@imhotep.io
-    directory: Formula
-    homepage: https://k9scli.io/
-    description: Kubernetes CLI To Manage Your Clusters In Style!
-    test: |
-      system "k9s version"
-
 nfpms:
-  - file_name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}'
-    maintainer: Fernand Galiana
-    homepage: https://k9scli.io
-    description: Kubernetes CLI To Manage Your Clusters In Style!
+  - package_name: k9plus
+    file_name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}'
+    maintainer: k9+ contributors
+    homepage: https://github.com/jaredpricedev/k9s
+    description: k9+ is an independent Kubernetes terminal UI fork of K9s.
     license: "Apache-2.0"
     formats:
       - deb
@@ -126,9 +134,28 @@ nfpms:
     section: utils
     contents:
       - src: ./LICENSE
-        dst: /usr/share/doc/k9s/copyright
+        dst: /usr/share/doc/k9plus/LICENSE
         file_info:
           mode: 0644
+      - src: ./COPYING
+        dst: /usr/share/doc/k9plus/COPYING
+        file_info:
+          mode: 0644
+      - src: ./NOTICE
+        dst: /usr/share/doc/k9plus/NOTICE
+        file_info:
+          mode: 0644
+      - src: ./MODIFICATIONS.md
+        dst: /usr/share/doc/k9plus/MODIFICATIONS.md
+        file_info:
+          mode: 0644
+      - src: ./docs/licensing.md
+        dst: /usr/share/doc/k9plus/docs/licensing.md
+        file_info:
+          mode: 0644
+      - src: ./THIRD_PARTY_LICENSES/
+        dst: /usr/share/doc/k9plus/THIRD_PARTY_LICENSES/
+        type: tree
 
 sboms:
   - artifacts: archive

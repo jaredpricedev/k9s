@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package config_test
 
@@ -113,7 +114,10 @@ func TestAliasesLoad(t *testing.T) {
 	a := config.NewAliases()
 	require.NoError(t, a.Load(path.Join(config.AppConfigDir, "plain.yaml")))
 
-	assert.Len(t, a.Alias, 55)
+	assert.Len(t, a.Alias, 56)
+	gvr, ok := a.Resolve(cmd.NewInterpreter("flux"))
+	require.True(t, ok)
+	assert.Equal(t, client.FluxGVR, gvr)
 }
 
 func TestAliasesSave(t *testing.T) {

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package ui
 
@@ -58,6 +59,7 @@ type Table struct {
 	readOnly       bool
 	noIcon         bool
 	fullGVR        bool
+	literalFields  bool
 }
 
 // NewTable returns a new table view.
@@ -74,6 +76,19 @@ func NewTable(gvr *client.GVR) *Table {
 		cmdBuff: model.NewFishBuff('/', model.FilterBuffer),
 		sortCol: model1.SortColumn{ASC: true},
 	}
+}
+
+// SetLiteralFields renders resource field text literally while allowing K9s decorations.
+func (t *Table) SetLiteralFields(enabled bool) {
+	t.mx.Lock()
+	defer t.mx.Unlock()
+	t.literalFields = enabled
+}
+
+func (t *Table) getLiteralFields() bool {
+	t.mx.RLock()
+	defer t.mx.RUnlock()
+	return t.literalFields
 }
 
 // SetFullGVR toggles full GVR title display.
@@ -488,7 +503,7 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 	cdata.Sort(t.getSortCol())
 
 	pads := make(MaxyPad, cdata.HeaderCount())
-	ComputeMaxColumns(pads, t.getSortCol().Name, cdata)
+	computeMaxColumns(pads, t.getSortCol().Name, cdata, t.getLiteralFields())
 	cdata.RowsRange(func(row int, re model1.RowEvent) bool {
 		ore, ok := data.FindRow(re.Row.ID)
 		if !ok {
@@ -505,6 +520,7 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 }
 
 func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads MaxyPad) {
+	literalFields := t.getLiteralFields()
 	color := model1.DefaultColorer
 	if t.colorerFn != nil {
 		color = t.colorerFn
@@ -513,6 +529,7 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 	marked := t.IsMarked(re.Row.ID)
 	var col int
 	ns := t.GetModel().GetNamespace()
+	var fgColor tcell.Color
 	for c, field := range re.Row.Fields {
 		if c >= len(h) {
 			slog.Error("Field/header overflow detected. Check your mappings!",
@@ -526,6 +543,18 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 			continue
 		}
 
+		if col == 0 {
+			fgColor = color(ns, h, &re)
+			if marked {
+				fgColor = t.styles.Table().MarkColor.Color()
+			}
+		}
+
+		original := field
+		if literalFields {
+			field = tview.Escape(field)
+		}
+
 		if !re.Deltas.IsBlank() && !h.IsTimeCol(c) {
 			var old string
 			if c < len(ore.Deltas) {
@@ -534,7 +563,7 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 			if c < len(re.Deltas) {
 				old = re.Deltas[c]
 			}
-			field += Deltas(old, field)
+			field += Deltas(old, original)
 		}
 
 		if h[c].Decorator != nil {
@@ -547,11 +576,7 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 		cell := tview.NewTableCell(field)
 		cell.SetExpansion(1)
 		cell.SetAlign(h[c].Align)
-		fgColor := color(ns, h, &re)
 		cell.SetTextColor(fgColor)
-		if marked {
-			cell.SetTextColor(t.styles.Table().MarkColor.Color())
-		}
 		if col == 0 {
 			cell.SetReference(re.Row.ID)
 		}

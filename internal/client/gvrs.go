@@ -1,3 +1,4 @@
+// Modified for k9+; see NOTICE.
 package client
 
 import "k8s.io/apimachinery/pkg/util/sets"
@@ -50,22 +51,23 @@ var (
 	PmxGVR = NewGVR("metrics.k8s.io/v1beta1/pods")
 
 	// K9s...
-	CpuGVR = NewGVR("cpu")
-	MemGVR = NewGVR("memory")
-	WkGVR  = NewGVR("workloads")
-	CoGVR  = NewGVR("containers")
-	CtGVR  = NewGVR("contexts")
-	RefGVR = NewGVR("references")
-	PuGVR  = NewGVR("pulses")
-	ScnGVR = NewGVR("scans")
-	DirGVR = NewGVR("dirs")
-	PfGVR  = NewGVR("portforwards")
-	SdGVR  = NewGVR("screendumps")
-	BeGVR  = NewGVR("benchmarks")
-	AliGVR = NewGVR("aliases")
-	XGVR   = NewGVR("xrays")
-	HlpGVR = NewGVR("help")
-	QGVR   = NewGVR("quit")
+	CpuGVR  = NewGVR("cpu")
+	MemGVR  = NewGVR("memory")
+	WkGVR   = NewGVR("workloads")
+	FluxGVR = NewGVR("flux")
+	CoGVR   = NewGVR("containers")
+	CtGVR   = NewGVR("contexts")
+	RefGVR  = NewGVR("references")
+	PuGVR   = NewGVR("pulses")
+	ScnGVR  = NewGVR("scans")
+	DirGVR  = NewGVR("dirs")
+	PfGVR   = NewGVR("portforwards")
+	SdGVR   = NewGVR("screendumps")
+	BeGVR   = NewGVR("benchmarks")
+	AliGVR  = NewGVR("aliases")
+	XGVR    = NewGVR("xrays")
+	HlpGVR  = NewGVR("help")
+	QGVR    = NewGVR("quit")
 
 	// Helm...
 	HmGVR  = NewGVR("helm")
@@ -86,6 +88,7 @@ var reservedGVRs = sets.New(
 	CpuGVR,
 	MemGVR,
 	WkGVR,
+	FluxGVR,
 	CoGVR,
 	CtGVR,
 	RefGVR,

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view
 
@@ -37,11 +38,11 @@ import (
 const (
 	shellCheck    = `command -v bash >/dev/null && exec bash || exec sh`
 	winShellCheck = `where powershell >nul 2>&1 && powershell || cmd`
-	bannerFmt     = "<<K9s-Shell>> Pod: %s | Container: %s \n"
+	bannerFmt     = "<<k9+-Shell>> Pod: %s | Container: %s \n"
 	outputPrefix  = "[output]"
 )
 
-var editorEnvVars = []string{"K9S_EDITOR", "KUBE_EDITOR", "EDITOR"}
+var editorEnvVars = []string{"K9PLUS_EDITOR", "KUBE_EDITOR", "EDITOR"}
 
 type shellOpts struct {
 	clear, background bool
@@ -211,7 +212,7 @@ func execute(opts *shellOpts, statusChan chan<- string) error {
 	cmd := exec.CommandContext(ctx, opts.binary, opts.args...)
 	slog.Debug("Exec command", slogs.Command, opts)
 
-	if env := os.Getenv("K9S_EDITOR"); env != "" {
+	if env := os.Getenv("K9PLUS_EDITOR"); env != "" {
 		// There may be situations where the user sets the editor as the binary
 		// followed by some arguments (e.g. "code -w" to make it work with vscode)
 		//
@@ -306,7 +307,7 @@ func clearScreen() {
 }
 
 const (
-	k9sShell           = "k9s-shell"
+	k9sShell           = "k9plus-shell"
 	k9sShellRetryCount = 50
 	k9sShellRetryDelay = 2 * time.Second
 )
@@ -449,7 +450,7 @@ func launchShellPod(ctx context.Context, a *App, node string) error {
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(o.(*unstructured.Unstructured).Object, &pod); err != nil {
 			return err
 		}
-		slog.Debug("Checking k9s shell pod retries",
+		slog.Debug("Checking k9+ shell pod retries",
 			slogs.Retry, i,
 			slogs.PodPhase, pod.Status.Phase,
 		)
@@ -602,7 +603,7 @@ func pipe(_ context.Context, opts *shellOpts, statusChan chan<- string, w, e *by
 		close(statusChan)
 
 		if err != nil {
-			err = fmt.Errorf("command failed. Check k9s logs: %w", err)
+			err = fmt.Errorf("command failed. Check k9+ logs: %w", err)
 		}
 
 		return err

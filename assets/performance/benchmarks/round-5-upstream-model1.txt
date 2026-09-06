@@ -1,0 +1,11 @@
+goos: linux
+goarch: amd64
+pkg: github.com/derailed/k9s/internal/model1
+cpu: INTEL(R) XEON(R) PLATINUM 8573C
+BenchmarkPerformanceCustomize-4   	      72	   3220796 ns/op	 5191378 B/op	   10053 allocs/op
+BenchmarkPerformanceRegex-4       	      22	  11121539 ns/op	 1875666 B/op	   20061 allocs/op
+BenchmarkRowEventsClone10K-4      	     100	   3829017 ns/op	 3030744 B/op	   12037 allocs/op
+BenchmarkTableDataDelete10K/None-4         	     600	    452431 ns/op	       0 B/op	       0 allocs/op
+BenchmarkTableDataDelete10K/OnePercent-4   	      10	  21189417 ns/op	    8488 B/op	      10 allocs/op
+BenchmarkTableDataDelete10K/Half-4         	       1	 834884120 ns/op	  518328 B/op	      47 allocs/op
+PASS

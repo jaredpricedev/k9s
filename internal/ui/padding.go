@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package ui
 
@@ -9,6 +10,7 @@ import (
 
 	"github.com/derailed/k9s/internal/model1"
 	"github.com/derailed/k9s/internal/render"
+	"github.com/derailed/tview"
 )
 
 // MaxyPad tracks uniform column padding.
@@ -16,24 +18,29 @@ type MaxyPad []int
 
 // ComputeMaxColumns figures out column max size and necessary padding.
 func ComputeMaxColumns(pads MaxyPad, sortColName string, t *model1.TableData) {
+	computeMaxColumns(pads, sortColName, t, false)
+}
+
+func computeMaxColumns(pads MaxyPad, sortColName string, t *model1.TableData, literalFields bool) {
 	const colPadding = 1
 
 	for i, n := range t.ColumnNames(true) {
-		pads[i] = len(n)
+		pads[i] = displayWidth(n)
 		if n == sortColName {
 			pads[i] += 2
 		}
 	}
 
-	var row int
 	t.RowsRange(func(_ int, re model1.RowEvent) bool {
 		for index, field := range re.Row.Fields {
-			width := len(field) + colPadding
+			if literalFields {
+				field = tview.Escape(field)
+			}
+			width := displayWidth(field) + colPadding
 			if index < len(pads) && width > pads[index] {
 				pads[index] = width
 			}
 		}
-		row++
 		return true
 	})
 }

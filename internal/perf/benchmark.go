@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package perf
 
@@ -27,7 +28,7 @@ const (
 	// BOZO!! Revisit bench and when we should timeout.
 	benchTimeout = 2 * time.Minute
 	benchFmat    = "%s_%s_%d.txt"
-	k9sUA        = "k9s/"
+	k9sUA        = "k9plus/"
 )
 
 // Benchmark puts a workload under load.

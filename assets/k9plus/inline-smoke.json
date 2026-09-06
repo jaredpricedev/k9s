@@ -1,0 +1,136 @@
+{
+  "schema_version": 1,
+  "runtime": "k9plus",
+  "captured_at": "2026-09-06T14:13:01.713178+00:00",
+  "binary": {
+    "path": "/tmp/k9plus-demo",
+    "sha256": "d3ac18c871cff23956f09b17feb91d6c2534087d012c3f480187efd9813f24da"
+  },
+  "fixture": {
+    "resource": "HelmRelease",
+    "count": 10000,
+    "namespace": "default",
+    "transport": "disposable localhost HTTP",
+    "controller": "scripted; no Flux controller or CLI is running",
+    "delays": "PATCH response and controller updates wait for explicit harness signals"
+  },
+  "terminal": {
+    "columns": 150,
+    "rows": 28
+  },
+  "checks": {
+    "sentinel_plugin_config_loaded": true,
+    "cancel_has_no_resource_requests": true,
+    "navigation_and_filter_while_patch_held": true,
+    "duplicate_reconcile_while_patch_held_suppressed": true,
+    "duplicate_reconcile_after_patch_ack_suppressed": true,
+    "navigation_and_filter_while_controller_waits": true,
+    "legacy_override_does_not_replace_native_key": true,
+    "cli_invocations": 0,
+    "resource_request_counts": {
+      "list": 0,
+      "watch": 1,
+      "get": 2,
+      "patch": 2
+    },
+    "per_action_requests": [
+      {
+        "name": "release-00000",
+        "get": 1,
+        "patch": 1
+      },
+      {
+        "name": "release-00001",
+        "get": 1,
+        "patch": 1
+      }
+    ],
+    "observed_outcomes": [
+      "Ready",
+      "Failed"
+    ]
+  },
+  "interactions": [
+    {
+      "query": "release-0000",
+      "rows": 10,
+      "start": 7.373472340001172,
+      "end": 7.776407666000523,
+      "pty_response_ms": 402.93532599935133,
+      "phase": "PATCH response held"
+    },
+    {
+      "input": "j",
+      "previous": "release-00000",
+      "selected": "release-00001",
+      "start": 7.797827404001509,
+      "end": 7.803166307001447,
+      "pty_response_ms": 5.338902999938,
+      "phase": "PATCH response held"
+    },
+    {
+      "query": "release-000",
+      "rows": 100,
+      "start": 8.423453954001161,
+      "end": 8.993730526000945,
+      "pty_response_ms": 570.2765719997842,
+      "phase": "controller not started"
+    },
+    {
+      "input": "j",
+      "previous": "release-00000",
+      "selected": "release-00001",
+      "start": 9.010720180000135,
+      "end": 9.013539713001592,
+      "pty_response_ms": 2.8195330014568754,
+      "phase": "controller not started"
+    },
+    {
+      "query": "release-00001",
+      "rows": 1,
+      "start": 14.238841590000447,
+      "end": 14.823989842001538,
+      "pty_response_ms": 585.1482520010904,
+      "phase": "select second release"
+    },
+    {
+      "query": "",
+      "rows": 10000,
+      "start": 22.117450208001173,
+      "end": 22.25970058600069,
+      "pty_response_ms": 142.2503779995168,
+      "phase": "restore full table"
+    }
+  ],
+  "method": {
+    "capture": "real k9plus PTY; complete tcell frames; terminal output replayed at original pace",
+    "limit": "Synthetic responsiveness smoke test, not evidence of actual Flux reconciliation speed",
+    "isolation": "Explicit loopback kubeconfig; isolated k9plus, XDG config/data/state/cache and KUBECACHEDIR"
+  },
+  "status": "passed",
+  "actions": [
+    {
+      "name": "release-00000",
+      "token": "2026-09-06T14:13:06.544126159Z",
+      "patch_received": 5.00280698700044,
+      "patch_response_released": 9.59335509199991,
+      "controller_started": 10.203787716000079,
+      "controller_finished": 11.004519918998994,
+      "outcome": "Ready"
+    },
+    {
+      "name": "release-00001",
+      "token": "2026-09-06T14:13:17.63942352Z",
+      "patch_received": 16.06450436799969,
+      "patch_response_released": 18.945744446999015,
+      "controller_started": 18.959472202999677,
+      "controller_finished": 19.765196844999082,
+      "outcome": "Failed"
+    }
+  ],
+  "retained_screenshot": {
+    "file": "reconciling.png",
+    "capture_timestamp": 7.355335547001232
+  },
+  "retention": "Only this smoke result and one terminal screenshot are retained; the repeated video, terminal cast, request log, and other smoke screenshots were omitted to avoid duplicating historical media."
+}

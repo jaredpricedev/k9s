@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package render
 
@@ -180,7 +181,7 @@ func boolToStr(b bool) string {
 	case true:
 		return "true"
 	default:
-		return "false"
+		return falseStr
 	}
 }
 

@@ -1,15 +1,59 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package model1_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/derailed/k9s/internal/model1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func BenchmarkRowEventsCustomize10K(b *testing.B) {
+	const rowCount = 10_000
+	events := model1.NewRowEvents(rowCount)
+	for i := range rowCount {
+		id := fmt.Sprintf("row-%05d", i)
+		events.Add(model1.RowEvent{
+			Row: model1.Row{ID: id, Fields: model1.Fields{id, "ready", "42", "1m", "node-a", "extra"}},
+		})
+	}
+	cols := []int{0, 1, 3, 4}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		_ = events.Customize(cols)
+	}
+}
+
+func TestRowEventsAtRejectsLength(t *testing.T) {
+	for name, events := range map[string]*model1.RowEvents{
+		"empty":    model1.NewRowEvents(0),
+		"nonempty": model1.NewRowEventsWithEvts(model1.RowEvent{Row: model1.Row{ID: "A"}}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, ok := events.At(events.Len())
+			assert.False(t, ok)
+		})
+	}
+}
+
+func TestRowEventsSetRemovesReplacedID(t *testing.T) {
+	events := model1.NewRowEventsWithEvts(model1.RowEvent{Row: model1.Row{ID: "old"}})
+
+	events.Set(0, model1.RowEvent{Row: model1.Row{ID: "new"}})
+
+	_, foundOld := events.Get("old")
+	got, foundNew := events.Get("new")
+	assert.False(t, foundOld)
+	require.True(t, foundNew)
+	assert.Equal(t, "new", got.Row.ID)
+}
 
 func TestRowEventCustomize(t *testing.T) {
 	uu := map[string]struct {

@@ -1,6 +1,8 @@
-# K9s community plugins
+<!-- Modified for k9+; see NOTICE. -->
 
-K9s plugins extend the tool to provide additional functionality via actions to further help you observe or administer
+# k9+ compatible community plugins
+
+These k9s-compatible plugins extend k9+ to provide additional functionality via actions to further help you observe or administer
 your Kubernetes clusters.
 
 Following is an example of some plugin files in this directory. Other files are not listed in this table.
@@ -16,6 +18,7 @@ Following is an example of some plugin files in this directory. Other files are 
 | dive.yaml                      | Dive image layers                                                                         | containers                          | d           | [Dive](https://github.com/wagoodman/dive)                                             |
 | dup.yaml                       | Duplicate, edit and Debug resources                                                       | all                                 | Shift-d/e/v | [dup](https://github.com/vash/dup)                                                    |
 | external-secrets.yaml          | Refresh external/push-secrets                                                             | externalsecrets/pushsecrets         | Shift-R     | [External Secrets](https://external-secrets.io)                                       |
+| flux.yaml                      | Reconcile and suspend Flux resources; trace ownership, inspect trees, and view controller logs | Flux resources/all              | Shift-R/T/Q/Y/L | [Flux CLI](https://fluxcd.io/flux/cmd/), [jq](https://jqlang.github.io/jq/), optional [Flux Operator CLI](https://fluxcd.control-plane.io/operator/cli/) |
 | get-all-namespace-resources.yaml  | List all namespace resources (using standard kubectl)                                  | all                                 | m           | [kubectl](https://kubernetes.io/docs/tasks/tools/) |
 | get-all.yaml                   | get all resources in a namespace                                                          | all                                 | g           | [Krew](https://krew.sigs.k8s.io/), [ketall](https://github.com/corneliusweig/ketall/) |
 | helm-diff.yaml                 | Diff with previous revision / current revision                                            | helm/history                        | Shift-D/Q   | [helm-diff](https://github.com/databus23/helm-diff)                                   |

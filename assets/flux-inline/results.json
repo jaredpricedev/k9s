@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-09-06T13:39:40.032646+00:00",
+  "binary": {
+    "path": "/tmp/k9s-flux-inline-final",
+    "sha256": "2c23cdb2e6d3019abaafc51f72ba367c9673d4a28aeb5e68d87ac228f651bc04"
+  },
+  "fixture": {
+    "resource": "HelmRelease",
+    "count": 10000,
+    "namespace": "default",
+    "transport": "disposable localhost HTTP",
+    "controller": "scripted; no Flux controller or CLI is running",
+    "delays": "PATCH response and controller updates wait for explicit harness signals"
+  },
+  "terminal": {
+    "columns": 150,
+    "rows": 28
+  },
+  "screenshots": {
+    "01-ready-10000": 3.636415078999562,
+    "02-confirm-native": 4.3089254980004625,
+    "03-accepted-patch-held": 7.57066660899909,
+    "04-filtered-moving-patch-held": 8.070769399999335,
+    "05-controller-waiting": 9.160268907999125,
+    "06-ready-acknowledged": 13.89923384299982,
+    "07-failed-acknowledged": 22.4502104029998,
+    "08-ready-and-failed-10000": 22.675330161999227
+  },
+  "checks": {
+    "sentinel_plugin_config_loaded": true,
+    "cancel_has_no_resource_requests": true,
+    "navigation_and_filter_while_patch_held": true,
+    "duplicate_reconcile_while_patch_held_suppressed": true,
+    "duplicate_reconcile_after_patch_ack_suppressed": true,
+    "navigation_and_filter_while_controller_waits": true,
+    "legacy_override_does_not_replace_native_key": true,
+    "cli_invocations": 0,
+    "resource_request_counts": {
+      "list": 0,
+      "watch": 1,
+      "get": 2,
+      "patch": 2
+    },
+    "per_action_requests": [
+      {
+        "name": "release-00000",
+        "get": 1,
+        "patch": 1
+      },
+      {
+        "name": "release-00001",
+        "get": 1,
+        "patch": 1
+      }
+    ],
+    "observed_outcomes": [
+      "Ready",
+      "Failed"
+    ]
+  },
+  "interactions": [
+    {
+      "query": "release-0000",
+      "rows": 10,
+      "start": 7.58089577300052,
+      "end": 8.051328601999558,
+      "pty_response_ms": 470.43282899903716,
+      "phase": "PATCH response held"
+    },
+    {
+      "input": "j",
+      "previous": "release-00000",
+      "selected": "release-00001",
+      "start": 8.064382819999082,
+      "end": 8.067153259999031,
+      "pty_response_ms": 2.7704399999493035,
+      "phase": "PATCH response held"
+    },
+    {
+      "query": "release-000",
+      "rows": 100,
+      "start": 8.67915075900055,
+      "end": 9.106868991999363,
+      "pty_response_ms": 427.7182329988136,
+      "phase": "controller not started"
+    },
+    {
+      "input": "j",
+      "previous": "release-00000",
+      "selected": "release-00001",
+      "start": 9.151433543000167,
+      "end": 9.153824508999605,
+      "pty_response_ms": 2.3909659994387766,
+      "phase": "controller not started"
+    },
+    {
+      "query": "release-00001",
+      "rows": 1,
+      "start": 14.602664993999497,
+      "end": 15.745706218000123,
+      "pty_response_ms": 1143.0412240006262,
+      "phase": "select second release"
+    },
+    {
+      "query": "",
+      "rows": 10000,
+      "start": 22.45254718599972,
+      "end": 22.612431731999095,
+      "pty_response_ms": 159.8845459993754,
+      "phase": "restore full table"
+    }
+  ],
+  "method": {
+    "capture": "real K9s PTY; complete tcell frames; terminal output replayed at original pace",
+    "limit": "Synthetic responsiveness smoke test, not evidence of actual Flux reconciliation speed",
+    "isolation": "Explicit loopback kubeconfig; isolated K9s, XDG config/data/state/cache and KUBECACHEDIR"
+  },
+  "video_start": 3.6364115979995404,
+  "video_end": 23.67708478900022,
+  "status": "passed",
+  "actions": [
+    {
+      "name": "release-00000",
+      "token": "2026-09-06T13:39:44.86271413Z",
+      "patch_received": 4.926245276999907,
+      "patch_response_released": 9.105155590999857,
+      "controller_started": 9.594429656999637,
+      "controller_finished": 10.394959197999924,
+      "outcome": "Ready"
+    },
+    {
+      "name": "release-00001",
+      "token": "2026-09-06T13:39:56.18907744Z",
+      "patch_received": 16.218370701999447,
+      "patch_response_released": 18.646294867998222,
+      "controller_started": 18.674950745999013,
+      "controller_finished": 19.557327721999172,
+      "outcome": "Failed"
+    }
+  ],
+  "video": {
+    "file": "inline-reconcile.mp4",
+    "fps": 20,
+    "duration_seconds": 20.04067319100068,
+    "pace": 1,
+    "editing": "continuous original PTY timeline from loaded table to final outcomes; no cuts or speed changes"
+  }
+}

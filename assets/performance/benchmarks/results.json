@@ -1,0 +1,1399 @@
+{
+  "go": "go version go1.25.8 linux/amd64",
+  "platform": "Linux-6.18.35-x86_64-with-glibc2.39",
+  "gomaxprocs": 4,
+  "rounds": 5,
+  "benchtime": "200ms",
+  "captured_at_utc": "2026-09-06T12:54:40Z",
+  "cpu": "INTEL(R) XEON(R) PLATINUM 8573C",
+  "trees": {
+    "upstream": {
+      "head": "84852e6e47ae830b30c921ffa5838443387e096e",
+      "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "go_mod_sha256": "106f1798f2f162b69f922e3e29a7801c41f37c8898c09ad78e55ff56ed25a643",
+      "go_sum_sha256": "0eecfc5961336209bd253386504c7b8e1c5eb8f01bf09081458d42b9605bc19a"
+    },
+    "before": {
+      "head": "5c5e1b1dcf708373deab91add79800ff2572692d",
+      "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "go_mod_sha256": "106f1798f2f162b69f922e3e29a7801c41f37c8898c09ad78e55ff56ed25a643",
+      "go_sum_sha256": "0eecfc5961336209bd253386504c7b8e1c5eb8f01bf09081458d42b9605bc19a"
+    },
+    "fork": {
+      "head": "5c5e1b1dcf708373deab91add79800ff2572692d",
+      "tracked_diff_sha256": "1cbc14717d032ab3fa8a9b1a13f60ec1c9ffc04a3349eaf5a740c05f539c38b1",
+      "go_mod_sha256": "106f1798f2f162b69f922e3e29a7801c41f37c8898c09ad78e55ff56ed25a643",
+      "go_sum_sha256": "0eecfc5961336209bd253386504c7b8e1c5eb8f01bf09081458d42b9605bc19a"
+    }
+  },
+  "fixtures": {
+    "internal/ui/performance_test.go": "fa21ef31c0e937bfb108a893999906188eb04102e05ffca1ca30e93be256bff4",
+    "internal/model1/performance_test.go": "1b495a0f066b71b2db9e57e03b0a760d2855ab48107c83fab3aa9f856e53a540",
+    "internal/model1/table_delete_bench_test.go": "087822d392829492a6454d7eeb06692b2dc84d8a7cf0d20b851125e50e903e81",
+    "internal/model1/row_clone_bench_test.go": "c3dbf3b3008ac36cb139c3b40b9416a564a6fff609e71190dec5ec4aacf1693e"
+  },
+  "samples": {
+    "PerformancePadding/1000": {
+      "upstream": [
+        {
+          "ns_per_op": 8354.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        },
+        {
+          "ns_per_op": 7843.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        },
+        {
+          "ns_per_op": 7958.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        },
+        {
+          "ns_per_op": 7886.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        },
+        {
+          "ns_per_op": 8154.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        }
+      ],
+      "before": [
+        {
+          "ns_per_op": 11114293.0,
+          "bytes_per_op": 260865.0,
+          "allocs_per_op": 15017.0
+        },
+        {
+          "ns_per_op": 11620381.0,
+          "bytes_per_op": 259378.0,
+          "allocs_per_op": 15017.0
+        },
+        {
+          "ns_per_op": 9782299.0,
+          "bytes_per_op": 259503.0,
+          "allocs_per_op": 15017.0
+        },
+        {
+          "ns_per_op": 10356358.0,
+          "bytes_per_op": 258268.0,
+          "allocs_per_op": 15017.0
+        },
+        {
+          "ns_per_op": 13150472.0,
+          "bytes_per_op": 260410.0,
+          "allocs_per_op": 15017.0
+        }
+      ],
+      "fork": [
+        {
+          "ns_per_op": 67812.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        },
+        {
+          "ns_per_op": 65273.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        },
+        {
+          "ns_per_op": 62612.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        },
+        {
+          "ns_per_op": 62532.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        },
+        {
+          "ns_per_op": 67122.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        }
+      ]
+    },
+    "PerformancePadding/10000": {
+      "upstream": [
+        {
+          "ns_per_op": 73000.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        },
+        {
+          "ns_per_op": 92621.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        },
+        {
+          "ns_per_op": 83320.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        },
+        {
+          "ns_per_op": 84919.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        },
+        {
+          "ns_per_op": 143480.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        }
+      ],
+      "before": [
+        {
+          "ns_per_op": 106496418.0,
+          "bytes_per_op": 2560648.0,
+          "allocs_per_op": 150018.0
+        },
+        {
+          "ns_per_op": 112644311.0,
+          "bytes_per_op": 2616660.0,
+          "allocs_per_op": 150026.0
+        },
+        {
+          "ns_per_op": 126045426.0,
+          "bytes_per_op": 2597906.0,
+          "allocs_per_op": 150023.0
+        },
+        {
+          "ns_per_op": 143474250.0,
+          "bytes_per_op": 2635252.0,
+          "allocs_per_op": 150029.0
+        },
+        {
+          "ns_per_op": 104465171.0,
+          "bytes_per_op": 2672412.0,
+          "allocs_per_op": 150034.0
+        }
+      ],
+      "fork": [
+        {
+          "ns_per_op": 1540966.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        },
+        {
+          "ns_per_op": 687861.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        },
+        {
+          "ns_per_op": 641846.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        },
+        {
+          "ns_per_op": 853543.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        },
+        {
+          "ns_per_op": 659161.0,
+          "bytes_per_op": 128.0,
+          "allocs_per_op": 1.0
+        }
+      ]
+    },
+    "PerformanceTableRefresh/1000": {
+      "upstream": [
+        {
+          "ns_per_op": 6402928.0,
+          "bytes_per_op": 1505862.0,
+          "allocs_per_op": 27380.0
+        },
+        {
+          "ns_per_op": 4953178.0,
+          "bytes_per_op": 1510841.0,
+          "allocs_per_op": 27382.0
+        },
+        {
+          "ns_per_op": 4502411.0,
+          "bytes_per_op": 1508258.0,
+          "allocs_per_op": 27380.0
+        },
+        {
+          "ns_per_op": 7314859.0,
+          "bytes_per_op": 1506495.0,
+          "allocs_per_op": 27380.0
+        },
+        {
+          "ns_per_op": 5670093.0,
+          "bytes_per_op": 1509944.0,
+          "allocs_per_op": 27381.0
+        }
+      ],
+      "before": [
+        {
+          "ns_per_op": 35307261.0,
+          "bytes_per_op": 2036029.0,
+          "allocs_per_op": 57400.0
+        },
+        {
+          "ns_per_op": 27885555.0,
+          "bytes_per_op": 2034955.0,
+          "allocs_per_op": 57396.0
+        },
+        {
+          "ns_per_op": 37178612.0,
+          "bytes_per_op": 2035177.0,
+          "allocs_per_op": 57399.0
+        },
+        {
+          "ns_per_op": 29101712.0,
+          "bytes_per_op": 2038840.0,
+          "allocs_per_op": 57400.0
+        },
+        {
+          "ns_per_op": 49093557.0,
+          "bytes_per_op": 2030627.0,
+          "allocs_per_op": 57399.0
+        }
+      ],
+      "fork": [
+        {
+          "ns_per_op": 6349771.0,
+          "bytes_per_op": 1506137.0,
+          "allocs_per_op": 27381.0
+        },
+        {
+          "ns_per_op": 14581219.0,
+          "bytes_per_op": 1503099.0,
+          "allocs_per_op": 27379.0
+        },
+        {
+          "ns_per_op": 3969529.0,
+          "bytes_per_op": 1506066.0,
+          "allocs_per_op": 27380.0
+        },
+        {
+          "ns_per_op": 6872486.0,
+          "bytes_per_op": 1508264.0,
+          "allocs_per_op": 27381.0
+        },
+        {
+          "ns_per_op": 5571046.0,
+          "bytes_per_op": 1506147.0,
+          "allocs_per_op": 27381.0
+        }
+      ]
+    },
+    "PerformanceTableRefresh/10000": {
+      "upstream": [
+        {
+          "ns_per_op": 35061080.0,
+          "bytes_per_op": 14387117.0,
+          "allocs_per_op": 225398.0
+        },
+        {
+          "ns_per_op": 23190898.0,
+          "bytes_per_op": 14389712.0,
+          "allocs_per_op": 225398.0
+        },
+        {
+          "ns_per_op": 22249752.0,
+          "bytes_per_op": 14387894.0,
+          "allocs_per_op": 225397.0
+        },
+        {
+          "ns_per_op": 49279672.0,
+          "bytes_per_op": 14378280.0,
+          "allocs_per_op": 225395.0
+        },
+        {
+          "ns_per_op": 33171392.0,
+          "bytes_per_op": 14383662.0,
+          "allocs_per_op": 225397.0
+        }
+      ],
+      "before": [
+        {
+          "ns_per_op": 330341032.0,
+          "bytes_per_op": 19766032.0,
+          "allocs_per_op": 525433.0
+        },
+        {
+          "ns_per_op": 269368505.0,
+          "bytes_per_op": 19729056.0,
+          "allocs_per_op": 525430.0
+        },
+        {
+          "ns_per_op": 342656869.0,
+          "bytes_per_op": 19691696.0,
+          "allocs_per_op": 525423.0
+        },
+        {
+          "ns_per_op": 255037852.0,
+          "bytes_per_op": 19728688.0,
+          "allocs_per_op": 525425.0
+        },
+        {
+          "ns_per_op": 363056141.0,
+          "bytes_per_op": 19691440.0,
+          "allocs_per_op": 525420.0
+        }
+      ],
+      "fork": [
+        {
+          "ns_per_op": 28269388.0,
+          "bytes_per_op": 14401108.0,
+          "allocs_per_op": 225402.0
+        },
+        {
+          "ns_per_op": 34041748.0,
+          "bytes_per_op": 14385577.0,
+          "allocs_per_op": 225399.0
+        },
+        {
+          "ns_per_op": 17734796.0,
+          "bytes_per_op": 14395003.0,
+          "allocs_per_op": 225400.0
+        },
+        {
+          "ns_per_op": 24304568.0,
+          "bytes_per_op": 14398157.0,
+          "allocs_per_op": 225401.0
+        },
+        {
+          "ns_per_op": 25798008.0,
+          "bytes_per_op": 14387261.0,
+          "allocs_per_op": 225400.0
+        }
+      ]
+    },
+    "PerformanceCustomize": {
+      "upstream": [
+        {
+          "ns_per_op": 8423297.0,
+          "bytes_per_op": 5191416.0,
+          "allocs_per_op": 10053.0
+        },
+        {
+          "ns_per_op": 2713915.0,
+          "bytes_per_op": 5191292.0,
+          "allocs_per_op": 10053.0
+        },
+        {
+          "ns_per_op": 6159264.0,
+          "bytes_per_op": 5191293.0,
+          "allocs_per_op": 10053.0
+        },
+        {
+          "ns_per_op": 4951145.0,
+          "bytes_per_op": 5191309.0,
+          "allocs_per_op": 10053.0
+        },
+        {
+          "ns_per_op": 3220796.0,
+          "bytes_per_op": 5191378.0,
+          "allocs_per_op": 10053.0
+        }
+      ],
+      "before": [
+        {
+          "ns_per_op": 2300281.0,
+          "bytes_per_op": 1797841.0,
+          "allocs_per_op": 10036.0
+        },
+        {
+          "ns_per_op": 2561119.0,
+          "bytes_per_op": 1797900.0,
+          "allocs_per_op": 10036.0
+        },
+        {
+          "ns_per_op": 2202076.0,
+          "bytes_per_op": 1797901.0,
+          "allocs_per_op": 10036.0
+        },
+        {
+          "ns_per_op": 2819913.0,
+          "bytes_per_op": 1797847.0,
+          "allocs_per_op": 10036.0
+        },
+        {
+          "ns_per_op": 4929431.0,
+          "bytes_per_op": 1797945.0,
+          "allocs_per_op": 10036.0
+        }
+      ],
+      "fork": [
+        {
+          "ns_per_op": 2121316.0,
+          "bytes_per_op": 1797887.0,
+          "allocs_per_op": 10036.0
+        },
+        {
+          "ns_per_op": 2808779.0,
+          "bytes_per_op": 1797844.0,
+          "allocs_per_op": 10036.0
+        },
+        {
+          "ns_per_op": 1633700.0,
+          "bytes_per_op": 1797843.0,
+          "allocs_per_op": 10036.0
+        },
+        {
+          "ns_per_op": 2525103.0,
+          "bytes_per_op": 1797910.0,
+          "allocs_per_op": 10036.0
+        },
+        {
+          "ns_per_op": 2041809.0,
+          "bytes_per_op": 1797843.0,
+          "allocs_per_op": 10036.0
+        }
+      ]
+    },
+    "PerformanceRegex": {
+      "upstream": [
+        {
+          "ns_per_op": 10054761.0,
+          "bytes_per_op": 1878728.0,
+          "allocs_per_op": 20062.0
+        },
+        {
+          "ns_per_op": 11017691.0,
+          "bytes_per_op": 1874258.0,
+          "allocs_per_op": 20061.0
+        },
+        {
+          "ns_per_op": 18700541.0,
+          "bytes_per_op": 1874698.0,
+          "allocs_per_op": 20061.0
+        },
+        {
+          "ns_per_op": 12566151.0,
+          "bytes_per_op": 1882405.0,
+          "allocs_per_op": 20062.0
+        },
+        {
+          "ns_per_op": 11121539.0,
+          "bytes_per_op": 1875666.0,
+          "allocs_per_op": 20061.0
+        }
+      ],
+      "before": [
+        {
+          "ns_per_op": 8777863.0,
+          "bytes_per_op": 588026.0,
+          "allocs_per_op": 61.0
+        },
+        {
+          "ns_per_op": 10585706.0,
+          "bytes_per_op": 586489.0,
+          "allocs_per_op": 61.0
+        },
+        {
+          "ns_per_op": 9725621.0,
+          "bytes_per_op": 585088.0,
+          "allocs_per_op": 60.0
+        },
+        {
+          "ns_per_op": 9012475.0,
+          "bytes_per_op": 588206.0,
+          "allocs_per_op": 61.0
+        },
+        {
+          "ns_per_op": 12284829.0,
+          "bytes_per_op": 587620.0,
+          "allocs_per_op": 61.0
+        }
+      ],
+      "fork": [
+        {
+          "ns_per_op": 8734737.0,
+          "bytes_per_op": 586588.0,
+          "allocs_per_op": 61.0
+        },
+        {
+          "ns_per_op": 9936222.0,
+          "bytes_per_op": 588662.0,
+          "allocs_per_op": 61.0
+        },
+        {
+          "ns_per_op": 9026979.0,
+          "bytes_per_op": 585111.0,
+          "allocs_per_op": 61.0
+        },
+        {
+          "ns_per_op": 14747187.0,
+          "bytes_per_op": 588353.0,
+          "allocs_per_op": 61.0
+        },
+        {
+          "ns_per_op": 9289405.0,
+          "bytes_per_op": 585107.0,
+          "allocs_per_op": 61.0
+        }
+      ]
+    },
+    "RowEventsClone10K": {
+      "upstream": [
+        {
+          "ns_per_op": 2533583.0,
+          "bytes_per_op": 3030746.0,
+          "allocs_per_op": 12037.0
+        },
+        {
+          "ns_per_op": 2048657.0,
+          "bytes_per_op": 3030747.0,
+          "allocs_per_op": 12037.0
+        },
+        {
+          "ns_per_op": 3130462.0,
+          "bytes_per_op": 3030741.0,
+          "allocs_per_op": 12037.0
+        },
+        {
+          "ns_per_op": 3237829.0,
+          "bytes_per_op": 3030748.0,
+          "allocs_per_op": 12037.0
+        },
+        {
+          "ns_per_op": 3829017.0,
+          "bytes_per_op": 3030744.0,
+          "allocs_per_op": 12037.0
+        }
+      ],
+      "before": [
+        {
+          "ns_per_op": 2386450.0,
+          "bytes_per_op": 3030744.0,
+          "allocs_per_op": 12037.0
+        },
+        {
+          "ns_per_op": 2570455.0,
+          "bytes_per_op": 3030750.0,
+          "allocs_per_op": 12037.0
+        },
+        {
+          "ns_per_op": 3616122.0,
+          "bytes_per_op": 3030747.0,
+          "allocs_per_op": 12037.0
+        },
+        {
+          "ns_per_op": 3188233.0,
+          "bytes_per_op": 3030738.0,
+          "allocs_per_op": 12037.0
+        },
+        {
+          "ns_per_op": 5515679.0,
+          "bytes_per_op": 3030743.0,
+          "allocs_per_op": 12037.0
+        }
+      ],
+      "fork": [
+        {
+          "ns_per_op": 2519675.0,
+          "bytes_per_op": 2309843.0,
+          "allocs_per_op": 12036.0
+        },
+        {
+          "ns_per_op": 3472179.0,
+          "bytes_per_op": 2309843.0,
+          "allocs_per_op": 12036.0
+        },
+        {
+          "ns_per_op": 2054333.0,
+          "bytes_per_op": 2309843.0,
+          "allocs_per_op": 12036.0
+        },
+        {
+          "ns_per_op": 2481109.0,
+          "bytes_per_op": 2309841.0,
+          "allocs_per_op": 12036.0
+        },
+        {
+          "ns_per_op": 3326250.0,
+          "bytes_per_op": 2309844.0,
+          "allocs_per_op": 12036.0
+        }
+      ]
+    },
+    "TableDataDelete10K/None": {
+      "upstream": [
+        {
+          "ns_per_op": 469327.0,
+          "bytes_per_op": 1.0,
+          "allocs_per_op": 0.0
+        },
+        {
+          "ns_per_op": 402729.0,
+          "bytes_per_op": 0.0,
+          "allocs_per_op": 0.0
+        },
+        {
+          "ns_per_op": 452453.0,
+          "bytes_per_op": 1.0,
+          "allocs_per_op": 0.0
+        },
+        {
+          "ns_per_op": 486816.0,
+          "bytes_per_op": 0.0,
+          "allocs_per_op": 0.0
+        },
+        {
+          "ns_per_op": 452431.0,
+          "bytes_per_op": 0.0,
+          "allocs_per_op": 0.0
+        }
+      ],
+      "before": [
+        {
+          "ns_per_op": 586824.0,
+          "bytes_per_op": 0.0,
+          "allocs_per_op": 0.0
+        },
+        {
+          "ns_per_op": 463154.0,
+          "bytes_per_op": 0.0,
+          "allocs_per_op": 0.0
+        },
+        {
+          "ns_per_op": 635687.0,
+          "bytes_per_op": 1.0,
+          "allocs_per_op": 0.0
+        },
+        {
+          "ns_per_op": 441820.0,
+          "bytes_per_op": 1.0,
+          "allocs_per_op": 0.0
+        },
+        {
+          "ns_per_op": 529901.0,
+          "bytes_per_op": 1.0,
+          "allocs_per_op": 0.0
+        }
+      ],
+      "fork": [
+        {
+          "ns_per_op": 528346.0,
+          "bytes_per_op": 0.0,
+          "allocs_per_op": 0.0
+        },
+        {
+          "ns_per_op": 441240.0,
+          "bytes_per_op": 1.0,
+          "allocs_per_op": 0.0
+        },
+        {
+          "ns_per_op": 417235.0,
+          "bytes_per_op": 0.0,
+          "allocs_per_op": 0.0
+        },
+        {
+          "ns_per_op": 400573.0,
+          "bytes_per_op": 0.0,
+          "allocs_per_op": 0.0
+        },
+        {
+          "ns_per_op": 396772.0,
+          "bytes_per_op": 0.0,
+          "allocs_per_op": 0.0
+        }
+      ]
+    },
+    "TableDataDelete10K/OnePercent": {
+      "upstream": [
+        {
+          "ns_per_op": 37570685.0,
+          "bytes_per_op": 8488.0,
+          "allocs_per_op": 10.0
+        },
+        {
+          "ns_per_op": 22095530.0,
+          "bytes_per_op": 8488.0,
+          "allocs_per_op": 10.0
+        },
+        {
+          "ns_per_op": 23050461.0,
+          "bytes_per_op": 8488.0,
+          "allocs_per_op": 10.0
+        },
+        {
+          "ns_per_op": 26063255.0,
+          "bytes_per_op": 8488.0,
+          "allocs_per_op": 10.0
+        },
+        {
+          "ns_per_op": 21189417.0,
+          "bytes_per_op": 8488.0,
+          "allocs_per_op": 10.0
+        }
+      ],
+      "before": [
+        {
+          "ns_per_op": 24315736.0,
+          "bytes_per_op": 8488.0,
+          "allocs_per_op": 10.0
+        },
+        {
+          "ns_per_op": 26258295.0,
+          "bytes_per_op": 8488.0,
+          "allocs_per_op": 10.0
+        },
+        {
+          "ns_per_op": 32439707.0,
+          "bytes_per_op": 8488.0,
+          "allocs_per_op": 10.0
+        },
+        {
+          "ns_per_op": 21279399.0,
+          "bytes_per_op": 8488.0,
+          "allocs_per_op": 10.0
+        },
+        {
+          "ns_per_op": 20852271.0,
+          "bytes_per_op": 8488.0,
+          "allocs_per_op": 10.0
+        }
+      ],
+      "fork": [
+        {
+          "ns_per_op": 2382574.0,
+          "bytes_per_op": 6697.0,
+          "allocs_per_op": 9.0
+        },
+        {
+          "ns_per_op": 1189049.0,
+          "bytes_per_op": 6696.0,
+          "allocs_per_op": 9.0
+        },
+        {
+          "ns_per_op": 1024592.0,
+          "bytes_per_op": 6696.0,
+          "allocs_per_op": 9.0
+        },
+        {
+          "ns_per_op": 1006126.0,
+          "bytes_per_op": 6696.0,
+          "allocs_per_op": 9.0
+        },
+        {
+          "ns_per_op": 961830.0,
+          "bytes_per_op": 6696.0,
+          "allocs_per_op": 9.0
+        }
+      ]
+    },
+    "TableDataDelete10K/Half": {
+      "upstream": [
+        {
+          "ns_per_op": 885948346.0,
+          "bytes_per_op": 518328.0,
+          "allocs_per_op": 47.0
+        },
+        {
+          "ns_per_op": 761851770.0,
+          "bytes_per_op": 518328.0,
+          "allocs_per_op": 47.0
+        },
+        {
+          "ns_per_op": 803946565.0,
+          "bytes_per_op": 518328.0,
+          "allocs_per_op": 47.0
+        },
+        {
+          "ns_per_op": 864879269.0,
+          "bytes_per_op": 518328.0,
+          "allocs_per_op": 47.0
+        },
+        {
+          "ns_per_op": 834884120.0,
+          "bytes_per_op": 518328.0,
+          "allocs_per_op": 47.0
+        }
+      ],
+      "before": [
+        {
+          "ns_per_op": 1029035216.0,
+          "bytes_per_op": 518328.0,
+          "allocs_per_op": 47.0
+        },
+        {
+          "ns_per_op": 807005119.0,
+          "bytes_per_op": 518328.0,
+          "allocs_per_op": 47.0
+        },
+        {
+          "ns_per_op": 784492453.0,
+          "bytes_per_op": 518328.0,
+          "allocs_per_op": 47.0
+        },
+        {
+          "ns_per_op": 721787107.0,
+          "bytes_per_op": 518328.0,
+          "allocs_per_op": 47.0
+        },
+        {
+          "ns_per_op": 766684663.0,
+          "bytes_per_op": 518328.0,
+          "allocs_per_op": 47.0
+        }
+      ],
+      "fork": [
+        {
+          "ns_per_op": 1606718.0,
+          "bytes_per_op": 436409.0,
+          "allocs_per_op": 46.0
+        },
+        {
+          "ns_per_op": 2788429.0,
+          "bytes_per_op": 436412.0,
+          "allocs_per_op": 46.0
+        },
+        {
+          "ns_per_op": 2168465.0,
+          "bytes_per_op": 436409.0,
+          "allocs_per_op": 46.0
+        },
+        {
+          "ns_per_op": 1489091.0,
+          "bytes_per_op": 436411.0,
+          "allocs_per_op": 46.0
+        },
+        {
+          "ns_per_op": 1602124.0,
+          "bytes_per_op": 436411.0,
+          "allocs_per_op": 46.0
+        }
+      ]
+    }
+  },
+  "summary": {
+    "PerformancePadding/1000": {
+      "upstream": {
+        "ns_per_op": {
+          "median": 7958.0,
+          "min": 7843.0,
+          "max": 8354.0
+        },
+        "bytes_per_op": {
+          "median": 128.0,
+          "min": 128.0,
+          "max": 128.0
+        },
+        "allocs_per_op": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        }
+      },
+      "before": {
+        "ns_per_op": {
+          "median": 11114293.0,
+          "min": 9782299.0,
+          "max": 13150472.0
+        },
+        "bytes_per_op": {
+          "median": 259503.0,
+          "min": 258268.0,
+          "max": 260865.0
+        },
+        "allocs_per_op": {
+          "median": 15017.0,
+          "min": 15017.0,
+          "max": 15017.0
+        }
+      },
+      "fork": {
+        "ns_per_op": {
+          "median": 65273.0,
+          "min": 62532.0,
+          "max": 67812.0
+        },
+        "bytes_per_op": {
+          "median": 128.0,
+          "min": 128.0,
+          "max": 128.0
+        },
+        "allocs_per_op": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        }
+      }
+    },
+    "PerformancePadding/10000": {
+      "upstream": {
+        "ns_per_op": {
+          "median": 84919.0,
+          "min": 73000.0,
+          "max": 143480.0
+        },
+        "bytes_per_op": {
+          "median": 128.0,
+          "min": 128.0,
+          "max": 128.0
+        },
+        "allocs_per_op": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        }
+      },
+      "before": {
+        "ns_per_op": {
+          "median": 112644311.0,
+          "min": 104465171.0,
+          "max": 143474250.0
+        },
+        "bytes_per_op": {
+          "median": 2616660.0,
+          "min": 2560648.0,
+          "max": 2672412.0
+        },
+        "allocs_per_op": {
+          "median": 150026.0,
+          "min": 150018.0,
+          "max": 150034.0
+        }
+      },
+      "fork": {
+        "ns_per_op": {
+          "median": 687861.0,
+          "min": 641846.0,
+          "max": 1540966.0
+        },
+        "bytes_per_op": {
+          "median": 128.0,
+          "min": 128.0,
+          "max": 128.0
+        },
+        "allocs_per_op": {
+          "median": 1.0,
+          "min": 1.0,
+          "max": 1.0
+        }
+      }
+    },
+    "PerformanceTableRefresh/1000": {
+      "upstream": {
+        "ns_per_op": {
+          "median": 5670093.0,
+          "min": 4502411.0,
+          "max": 7314859.0
+        },
+        "bytes_per_op": {
+          "median": 1508258.0,
+          "min": 1505862.0,
+          "max": 1510841.0
+        },
+        "allocs_per_op": {
+          "median": 27380.0,
+          "min": 27380.0,
+          "max": 27382.0
+        }
+      },
+      "before": {
+        "ns_per_op": {
+          "median": 35307261.0,
+          "min": 27885555.0,
+          "max": 49093557.0
+        },
+        "bytes_per_op": {
+          "median": 2035177.0,
+          "min": 2030627.0,
+          "max": 2038840.0
+        },
+        "allocs_per_op": {
+          "median": 57399.0,
+          "min": 57396.0,
+          "max": 57400.0
+        }
+      },
+      "fork": {
+        "ns_per_op": {
+          "median": 6349771.0,
+          "min": 3969529.0,
+          "max": 14581219.0
+        },
+        "bytes_per_op": {
+          "median": 1506137.0,
+          "min": 1503099.0,
+          "max": 1508264.0
+        },
+        "allocs_per_op": {
+          "median": 27381.0,
+          "min": 27379.0,
+          "max": 27381.0
+        }
+      }
+    },
+    "PerformanceTableRefresh/10000": {
+      "upstream": {
+        "ns_per_op": {
+          "median": 33171392.0,
+          "min": 22249752.0,
+          "max": 49279672.0
+        },
+        "bytes_per_op": {
+          "median": 14387117.0,
+          "min": 14378280.0,
+          "max": 14389712.0
+        },
+        "allocs_per_op": {
+          "median": 225397.0,
+          "min": 225395.0,
+          "max": 225398.0
+        }
+      },
+      "before": {
+        "ns_per_op": {
+          "median": 330341032.0,
+          "min": 255037852.0,
+          "max": 363056141.0
+        },
+        "bytes_per_op": {
+          "median": 19728688.0,
+          "min": 19691440.0,
+          "max": 19766032.0
+        },
+        "allocs_per_op": {
+          "median": 525425.0,
+          "min": 525420.0,
+          "max": 525433.0
+        }
+      },
+      "fork": {
+        "ns_per_op": {
+          "median": 25798008.0,
+          "min": 17734796.0,
+          "max": 34041748.0
+        },
+        "bytes_per_op": {
+          "median": 14395003.0,
+          "min": 14385577.0,
+          "max": 14401108.0
+        },
+        "allocs_per_op": {
+          "median": 225400.0,
+          "min": 225399.0,
+          "max": 225402.0
+        }
+      }
+    },
+    "PerformanceCustomize": {
+      "upstream": {
+        "ns_per_op": {
+          "median": 4951145.0,
+          "min": 2713915.0,
+          "max": 8423297.0
+        },
+        "bytes_per_op": {
+          "median": 5191309.0,
+          "min": 5191292.0,
+          "max": 5191416.0
+        },
+        "allocs_per_op": {
+          "median": 10053.0,
+          "min": 10053.0,
+          "max": 10053.0
+        }
+      },
+      "before": {
+        "ns_per_op": {
+          "median": 2561119.0,
+          "min": 2202076.0,
+          "max": 4929431.0
+        },
+        "bytes_per_op": {
+          "median": 1797900.0,
+          "min": 1797841.0,
+          "max": 1797945.0
+        },
+        "allocs_per_op": {
+          "median": 10036.0,
+          "min": 10036.0,
+          "max": 10036.0
+        }
+      },
+      "fork": {
+        "ns_per_op": {
+          "median": 2121316.0,
+          "min": 1633700.0,
+          "max": 2808779.0
+        },
+        "bytes_per_op": {
+          "median": 1797844.0,
+          "min": 1797843.0,
+          "max": 1797910.0
+        },
+        "allocs_per_op": {
+          "median": 10036.0,
+          "min": 10036.0,
+          "max": 10036.0
+        }
+      }
+    },
+    "PerformanceRegex": {
+      "upstream": {
+        "ns_per_op": {
+          "median": 11121539.0,
+          "min": 10054761.0,
+          "max": 18700541.0
+        },
+        "bytes_per_op": {
+          "median": 1875666.0,
+          "min": 1874258.0,
+          "max": 1882405.0
+        },
+        "allocs_per_op": {
+          "median": 20061.0,
+          "min": 20061.0,
+          "max": 20062.0
+        }
+      },
+      "before": {
+        "ns_per_op": {
+          "median": 9725621.0,
+          "min": 8777863.0,
+          "max": 12284829.0
+        },
+        "bytes_per_op": {
+          "median": 587620.0,
+          "min": 585088.0,
+          "max": 588206.0
+        },
+        "allocs_per_op": {
+          "median": 61.0,
+          "min": 60.0,
+          "max": 61.0
+        }
+      },
+      "fork": {
+        "ns_per_op": {
+          "median": 9289405.0,
+          "min": 8734737.0,
+          "max": 14747187.0
+        },
+        "bytes_per_op": {
+          "median": 586588.0,
+          "min": 585107.0,
+          "max": 588662.0
+        },
+        "allocs_per_op": {
+          "median": 61.0,
+          "min": 61.0,
+          "max": 61.0
+        }
+      }
+    },
+    "RowEventsClone10K": {
+      "upstream": {
+        "ns_per_op": {
+          "median": 3130462.0,
+          "min": 2048657.0,
+          "max": 3829017.0
+        },
+        "bytes_per_op": {
+          "median": 3030746.0,
+          "min": 3030741.0,
+          "max": 3030748.0
+        },
+        "allocs_per_op": {
+          "median": 12037.0,
+          "min": 12037.0,
+          "max": 12037.0
+        }
+      },
+      "before": {
+        "ns_per_op": {
+          "median": 3188233.0,
+          "min": 2386450.0,
+          "max": 5515679.0
+        },
+        "bytes_per_op": {
+          "median": 3030744.0,
+          "min": 3030738.0,
+          "max": 3030750.0
+        },
+        "allocs_per_op": {
+          "median": 12037.0,
+          "min": 12037.0,
+          "max": 12037.0
+        }
+      },
+      "fork": {
+        "ns_per_op": {
+          "median": 2519675.0,
+          "min": 2054333.0,
+          "max": 3472179.0
+        },
+        "bytes_per_op": {
+          "median": 2309843.0,
+          "min": 2309841.0,
+          "max": 2309844.0
+        },
+        "allocs_per_op": {
+          "median": 12036.0,
+          "min": 12036.0,
+          "max": 12036.0
+        }
+      }
+    },
+    "TableDataDelete10K/None": {
+      "upstream": {
+        "ns_per_op": {
+          "median": 452453.0,
+          "min": 402729.0,
+          "max": 486816.0
+        },
+        "bytes_per_op": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 1.0
+        },
+        "allocs_per_op": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        }
+      },
+      "before": {
+        "ns_per_op": {
+          "median": 529901.0,
+          "min": 441820.0,
+          "max": 635687.0
+        },
+        "bytes_per_op": {
+          "median": 1.0,
+          "min": 0.0,
+          "max": 1.0
+        },
+        "allocs_per_op": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        }
+      },
+      "fork": {
+        "ns_per_op": {
+          "median": 417235.0,
+          "min": 396772.0,
+          "max": 528346.0
+        },
+        "bytes_per_op": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 1.0
+        },
+        "allocs_per_op": {
+          "median": 0.0,
+          "min": 0.0,
+          "max": 0.0
+        }
+      }
+    },
+    "TableDataDelete10K/OnePercent": {
+      "upstream": {
+        "ns_per_op": {
+          "median": 23050461.0,
+          "min": 21189417.0,
+          "max": 37570685.0
+        },
+        "bytes_per_op": {
+          "median": 8488.0,
+          "min": 8488.0,
+          "max": 8488.0
+        },
+        "allocs_per_op": {
+          "median": 10.0,
+          "min": 10.0,
+          "max": 10.0
+        }
+      },
+      "before": {
+        "ns_per_op": {
+          "median": 24315736.0,
+          "min": 20852271.0,
+          "max": 32439707.0
+        },
+        "bytes_per_op": {
+          "median": 8488.0,
+          "min": 8488.0,
+          "max": 8488.0
+        },
+        "allocs_per_op": {
+          "median": 10.0,
+          "min": 10.0,
+          "max": 10.0
+        }
+      },
+      "fork": {
+        "ns_per_op": {
+          "median": 1024592.0,
+          "min": 961830.0,
+          "max": 2382574.0
+        },
+        "bytes_per_op": {
+          "median": 6696.0,
+          "min": 6696.0,
+          "max": 6697.0
+        },
+        "allocs_per_op": {
+          "median": 9.0,
+          "min": 9.0,
+          "max": 9.0
+        }
+      }
+    },
+    "TableDataDelete10K/Half": {
+      "upstream": {
+        "ns_per_op": {
+          "median": 834884120.0,
+          "min": 761851770.0,
+          "max": 885948346.0
+        },
+        "bytes_per_op": {
+          "median": 518328.0,
+          "min": 518328.0,
+          "max": 518328.0
+        },
+        "allocs_per_op": {
+          "median": 47.0,
+          "min": 47.0,
+          "max": 47.0
+        }
+      },
+      "before": {
+        "ns_per_op": {
+          "median": 784492453.0,
+          "min": 721787107.0,
+          "max": 1029035216.0
+        },
+        "bytes_per_op": {
+          "median": 518328.0,
+          "min": 518328.0,
+          "max": 518328.0
+        },
+        "allocs_per_op": {
+          "median": 47.0,
+          "min": 47.0,
+          "max": 47.0
+        }
+      },
+      "fork": {
+        "ns_per_op": {
+          "median": 1606718.0,
+          "min": 1489091.0,
+          "max": 2788429.0
+        },
+        "bytes_per_op": {
+          "median": 436411.0,
+          "min": 436409.0,
+          "max": 436412.0
+        },
+        "allocs_per_op": {
+          "median": 46.0,
+          "min": 46.0,
+          "max": 46.0
+        }
+      }
+    }
+  }
+}

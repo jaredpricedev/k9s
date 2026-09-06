@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package ui_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/derailed/k9s/internal/config"
@@ -15,8 +17,8 @@ func TestNewLogoView(t *testing.T) {
 	v := ui.NewLogo(config.NewStyles())
 	v.Reset()
 
-	const elogo = "[#ffa500::b] ____  __ ________       \n[#ffa500::b]|    |/  /   __   \\______\n[#ffa500::b]|       /\\____    /  ___/\n[#ffa500::b]|    \\   \\  /    /\\___  \\\n[#ffa500::b]|____|\\__ \\/____//____  /\n[#ffa500::b]         \\/           \\/ \n"
-	assert.Equal(t, elogo, v.Logo().GetText(false))
+	assert.Contains(t, v.Logo().GetText(false), "k9+")
+	assert.Equal(t, 6, strings.Count(v.Logo().GetText(false), "[#ffa500::b]"))
 	assert.Empty(t, v.Status().GetText(false))
 }
 
@@ -25,17 +27,17 @@ func TestLogoStatus(t *testing.T) {
 		logo, msg, e string
 	}{
 		"info": {
-			"[#008000::b] ____  __ ________       \n[#008000::b]|    |/  /   __   \\______\n[#008000::b]|       /\\____    /  ___/\n[#008000::b]|    \\   \\  /    /\\___  \\\n[#008000::b]|____|\\__ \\/____//____  /\n[#008000::b]         \\/           \\/ \n",
+			"[#008000::b]",
 			"blee",
 			"[#ffffff::b]blee\n",
 		},
 		"warn": {
-			"[#c71585::b] ____  __ ________       \n[#c71585::b]|    |/  /   __   \\______\n[#c71585::b]|       /\\____    /  ___/\n[#c71585::b]|    \\   \\  /    /\\___  \\\n[#c71585::b]|____|\\__ \\/____//____  /\n[#c71585::b]         \\/           \\/ \n",
+			"[#c71585::b]",
 			"blee",
 			"[#ffffff::b]blee\n",
 		},
 		"err": {
-			"[#ff0000::b] ____  __ ________       \n[#ff0000::b]|    |/  /   __   \\______\n[#ff0000::b]|       /\\____    /  ___/\n[#ff0000::b]|    \\   \\  /    /\\___  \\\n[#ff0000::b]|____|\\__ \\/____//____  /\n[#ff0000::b]         \\/           \\/ \n",
+			"[#ff0000::b]",
 			"blee",
 			"[#ffffff::b]blee\n",
 		},
@@ -53,7 +55,8 @@ func TestLogoStatus(t *testing.T) {
 			case "err":
 				v.Err(u.msg)
 			}
-			assert.Equal(t, u.logo, v.Logo().GetText(false))
+			assert.Contains(t, v.Logo().GetText(false), "k9+")
+			assert.Equal(t, 6, strings.Count(v.Logo().GetText(false), u.logo))
 			assert.Equal(t, u.e, v.Status().GetText(false))
 		})
 	}

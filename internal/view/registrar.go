@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view
 
@@ -60,6 +61,7 @@ func coreViewers(vv MetaViewers) {
 }
 
 func miscViewers(vv MetaViewers) {
+	vv[client.FluxGVR] = MetaViewer{viewerFn: NewFlux}
 	vv[client.WkGVR] = MetaViewer{
 		viewerFn: NewWorkload,
 	}

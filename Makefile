@@ -1,13 +1,15 @@
-NAME            := k9s
-VERSION         ?= v0.51.0
-PACKAGE         := github.com/derailed/$(NAME)
+# Modified for k9+ by the k9+ contributors; see MODIFICATIONS.md.
+NAME            := k9plus
+VERSION         ?= v0.1.0-dev
+# Keep the original Go module path so linker metadata reaches the existing module.
+PACKAGE         := github.com/derailed/k9s
 OUTPUT_BIN      ?= execs/${NAME}
 GO_FLAGS        ?=
 GO_TAGS	        ?= netgo
 CGO_ENABLED     ?=0
 GIT_REV         ?= $(shell git rev-parse --short HEAD)
 
-IMG_NAME        := derailed/k9s
+IMG_NAME        ?= ghcr.io/jaredpricedev/k9plus
 IMAGE           := ${IMG_NAME}:${VERSION}
 BUILD_PLATFORMS ?= linux/amd64,linux/arm64
 
@@ -17,6 +19,8 @@ DATE            ?= $(shell TZ=UTC /bin/date -j -f "%s" ${SOURCE_DATE_EPOCH} +"%Y
 else
 DATE            ?= $(shell date -u -d @${SOURCE_DATE_EPOCH} +"%Y-%m-%dT%H:%M:%SZ")
 endif
+
+.PHONY: default test cover build licenses kubectl-stable-version imgx pushx help
 
 default: help
 
@@ -31,6 +35,9 @@ build:                   ## Builds the CLI
 	@CGO_ENABLED=${CGO_ENABLED} go build ${GO_FLAGS} \
 	-ldflags "-w -s -X ${PACKAGE}/cmd.version=${VERSION} -X ${PACKAGE}/cmd.commit=${GIT_REV} -X ${PACKAGE}/cmd.date=${DATE}" \
 	-a -tags=${GO_TAGS} -o ${OUTPUT_BIN} main.go
+
+licenses:                ## Generate bundled third-party license and notice files
+	@python3 scripts/collect-licenses.py
 
 kubectl-stable-version:  ## Get kubectl latest stable version
 	@curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt

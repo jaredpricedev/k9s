@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package ui
 
@@ -75,7 +76,7 @@ func TestMaxColumn(t *testing.T) {
 				),
 			),
 			"A",
-			MaxyPad{32, 6},
+			MaxyPad{30, 6},
 		},
 	}
 

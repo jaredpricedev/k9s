@@ -1,3 +1,4 @@
+// Modified for k9+; see NOTICE.
 package dao
 
 import (
@@ -8,14 +9,15 @@ import (
 )
 
 var accessors = Accessors{
-	client.WkGVR:  new(Workload),
-	client.CtGVR:  new(Context),
-	client.CoGVR:  new(Container),
-	client.ScnGVR: new(ImageScan),
-	client.SdGVR:  new(ScreenDump),
-	client.BeGVR:  new(Benchmark),
-	client.PfGVR:  new(PortForward),
-	client.DirGVR: new(Dir),
+	client.FluxGVR: new(FluxDashboard),
+	client.WkGVR:   new(Workload),
+	client.CtGVR:   new(Context),
+	client.CoGVR:   new(Container),
+	client.ScnGVR:  new(ImageScan),
+	client.SdGVR:   new(ScreenDump),
+	client.BeGVR:   new(Benchmark),
+	client.PfGVR:   new(PortForward),
+	client.DirGVR:  new(Dir),
 
 	client.SvcGVR:  new(Service),
 	client.PodGVR:  new(Pod),

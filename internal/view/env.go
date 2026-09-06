@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view
 
@@ -51,7 +52,7 @@ func (e Env) Substitute(arg string) (string, error) {
 		key, inverse := keyFromSubmatch(m)
 		v, ok := e[strings.ToUpper(key)]
 		if !ok {
-			slog.Warn("No k9s environment matching key",
+			slog.Warn("No k9+ environment matching key",
 				slogs.Matches, matches,
 				slogs.Key, key,
 			)

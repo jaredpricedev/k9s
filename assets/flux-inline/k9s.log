@@ -1,0 +1,3 @@
+[2m2026-09-06T13:39:41Z[0m [92mINF[0m 🐶 K9s starting up...
+[2m2026-09-06T13:39:41Z[0m [93mWRN[0m Fail to locate metrics-server [2merror=[0m"No metrics api group metrics.k8s.io found on cluster"
+[2m2026-09-06T13:39:41Z[0m [92mINF[0m ✅ Kubernetes connectivity OK

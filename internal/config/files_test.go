@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package config_test
 
@@ -25,15 +26,15 @@ func TestInitLogLoc(t *testing.T) {
 	}{
 		"log-env": {
 			dir: "/tmp/test/k9s/logs",
-			e:   "/tmp/test/k9s/logs/k9s.log",
+			e:   "/tmp/test/k9s/logs/k9plus.log",
 		},
 		"xdg-env": {
 			dir: "/tmp/test/xdg-state",
-			e:   "/tmp/test/xdg-state/k9s/k9s.log",
+			e:   "/tmp/test/xdg-state/k9plus/k9plus.log",
 		},
 		"cfg-env": {
 			dir: "/tmp/test/k9s-test",
-			e:   filepath.Join(tmp, "k9s.log"),
+			e:   filepath.Join(tmp, "k9plus.log"),
 		},
 	}
 

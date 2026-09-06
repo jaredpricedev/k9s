@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package config_test
 
@@ -314,7 +315,7 @@ func TestConfigLoader(t *testing.T) {
 		},
 		"toast": {
 			f: "testdata/configs/k9s_toast.yaml",
-			err: `k9s config file "testdata/configs/k9s_toast.yaml" load failed:
+			err: `k9+ config file "testdata/configs/k9s_toast.yaml" load failed:
 Additional property disablePodCounts is not allowed
 Additional property shellPods is not allowed
 Invalid type. Expected: boolean, given: string`,

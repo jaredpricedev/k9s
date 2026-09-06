@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package config
 
@@ -136,9 +137,9 @@ func (p Plugins) Load(path string, loadExtra bool) error {
 		return errs
 	}
 	// Load from XDG dirs
-	const k9sPluginsDir = "k9s/plugins"
+	pluginsDir := filepath.Join(AppName, "plugins")
 	for _, dir := range append(xdg.DataDirs, xdg.DataHome, xdg.ConfigHome) {
-		path := filepath.Join(dir, k9sPluginsDir)
+		path := filepath.Join(dir, pluginsDir)
 		if err := p.loadDir(path); err != nil {
 			errs = errors.Join(errs, err)
 		}

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package config
 
@@ -196,6 +197,7 @@ func (a *Aliases) loadDefaultAliases() {
 	a.declare(client.PuGVR, "pulse", "pu", "hz")
 	a.declare(client.XGVR, "xray", "x")
 	a.declare(client.WkGVR, "workload", "wk")
+	a.declare(client.FluxGVR)
 }
 
 // Save alias to disk.

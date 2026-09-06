@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package ui
 
@@ -13,6 +14,7 @@ import (
 
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/model"
+	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
 	runewidth "github.com/mattn/go-runewidth"
 )
@@ -29,6 +31,8 @@ type Menu struct {
 	*tview.Table
 
 	styles *config.Styles
+	hints  model.MenuHints
+	width  int
 }
 
 // NewMenu returns a new menu.
@@ -47,13 +51,7 @@ func NewMenu(styles *config.Styles) *Menu {
 func (m *Menu) StylesChanged(s *config.Styles) {
 	m.styles = s
 	m.SetBackgroundColor(s.BgColor())
-	for row := range m.GetRowCount() {
-		for col := range m.GetColumnCount() {
-			if c := m.GetCell(row, col); c != nil {
-				c.BackgroundColor = s.BgColor()
-			}
-		}
-	}
+	m.HydrateMenu(m.hints)
 }
 
 // StackPushed notifies a component was added.
@@ -66,7 +64,7 @@ func (m *Menu) StackPopped(_, top model.Component) {
 	if top != nil {
 		m.HydrateMenu(top.Hints())
 	} else {
-		m.Clear()
+		m.HydrateMenu(nil)
 	}
 }
 
@@ -78,6 +76,8 @@ func (m *Menu) StackTop(t model.Component) {
 // HydrateMenu populate menu ui from hints.
 func (m *Menu) HydrateMenu(hh model.MenuHints) {
 	m.Clear()
+	m.hints = append(m.hints[:0], hh...)
+	hh = m.hints
 	sort.Sort(hh)
 
 	table := make([]model.MenuHints, maxRows+1)
@@ -100,6 +100,15 @@ func (m *Menu) HydrateMenu(hh model.MenuHints) {
 			m.SetCell(row, col, c)
 		}
 	}
+}
+
+// Draw fits descriptions again after a resize, keeping shortcut columns intact.
+func (m *Menu) Draw(screen tcell.Screen) {
+	if _, _, width, _ := m.GetInnerRect(); width != m.width {
+		m.width = width
+		m.HydrateMenu(m.hints)
+	}
+	m.Table.Draw(screen)
 }
 
 func (*Menu) hasDigits(hh model.MenuHints) bool {
@@ -129,8 +138,8 @@ func (m *Menu) buildMenuTable(hh model.MenuHints, table []model.MenuHints, colCo
 				col = 0
 			}
 		}
-		if maxKeys[col] < len(h.Mnemonic) {
-			maxKeys[col] = len(h.Mnemonic)
+		if size := runewidth.StringWidth(keyConv(strings.ToLower(h.Mnemonic))); maxKeys[col] < size {
+			maxKeys[col] = size
 		}
 		table[row][col] = h
 		row++
@@ -149,9 +158,51 @@ func (m *Menu) buildMenuTable(hh model.MenuHints, table []model.MenuHints, colCo
 }
 
 func (m *Menu) layout(table []model.MenuHints, mm []int, out [][]string) {
+	widths := make([]int, len(mm))
+	var total, columns int
+	for r := range table {
+		for c, hint := range table[r] {
+			widths[c] = max(widths[c], tview.TaggedStringWidth(m.formatMenu(hint, mm[c])))
+		}
+	}
+	for _, width := range widths {
+		total += width
+		if width > 0 {
+			columns++
+		}
+	}
+	// Leave the table's separator and each cell's trailing space intact. Share
+	// only description space; a long label must not push later keys offscreen.
+	if m.width > 0 && total+columns > m.width {
+		natural := append([]int(nil), widths...)
+		remaining := m.width - columns
+		for c, width := range widths {
+			widths[c] = min(width, mm[c]+6)
+			remaining -= widths[c]
+		}
+		for remaining > 0 {
+			changed := false
+			for c := range widths {
+				if remaining > 0 && widths[c] < natural[c] {
+					widths[c]++
+					remaining--
+					changed = true
+				}
+			}
+			if !changed {
+				break
+			}
+		}
+	}
 	for r := range table {
 		for c := range table[r] {
-			out[r][c] = m.formatMenu(table[r][c], mm[c])
+			hint := table[r][c]
+			if hint.Description != "" {
+				fullWidth := tview.TaggedStringWidth(m.formatMenu(hint, mm[c]))
+				labelWidth := runewidth.StringWidth(hint.Description)
+				hint.Description = Truncate(hint.Description, max(1, widths[c]-fullWidth+labelWidth))
+			}
+			out[r][c] = m.formatMenu(hint, mm[c])
 		}
 	}
 }
@@ -202,15 +253,17 @@ func formatNSMenu(i int, name string, styles *config.Frame) string {
 	fmat = strings.Replace(fmat, "[fg", "["+styles.Menu.FgColor.String(), 1)
 	fmat = strings.Replace(fmat, "fgstyle]", styles.Menu.FgStyle.ToShortString()+"]", 1)
 
-	return fmt.Sprintf(fmat, i, name)
+	return fmt.Sprintf(fmat, i, tview.Escape(name))
 }
 
 func formatPlainMenu(h model.MenuHint, size int, styles *config.Frame) string {
-	menuFmt := " [key:-:b]%-" + strconv.Itoa(size+2) + "s [fg:-:fgstyle]%s "
+	menuFmt := " [key:-:b]%s [fg:-:fgstyle]%s "
 	fmat := strings.Replace(menuFmt, "[key", "["+styles.Menu.KeyColor.String(), 1)
 	fmat = strings.Replace(fmat, "[fg", "["+styles.Menu.FgColor.String(), 1)
 	fmat = strings.ReplaceAll(fmat, ":bg:", ":"+styles.Title.BgColor.String()+":")
 	fmat = strings.Replace(fmat, "fgstyle]", styles.Menu.FgStyle.ToShortString()+"]", 1)
 
-	return fmt.Sprintf(fmat, ToMnemonic(h.Mnemonic), h.Description)
+	key := ToMnemonic(h.Mnemonic)
+	key += strings.Repeat(" ", max(0, size+2-runewidth.StringWidth(key)))
+	return fmt.Sprintf(fmat, tview.Escape(key), tview.Escape(h.Description))
 }

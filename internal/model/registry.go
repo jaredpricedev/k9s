@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package model
 
@@ -14,6 +15,10 @@ import (
 // Registry tracks resources metadata.
 // BOZO!! Break up deps and merge into single registrar.
 var Registry = map[*client.GVR]ResourceMeta{
+	client.FluxGVR: {
+		DAO:      new(dao.FluxDashboard),
+		Renderer: &render.Flux{Unified: true},
+	},
 	// Custom...
 	client.WkGVR: {
 		DAO:      new(dao.Workload),

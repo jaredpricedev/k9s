@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package model1
 
@@ -105,10 +106,15 @@ func (t *TableData) RowsRange(f ReRangeFn) {
 }
 
 func (t *TableData) Sort(sc SortColumn) {
-	col, idx := t.HeadCol(sc.Name, false)
+	col, idx := t.HeadCol(sc.Name, true)
 	if idx < 0 {
 		return
 	}
+	if t.gvr == client.FluxGVR && sc.Name == "STATUS" {
+		t.rowEvents.sortFluxStatus(idx, sc.ASC)
+		return
+	}
+
 	t.rowEvents.Sort(
 		t.GetNamespace(),
 		idx,
@@ -177,16 +183,28 @@ func (t *TableData) rxFilter(q string, inverse bool) (*RowEvents, error) {
 	}
 
 	vidx := t.header.FilterColIndices(t.namespace, true)
+	cols := make([]int, 0, len(vidx))
+	for idx := range t.header {
+		if vidx.Has(idx) {
+			cols = append(cols, idx)
+		}
+	}
 	rr := NewRowEvents(t.RowCount() / 2)
+	fields := make([]byte, 0, 128)
 	t.rowEvents.Range(func(_ int, re RowEvent) bool {
-		ff := make([]string, 0, len(re.Row.Fields))
-		for idx, r := range re.Row.Fields {
-			if !vidx.Has(idx) {
+		fields = fields[:0]
+		first := true
+		for _, idx := range cols {
+			if idx >= len(re.Row.Fields) {
 				continue
 			}
-			ff = append(ff, r)
+			if !first {
+				fields = append(fields, spacer...)
+			}
+			first = false
+			fields = append(fields, re.Row.Fields[idx]...)
 		}
-		match := rx.MatchString(strings.Join(ff, spacer))
+		match := rx.Match(fields)
 		if (inverse && !match) || (!inverse && match) {
 			rr.Add(re)
 		}
@@ -471,14 +489,7 @@ func (t *TableData) Delete(newKeys sets.Set[string]) {
 		return true
 	})
 
-	for _, id := range victims.UnsortedList() {
-		if err := t.rowEvents.Delete(id); err != nil {
-			slog.Error("Table delete failed",
-				slogs.Error, err,
-				slogs.Message, id,
-			)
-		}
-	}
+	t.rowEvents.deleteAll(victims)
 }
 
 // Diff checks if two tables are equal.

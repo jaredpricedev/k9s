@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package config
 
@@ -280,7 +281,7 @@ func (c *Config) Load(path string, force bool) error {
 	}
 	var errs error
 	if err := data.JSONValidator.Validate(json.K9sSchema, bb); err != nil {
-		errs = errors.Join(errs, fmt.Errorf("k9s config file %q load failed:\n%w", path, err))
+		errs = errors.Join(errs, fmt.Errorf("%s config file %q load failed:\n%w", AppDisplayName, path, err))
 	}
 
 	var cfg Config
@@ -322,11 +323,11 @@ func (c *Config) SaveFile(path string) error {
 	}
 
 	if err := data.SaveYAML(path, c); err != nil {
-		slog.Error("Unable to save K9s config file", slogs.Error, err)
+		slog.Error("Unable to save "+AppDisplayName+" config file", slogs.Error, err)
 		return err
 	}
 
-	slog.Info("[CONFIG] Saving K9s config to disk", slogs.Path, path)
+	slog.Info("[CONFIG] Saving "+AppDisplayName+" config to disk", slogs.Path, path)
 	return nil
 }
 

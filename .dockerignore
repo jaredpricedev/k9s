@@ -1,3 +1,4 @@
+# Modified for k9+ by the k9+ contributors; see MODIFICATIONS.md.
 /k8s
 /change_logs
 .github
@@ -9,7 +10,7 @@ assets
 /notes
 /skins
 README.md
-LICENSE
 cov.out
 /k9s
+/k9plus
 .travis.yml

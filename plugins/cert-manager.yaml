@@ -1,8 +1,12 @@
+# Modified for k9+; see NOTICE.
 # Manage cert-manager Certificate resources via cmctl.
 # See: https://github.com/cert-manager/cmctl
+# Every command uses the context and kubeconfig selected by K9s.
 plugins:
   cert-status:
     shortCut: Shift-S
+    # Explicitly replace SortStatus in the Certificate view.
+    override: true
     confirm: false
     description: Certificate status
     scopes:
@@ -11,10 +15,16 @@ plugins:
     background: false
     args:
       - -c
-      - "cmctl status certificate --context $CONTEXT -n $NAMESPACE $NAME |& less"
+      - 'set -euo pipefail; values=("$@"); KUBECONFIG="${values[1]}" cmctl status certificate --context "${values[0]}" -n "${values[2]}" "${values[3]}" |& less -K'
+      - _
+      - $CONTEXT
+      - $KUBECONFIG
+      - $NAMESPACE
+      - $NAME
   cert-renew:
     shortCut: Shift-R
-    confirm: false
+    confirm: true
+    dangerous: true
     description: Certificate renew
     scopes:
       - certificates
@@ -22,7 +32,13 @@ plugins:
     background: false
     args:
       - -c
-      - "cmctl renew --context $CONTEXT -n $NAMESPACE $NAME |& less"
+      - 'set -euo pipefail; values=("$@"); KUBECONFIG="${values[1]}" cmctl renew --context "${values[0]}" -n "${values[2]}" "${values[3]}" |& less -K'
+      # Bash's command label is shown in K9s' confirmation, never executed.
+      - 'Renew certificate $NAMESPACE/$NAME in context $CONTEXT?'
+      - $CONTEXT
+      - $KUBECONFIG
+      - $NAMESPACE
+      - $NAME
   secret-inspect:
     shortCut: Shift-I
     confirm: false
@@ -33,4 +49,9 @@ plugins:
     background: false
     args:
       - -c
-      - "cmctl inspect secret --context $CONTEXT -n $NAMESPACE $NAME |& less"
+      - 'set -euo pipefail; values=("$@"); KUBECONFIG="${values[1]}" cmctl inspect secret --context "${values[0]}" -n "${values[2]}" "${values[3]}" |& less -K'
+      - _
+      - $CONTEXT
+      - $KUBECONFIG
+      - $NAMESPACE
+      - $NAME

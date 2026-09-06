@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package watch
 
@@ -135,6 +136,38 @@ func (f *Factory) Get(gvr *client.GVR, fqn string, wait bool, _ labels.Selector)
 	}
 
 	return inf.Lister().ByNamespace(ns).Get(n)
+}
+
+// CachedGet reads an already displayed object from the authorized list/watch cache.
+// namespace is the table's list namespace; fqn identifies the concrete object.
+// It only uses the matching existing factory, without authorization requests,
+// informer startup, cache synchronization, or a live GET fallback. The returned
+// object is shared with the informer cache and must be treated as immutable.
+// Mutating actions must independently authorize and fetch the live object.
+func (f *Factory) CachedGet(gvr *client.GVR, namespace, fqn string) (runtime.Object, error) {
+	if client.IsClusterWide(namespace) {
+		namespace = client.BlankNamespace
+	}
+	f.mx.RLock()
+	defer f.mx.RUnlock()
+	fac, ok := f.factories[namespace]
+	if !ok {
+		return nil, fmt.Errorf("cache for %q in namespace %q is unavailable; refresh the view and try again", gvr, namespace)
+	}
+
+	lister := fac.ForResource(gvr.GVR()).Lister()
+	ns, name := namespaced(fqn)
+	var obj runtime.Object
+	var err error
+	if client.IsClusterScoped(ns) || ns == client.BlankNamespace {
+		obj, err = lister.Get(name)
+	} else {
+		obj, err = lister.ByNamespace(ns).Get(name)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("cached resource %q is unavailable; refresh the view and try again: %w", fqn, err)
+	}
+	return obj, nil
 }
 
 func (f *Factory) waitForCacheSync(ns string) {

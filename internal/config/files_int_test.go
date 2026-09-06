@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package config
 
@@ -41,15 +42,15 @@ func Test_initXDGLocs(t *testing.T) {
 		hkFile             string
 	}{
 		"check-env": {
-			configDir:          filepath.Join(tmp, "k9s-xdg", "config", "k9s"),
-			configFile:         filepath.Join(tmp, "k9s-xdg", "config", "k9s", data.MainConfigFile),
-			benchmarksDir:      filepath.Join(tmp, "k9s-xdg", "state", "k9s", "benchmarks"),
-			contextsDir:        filepath.Join(tmp, "k9s-xdg", "data", "k9s", "clusters"),
-			contextHotkeysFile: filepath.Join(tmp, "k9s-xdg", "data", "k9s", "clusters", "cl-1", "ct-1-1", "hotkeys.yaml"),
-			contextConfig:      filepath.Join(tmp, "k9s-xdg", "data", "k9s", "clusters", "cl-1", "ct-1-1", data.MainConfigFile),
-			dumpsDir:           filepath.Join(tmp, "k9s-xdg", "state", "k9s", "screen-dumps", "cl-1", "ct-1-1"),
-			benchDir:           filepath.Join(tmp, "k9s-xdg", "state", "k9s", "benchmarks", "cl-1", "ct-1-1"),
-			hkFile:             filepath.Join(tmp, "k9s-xdg", "config", "k9s", "hotkeys.yaml"),
+			configDir:          filepath.Join(tmp, "k9s-xdg", "config", "k9plus"),
+			configFile:         filepath.Join(tmp, "k9s-xdg", "config", "k9plus", data.MainConfigFile),
+			benchmarksDir:      filepath.Join(tmp, "k9s-xdg", "state", "k9plus", "benchmarks"),
+			contextsDir:        filepath.Join(tmp, "k9s-xdg", "data", "k9plus", "clusters"),
+			contextHotkeysFile: filepath.Join(tmp, "k9s-xdg", "data", "k9plus", "clusters", "cl-1", "ct-1-1", "hotkeys.yaml"),
+			contextConfig:      filepath.Join(tmp, "k9s-xdg", "data", "k9plus", "clusters", "cl-1", "ct-1-1", data.MainConfigFile),
+			dumpsDir:           filepath.Join(tmp, "k9s-xdg", "state", "k9plus", "screen-dumps", "cl-1", "ct-1-1"),
+			benchDir:           filepath.Join(tmp, "k9s-xdg", "state", "k9plus", "benchmarks", "cl-1", "ct-1-1"),
+			hkFile:             filepath.Join(tmp, "k9s-xdg", "config", "k9plus", "hotkeys.yaml"),
 		},
 	}
 
