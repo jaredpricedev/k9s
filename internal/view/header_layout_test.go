@@ -3,11 +3,12 @@
 package view
 
 import (
+	"testing"
+
 	"github.com/derailed/k9s/internal/config/mock"
 	"github.com/derailed/k9s/internal/model"
 	"github.com/derailed/tcell/v2"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestHeaderReclaimsUnusedClusterInfoSpace(t *testing.T) {

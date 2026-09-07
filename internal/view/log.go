@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/derailed/k9s/internal/client"
@@ -19,6 +20,7 @@ import (
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/config/data"
 	"github.com/derailed/k9s/internal/dao"
+	"github.com/derailed/k9s/internal/logstream"
 	"github.com/derailed/k9s/internal/model"
 	"github.com/derailed/k9s/internal/slogs"
 	"github.com/derailed/k9s/internal/ui"
@@ -38,8 +40,15 @@ const (
 
 // Log represents a generic log viewer.
 type Log struct {
+	childStylesAttached bool
 	*tview.Flex
 
+	workbench         *logWorkbench
+	promptPurpose     string
+	lifecycleMu       sync.Mutex
+	lifecycleSeq      atomic.Uint64
+	originalCapture   func(*tcell.EventKey) *tcell.EventKey
+	started           bool
 	app               *App
 	logs              *Logger
 	indicator         *LogIndicator
@@ -78,7 +87,7 @@ func (l *Log) Init(ctx context.Context) (err error) {
 	l.SetDirection(tview.FlexRow)
 
 	l.indicator = NewLogIndicator(l.app.Config, l.app.Styles, l.isContainerLogView())
-	l.AddItem(l.indicator, 1, 1, false)
+	// The compact workbench status replaces the legacy indicator row.
 	if !l.model.HasDefaultContainer() {
 		l.indicator.ToggleAllContainers()
 	}
@@ -94,13 +103,24 @@ func (l *Log) Init(ctx context.Context) (err error) {
 	l.logs.SetMaxLines(l.app.Config.K9s.Logger.BufferSize)
 
 	l.ansiWriter = tview.ANSIWriter(l.logs, l.app.Styles.Views().Log.FgColor.String(), l.app.Styles.Views().Log.BgColor.String())
-	l.AddItem(l.logs, 0, 1, true)
+	l.childStylesAttached = true
+	l.workbench = newLogWorkbench(l, l.app.Config.K9s.Logger.BufferSize)
+	l.workbench.follow = !l.app.Config.K9s.Logger.DisableAutoscroll
+	l.workbench.showTime = l.app.Config.K9s.Logger.ShowTime
+	l.workbench.wrap = l.app.Config.K9s.Logger.TextWrap
+	l.workbench.columnLock = l.app.Config.K9s.Logger.ColumnLock
+	l.workbench.detail.SetWrap(l.workbench.wrap)
+	l.AddItem(l.workbench, 0, 1, true)
 	l.bindKeys()
+	l.workbench.register()
 
 	l.StylesChanged(l.app.Styles)
 	l.toggleFullScreen()
 
 	l.model.Init(l.app.factory)
+	contextName := l.app.Config.ActiveContextName()
+	clusterName, _ := l.app.Config.ActiveClusterName(contextName)
+	l.model.ConfigureSource(contextName, clusterName, true)
 	l.updateTitle()
 
 	l.follow = !l.app.Config.K9s.Logger.DisableAutoscroll
@@ -118,12 +138,19 @@ func (l *Log) InCmdMode() bool {
 
 // LogCanceled indicates no more logs are coming.
 func (l *Log) LogCanceled() {
+	if l.workbench != nil {
+		l.workbench.flush()
+		return
+	}
 	slog.Debug("Logs watcher canceled!")
 	l.Flush([][]byte{[]byte("\n🏁 [red::b]Stream exited! No more logs...")})
 }
 
 // LogStop disables log flushes.
 func (l *Log) LogStop() {
+	if l.workbench != nil {
+		return
+	}
 	slog.Debug("Logs watcher stopped!")
 	l.mx.Lock()
 	defer l.mx.Unlock()
@@ -133,6 +160,9 @@ func (l *Log) LogStop() {
 
 // LogResume resume log flushes.
 func (l *Log) LogResume() {
+	if l.workbench != nil {
+		return
+	}
 	l.mx.Lock()
 	defer l.mx.Unlock()
 
@@ -141,6 +171,9 @@ func (l *Log) LogResume() {
 
 // LogCleared clears the logs.
 func (l *Log) LogCleared() {
+	if l.workbench != nil {
+		return
+	}
 	l.app.QueueUpdateDraw(func() {
 		l.logs.Clear()
 	})
@@ -148,6 +181,17 @@ func (l *Log) LogCleared() {
 
 // LogFailed notifies an error occurred.
 func (l *Log) LogFailed(err error) {
+	if l.workbench != nil {
+		now := time.Now()
+		l.workbench.ingest([]logstream.Entry{{
+			RuntimeTime: now, Raw: err.Error(), Message: err.Error(),
+			Marker: &logstream.Marker{
+				Kind: "client-error", Origin: "client", Message: err.Error(), Time: now, Approximate: true,
+			},
+		}})
+		l.workbench.flush()
+		return
+	}
 	l.app.QueueUpdateDraw(func() {
 		l.app.Flash().Err(err)
 		if l.logs.GetText(true) == logMessage {
@@ -161,6 +205,9 @@ func (l *Log) LogFailed(err error) {
 
 // LogChanged updates the logs.
 func (l *Log) LogChanged(lines [][]byte) {
+	if l.workbench != nil {
+		return
+	}
 	l.app.QueueUpdateDraw(func() {
 		if l.logs.GetText(true) == logMessage {
 			l.logs.Clear()
@@ -171,6 +218,11 @@ func (l *Log) LogChanged(lines [][]byte) {
 
 // BufferCompleted indicates input was accepted.
 func (l *Log) BufferCompleted(text, _ string) {
+	// FishBuff emits debounced completion while typing on a worker. Apply only
+	// on prompt deactivation (Enter/Escape), which occurs on the draw thread.
+	if l.workbench != nil {
+		return
+	}
 	l.model.Filter(text)
 	l.updateTitle()
 }
@@ -181,6 +233,25 @@ func (*Log) BufferChanged(_, _ string) {}
 // BufferActive indicates the buff activity changed.
 func (l *Log) BufferActive(state bool, k model.BufferKind) {
 	l.app.BufferActive(state, k)
+	if l.workbench != nil && !state && !l.workbench.stopped.Load() {
+		text := l.logs.cmdBuff.GetText()
+		if l.promptPurpose == "sinceTime" {
+			l.promptPurpose = ""
+			if text != "" {
+				if _, err := time.Parse(time.RFC3339Nano, text); err != nil {
+					l.workbench.notice = "Invalid timestamp: " + err.Error()
+				} else {
+					l.workbench.notice = "Server sinceTime jump: available server history only"
+					l.runModel(func(ctx context.Context) { _ = l.model.SetSinceTime(ctx, text) })
+				}
+			}
+		} else if err := l.workbench.filter(text); err != nil {
+			l.workbench.notice = "Filter ERROR: " + err.Error()
+		} else {
+			l.workbench.notice = "Client filter applied; markers retained"
+		}
+		l.workbench.render()
+	}
 }
 
 // StylesChanged reports skin changes.
@@ -188,6 +259,11 @@ func (l *Log) StylesChanged(s *config.Styles) {
 	l.SetBackgroundColor(s.Views().Log.BgColor.Color())
 	l.logs.SetTextColor(s.Views().Log.FgColor.Color())
 	l.logs.SetBackgroundColor(s.Views().Log.BgColor.Color())
+	if l.workbench != nil {
+		l.workbench.table.SetBackgroundColor(s.Views().Log.BgColor.Color())
+		l.workbench.detail.SetBackgroundColor(s.Views().Log.BgColor.Color())
+		l.workbench.status.SetBackgroundColor(s.Views().Log.BgColor.Color())
+	}
 }
 
 // GetModel returns the log model.
@@ -197,7 +273,12 @@ func (l *Log) GetModel() *model.Log {
 
 // Hints returns a collection of menu hints.
 func (l *Log) Hints() model.MenuHints {
-	return l.logs.Actions().Hints()
+	hints := l.logs.Actions().Hints()
+	primary := map[string]bool{"?": true, "s": true, "c": true, "Shift-R": true, "p": true}
+	for i := range hints {
+		hints[i].Visible = primary[hints[i].Mnemonic]
+	}
+	return hints
 }
 
 // ExtraHints returns additional hints.
@@ -223,21 +304,67 @@ func (l *Log) getContext() context.Context {
 }
 
 // Start runs the component.
+// runModel serializes collection lifecycle off the draw thread. A newer request
+// cancels its predecessor and obsolete queued requests cannot resurrect streams.
+func (l *Log) runModel(action func(context.Context)) {
+	ctx := l.getContext()
+	seq := l.lifecycleSeq.Add(1)
+	go func() {
+		l.lifecycleMu.Lock()
+		defer l.lifecycleMu.Unlock()
+		if seq != l.lifecycleSeq.Load() || ctx.Err() != nil {
+			return
+		}
+		action(ctx)
+	}()
+}
 func (l *Log) Start() {
-	l.model.Start(l.getContext())
+	if l.started {
+		return
+	}
+	l.started = true
 	l.model.AddListener(l)
 	l.app.Styles.AddListener(l)
+	if !l.childStylesAttached {
+		l.app.Styles.AddListener(l.logs)
+		l.app.Styles.AddListener(l.indicator)
+		l.childStylesAttached = true
+	}
 	l.logs.cmdBuff.AddListener(l)
+	l.logs.cmdBuff.AddListener(l.logs)
 	l.logs.cmdBuff.AddListener(l.app.Prompt())
+	l.workbench.start()
+	l.originalCapture = l.app.GetInputCapture()
+	l.app.SetInputCapture(l.captureWorkbenchKey)
+	l.runModel(l.model.Start)
 	l.updateTitle()
 }
 
-// Stop terminates the component.
+// Stop never joins a draw worker or disk scan from the draw thread.
 func (l *Log) Stop() {
+	if !l.started {
+		l.logs.Stop()
+		l.app.Styles.RemoveListener(l.indicator)
+		l.childStylesAttached = false
+		return
+	}
+	l.started = false
+	l.workbench.stop()
 	l.model.RemoveListener(l)
-	l.model.Stop()
 	l.cancel()
+	seq := l.lifecycleSeq.Add(1)
+	go func() {
+		l.lifecycleMu.Lock()
+		defer l.lifecycleMu.Unlock()
+		if seq == l.lifecycleSeq.Load() {
+			l.model.Stop()
+		}
+	}()
+	l.app.SetInputCapture(l.originalCapture)
 	l.app.Styles.RemoveListener(l)
+	l.logs.Stop()
+	l.app.Styles.RemoveListener(l.indicator)
+	l.childStylesAttached = false
 	l.logs.cmdBuff.RemoveListener(l)
 	l.logs.cmdBuff.RemoveListener(l.app.Prompt())
 }
@@ -273,6 +400,22 @@ func (l *Log) bindKeys() {
 }
 
 func (l *Log) resetCmd(evt *tcell.EventKey) *tcell.EventKey {
+	if l.workbench != nil {
+		if l.logs.cmdBuff.IsActive() {
+			l.logs.cmdBuff.Reset()
+			return nil
+		}
+		if l.workbench.expression != "" {
+			if err := l.workbench.filter(""); err != nil {
+				l.workbench.notice = err.Error()
+				return nil
+			}
+			l.logs.cmdBuff.ClearText(false)
+			l.workbench.render()
+			return nil
+		}
+		return l.app.PrevCmd(evt)
+	}
 	if !l.logs.cmdBuff.IsActive() {
 		if l.logs.cmdBuff.GetText() == "" {
 			return l.app.PrevCmd(evt)
@@ -325,14 +468,17 @@ func (l *Log) updateTitle() {
 		styles   = l.app.Styles.Frame()
 	)
 	if co == "" {
-		title += ui.SkinTitle(fmt.Sprintf(logFmt, path, since), &styles)
+		title += ui.SkinTitle(fmt.Sprintf(logFmt, wbText(path), since), &styles)
 	} else {
-		title += ui.SkinTitle(fmt.Sprintf(logCoFmt, path, co, since), &styles)
+		title += ui.SkinTitle(fmt.Sprintf(logCoFmt, wbText(path), wbText(co), since), &styles)
 	}
 
 	buff := l.logs.cmdBuff.GetText()
+	if l.workbench != nil {
+		buff = l.workbench.expression
+	}
 	if buff != "" {
-		title += ui.SkinTitle(fmt.Sprintf(ui.SearchFmt, buff), &styles)
+		title += ui.SkinTitle(fmt.Sprintf(ui.SearchFmt, wbText(buff)), &styles)
 	}
 	l.SetTitle(title)
 }
@@ -380,6 +526,18 @@ func (l *Log) Flush(lines [][]byte) {
 
 func (l *Log) sinceCmd(n int) func(evt *tcell.EventKey) *tcell.EventKey {
 	return func(*tcell.EventKey) *tcell.EventKey {
+		if l.workbench != nil {
+			l.workbench.flush()
+			l.workbench.notice = "Reconnecting to available server history; retained observed rows remain"
+			l.runModel(func(ctx context.Context) {
+				if n == 0 {
+					l.model.Head(ctx)
+				} else {
+					l.model.SetSinceSeconds(ctx, int64(n))
+				}
+			})
+			return nil
+		}
 		l.logs.Clear()
 		ctx := l.getContext()
 		if n == 0 {
@@ -399,13 +557,25 @@ func (l *Log) toggleAllContainers(evt *tcell.EventKey) *tcell.EventKey {
 		return evt
 	}
 	l.indicator.ToggleAllContainers()
-	l.model.ToggleAllContainers(l.getContext())
+	if l.workbench != nil {
+		l.runModel(l.model.ToggleAllContainers)
+	} else {
+		l.model.ToggleAllContainers(l.getContext())
+	}
 	l.updateTitle()
 
 	return nil
 }
 
 func (l *Log) filterCmd(evt *tcell.EventKey) *tcell.EventKey {
+	if l.workbench != nil {
+		if l.logs.cmdBuff.IsActive() {
+			l.logs.cmdBuff.SetActive(false)
+		} else {
+			l.workbench.expand()
+		}
+		return nil
+	}
 	if !l.logs.cmdBuff.IsActive() {
 		_, _ = fmt.Fprintln(l.ansiWriter)
 		return evt
@@ -420,6 +590,10 @@ func (l *Log) filterCmd(evt *tcell.EventKey) *tcell.EventKey {
 
 // SaveCmd dumps the logs to file.
 func (l *Log) SaveCmd(*tcell.EventKey) *tcell.EventKey {
+	if l.workbench != nil && len(l.workbench.rows) > 0 {
+		l.workbench.exportVisible()
+		return nil
+	}
 	path, err := saveData(l.app.Config.K9s.ContextScreenDumpDir(), l.model.GetPath(), l.logs.GetText(true))
 	if err != nil {
 		l.app.Flash().Err(err)
@@ -448,7 +622,7 @@ func saveData(dir, fqn, logs string) (string, error) {
 			slogs.Path, path,
 			slogs.Error, err,
 		)
-		return "", nil
+		return "", err
 	}
 	defer func() {
 		if err := file.Close(); err != nil {
@@ -466,11 +640,18 @@ func saveData(dir, fqn, logs string) (string, error) {
 }
 
 func (l *Log) clearCmd(*tcell.EventKey) *tcell.EventKey {
+	if l.workbench != nil {
+		l.workbench.clearRetained()
+		return nil
+	}
 	l.model.Clear()
 	return nil
 }
 
 func (l *Log) markCmd(*tcell.EventKey) *tcell.EventKey {
+	if l.workbench != nil {
+		return l.workbench.key(tcell.NewEventKey(tcell.KeyRune, 'm', tcell.ModNone))
+	}
 	_, _, w, _ := l.GetRect()
 	_, _ = fmt.Fprintf(l.ansiWriter, "[%s:-:b]%s[-:-:-]\n", l.app.Styles.Views().Log.FgColor.String(), strings.Repeat("-", w-4))
 	l.follow = true
@@ -483,6 +664,10 @@ func (l *Log) toggleTimestampCmd(evt *tcell.EventKey) *tcell.EventKey {
 		return evt
 	}
 
+	if l.workbench != nil {
+		l.workbench.showTime = !l.workbench.showTime
+		l.workbench.render()
+	}
 	l.indicator.ToggleTimestamp()
 	l.model.ToggleShowTimestamp(l.indicator.showTime)
 	l.indicator.Refresh()
@@ -522,6 +707,10 @@ func (l *Log) toggleColumnLockCmd(evt *tcell.EventKey) *tcell.EventKey {
 
 	l.indicator.ToggleColumnLock()
 	l.columnLock = l.indicator.ColumnLock()
+	if l.workbench != nil {
+		l.workbench.notice = "Column lock applies to horizontal table offset while following"
+		l.workbench.columnLock = l.columnLock
+	}
 	l.indicator.Refresh()
 
 	return nil
@@ -550,4 +739,17 @@ func (l *Log) toggleFullScreen() {
 
 func (l *Log) isContainerLogView() bool {
 	return l.model.HasDefaultContainer()
+}
+
+// Local help/history/raw-record actions precede application-wide bindings only
+// while this Log owns focus. Prompt editing always stays in the prompt.
+func (l *Log) captureWorkbenchKey(evt *tcell.EventKey) *tcell.EventKey {
+	workbenchKey := evt.Rune() == '?' || evt.Rune() == '[' || evt.Rune() == ']' || evt.Key() == tcell.KeyCtrlR
+	if !l.workbench.stopped.Load() && !l.app.Prompt().InCmdMode() && !l.logs.cmdBuff.IsActive() && workbenchKey {
+		return l.workbench.key(evt)
+	}
+	if l.originalCapture != nil {
+		return l.originalCapture(evt)
+	}
+	return evt
 }

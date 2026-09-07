@@ -85,11 +85,13 @@ func (j *Job) TailLogs(ctx context.Context, opts *LogOptions) ([]LogChan, error)
 		return nil, errors.New("expecting a job resource")
 	}
 
-	if job.Spec.Selector == nil || len(job.Spec.Selector.MatchLabels) == 0 {
+	if job.Spec.Selector == nil || (len(job.Spec.Selector.MatchLabels) == 0 && len(job.Spec.Selector.MatchExpressions) == 0) {
 		return nil, fmt.Errorf("no valid selector found for job: %s", opts.Path)
 	}
 
-	return podLogs(ctx, job.Spec.Selector.MatchLabels, opts)
+	opts.WorkloadKind, opts.WorkloadName = "Job", job.Name
+	opts.Labels, opts.Annotations = job.Labels, job.Annotations
+	return selectorPodLogs(ctx, job.Spec.Selector, opts)
 }
 
 func (j *Job) GetInstance(fqn string) (*batchv1.Job, error) {

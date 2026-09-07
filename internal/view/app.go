@@ -53,6 +53,7 @@ type App struct {
 	cmdHistory    *model.History
 	filterHistory *model.History
 	fluxActions   map[fluxActionKey]struct{}
+	logRecordings logRecordingRegistry
 	conRetry      int32
 	showHeader    bool
 	showLogo      bool
@@ -317,7 +318,8 @@ func (a *App) buildHeader() tview.Primitive {
 	// short names release their unused space and context changes resize safely.
 	header.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
 		natural := clusterInfoWidth
-		for row := 0; row < info.GetRowCount(); row++ {
+		rowCount := info.GetRowCount()
+		for row := range rowCount {
 			label, value := info.GetCell(row, 0), info.GetCell(row, 1)
 			if label != nil && value != nil {
 				natural = max(natural, tview.TaggedStringWidth(label.Text)+tview.TaggedStringWidth(value.Text)+4)
@@ -551,6 +553,8 @@ func (a *App) BailOut(exitCode int) {
 			slog.Error("Bailout failed", slogs.Error, err)
 		}
 	}()
+
+	a.shutdownLogRecordings()
 
 	if err := nukeK9sShell(a); err != nil {
 		slog.Error("Unable to nuke k9+ shell pod", slogs.Error, err)

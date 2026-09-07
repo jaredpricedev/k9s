@@ -6,6 +6,7 @@ package model_test
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -71,6 +72,7 @@ func TestFlashBurst(t *testing.T) {
 }
 
 type flash struct {
+	mx         sync.Mutex
 	set, clear int
 	level      model.FlashLevel
 	msg        string
@@ -81,16 +83,20 @@ func newFlash() *flash {
 }
 
 func (f *flash) getMetrics() (val int, lvl model.FlashLevel, msg string) {
+	f.mx.Lock()
+	defer f.mx.Unlock()
 	return f.set, f.level, f.msg
 }
 
 func (f *flash) listen(c model.FlashChan) {
 	for m := range c {
+		f.mx.Lock()
 		if m.IsClear() {
 			f.clear++
 		} else {
 			f.set++
 			f.level, f.msg = m.Level, m.Text
 		}
+		f.mx.Unlock()
 	}
 }

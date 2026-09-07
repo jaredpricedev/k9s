@@ -1,0 +1,154 @@
+# Synthetic test data only. Apply with kubectl apply -f logging-demo.yaml.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: logging-demo
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: log-generator
+  namespace: logging-demo
+data:
+  generate.py: |
+    import datetime, json, os, sys, time
+    pod = os.environ.get("POD_NAME", "unknown")
+    mode = os.environ.get("MODE", "mixed")
+    count = 0
+    def emit(line):
+        print(line, flush=True)
+    while True:
+        count += 1
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        if mode == "crashy":
+            emit(json.dumps({"time": now, "level": "warn", "msg": "worker retry", "attempt": count}))
+            if count == 24:
+                emit(json.dumps({"level": "error", "msg": "controlled demo crash", "exit_code": 1}))
+                sys.exit(1)
+        elif mode == "raw":
+            emit("sidecar healthz ok")
+            if count % 25 == 0:
+                emit("Traceback (most recent call last):")
+                emit('  File "/demo/worker.py", line 42, in run')
+                emit('    raise RuntimeError("synthetic failure")')
+                emit("RuntimeError: synthetic failure")
+            if count % 40 == 0:
+                emit("request 72a681a2-96f3-4ef7-a8ca-6bdfab29124a from 10.42.1.15 status=200")
+                emit("request 826b7489-a90d-4d37-a9df-7a01ddaf8f71 from 10.42.2.17 status=500")
+        else:
+            if count % 17 == 0:
+                emit(json.dumps({"time": now, "level": "error", "msg": "upstream request failed", "http": {"status": 503}, "trace_id": "abc", "pod": pod, "attempt": count}))
+            elif count % 7 == 0:
+                emit('time=%s level=warn msg="cache miss" http.status=429 trace_id=abc duration_ms=25' % now)
+            else:
+                emit(json.dumps({"time": now, "level": "info", "msg": "healthz", "http": {"status": 200}, "pod": pod}))
+            if count % 33 == 0:
+                for _ in range(12):
+                    emit('{"level":"info","msg":"duplicate sidecar heartbeat","http":{"status":200}}')
+            if count % 50 == 0:
+                emit("java.lang.IllegalStateException: synthetic demo")
+                emit("    at demo.Worker.run(Worker.java:42)")
+                emit("Caused by: java.io.IOException: synthetic upstream failure")
+                emit("    at demo.Client.read(Client.java:18)")
+            if count % 60 == 0:
+                emit("synthetic credential shapes: Authorization: Bearer demo-token-not-a-secret AKIAIOSFODNN7EXAMPLE")
+                emit("synthetic jwt: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkZW1vIn0.c3ludGhldGljLXNpZ25hdHVyZQ")
+                emit("-----BEGIN PRIVATE KEY-----")
+                emit("U1lOVEhFVElDLURFTU8tREFUQS1OT1QtQS1LRVk=")
+                emit("-----END PRIVATE KEY-----")
+        time.sleep(0.15 if mode != "crashy" else 1)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mixed-logs
+  namespace: logging-demo
+  annotations:
+    k9plus.io/log-noise: '["healthz"]'
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mixed-logs
+  template:
+    metadata:
+      labels:
+        app: mixed-logs
+        app.kubernetes.io/name: mixed-logs
+      annotations:
+        k9plus.io/log-noise: '["healthz"]'
+        kubectl.kubernetes.io/default-container: app
+    spec:
+      containers:
+      - name: app
+        image: python:3.12-alpine
+        command: [python, -u, /demo/generate.py]
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        resources:
+          requests: {cpu: 5m, memory: 24Mi}
+          limits: {cpu: 100m, memory: 64Mi}
+        volumeMounts:
+        - {name: generator, mountPath: /demo, readOnly: true}
+      - name: sidecar
+        image: python:3.12-alpine
+        command: [python, -u, /demo/generate.py]
+        env: [{name: MODE, value: raw}]
+        resources:
+          requests: {cpu: 5m, memory: 24Mi}
+          limits: {cpu: 100m, memory: 64Mi}
+        volumeMounts: [{name: generator, mountPath: /demo, readOnly: true}]
+      volumes:
+      - name: generator
+        configMap: {name: log-generator}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: noisy-sidecar
+  namespace: logging-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: noisy-sidecar}
+  template:
+    metadata:
+      labels: {app: noisy-sidecar, app.kubernetes.io/name: noisy-sidecar}
+    spec:
+      containers:
+      - name: sidecar
+        image: python:3.12-alpine
+        command: [python, -u, /demo/generate.py]
+        env: [{name: MODE, value: raw}]
+        resources:
+          requests: {cpu: 5m, memory: 24Mi}
+          limits: {cpu: 100m, memory: 64Mi}
+        volumeMounts: [{name: generator, mountPath: /demo, readOnly: true}]
+      volumes: [{name: generator, configMap: {name: log-generator}}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controlled-crash
+  namespace: logging-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: controlled-crash}
+  template:
+    metadata:
+      labels: {app: controlled-crash, app.kubernetes.io/name: controlled-crash}
+    spec:
+      containers:
+      - name: worker
+        image: python:3.12-alpine
+        command: [python, -u, /demo/generate.py]
+        env: [{name: MODE, value: crashy}]
+        resources:
+          requests: {cpu: 5m, memory: 24Mi}
+          limits: {cpu: 100m, memory: 64Mi}
+        volumeMounts: [{name: generator, mountPath: /demo, readOnly: true}]
+      volumes: [{name: generator, configMap: {name: log-generator}}]

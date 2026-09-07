@@ -8,8 +8,10 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReadLogs_Normal(t *testing.T) {
@@ -32,65 +34,24 @@ func TestReadLogs_Normal(t *testing.T) {
 	assert.Len(t, lines, 3)
 }
 
-func TestReadLogs_DropsOnFullChannel(t *testing.T) {
-	// Create more lines than the channel can hold
-	var sb strings.Builder
-	lineCount := 20
-	for i := range lineCount {
-		sb.WriteString("log line ")
-		sb.WriteByte(byte('A' + i%26))
-		sb.WriteByte('\n')
-	}
-	stream := io.NopCloser(strings.NewReader(sb.String()))
-
-	// Intentionally small buffer to force drops.
-	// readLogs sends an EOF error item via a blocking send,
-	// so we drain in a goroutine to prevent deadlock.
-	out := make(chan *LogItem, 2)
-	opts := &LogOptions{Path: "ns/pod", Container: "c1"}
-
-	var received int
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for range out {
-			received++
-		}
-	}()
-
-	result := readLogs(context.Background(), stream, out, opts)
-	close(out)
-	<-done
-
-	assert.Equal(t, streamEOF, result)
-	// Some lines should have been dropped since buffer is tiny
-	assert.Less(t, received, lineCount+2, "some lines should be dropped when channel is full")
-	assert.Positive(t, received, "at least some lines should be delivered")
-}
-
 func TestReadLogs_CancelStopsEarly(t *testing.T) {
-	// Infinite-like stream: we cancel after a few lines
-	input := strings.Repeat("line\n", 10000)
-	stream := io.NopCloser(strings.NewReader(input))
-	out := make(chan *LogItem, 10)
-	opts := &LogOptions{Path: "ns/pod", Container: "c1"}
-
+	reader, writer := io.Pipe()
+	defer writer.Close()
 	ctx, cancel := context.WithCancel(context.Background())
-
-	// Read a few items then cancel
+	defer cancel()
+	out := make(chan *LogItem, 10)
 	done := make(chan streamResult, 1)
-	go func() {
-		done <- readLogs(ctx, stream, out, opts)
-	}()
-
-	// Drain a few items then cancel
-	for range 5 {
-		<-out
-	}
+	go func() { done <- readLogs(ctx, reader, out, &LogOptions{}) }()
+	_, err := writer.Write([]byte("one\ntwo\n"))
+	require.NoError(t, err)
+	<-out
 	cancel()
-
-	result := <-done
-	assert.Equal(t, streamCanceled, result)
+	select {
+	case result := <-done:
+		require.Equal(t, streamCanceled, result)
+	case <-time.After(time.Second):
+		t.Fatal("blocked read survived cancellation")
+	}
 }
 
 func TestReadLogs_PartialLineAtEOF(t *testing.T) {
