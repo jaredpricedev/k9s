@@ -8,10 +8,10 @@ context safety, selection, and the return path from investigations.
 
 | Area | Useful improvement | How to keep it lightweight | Status |
 | --- | --- | --- | --- |
-| Navigation and actions | Search available actions for the selected resource instead of memorizing shortcuts. | One action menu; frequently used shortcuts still work. | Implemented in PR #6; pending review |
-| Resource troubleshooting | Bring conditions, recent events, restarts and ownership together. | Open an inspector on demand. | Implemented in PR #6; pending review |
-| TLS and certificates | Show expiry, SANs, issuer, chain information and where a certificate is used; optional endpoint checks. | A certificate view with deeper inspection rather than more columns everywhere. | Implemented in PR #6; pending review |
-| Workload relationships | Jump between Deployment, Pods, Service, EndpointSlices and Ingress/Gateway. | Contextual links before attempting a large topology map. | Backlog |
+| Navigation and actions | Search available actions for the selected resource instead of memorizing shortcuts. | One action menu; frequently used shortcuts still work. | Merged in PR #6 |
+| Resource troubleshooting | Bring conditions, recent events, restarts and ownership together. | Open an inspector on demand. | Merged in PR #6 |
+| TLS and certificates | Show expiry, SANs, issuer, chain information and where a certificate is used; optional endpoint checks. | A certificate view with deeper inspection rather than more columns everywhere. | Merged in PR #6 |
+| Workload relationships | Jump between Deployment, Pods, Service, EndpointSlices and Ingress/Gateway. | Contextual links before attempting a large topology map. | First increment implemented; review pending |
 | Change visibility | Show what changed between resource observations and compare live configuration with an available desired source. | Explicit diff action with clear comparison sources. | Backlog |
 | Resource pressure | Investigate requests, limits, usage, OOM kills and throttling. | Workload-focused view; show when required metrics are unavailable. | Backlog |
 | Context safety | Clear production identity, convenient read-only mode and destination-aware action confirmations. | Persistent, compact context indicators. | Backlog |
@@ -26,7 +26,8 @@ context safety, selection, and the return path from investigations.
 | TLS | Begin with certificate parsing, expiry, SANs and resource links. Review trust validation, active probes and sensitive-data handling separately. | `:tls` on Secrets/Certificates/Ingresses/Gateways; public metadata, references, offline trust verification and explicit verified endpoint probes from k9plus. |
 
 PR #6 completes the scoped increments for these three areas; see [usage and limits](docs/resource-investigation.md).
-It does not implement the five other roadmap areas. TLS revocation, mTLS client
+Workload relationships now has a separate first increment; see [usage and limits](docs/workload-relationships.md).
+The remaining four areas stay in the backlog. TLS revocation, mTLS client
 identity, STARTTLS, in-pod probing and exhaustive cross-namespace consumer discovery
 are outside this delivery. No certificate or network-policy changes are automatic.
 
