@@ -1,6 +1,6 @@
 # Workload relationships
 
-From a resource list, run `:troubleshoot`, then press `g` for related resources.
+From a resource list, run `:troubleshoot` (or `:ts`), then press `g` for related resources.
 Choose a row and press Enter to jump. Esc returns to the captured inspector;
 `r` refreshes the inspection. Reopening `g` takes a new relationship snapshot.
 The ordinary lists gain no additional polling or shortcuts.

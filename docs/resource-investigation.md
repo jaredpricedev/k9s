@@ -16,7 +16,7 @@ owner/reference navigation. No resource-list shortcuts were reassigned.
 
 ## Troubleshooting
 
-`:troubleshoot` shows a read-only snapshot of the selected object's owners,
+`:troubleshoot` (alias `:ts`) shows a read-only snapshot of the selected object's owners,
 conditions and container states/restarts. Deployment, DaemonSet, StatefulSet,
 ReplicaSet and Job selectors also load up to 100 matching pods with current and
 previous failure states. Empty selectors never expand to the namespace.

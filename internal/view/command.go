@@ -273,6 +273,8 @@ func (c *Command) defaultCmd(isRoot bool) error {
 
 func (c *Command) specialCmd(p *cmd.Interpreter, pushCmd bool) bool {
 	switch {
+	case p.Cmd() == "ts":
+		c.investigationCommand(troubleshootCommand)
 	case p.Cmd() == "tlsverify" || p.Cmd() == "tlsprobe":
 		c.tlsCheckCommand(p.GetLine())
 	case p.Cmd() == actionsCommand || p.Cmd() == troubleshootCommand || p.Cmd() == tlsCommand:
