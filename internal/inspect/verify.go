@@ -135,7 +135,11 @@ func Probe(ctx context.Context, address, serverName string, roots *x509.CertPool
 	if err != nil {
 		return "", err
 	}
-	report = strings.ReplaceAll(report, "No endpoint was contacted.", "Endpoint contacted by an explicit TLS probe.")
+	report = strings.NewReplacer(
+		" (trust not checked)", "",
+		"Bundle order does not prove a valid trust chain. No endpoint was contacted.",
+		"Server-auth chain and hostname verified during the explicit TLS handshake.",
+	).Replace(report)
 	return fmt.Sprintf("VERIFIED TLS HANDSHAKE\nExecution: k9plus machine (not a pod)\n"+
 		"Target: %s\nRemote: %s\nServer name: %s\nVersion: %s\nCipher: %s\n"+
 		"No HTTP request sent. Revocation not checked.\n\n%s",

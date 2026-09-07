@@ -62,7 +62,8 @@ func TestVerifyAndProbeRejectWrongNameAndUnknownRoot(t *testing.T) {
 	server.StartTLS()
 	defer server.Close()
 	address := strings.TrimPrefix(server.URL, "https://")
-	if report, err := Probe(t.Context(), address, "probe.test", roots); err != nil || !strings.Contains(report, "VERIFIED TLS HANDSHAKE") {
+	if report, err := Probe(t.Context(), address, "probe.test", roots); err != nil || !strings.Contains(report, "VERIFIED TLS HANDSHAKE") ||
+		strings.Contains(report, "trust not checked") || strings.Contains(report, "No endpoint was contacted") {
 		t.Fatalf("%s %v", report, err)
 	}
 	if _, err := Probe(t.Context(), address, "wrong.test", roots); err == nil {

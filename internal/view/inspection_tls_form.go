@@ -11,7 +11,7 @@ import (
 // form never connects to a target or reads a CA file.
 func (d *inspectionDetails) tlsForm(probe bool) {
 	styles := d.app.Styles.Dialog()
-	form := tview.NewForm().SetButtonsAlign(tview.AlignCenter)
+	form := tview.NewForm().SetItemPadding(0).SetButtonsAlign(tview.AlignCenter)
 	form.SetButtonBackgroundColor(styles.ButtonBgColor.Color()).SetButtonTextColor(styles.ButtonFgColor.Color()).
 		SetLabelColor(styles.LabelFgColor.Color()).SetFieldTextColor(styles.FieldFgColor.Color()).SetFieldBackgroundColor(styles.BgColor.Color())
 	var address, hostname, ca string
