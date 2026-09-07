@@ -135,7 +135,11 @@
             "disableAutoscroll": {"type": "boolean"},
             "columnLock": {"type": "boolean"},
             "showTime": {"type": "boolean"},
-            "logBufferSize": {"type": "integer"}
+            "logBufferSize": {"type": "integer"},
+            "noiseAppLabels": {"type": "array", "items": {"type": "string"}},
+            "recordingSessions": {"type": "integer"},
+            "recordingRetentionHours": {"type": "integer"},
+            "recordingMaxMiB": {"type": "integer"}
           }
         },
         "thresholds": {

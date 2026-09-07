@@ -113,6 +113,7 @@ func (*Logger) Start() {}
 // Stop terminates the updater.
 func (l *Logger) Stop() {
 	l.app.Styles.RemoveListener(l)
+	l.cmdBuff.RemoveListener(l)
 }
 
 // Hints returns menu hints.

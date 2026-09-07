@@ -34,6 +34,9 @@ k9s:
       namespaces: []
       labels: {}
   logger:
+    recordingSessions: 8
+    recordingRetentionHours: 24
+    recordingMaxMiB: 128
     tail: 500
     buffer: 800
     sinceSeconds: -1

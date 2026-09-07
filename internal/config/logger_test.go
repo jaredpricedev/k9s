@@ -27,3 +27,17 @@ func TestLoggerValidate(t *testing.T) {
 	assert.Equal(t, 5000, l.BufferSize)
 	assert.Equal(t, 50, l.LogBufferSize)
 }
+
+func TestLoggerRecordingBounds(t *testing.T) {
+	l := config.NewLogger().Validate()
+	assert.Equal(t, 8, l.RecordingSessions)
+	assert.Equal(t, 24, l.RecordingRetentionHours)
+	assert.Equal(t, 128, l.RecordingMaxMiB)
+	l.RecordingSessions = 999
+	l.RecordingRetentionHours = -1
+	l.RecordingMaxMiB = -1
+	l = l.Validate()
+	assert.Equal(t, 8, l.RecordingSessions)
+	assert.Equal(t, 24, l.RecordingRetentionHours)
+	assert.Equal(t, 128, l.RecordingMaxMiB)
+}

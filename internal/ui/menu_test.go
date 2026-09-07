@@ -136,8 +136,9 @@ func TestMenuSharesShortNamespaceColumnAtNarrowWidths(t *testing.T) {
 	v.SetRect(0, 0, 96, 6)
 	v.Draw(screen)
 	require.LessOrEqual(t, v.GetColumnCount(), 3, "namespace shortcuts should not reserve an almost empty column")
-	for row := 0; row < 6; row++ {
-		for col := 0; col < v.GetColumnCount(); col++ {
+	columnCount := v.GetColumnCount()
+	for row := range 6 {
+		for col := range columnCount {
 			assert.NotContains(t, v.GetCell(row, col).Text, "…")
 		}
 	}

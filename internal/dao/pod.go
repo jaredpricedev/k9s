@@ -4,25 +4,21 @@
 package dao
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
-	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/render"
 	"github.com/derailed/k9s/internal/slogs"
-	"github.com/derailed/k9s/internal/watch"
-	"github.com/derailed/tview"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -55,25 +51,6 @@ const (
 // Pod represents a pod resource.
 type Pod struct {
 	Resource
-}
-
-// shouldStopRetrying checks if we should stop retrying log streaming based on pod status.
-func (p *Pod) shouldStopRetrying(path string) bool {
-	pod, err := p.GetInstance(path)
-	if err != nil {
-		return true
-	}
-
-	if pod.DeletionTimestamp != nil {
-		return true
-	}
-
-	switch pod.Status.Phase {
-	case v1.PodSucceeded, v1.PodFailed:
-		return true
-	default:
-		return false
-	}
 }
 
 // Get returns a resource instance if found, else an error.
@@ -211,48 +188,34 @@ func (p *Pod) GetInstance(fqn string) (*v1.Pod, error) {
 
 // TailLogs tails a given container logs.
 func (p *Pod) TailLogs(ctx context.Context, opts *LogOptions) ([]LogChan, error) {
-	fac, ok := ctx.Value(internal.KeyFactory).(*watch.Factory)
-	if !ok {
-		return nil, errors.New("no factory in context")
-	}
-	o, err := fac.Get(p.gvr, opts.Path, true, labels.Everything())
+	po, err := p.GetInstance(opts.Path)
 	if err != nil {
 		return nil, err
 	}
-	var po v1.Pod
-	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(o.(*unstructured.Unstructured).Object, &po); err != nil {
+	opts.SingleContainer = len(po.Spec.Containers)+len(po.Spec.InitContainers)+len(po.Spec.EphemeralContainers) == 1
+	if co, ok := GetDefaultContainer(&po.ObjectMeta, &po.Spec); ok {
+		opts.DefaultContainer = co
+	}
+	opts.WorkloadKind, opts.WorkloadName = "Pod", po.Name
+	opts.Labels, opts.Annotations = po.Labels, po.Annotations
+	k, err := p.Client().Dial()
+	if err != nil {
 		return nil, err
 	}
-	coCounts := len(po.Spec.InitContainers) + len(po.Spec.Containers) + len(po.Spec.EphemeralContainers)
-	if coCounts == 1 {
-		opts.SingleContainer = true
+	logs, err := p.Client().DialLogs()
+	if err != nil {
+		return nil, err
 	}
-
-	outs := make([]LogChan, 0, coCounts)
-	if co, ok := GetDefaultContainer(&po.ObjectMeta, &po.Spec); ok && !opts.AllContainers {
-		opts.DefaultContainer = co
-		return append(outs, tailLogs(ctx, p, opts)), nil
+	selection := metav1.ListOptions{FieldSelector: fields.OneTermEqualSelector("metadata.name", po.Name).String()}
+	out, err := followPodLogs(ctx, k, po.Namespace, selection, opts, func(
+		ctx context.Context, pod *v1.Pod, _ *LogOptions, po *v1.PodLogOptions,
+	) (io.ReadCloser, error) {
+		return logs.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, po).Stream(ctx)
+	})
+	if err != nil {
+		return nil, err
 	}
-	if opts.HasContainer() && !opts.AllContainers {
-		return append(outs, tailLogs(ctx, p, opts)), nil
-	}
-	for i := range po.Spec.InitContainers {
-		cfg := opts.Clone()
-		cfg.Container = po.Spec.InitContainers[i].Name
-		outs = append(outs, tailLogs(ctx, p, cfg))
-	}
-	for i := range po.Spec.Containers {
-		cfg := opts.Clone()
-		cfg.Container = po.Spec.Containers[i].Name
-		outs = append(outs, tailLogs(ctx, p, cfg))
-	}
-	for i := range po.Spec.EphemeralContainers {
-		cfg := opts.Clone()
-		cfg.Container = po.Spec.EphemeralContainers[i].Name
-		outs = append(outs, tailLogs(ctx, p, cfg))
-	}
-
-	return outs, nil
+	return []LogChan{out}, nil
 }
 
 // ScanSA scans for ServiceAccount refs.
@@ -353,184 +316,6 @@ func (p *Pod) Scan(_ context.Context, gvr *client.GVR, fqn string, wait bool) (R
 
 // ----------------------------------------------------------------------------
 // Helpers...
-
-func tailLogs(ctx context.Context, logger Logger, opts *LogOptions) LogChan {
-	bufSize := opts.LogBufferSize
-	if bufSize <= 0 {
-		bufSize = logChannelBuffer
-	}
-	out := make(LogChan, bufSize)
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		podOpts := opts.ToPodLogOptions()
-
-		// Setup exponential backoff following project pattern
-		bf := backoff.NewExponentialBackOff()
-		bf.InitialInterval = logBackoffInitial
-		bf.MaxElapsedTime = 0
-		bf.MaxInterval = logBackoffMax / 2
-		backoffCtx := backoff.WithContext(bf, ctx)
-		delay := logBackoffInitial
-
-		for range logRetryCount {
-			req, err := logger.Logs(opts.Path, podOpts)
-			if err != nil {
-				slog.Error("Log request failed",
-					slogs.Container, opts.Info(),
-					slogs.Error, err,
-				)
-				// Check if we should stop retrying based on pod status
-				if pod, ok := logger.(*Pod); ok && pod.shouldStopRetrying(opts.Path) {
-					slog.Debug("Stopping log retry - pod is terminating or deleted",
-						slogs.Container, opts.Info(),
-					)
-					return
-				}
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(delay):
-					if delay = backoffCtx.NextBackOff(); delay == backoff.Stop {
-						return
-					}
-				}
-				continue
-			}
-
-			stream, e := req.Stream(ctx)
-			if e != nil {
-				slog.Error("Stream logs failed",
-					slogs.Error, e,
-					slogs.Container, opts.Info(),
-				)
-				// Check if we should stop retrying based on pod status
-				if pod, ok := logger.(*Pod); ok && pod.shouldStopRetrying(opts.Path) {
-					slog.Debug("Stopping log retry - pod is terminating or deleted",
-						slogs.Container, opts.Info(),
-					)
-					return
-				}
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(delay):
-					if delay = backoffCtx.NextBackOff(); delay == backoff.Stop {
-						return
-					}
-				}
-				continue
-			}
-
-			// Process logs until completion
-			result := readLogs(ctx, stream, out, opts)
-			switch result {
-			case streamEOF:
-				slog.Debug("Log stream ended cleanly",
-					slogs.Container, opts.Info(),
-				)
-				return
-			case streamError:
-				// Check if we should stop retrying based on pod status
-				if pod, ok := logger.(*Pod); ok && pod.shouldStopRetrying(opts.Path) {
-					slog.Debug("Stopping log retry after stream error - pod is terminating or deleted",
-						slogs.Container, opts.Info(),
-					)
-					return
-				}
-				slog.Debug("Log stream error, retrying",
-					slogs.Container, opts.Info(),
-				)
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(delay):
-					if delay = backoffCtx.NextBackOff(); delay == backoff.Stop {
-						return
-					}
-				}
-				continue
-			case streamCanceled:
-				return
-			}
-
-			// Reset backoff and delay on successful connection
-			bf.Reset()
-			delay = logBackoffInitial
-		}
-
-		// Out of retries
-		out <- opts.ToErrLogItem(fmt.Errorf("failed to maintain log stream after %d retries", logRetryCount))
-	}()
-
-	go func() {
-		wg.Wait()
-		close(out)
-	}()
-
-	return out
-}
-
-func readLogs(ctx context.Context, stream io.ReadCloser, out chan<- *LogItem, opts *LogOptions) streamResult {
-	defer func() {
-		if err := stream.Close(); err != nil && !errors.Is(err, io.ErrClosedPipe) {
-			slog.Error("Failed to close stream",
-				slogs.Container, opts.Info(),
-				slogs.Error, err,
-			)
-		}
-	}()
-
-	r := bufio.NewReader(stream)
-	var droppedLines int64
-
-	for {
-		bytes, err := r.ReadBytes('\n')
-		if err == nil {
-			item := opts.ToLogItem(tview.EscapeBytes(bytes))
-			select {
-			case <-ctx.Done():
-				return streamCanceled
-			case out <- item:
-			default:
-				droppedLines++
-				if droppedLines == 1 || droppedLines%100 == 0 {
-					slog.Warn("Dropping log lines due to slow consumer",
-						slogs.Container, opts.Info(),
-						slogs.Count, droppedLines,
-					)
-				}
-			}
-			continue
-		}
-
-		if droppedLines > 0 {
-			slog.Warn("Total log lines dropped during stream",
-				slogs.Container, opts.Info(),
-				slogs.Count, droppedLines,
-			)
-		}
-
-		if errors.Is(err, io.EOF) {
-			if len(bytes) > 0 {
-				// Emit trailing partial line before EOF
-				out <- opts.ToLogItem(tview.EscapeBytes(bytes))
-			}
-			slog.Debug("Log reader reached EOF", slogs.Container, opts.Info())
-			out <- opts.ToErrLogItem(fmt.Errorf("stream closed: %w for %s", err, opts.Info()))
-			return streamEOF
-		}
-
-		// Non-EOF error
-		slog.Debug("Log stream error, will retry connection",
-			slogs.Container, opts.Info(),
-			slogs.Error, fmt.Errorf("stream error: %w for %s", err, opts.Info()),
-		)
-		return streamError
-	}
-}
 
 // MetaFQN returns a fully qualified resource name.
 func MetaFQN(m *metav1.ObjectMeta) string {

@@ -7,7 +7,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/derailed/k9s/internal"
@@ -15,6 +17,7 @@ import (
 	"github.com/derailed/k9s/internal/color"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/dao"
+	"github.com/derailed/k9s/internal/logstream"
 	"github.com/derailed/k9s/internal/slogs"
 )
 
@@ -39,25 +42,32 @@ type LogsListener interface {
 	LogCanceled()
 }
 
+type entrySubscription struct {
+	active   atomic.Bool
+	callback func([]logstream.Entry)
+}
+
 // Log represents a resource logger.
 type Log struct {
-	factory      dao.Factory
-	lines        *dao.LogItems
-	listeners    []LogsListener
-	gvr          *client.GVR
-	logOptions   *dao.LogOptions
-	cancelFn     context.CancelFunc
-	mx           sync.RWMutex
-	filter       string
-	lastSent     int
-	flushTimeout time.Duration
+	entryListeners  []*entrySubscription
+	profilePodAdded bool
+	factory         dao.Factory
+	lines           *dao.LogItems
+	listeners       []LogsListener
+	gvr             *client.GVR
+	logOptions      *dao.LogOptions
+	cancelFn        context.CancelFunc
+	mx              sync.RWMutex
+	filter          string
+	lastSent        int
+	flushTimeout    time.Duration
 }
 
 // NewLog returns a new model.
 func NewLog(gvr *client.GVR, opts *dao.LogOptions, flushTimeout time.Duration) *Log {
 	return &Log{
 		gvr:          gvr,
-		logOptions:   opts,
+		logOptions:   opts.Clone(),
 		lines:        dao.NewLogItems(),
 		flushTimeout: flushTimeout,
 	}
@@ -68,7 +78,35 @@ func (l *Log) GVR() *client.GVR {
 }
 
 func (l *Log) LogOptions() *dao.LogOptions {
-	return l.logOptions
+	return l.LogOptionsSnapshot()
+}
+
+// LogOptionsSnapshot returns detached settings and workload/pod profile metadata.
+func (l *Log) LogOptionsSnapshot() *dao.LogOptions {
+	l.mx.RLock()
+	defer l.mx.RUnlock()
+	return l.logOptions.Clone()
+}
+
+// SubscribeEntries delivers raw records independently of legacy display filters.
+// Callbacks run outside model locks. An already running callback may finish after unsubscribe.
+func (l *Log) SubscribeEntries(callback func([]logstream.Entry)) func() {
+	sub := &entrySubscription{callback: callback}
+	sub.active.Store(true)
+	l.mx.Lock()
+	l.entryListeners = append(l.entryListeners, sub)
+	l.mx.Unlock()
+	return func() {
+		sub.active.Store(false)
+		l.mx.Lock()
+		defer l.mx.Unlock()
+		for i, s := range l.entryListeners {
+			if s == sub {
+				l.entryListeners = append(l.entryListeners[:i], l.entryListeners[i+1:]...)
+				break
+			}
+		}
+	}
 }
 
 // SinceSeconds returns since seconds option.
@@ -89,7 +127,9 @@ func (l *Log) IsHead() bool {
 
 // ToggleShowTimestamp toggles to logs timestamps.
 func (l *Log) ToggleShowTimestamp(b bool) {
+	l.mx.Lock()
 	l.logOptions.ShowTimestamp = b
+	l.mx.Unlock()
 	l.Refresh()
 }
 
@@ -102,12 +142,18 @@ func (l *Log) Head(ctx context.Context) {
 
 // SetSinceSeconds sets the logs retrieval time.
 func (l *Log) SetSinceSeconds(ctx context.Context, i int64) {
+	l.mx.Lock()
 	l.logOptions.SinceSeconds, l.logOptions.Head = i, false
+	l.mx.Unlock()
 	l.Restart(ctx)
 }
 
 // Configure sets logger configuration.
+//
+//nolint:gocritic // The configuration value API is established and copied under the model lock.
 func (l *Log) Configure(opts config.Logger) {
+	l.mx.Lock()
+	defer l.mx.Unlock()
 	l.logOptions.Lines = opts.TailCount
 	l.logOptions.SinceSeconds = opts.SinceSeconds
 	l.logOptions.LogBufferSize = opts.LogBufferSize
@@ -115,16 +161,22 @@ func (l *Log) Configure(opts config.Logger) {
 
 // GetPath returns resource path.
 func (l *Log) GetPath() string {
+	l.mx.RLock()
+	defer l.mx.RUnlock()
 	return l.logOptions.Path
 }
 
 // GetContainer returns the resource container if any or "" otherwise.
 func (l *Log) GetContainer() string {
+	l.mx.RLock()
+	defer l.mx.RUnlock()
 	return l.logOptions.Container
 }
 
 // HasDefaultContainer returns true if the pod has a default container, false otherwise.
 func (l *Log) HasDefaultContainer() bool {
+	l.mx.RLock()
+	defer l.mx.RUnlock()
 	return l.logOptions.DefaultContainer != ""
 }
 
@@ -146,9 +198,7 @@ func (l *Log) Clear() {
 // Refresh refreshes the logs.
 func (l *Log) Refresh() {
 	l.fireLogCleared()
-	ll := make([][]byte, l.lines.Len())
-	l.lines.Render(0, l.logOptions.ShowTimestamp, ll)
-	l.fireLogChanged(ll)
+	l.fireLogBuffChanged()
 }
 
 // Restart restarts the logger.
@@ -179,9 +229,7 @@ func (l *Log) Set(lines *dao.LogItems) {
 	l.mx.Unlock()
 
 	l.fireLogCleared()
-	ll := make([][]byte, l.lines.Len())
-	l.lines.Render(0, l.logOptions.ShowTimestamp, ll)
-	l.fireLogChanged(ll)
+	l.fireLogBuffChanged()
 }
 
 // ClearFilter resets the log filter if any.
@@ -191,9 +239,7 @@ func (l *Log) ClearFilter() {
 	l.mx.Unlock()
 
 	l.fireLogCleared()
-	ll := make([][]byte, l.lines.Len())
-	l.lines.Render(0, l.logOptions.ShowTimestamp, ll)
-	l.fireLogChanged(ll)
+	l.fireLogBuffChanged()
 }
 
 // Filter filters the model using either fuzzy or regexp.
@@ -203,7 +249,7 @@ func (l *Log) Filter(q string) {
 	l.mx.Unlock()
 
 	l.fireLogCleared()
-	l.fireLogBuffChanged(0)
+	l.fireLogBuffChanged()
 }
 
 func (l *Log) cancel() {
@@ -227,13 +273,23 @@ func (l *Log) load(ctx context.Context) error {
 
 	l.cancel()
 	ctx = context.WithValue(ctx, internal.KeyFactory, l.factory)
-	ctx, l.cancelFn = context.WithCancel(ctx)
-
-	cc, err := loggable.TailLogs(ctx, l.logOptions)
+	var stop context.CancelFunc
+	ctx, stop = context.WithCancel(ctx)
+	l.mx.Lock()
+	l.cancelFn = stop
+	opts := l.logOptions.Clone()
+	l.mx.Unlock()
+	cc, err := loggable.TailLogs(ctx, opts)
+	l.mx.Lock()
+	l.logOptions.WorkloadKind, l.logOptions.WorkloadName = opts.WorkloadKind, opts.WorkloadName
+	l.logOptions.Labels, l.logOptions.Annotations = maps.Clone(opts.Labels), maps.Clone(opts.Annotations)
+	l.profilePodAdded = false
+	l.logOptions.SingleContainer, l.logOptions.DefaultContainer = opts.SingleContainer, opts.DefaultContainer
+	l.mx.Unlock()
 	if err != nil {
 		slog.Error("Tail logs failed", slogs.Error, err)
 		l.cancel()
-		l.fireLogError(err)
+		return err
 	}
 	for _, c := range cc {
 		go l.updateLogs(ctx, c)
@@ -248,46 +304,94 @@ func (l *Log) Append(line *dao.LogItem) {
 		return
 	}
 	l.mx.Lock()
-	defer l.mx.Unlock()
-	l.logOptions.SinceTime = line.GetTimestamp()
-	if l.lines.Len() < int(l.logOptions.Lines) {
-		l.lines.Add(line)
-		return
+	if !l.profilePodAdded && line.Source.Pod != "" && (len(line.Labels) > 0 || len(line.Annotations) > 0) {
+		l.profilePodAdded = true
+		if l.logOptions.Labels == nil {
+			l.logOptions.Labels = make(map[string]string)
+		}
+		if l.logOptions.Annotations == nil {
+			l.logOptions.Annotations = make(map[string]string)
+		}
+		for k, v := range line.Labels {
+			if _, ok := l.logOptions.Labels[k]; !ok {
+				l.logOptions.Labels[k] = v
+			}
+		}
+		for k, v := range line.Annotations {
+			if _, ok := l.logOptions.Annotations[k]; !ok {
+				l.logOptions.Annotations[k] = v
+			}
+		}
 	}
-	l.lines.Shift(line)
-	l.lastSent--
-	if l.lastSent < 0 {
-		l.lastSent = 0
+	capacity := int(l.logOptions.Lines)
+	if capacity <= 0 {
+		capacity = 10000
+	}
+	if capacity > 100000 {
+		capacity = 100000
+	}
+	if l.lines.Len() < capacity {
+		l.lines.Add(line)
+	} else {
+		l.lines.Shift(line)
+		if l.lastSent > 0 {
+			l.lastSent--
+		}
+	}
+	subscribers := append([]*entrySubscription(nil), l.entryListeners...)
+	l.mx.Unlock()
+	for _, sub := range subscribers {
+		if sub.active.Load() {
+			sub.callback([]logstream.Entry{line.Entry()})
+		}
 	}
 }
 
-// Notify fires of notifications to the listeners.
+// Notify snapshots state before calling listeners, allowing reentrant UI actions.
 func (l *Log) Notify() {
 	l.mx.Lock()
-	defer l.mx.Unlock()
-
+	var lines [][]byte
+	var err error
 	if l.lastSent < l.lines.Len() {
-		l.fireLogBuffChanged(l.lastSent)
+		lines, err = l.logBuffer(l.lastSent)
 		l.lastSent = l.lines.Len()
+	}
+	l.mx.Unlock()
+	if err != nil {
+		l.fireLogError(err)
+	} else if len(lines) > 0 {
+		l.fireLogChanged(lines)
 	}
 }
 
 // ToggleAllContainers toggles to show all containers logs.
 func (l *Log) ToggleAllContainers(ctx context.Context) {
+	l.mx.Lock()
 	l.logOptions.ToggleAllContainers()
+	l.mx.Unlock()
 	l.Restart(ctx)
 }
 
 func (l *Log) updateLogs(ctx context.Context, c dao.LogChan) {
+	duration := l.flushTimeout
+	if duration <= 0 {
+		duration = 100 * time.Millisecond
+	}
+	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
 	for {
 		select {
 		case item, ok := <-c:
+			if ctx.Err() != nil {
+				return
+			}
 			if !ok {
-				l.Append(item)
 				l.Notify()
+				l.fireCanceled()
 				return
 			}
 			if item == dao.ItemEOF {
+				l.Notify()
 				l.fireCanceled()
 				return
 			}
@@ -299,7 +403,7 @@ func (l *Log) updateLogs(ctx context.Context, c dao.LogChan) {
 			if overflow {
 				l.Notify()
 			}
-		case <-time.After(l.flushTimeout):
+		case <-ticker.C:
 			l.Notify()
 		case <-ctx.Done():
 			return
@@ -362,54 +466,82 @@ func (l *Log) applyFilter(index int, q string) ([][]byte, error) {
 	return filtered, nil
 }
 
-func (l *Log) fireLogBuffChanged(index int) {
-	ll := make([][]byte, l.lines.Len()-index)
-	if l.filter == "" {
-		l.lines.Render(index, l.logOptions.ShowTimestamp, ll)
-	} else {
-		ff, err := l.applyFilter(index, l.filter)
-		if err != nil {
-			l.fireLogError(err)
-			return
-		}
-		ll = ff
+// logBuffer requires the model lock.
+func (l *Log) logBuffer(index int) ([][]byte, error) {
+	if index > l.lines.Len() {
+		index = l.lines.Len()
 	}
-
-	if len(ll) > 0 {
-		l.fireLogChanged(ll)
+	if l.filter != "" {
+		return l.applyFilter(index, l.filter)
 	}
+	lines := make([][]byte, l.lines.Len()-index)
+	l.lines.Render(index, l.logOptions.ShowTimestamp, lines)
+	return lines, nil
+}
+func (l *Log) fireLogBuffChanged() {
+	l.mx.Lock()
+	lines, err := l.logBuffer(0)
+	l.mx.Unlock()
+	if err != nil {
+		l.fireLogError(err)
+	} else if len(lines) > 0 {
+		l.fireLogChanged(lines)
+	}
+}
+func (l *Log) listenerSnapshot() []LogsListener {
+	l.mx.RLock()
+	defer l.mx.RUnlock()
+	return append([]LogsListener(nil), l.listeners...)
 }
 
 func (l *Log) fireLogResume() {
-	for _, lis := range l.listeners {
+	for _, lis := range l.listenerSnapshot() {
 		lis.LogResume()
 	}
 }
 
 func (l *Log) fireCanceled() {
-	for _, lis := range l.listeners {
+	for _, lis := range l.listenerSnapshot() {
 		lis.LogCanceled()
 	}
 }
 
 func (l *Log) fireLogError(err error) {
-	for _, lis := range l.listeners {
+	for _, lis := range l.listenerSnapshot() {
 		lis.LogFailed(err)
 	}
 }
 
 func (l *Log) fireLogChanged(lines [][]byte) {
-	for _, lis := range l.listeners {
+	for _, lis := range l.listenerSnapshot() {
 		lis.LogChanged(lines)
 	}
 }
 
 func (l *Log) fireLogCleared() {
-	var ll []LogsListener
-	l.mx.RLock()
-	ll = l.listeners
-	l.mx.RUnlock()
-	for _, lis := range ll {
+	for _, lis := range l.listenerSnapshot() {
 		lis.LogCleared()
 	}
+}
+
+// ConfigureSource sets provenance before Start. It does not restart an active session.
+func (l *Log) ConfigureSource(contextName, clusterName string, events bool) {
+	l.mx.Lock()
+	defer l.mx.Unlock()
+	l.logOptions.Context, l.logOptions.Cluster, l.logOptions.Events = contextName, clusterName, events
+}
+
+// SetSinceTime restarts at an inclusive runtime timestamp. Previous remains unchanged.
+func (l *Log) SetSinceTime(ctx context.Context, value string) error {
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return fmt.Errorf("invalid runtime timestamp: %w", err)
+	}
+	l.mx.Lock()
+	l.logOptions.SinceTime = parsed.Format(time.RFC3339Nano)
+	l.logOptions.SinceSeconds = 0
+	l.logOptions.Head = false
+	l.mx.Unlock()
+	l.Restart(ctx)
+	return nil
 }

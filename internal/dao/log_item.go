@@ -5,6 +5,9 @@ package dao
 
 import (
 	"bytes"
+	"time"
+
+	"github.com/derailed/k9s/internal/logstream"
 )
 
 // LogChan represents a channel for logs.
@@ -14,10 +17,17 @@ var ItemEOF = new(LogItem)
 
 // LogItem represents a container log line.
 type LogItem struct {
-	Pod, Container  string
-	SingleContainer bool
-	Bytes           []byte
-	IsError         bool
+	Sensitive           bool
+	Raw                 []byte
+	Source              logstream.Source
+	RuntimeTime         time.Time
+	Marker              *logstream.Marker
+	Truncated           bool
+	Labels, Annotations map[string]string
+	Pod, Container      string
+	SingleContainer     bool
+	Bytes               []byte
+	IsError             bool
 }
 
 // NewLogItem returns a new item.
@@ -58,17 +68,20 @@ func (l *LogItem) Info() string {
 
 // IsEmpty checks if the entry is empty.
 func (l *LogItem) IsEmpty() bool {
-	return len(l.Bytes) == 0
+	return len(l.Bytes) == 0 && len(l.Raw) == 0 && l.Marker == nil
 }
 
 // Size returns the size of the item.
 func (l *LogItem) Size() int {
-	return 100 + len(l.Bytes) + len(l.Pod) + len(l.Container)
+	return 100 + len(l.Raw) + len(l.Bytes) + len(l.Pod) + len(l.Container)
 }
 
 // Render returns a log line as string.
 func (l *LogItem) Render(paint string, showTime bool, bb *bytes.Buffer) {
 	index := bytes.Index(l.Bytes, []byte{' '})
+	if l.Raw != nil && l.RuntimeTime.IsZero() {
+		index = -1
+	}
 	if showTime && index > 0 {
 		bb.WriteString("[gray::b]")
 		bb.Write(l.Bytes[:index])
@@ -97,4 +110,11 @@ func (l *LogItem) Render(paint string, showTime bool, bb *bytes.Buffer) {
 	} else {
 		bb.Write(l.Bytes)
 	}
+}
+
+// Entry returns raw structured data without terminal presentation markup.
+func (l *LogItem) Entry() logstream.Entry {
+	e := logstream.Parse(l.Source, l.RuntimeTime, string(l.Raw))
+	e.Marker, e.Truncated, e.Sensitive = l.Marker, l.Truncated, l.Sensitive
+	return e
 }

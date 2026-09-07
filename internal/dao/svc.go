@@ -36,6 +36,8 @@ func (s *Service) TailLogs(ctx context.Context, opts *LogOptions) ([]LogChan, er
 		return nil, fmt.Errorf("no valid selector found on Service %s", opts.Path)
 	}
 
+	opts.WorkloadKind, opts.WorkloadName = "Service", svc.Name
+	opts.Labels, opts.Annotations = svc.Labels, svc.Annotations
 	return podLogs(ctx, svc.Spec.Selector, opts)
 }
 

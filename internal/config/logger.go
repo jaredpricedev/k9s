@@ -19,28 +19,46 @@ const (
 
 // Logger tracks logger options.
 type Logger struct {
-	TailCount         int64 `json:"tail" yaml:"tail"`
-	BufferSize        int   `json:"buffer" yaml:"buffer"`
-	SinceSeconds      int64 `json:"sinceSeconds" yaml:"sinceSeconds"`
-	TextWrap          bool  `json:"textWrap" yaml:"textWrap"`
-	DisableAutoscroll bool  `json:"disableAutoscroll" yaml:"disableAutoscroll"`
-	ColumnLock        bool  `json:"columnLock" yaml:"columnLock"`
-	ShowTime          bool  `json:"showTime" yaml:"showTime"`
-	LogBufferSize     int   `json:"logBufferSize" yaml:"logBufferSize"`
+	NoiseAppLabels          []string `json:"noiseAppLabels,omitempty" yaml:"noiseAppLabels,omitempty"`
+	RecordingSessions       int      `json:"recordingSessions,omitempty" yaml:"recordingSessions,omitempty"`
+	RecordingRetentionHours int      `json:"recordingRetentionHours,omitempty" yaml:"recordingRetentionHours,omitempty"`
+	RecordingMaxMiB         int      `json:"recordingMaxMiB,omitempty" yaml:"recordingMaxMiB,omitempty"`
+	TailCount               int64    `json:"tail" yaml:"tail"`
+	BufferSize              int      `json:"buffer" yaml:"buffer"`
+	SinceSeconds            int64    `json:"sinceSeconds" yaml:"sinceSeconds"`
+	TextWrap                bool     `json:"textWrap" yaml:"textWrap"`
+	DisableAutoscroll       bool     `json:"disableAutoscroll" yaml:"disableAutoscroll"`
+	ColumnLock              bool     `json:"columnLock" yaml:"columnLock"`
+	ShowTime                bool     `json:"showTime" yaml:"showTime"`
+	LogBufferSize           int      `json:"logBufferSize" yaml:"logBufferSize"`
 }
 
 // NewLogger returns a new instance.
 func NewLogger() Logger {
 	return Logger{
-		TailCount:     DefaultLoggerTailCount,
-		BufferSize:    MaxLogThreshold,
-		SinceSeconds:  DefaultSinceSeconds,
-		LogBufferSize: DefaultLogBufferSize,
+		RecordingSessions:       8,
+		RecordingRetentionHours: 24,
+		RecordingMaxMiB:         128,
+		TailCount:               DefaultLoggerTailCount,
+		BufferSize:              MaxLogThreshold,
+		SinceSeconds:            DefaultSinceSeconds,
+		LogBufferSize:           DefaultLogBufferSize,
 	}
 }
 
 // Validate checks thresholds and make sure we're cool. If not use defaults.
+//
+//nolint:gocritic // Validation intentionally returns a corrected value without mutating the caller.
 func (l Logger) Validate() Logger {
+	if l.RecordingSessions <= 0 || l.RecordingSessions > 64 {
+		l.RecordingSessions = 8
+	}
+	if l.RecordingRetentionHours <= 0 || l.RecordingRetentionHours > 8760 {
+		l.RecordingRetentionHours = 24
+	}
+	if l.RecordingMaxMiB <= 0 || l.RecordingMaxMiB > 1024 {
+		l.RecordingMaxMiB = 128
+	}
 	if l.TailCount <= 0 {
 		l.TailCount = DefaultLoggerTailCount
 	}

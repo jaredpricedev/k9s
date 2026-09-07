@@ -66,11 +66,13 @@ func (d *Deployment) TailLogs(ctx context.Context, opts *LogOptions) ([]LogChan,
 	if err != nil {
 		return nil, err
 	}
-	if dp.Spec.Selector == nil || len(dp.Spec.Selector.MatchLabels) == 0 {
+	if dp.Spec.Selector == nil || (len(dp.Spec.Selector.MatchLabels) == 0 && len(dp.Spec.Selector.MatchExpressions) == 0) {
 		return nil, fmt.Errorf("no valid selector found on deployment: %s", opts.Path)
 	}
 
-	return podLogs(ctx, dp.Spec.Selector.MatchLabels, opts)
+	opts.WorkloadKind, opts.WorkloadName = "Deployment", dp.Name
+	opts.Labels, opts.Annotations = dp.Labels, dp.Annotations
+	return selectorPodLogs(ctx, dp.Spec.Selector, opts)
 }
 
 // Pod returns a pod victim by name.

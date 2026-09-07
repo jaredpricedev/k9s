@@ -80,11 +80,13 @@ func (s *StatefulSet) TailLogs(ctx context.Context, opts *LogOptions) ([]LogChan
 	if err != nil {
 		return nil, errors.New("expecting StatefulSet resource")
 	}
-	if sts.Spec.Selector == nil || len(sts.Spec.Selector.MatchLabels) == 0 {
+	if sts.Spec.Selector == nil || (len(sts.Spec.Selector.MatchLabels) == 0 && len(sts.Spec.Selector.MatchExpressions) == 0) {
 		return nil, fmt.Errorf("no valid selector found on statefulset: %s", opts.Path)
 	}
 
-	return podLogs(ctx, sts.Spec.Selector.MatchLabels, opts)
+	opts.WorkloadKind, opts.WorkloadName = "StatefulSet", sts.Name
+	opts.Labels, opts.Annotations = sts.Labels, sts.Annotations
+	return selectorPodLogs(ctx, sts.Spec.Selector, opts)
 }
 
 // Pod returns a pod victim by name.

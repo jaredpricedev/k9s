@@ -25,13 +25,16 @@ func TestUpdateLogs(t *testing.T) {
 	c := make(dao.LogChan, 2)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go m.updateLogs(ctx, c)
+	done := make(chan struct{})
+	go func() { defer close(done); m.updateLogs(ctx, c) }()
 
 	for i := range 2 * size {
 		c <- dao.NewLogItemFromString("line" + strconv.Itoa(i))
 	}
-	time.Sleep(2 * time.Second)
-	assert.Equal(t, size, v.count)
+	close(c)
+	<-done
+	assert.GreaterOrEqual(t, v.count, size)
+	assert.LessOrEqual(t, v.count, 2*size)
 }
 
 func BenchmarkUpdateLogs(b *testing.B) {
