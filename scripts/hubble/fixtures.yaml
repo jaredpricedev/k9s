@@ -1,0 +1,72 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hubble-test
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server
+  namespace: hubble-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: server}
+  template:
+    metadata:
+      labels: {app: server}
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: server
+  namespace: hubble-test
+spec:
+  selector: {app: server}
+  ports:
+  - port: 80
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: allowed
+  namespace: hubble-test
+  labels: {role: allowed}
+spec:
+  containers:
+  - name: curl
+    image: curlimages/curl:8.12.1
+    command: [sh, -c, 'while true; do curl -s --max-time 2 http://server >/dev/null; curl -s --max-time 2 http://1.1.1.1 >/dev/null; sleep 1; done']
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: denied
+  namespace: hubble-test
+  labels: {role: denied}
+spec:
+  containers:
+  - name: curl
+    image: curlimages/curl:8.12.1
+    command: [sh, -c, 'while true; do curl -s --max-time 2 http://server >/dev/null; sleep 1; done']
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: server-allow-selected
+  namespace: hubble-test
+spec:
+  podSelector:
+    matchLabels: {app: server}
+  policyTypes: [Ingress]
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels: {role: allowed}
+    ports:
+    - protocol: TCP
+      port: 80

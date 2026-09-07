@@ -42,3 +42,35 @@ func TestHubbleMalformedFilterPreservesView(t *testing.T) {
 		t.Fatal("previous filter lost")
 	}
 }
+
+func TestHubbleDetailRefreshPreservesScroll(t *testing.T) {
+	w := newHubbleView(hubble.Scope{}, false)
+	w.mode = "detail"
+	w.frozen = true
+	w.render()
+	w.detail.ScrollTo(4, 0)
+	w.render()
+	row, _ := w.detail.GetScrollOffset()
+	if row != 4 {
+		t.Fatalf("detail refresh reset scroll: %d", row)
+	}
+}
+
+func TestHubbleHelpReturnsToStatus(t *testing.T) {
+	w := newHubbleView(hubble.Scope{}, true)
+	w.key(tcell.NewEventKey(tcell.KeyRune, '?', tcell.ModNone))
+	w.key(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+	if w.mode != "status" {
+		t.Fatal("status screen lost after help", w.mode)
+	}
+}
+
+func TestHubbleStopCancelsCollectorWhileLifecycleStopped(t *testing.T) {
+	w := newHubbleView(hubble.Scope{}, false)
+	called := false
+	w.cancel = func() { called = true }
+	w.Stop()
+	if !called || w.cancel != nil {
+		t.Fatal("collector leaked after second stop")
+	}
+}

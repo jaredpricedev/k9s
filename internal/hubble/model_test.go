@@ -47,3 +47,43 @@ func TestSafeProjectionAndExternalPeers(t *testing.T) {
 		t.Fatal("invented L7 visibility")
 	}
 }
+
+func TestExactClusterScope(t *testing.T) {
+	s := Scope{Pods: []string{"ns/a"}, Cluster: "local"}
+	if s.Includes(Event{Source: Peer{Pod: "ns/ab", Cluster: "local"}}) || s.Includes(Event{Source: Peer{Pod: "ns/a", Cluster: "remote"}}) {
+		t.Fatal("scope leaked prefix or remote cluster")
+	}
+	if !s.Includes(Event{Destination: Peer{Pod: "ns/a", Cluster: "local"}}) {
+		t.Fatal("reverse direction missing")
+	}
+	q, _ := Compile("protocol=tcp port=443 ip=1.1.1.1")
+	filters := Filters(s, q)
+	if len(filters) != 8 {
+		t.Fatal("missing bidirectional OR expansion", len(filters))
+	}
+	for _, f := range filters {
+		if len(f.SourcePod) == 0 && len(f.DestinationPod) == 0 {
+			t.Fatal("lost scope")
+		}
+		if len(f.Protocol) == 0 {
+			t.Fatal("lost protocol")
+		}
+	}
+}
+
+func TestReportedNonPodIdentityAndPolicyEvidence(t *testing.T) {
+	for _, tc := range []struct {
+		labels, names []string
+		kind          string
+	}{{[]string{"reserved:kube-apiserver"}, nil, "kube-apiserver"}, {nil, []string{"example.com"}, "FQDN"}, {nil, nil, "external IP"}} {
+		f := &flow.Flow{Destination: &flow.Endpoint{Labels: tc.labels}, DestinationNames: tc.names, IP: &flow.IP{Destination: "203.0.113.1"}}
+		e := Normalize(f, "live")
+		if e.Destination.Kind != tc.kind || e.Policy != "Not reported" {
+			t.Fatal(e)
+		}
+		f.IngressDeniedBy = []*flow.Policy{{Name: "deny", Namespace: "ns", Kind: "NetworkPolicy"}}
+		if Normalize(f, "live").Policy != "ingress denied: NetworkPolicy ns/deny" {
+			t.Fatal("lost reported attribution")
+		}
+	}
+}

@@ -266,3 +266,10 @@ branch. Generated THIRD_PARTY_LICENSES is assembled separately for distributions
 - `scripts/flux-inline-demo.py`
 - `scripts/perf-demo.py`
 - `scripts/test_collect_licenses.py`
+
+## Native Cilium/Hubble integration
+
+Added a native Relay gRPC client, per-context TLS configuration, peers and
+conversation inspection, safe event detail, pod jumps, structured filtering,
+reported coverage/loss, and stable frozen datasets. See docs/hubble.md for the
+first increment's behavior, verification, and visibility limits.

@@ -66,13 +66,14 @@ func Compile(s string) (Query, error) {
 
 // Scope uses exact local matching to compensate for Hubble's pod-prefix filters.
 type Scope struct {
-	Pods  []string
-	Title string
+	Cluster string
+	Pods    []string
+	Title   string
 }
 
 func (s Scope) Contains(p Peer) bool {
 	for _, pod := range s.Pods {
-		if pod == p.Pod {
+		if pod == p.Pod && (s.Cluster == "" || s.Cluster == p.Cluster) {
 			return true
 		}
 	}
@@ -99,6 +100,14 @@ func Filters(s Scope, q Query) []*flow.FlowFilter {
 	var out []*flow.FlowFilter
 	for _, b := range base {
 		b = proto.Clone(b).(*flow.FlowFilter)
+		if s.Cluster != "" {
+			if len(b.SourcePod) > 0 {
+				b.SourceClusterName = []string{s.Cluster}
+			}
+			if len(b.DestinationPod) > 0 {
+				b.DestinationClusterName = []string{s.Cluster}
+			}
+		}
 		b.Verdict = q.Filter.GetVerdict()
 		b.Protocol = q.Filter.GetProtocol()
 		variants := []*flow.FlowFilter{b}

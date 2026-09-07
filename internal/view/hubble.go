@@ -25,6 +25,9 @@ type hubblePeerRow struct {
 
 // All view fields belong to the draw goroutine. Only Session ingests concurrently.
 type HubbleView struct {
+	statusOnly bool
+	started    bool
+	helpReturn string
 	*tview.Flex
 	app                      *App
 	table                    *tview.Table
@@ -53,7 +56,7 @@ type HubbleView struct {
 var _ model.Component = (*HubbleView)(nil)
 
 func newHubbleView(scope hubble.Scope, statusOnly bool) *HubbleView {
-	w := &HubbleView{Flex: tview.NewFlex().SetDirection(tview.FlexRow), scope: scope, mode: "peers", table: tview.NewTable(), detail: tview.NewTextView(), status: tview.NewTextView(), prompt: tview.NewInputField(), pages: tview.NewPages()}
+	w := &HubbleView{statusOnly: statusOnly, Flex: tview.NewFlex().SetDirection(tview.FlexRow), scope: scope, mode: "peers", table: tview.NewTable(), detail: tview.NewTextView(), status: tview.NewTextView(), prompt: tview.NewInputField(), pages: tview.NewPages()}
 	if statusOnly {
 		w.mode = "status"
 	}
@@ -77,7 +80,7 @@ func newHubbleView(scope hubble.Scope, statusOnly bool) *HubbleView {
 		if key == tcell.KeyEnter || key == tcell.KeyEscape {
 			w.prompting = false
 			w.RemoveItem(w.prompt)
-			w.focus(w.table)
+			w.focusContent()
 		}
 	})
 	return w
@@ -111,6 +114,10 @@ func (w *HubbleView) Init(ctx context.Context) error {
 	return nil
 }
 func (w *HubbleView) Start() {
+	if w.started {
+		return
+	}
+	w.started = true
 	w.originalCapture = w.app.GetInputCapture()
 	w.app.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
 		if w.prompting {
@@ -134,13 +141,15 @@ func (w *HubbleView) Start() {
 	w.restart()
 }
 func (w *HubbleView) Stop() {
+	wasStarted := w.started
+	w.started = false
 	w.generation++
 	if w.cancel != nil {
 		w.cancel()
 		w.cancel = nil
 	}
 	w.freeze()
-	if w.app != nil {
+	if w.app != nil && wasStarted {
 		w.app.SetInputCapture(w.originalCapture)
 	}
 }
@@ -155,7 +164,7 @@ func (w *HubbleView) restart() {
 	generation := w.generation
 	ctx, cancel := context.WithCancel(context.Background())
 	w.cancel = cancel
-	w.notice = "Connecting; history/live handoff and reconnect may have gaps"
+	w.notice = "History/live handoff and reconnect may have gaps"
 	// Resolution and connection never run on the draw goroutine.
 	resolve := w.resolve
 	scope := w.scope
@@ -178,13 +187,16 @@ func (w *HubbleView) restart() {
 				w.render()
 				return
 			}
+			scope.Cluster = cfg.ClusterName
 			w.scope = scope
 			w.session = hubble.NewSession(cfg, scope, q, 10000)
 			w.displayed = nil
 			w.frozen = false
 			w.peer = hubble.Peer{}
 			w.rows = nil
-			if w.mode != "status" {
+			if w.statusOnly {
+				w.mode = "status"
+			} else {
 				w.mode = "peers"
 			}
 			session := w.session
@@ -256,7 +268,7 @@ func (w *HubbleView) key(e *tcell.EventKey) *tcell.EventKey {
 			w.mode = "peers"
 			w.table.Select(w.peerRow, 0)
 		case "help":
-			w.mode = "peers"
+			w.mode = w.helpReturn
 		default:
 			if w.app != nil {
 				return w.app.PrevCmd(e)
@@ -264,7 +276,7 @@ func (w *HubbleView) key(e *tcell.EventKey) *tcell.EventKey {
 			return nil
 		}
 		w.render()
-		w.focus(w.table)
+		w.focusContent()
 		return nil
 	}
 	if e.Key() == tcell.KeyEnter {
@@ -293,6 +305,10 @@ func (w *HubbleView) key(e *tcell.EventKey) *tcell.EventKey {
 	}
 	switch e.Rune() {
 	case 's':
+		if w.app != nil && w.cancel == nil {
+			w.restart()
+			return nil
+		}
 		if w.mode == "status" {
 			return nil
 		}
@@ -300,7 +316,7 @@ func (w *HubbleView) key(e *tcell.EventKey) *tcell.EventKey {
 			w.frozen = false
 			if w.mode == "detail" {
 				w.mode = "conversation"
-				w.focus(w.table)
+				w.focusContent()
 			}
 		} else {
 			w.freeze()
@@ -335,6 +351,9 @@ func (w *HubbleView) key(e *tcell.EventKey) *tcell.EventKey {
 		w.jump(p)
 		return nil
 	case '?':
+		if w.mode != "help" {
+			w.helpReturn = w.mode
+		}
 		w.freeze()
 		w.mode = "help"
 		w.render()
@@ -369,6 +388,7 @@ func (w *HubbleView) jump(p hubble.Peer) {
 	}
 }
 func (w *HubbleView) render() {
+	w.SetTitle(" Cilium / Hubble | " + tview.Escape(hubble.Clean(w.scope.Title)) + " | " + w.mode + " ")
 	st := hubble.Status{Phase: "not connected"}
 	var evicted uint64
 	if w.session != nil {
@@ -391,12 +411,12 @@ func (w *HubbleView) render() {
 	if w.mode == "detail" {
 		w.pages.SwitchToPage("detail")
 		e := w.selected
-		w.detail.SetText(fmt.Sprintf("Observed event %d — %s\n%s\nSource: %s\nDestination: %s\nNode: %s\n%s %d -> %d\nVerdict: %s\nDrop reason: %s\nL7: %s\nPolicy evidence: %s", e.ID, e.Origin, e.Time.Format(time.RFC3339Nano), e.Source, e.Destination, e.Node, e.Protocol, e.SourcePort, e.DestinationPort, e.Verdict, e.DropReason, e.L7, e.Policy))
+		w.setDetail(fmt.Sprintf("Observed event %d — %s\n%s\nSource: %s\nDestination: %s\nNode: %s\n%s %d -> %d\nVerdict: %s\nDrop reason: %s\nL7: %s\nPolicy evidence: %s", e.ID, e.Origin, e.Time.Format(time.RFC3339Nano), e.Source, e.Destination, e.Node, e.Protocol, e.SourcePort, e.DestinationPort, e.Verdict, e.DropReason, e.L7, e.Policy))
 		return
 	}
 	if w.mode == "help" {
 		w.pages.SwitchToPage("detail")
-		w.detail.SetText("Hubble network inspection\n\nPeers count observed events in the retained dataset, not connections or requests.\nEnter freezes peers, opens both directions, then event detail. Navigation also freezes.\ns explicitly resumes. Incoming traffic cannot evict the frozen snapshot.\n1 / 2 jump to reported source / destination pods. Esc backtracks.\nr reconnects and replaces the dataset; history/live handoff can have gaps.\n\n/ plain text searches locally. Structured AND filters:\nverdict=dropped protocol=tcp port=443 ip=10.0.0.0/8\nSupported fields: verdict, protocol, port (either end), ip (either end).\nMalformed expressions leave the prior filter intact. Valid structured changes restart observation.\n\nMissing flows do not prove traffic was allowed or denied. Coverage is Relay-reported.\nNo L7 record means visibility unknown. DNS success does not prove policy authorization.\nL7 payloads are discarded; export, capture and policy changes are unavailable.")
+		w.setDetail("Hubble network inspection\n\nPeers count observed events in the retained dataset, not connections or requests.\nEnter freezes peers, opens both directions, then event detail. Navigation also freezes.\ns explicitly resumes. Incoming traffic cannot evict the frozen snapshot.\n1 / 2 jump to reported source / destination pods. Esc backtracks.\nr reconnects and replaces the dataset; history/live handoff can have gaps.\n\n/ plain text searches locally. Structured AND filters:\nverdict=dropped protocol=tcp port=443 ip=10.0.0.0/8\nSupported fields: verdict, protocol, port (either end), ip (either end).\nMalformed expressions leave the prior filter intact. Valid structured changes restart observation.\n\nMissing flows do not prove traffic was allowed or denied. Coverage is Relay-reported.\nNo L7 record means visibility unknown. DNS success does not prove policy authorization.\nL7 payloads are discarded; export, capture and policy changes are unavailable.")
 		return
 	}
 	w.pages.SwitchToPage("table")
@@ -480,4 +500,18 @@ func (w *HubbleView) render() {
 	w.table.Select(row, col)
 	w.table.SetOffset(offR, offC)
 	w.SetTitle(" Cilium / Hubble | " + tview.Escape(hubble.Clean(w.scope.Title)) + " | " + w.mode + " ")
+}
+
+func (w *HubbleView) setDetail(text string) {
+	if w.detail.GetText(false) != text {
+		w.detail.SetText(text)
+	}
+}
+
+func (w *HubbleView) focusContent() {
+	if w.mode == "detail" || w.mode == "help" {
+		w.focus(w.detail)
+	} else {
+		w.focus(w.table)
+	}
 }

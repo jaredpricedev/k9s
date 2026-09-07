@@ -422,7 +422,7 @@ func (a *App) refreshCluster(context.Context) error {
 			atomic.StoreInt32(&a.conRetry, 0)
 			a.Status(model.FlashInfo, "K8s connectivity OK")
 			if c != nil {
-				c.Start()
+				a.connectivityComponent(c, true)
 			}
 		} else {
 			a.ClearStatus(true)
@@ -430,7 +430,7 @@ func (a *App) refreshCluster(context.Context) error {
 		a.factory.ValidatePortForwards()
 	} else if c != nil {
 		atomic.AddInt32(&a.conRetry, 1)
-		c.Stop()
+		a.connectivityComponent(c, false)
 	}
 
 	count, maxConnRetry := atomic.LoadInt32(&a.conRetry), a.Config.K9s.MaxConnRetry
@@ -838,4 +838,27 @@ func (a *App) clusterInfo() *ClusterInfo {
 
 func (a *App) statusIndicator() *ui.StatusIndicator {
 	return a.Views()["statusIndicator"].(*ui.StatusIndicator)
+}
+
+// Hubble presentation state is owned by the draw goroutine. The connectivity
+// poller is not; ignore queued work if navigation has changed the top component.
+func (a *App) connectivityComponent(c model.Component, connected bool) {
+	if _, ok := c.(*HubbleView); ok {
+		a.QueueUpdateDraw(func() {
+			if a.Content.Top() != c {
+				return
+			}
+			if atomic.LoadInt32(&a.conRetry) > 0 {
+				c.Stop()
+			} else {
+				c.Start()
+			}
+		})
+		return
+	}
+	if connected {
+		c.Start()
+	} else {
+		c.Stop()
+	}
 }

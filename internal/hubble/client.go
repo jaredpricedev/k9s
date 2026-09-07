@@ -93,7 +93,12 @@ func (s *Session) Status() Status {
 }
 func (s *Session) update(f func(*Status)) { s.mu.Lock(); defer s.mu.Unlock(); f(&s.status) }
 func (s *Session) fail(err error) {
-	s.update(func(v *Status) { v.Phase = "disconnected"; v.Error = Clean(err.Error()) })
+	s.update(func(v *Status) {
+		v.Phase = "disconnected"
+		v.CoverageKnown = false
+		v.Nodes = nil
+		v.Error = Clean(err.Error())
+	})
 }
 func (s *Session) poll(ctx context.Context, c observer.ObserverClient) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -105,6 +110,9 @@ func (s *Session) poll(ctx context.Context, c observer.ObserverClient) {
 	}
 	nodes, nerr := c.GetNodes(ctx, &observer.GetNodesRequest{})
 	s.update(func(v *Status) {
+		if v.Phase == "disconnected" || ctx.Err() != nil {
+			return
+		}
 		v.Version = Clean(status.GetVersion())
 		v.CoverageKnown = status.NumConnectedNodes != nil && status.NumUnavailableNodes != nil
 		v.Connected = status.GetNumConnectedNodes().GetValue()
@@ -124,6 +132,12 @@ func (s *Session) poll(ctx context.Context, c observer.ObserverClient) {
 // Run owns one connection. Explicit retry starts a new session and exposes the
 // observation gap instead of implying lossless reconnect or durable history.
 func (s *Session) Run(ctx context.Context) {
+	parentContext := ctx
+	defer func() {
+		if parentContext.Err() != nil {
+			s.update(func(v *Status) { v.Phase = "stopped; reconnect required" })
+		}
+	}()
 	creds, err := s.config.Credentials()
 	if err != nil {
 		s.fail(err)

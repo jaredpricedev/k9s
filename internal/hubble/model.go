@@ -22,6 +22,9 @@ func (p Peer) Key() string {
 }
 func (p Peer) String() string {
 	if p.Pod != "" {
+		if p.Cluster != "" {
+			return p.Cluster + "/" + p.Pod
+		}
 		return p.Pod
 	}
 	s := p.Kind + " " + p.IP
@@ -105,7 +108,7 @@ func Normalize(f *flow.Flow, origin string) Event {
 		}
 	}
 	if len(pp) > 0 {
-		e.Policy = strings.Join(pp, "; ")
+		e.Policy = Clean(strings.Join(pp, "; "))
 	}
 	return e
 }

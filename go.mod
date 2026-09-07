@@ -4,6 +4,7 @@ module github.com/derailed/k9s
 go 1.25.8
 
 require (
+	github.com/cilium/cilium v1.18.1
 	github.com/adrg/xdg v0.5.3
 	github.com/anchore/clio v0.1.1
 	github.com/anchore/grype v0.110.0
@@ -134,7 +135,6 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.6 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
-	github.com/cilium/cilium v1.18.1 // indirect
 	github.com/clipperhouse/displaywidth v0.10.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.6.0 // indirect
 	github.com/cloudflare/circl v1.6.3 // indirect

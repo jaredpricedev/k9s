@@ -14,15 +14,15 @@ Separate bounded history and live requests label provenance; any handoff or
 reconnect gap is disclosed. Counts are observed events, never connections.
 
 Tasks:
-- [ ] Add tests for exact bidirectional scope, malformed filters, safe L7 projection,
+- [x] Add tests for exact bidirectional scope, malformed filters, safe L7 projection,
   non-pod identity, bounded eviction and immutable snapshots; implement model.
-- [ ] Add context config/TLS validation and native Observer client. Verify against
+- [x] Add context config/TLS validation and native Observer client. Verify against
   Cilium v1.18.1 observer/flow proto and official TLS docs. Test with real gRPC server.
-- [ ] Add :cilium and Shift-H from pod/workload resource views. Freeze before
+- [x] Add :cilium and Shift-H from pod/workload resource views. Freeze before
   movement/Enter; preserve peer/event identity and scroll; explicit resume.
-- [ ] Exercise allowed/drop/external/no-L7/disconnect/high-volume behavior in a
+- [x] Exercise allowed/drop/external/no-L7/disconnect/high-volume behavior in a
   separate private iximiuz Cilium lab, preserving logging lab.
-- [ ] Build, run focused tests, review diff, document limitations and open PR.
+- [x] Build, run focused tests, review diff, document limitations and open PR.
 
 Key audit: Shift-H unused by resource/app/table/extender bindings. Existing logs
 use s for follow, navigation freezes, Enter expands, Esc backtracks. Network views
