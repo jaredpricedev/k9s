@@ -8,18 +8,20 @@ import (
 	"sync"
 
 	"github.com/derailed/k9s/internal/client"
+	"github.com/derailed/k9s/internal/hubble"
 	"k8s.io/client-go/tools/clientcmd/api"
 )
 
 // Context tracks K9s context configuration.
 type Context struct {
-	ClusterName  string       `yaml:"cluster,omitempty"`
-	ReadOnly     *bool        `yaml:"readOnly,omitempty"`
-	Skin         string       `yaml:"skin,omitempty"`
-	Namespace    *Namespace   `yaml:"namespace"`
-	View         *View        `yaml:"view"`
-	FeatureGates FeatureGates `yaml:"featureGates"`
-	Proxy        *Proxy       `yaml:"proxy"`
+	Hubble       hubble.Config `yaml:"hubble,omitempty"`
+	ClusterName  string        `yaml:"cluster,omitempty"`
+	ReadOnly     *bool         `yaml:"readOnly,omitempty"`
+	Skin         string        `yaml:"skin,omitempty"`
+	Namespace    *Namespace    `yaml:"namespace"`
+	View         *View         `yaml:"view"`
+	FeatureGates FeatureGates  `yaml:"featureGates"`
+	Proxy        *Proxy        `yaml:"proxy"`
 	mx           sync.RWMutex
 }
 

@@ -145,6 +145,9 @@ func (b *Browser) suggestFilter() model.SuggestionFunc {
 }
 
 func (b *Browser) bindKeys(aa *ui.KeyActions) {
+	if hubbleResource(b.GVR()) {
+		aa.Add(ui.KeyShiftH, ui.NewKeyAction("Hubble Peers", b.hubbleCmd, true))
+	}
 	aa.Bulk(ui.KeyMap{
 		tcell.KeyEscape: ui.NewSharedKeyAction("Filter Reset", b.resetCmd, false),
 		ui.KeyQ:         ui.NewSharedKeyAction("Filter Reset", b.resetCmd, false),

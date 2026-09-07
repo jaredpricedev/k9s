@@ -17,6 +17,7 @@ import (
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/dao"
 	"github.com/derailed/k9s/internal/flux"
+	"github.com/derailed/k9s/internal/hubble"
 	"github.com/derailed/k9s/internal/model"
 	"github.com/derailed/k9s/internal/slogs"
 	"github.com/derailed/k9s/internal/view/cmd"
@@ -272,6 +273,10 @@ func (c *Command) defaultCmd(isRoot bool) error {
 
 func (c *Command) specialCmd(p *cmd.Interpreter, pushCmd bool) bool {
 	switch {
+	case p.Cmd() == "cilium" || p.Cmd() == "hubble":
+		if err := c.app.inject(newHubbleView(hubble.Scope{Title: "Relay status"}, true), false); err != nil {
+			c.app.Flash().Err(err)
+		}
 	case p.IsCowCmd():
 		if msg, ok := p.CowArg(); !ok {
 			c.app.Flash().Errf("Invalid command. Use `cow xxx`")

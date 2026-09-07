@@ -7,18 +7,27 @@
     "k9s": {
       "additionalProperties": false,
       "properties": {
-        "cluster": { "type": "string" },
-        "readOnly": {"type": "boolean"},
-        "skin": { "type": "string" },
+        "cluster": {
+          "type": "string"
+        },
+        "readOnly": {
+          "type": "boolean"
+        },
+        "skin": {
+          "type": "string"
+        },
         "proxy": {
           "oneOf": [
-            { "type": "null" },
+            {
+              "type": "null"
+            },
             {
               "type": "object",
               "additionalProperties": false,
-              "properties":
-              {
-                "address": {"type": "string"}
+              "properties": {
+                "address": {
+                  "type": "string"
+                }
               }
             }
           ]
@@ -27,11 +36,17 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "active": {"type": "string"},
-            "lockFavorites": {"type": "boolean"},
+            "active": {
+              "type": "string"
+            },
+            "lockFavorites": {
+              "type": "boolean"
+            },
             "favorites": {
               "type": "array",
-              "items": {"type": "string"}
+              "items": {
+                "type": "string"
+              }
             }
           }
         },
@@ -39,18 +54,51 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "active": { "type": "string" }
+            "active": {
+              "type": "string"
+            }
           }
         },
         "featureGates": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "nodeShell": { "type": "boolean" }
+            "nodeShell": {
+              "type": "boolean"
+            }
+          }
+        },
+        "hubble": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "address": {
+              "type": "string"
+            },
+            "plaintext": {
+              "type": "boolean"
+            },
+            "caFile": {
+              "type": "string"
+            },
+            "certFile": {
+              "type": "string"
+            },
+            "keyFile": {
+              "type": "string"
+            },
+            "serverName": {
+              "type": "string"
+            },
+            "clusterName": {
+              "type": "string"
+            }
           }
         }
       }
     }
   },
-  "required": ["k9s"]
+  "required": [
+    "k9s"
+  ]
 }

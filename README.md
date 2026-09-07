@@ -11,6 +11,11 @@ small UI refinements. It is not affiliated with or endorsed by the k9s maintaine
 
 The app displays **k9+**; its command and package name are **`k9plus`**.
 
+## Native Cilium / Hubble
+
+Use `:cilium` for Relay status or `Shift-H` from a pod/workload for peers,
+bidirectional flows and safe detail. [Configuration and usage](docs/hubble.md).
+
 ## Build and run
 
 This work is currently on the [review branch](https://github.com/jaredpricedev/k9s/pull/1).
