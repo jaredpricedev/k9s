@@ -72,8 +72,8 @@ func newHubbleView(scope hubble.Scope, statusOnly bool) *HubbleView {
 		w.mode = hubbleStatusMode
 	}
 	w.table.SetSelectable(true, false).SetFixed(1, 0)
-	w.detail.SetWrap(true).SetScrollable(true)
-	w.status.SetWrap(false)
+	w.detail.SetDynamicColors(true).SetWrap(true).SetScrollable(true)
+	w.status.SetDynamicColors(true).SetWrap(false)
 	w.prompt.SetLabel("Filter: ")
 	w.pages.AddPage("table", w.table, true, true).AddPage(modeDetail, w.detail, true, false)
 	w.AddItem(w.status, 5, 0, false).AddItem(w.pages, 0, 1, true)
@@ -394,30 +394,10 @@ func (w *HubbleView) render() {
 	if w.statusOnly {
 		loss = "not observed (status only)"
 	}
-	w.status.SetText(fmt.Sprintf(
-		"%s | node coverage: %s | retained observed events: %d\n"+
-			"Reported loss: %s (%s) | local evictions: %d | L7 redacted\n"+
-			"%s %s %s\n"+
-			"%s | filter: %s\n"+
-			"Enter inspect | s freeze/resume | / filter | 1/2 pod | r reconnect | ? help | Esc back",
-		hubble.Clean(state), coverage, len(w.displayed), loss, hubble.Clean(st.LossDetail), evicted,
-		hubble.Clean(st.Error), hubble.Clean(st.CoverageError), hubble.Clean(st.NodeEvent),
-		hubble.Clean(w.notice), hubble.Clean(w.expression)))
+	w.renderHubbleStatus(&st, state, coverage, loss, evicted)
 	if w.mode == modeDetail {
 		w.pages.SwitchToPage(modeDetail)
-		e := w.selected
-		w.setDetail(fmt.Sprintf(
-			"Observed event %d — %s\n"+
-				"%s\n"+
-				"Source: %s\n"+
-				"Destination: %s\n"+
-				"Node: %s\n"+
-				"%s %d -> %d\n"+
-				"Verdict: %s\n"+
-				"Drop reason: %s\n"+
-				"L7: %s\n"+
-				"Policy evidence: %s", e.ID, e.Origin, e.Time.Format(time.RFC3339Nano), e.Source, e.Destination, e.Node,
-			e.Protocol, e.SourcePort, e.DestinationPort, e.Verdict, e.DropReason, e.L7, e.Policy))
+		w.setDetail(w.hubbleDetail(&w.selected))
 		return
 	}
 	if w.mode == hubbleHelpMode {
