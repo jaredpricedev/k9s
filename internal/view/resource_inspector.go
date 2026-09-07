@@ -60,7 +60,7 @@ func (a *App) openInspection(v ResourceViewer, name, path string) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	d := &inspectionDetails{Details: NewDetails(a, name, path, contentTXT, true).Update("Loading read-only snapshot..."), cancel: cancel}
+	d := &inspectionDetails{Details: NewDetails(a, name, path, contentInspection, true).Update("Loading read-only snapshot..."), cancel: cancel}
 	if err := a.inject(d, false); err != nil {
 		cancel()
 		a.Flash().Err(err)
@@ -76,7 +76,7 @@ func (a *App) openInspection(v ResourceViewer, name, path string) {
 		}
 		a.QueueUpdateDraw(func() {
 			if a.Content.Top() == d {
-				d.Update(inspectionMarkup(a, text))
+				d.Update(text)
 			}
 		})
 	}()
@@ -135,11 +135,21 @@ func resourceSummary(o *unstructured.Unstructured) string {
 	for _, r := range o.GetOwnerReferences() {
 		fmt.Fprintf(&b, "%s %s (%s)\n", r.Kind, r.Name, r.APIVersion)
 	}
+	if len(o.GetOwnerReferences()) == 0 {
+		b.WriteString("No owner references reported.\n")
+	}
 	b.WriteString("\nCONDITIONS\n")
 	conditions, _, _ := unstructured.NestedSlice(o.Object, "status", "conditions")
 	for _, c := range conditions {
 		if m, ok := c.(map[string]any); ok {
-			fmt.Fprintf(&b, "%v: %v | %v\n  %v\n", m["type"], m["status"], m["reason"], m["message"])
+			fmt.Fprintf(&b, "%v: %v", m["type"], m["status"])
+			if reason, ok := m["reason"].(string); ok && reason != "" {
+				fmt.Fprintf(&b, " | %s", reason)
+			}
+			b.WriteString("\n")
+			if message, ok := m["message"].(string); ok && message != "" {
+				fmt.Fprintf(&b, "  %s\n", message)
+			}
 		}
 	}
 	if len(conditions) == 0 {
@@ -155,7 +165,13 @@ func resourceSummary(o *unstructured.Unstructured) string {
 					for _, phase := range []string{"waiting", "running", "terminated"} {
 						s, found, _ := unstructured.NestedMap(m, state, phase)
 						if found {
-							fmt.Fprintf(&b, "  %s %s: reason=%v exitCode=%v\n", state, phase, s["reason"], s["exitCode"])
+							fmt.Fprintf(&b, "  %s: %s", state, phase)
+							for _, key := range []string{"reason", "exitCode", "startedAt", "finishedAt"} {
+								if value, ok := s[key]; ok {
+									fmt.Fprintf(&b, " %s=%v", key, value)
+								}
+							}
+							b.WriteString("\n")
 						}
 					}
 				}

@@ -31,3 +31,15 @@ API references:
 - [Kubernetes TLS Secrets](https://kubernetes.io/docs/concepts/configuration/secret/#tls-secrets)
 
 See [ROADMAP.md](../ROADMAP.md) for the intended next increments and scope.
+
+## First-increment verification
+
+The separate private Hubble lab exercised `:actions`, typing a filter, invoking
+Troubleshoot from the menu, returning to the selected pod, and `:tls` on a
+disposable `inspection-cert` Secret containing only a public certificate.
+Existing Hubble sessions and the logging lab were preserved. Generated-certificate
+tests cover validity windows, multiple PEM blocks, malformed inputs and rejection
+of private-key blocks. View tests cover projection without spec/Secret data and
+escaped reported markup. Broad RBAC, large-event-set and multi-cluster acceptance
+matrices remain future verification; no active TLS probe or chain validation is
+claimed by this increment.

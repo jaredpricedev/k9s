@@ -4,6 +4,19 @@ Keep the basic resource browser fast and familiar. Advanced tools open on demand
 no background discovery on ordinary resource refreshes. Preserve existing shortcuts,
 context safety, selection, and the return path from investigations.
 
+## Areas and priorities
+
+| Area | Useful improvement | How to keep it lightweight | Status |
+| --- | --- | --- | --- |
+| Navigation and actions | Search available actions for the selected resource instead of memorizing shortcuts. | One action menu; frequently used shortcuts still work. | Active first increment |
+| Resource troubleshooting | Bring conditions, recent events, restarts and ownership together. | Open an inspector on demand. | Active first increment |
+| TLS and certificates | Show expiry, SANs, issuer, chain information and where a certificate is used; optional endpoint checks. | A certificate view with deeper inspection rather than more columns everywhere. | Active first increment |
+| Workload relationships | Jump between Deployment, Pods, Service, EndpointSlices and Ingress/Gateway. | Contextual links before attempting a large topology map. | Backlog |
+| Change visibility | Show what changed between resource observations and compare live configuration with an available desired source. | Explicit diff action with clear comparison sources. | Backlog |
+| Resource pressure | Investigate requests, limits, usage, OOM kills and throttling. | Workload-focused view; show when required metrics are unavailable. | Backlog |
+| Context safety | Clear production identity, convenient read-only mode and destination-aware action confirmations. | Persistent, compact context indicators. | Backlog |
+| Performance and interaction polish | Faster large lists, reliable cancellation, stable selection and consistent inspectors. | Improve existing workflows without adding another tool. | Backlog; preserve baseline behavior in active work |
+
 ## Active first increments
 
 | Area | Approach | Initial delivery |
