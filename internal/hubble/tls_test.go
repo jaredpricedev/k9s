@@ -9,15 +9,16 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	observer "github.com/cilium/cilium/api/v1/observer"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"math/big"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	observer "github.com/cilium/cilium/api/v1/observer"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 func TestVerifiedMutualTLS(t *testing.T) {
@@ -42,13 +43,13 @@ func TestVerifiedMutualTLS(t *testing.T) {
 	}
 	ca := x509.NewCertPool()
 	ca.AppendCertsFromPEM(certPEM)
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	srv := grpc.NewServer(grpc.Creds(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: ca})))
 	observer.RegisterObserverServer(srv, testObserver{})
-	go srv.Serve(listener)
+	go func() { _ = srv.Serve(listener) }()
 	defer srv.Stop()
 	dir := t.TempDir()
 	certPath := filepath.Join(dir, "cert.pem")
@@ -88,13 +89,13 @@ func TestVerifiedMutualTLS(t *testing.T) {
 	}
 }
 func TestDisconnectPreservesRetainedEvents(t *testing.T) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	l, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	srv := grpc.NewServer()
 	observer.RegisterObserverServer(srv, testObserver{})
-	go srv.Serve(l)
+	go func() { _ = srv.Serve(l) }()
 	defer srv.Stop()
 	s := NewSession(Config{Address: l.Addr().String(), Plaintext: true}, Scope{Pods: []string{"ns/a"}}, Query{}, 10)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -110,7 +111,7 @@ func TestDisconnectPreservesRetainedEvents(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("disconnect not detected")
 	}
-	if s.Status().Phase != "disconnected" || s.Status().Error == "" || s.Status().CoverageKnown {
+	if s.Status().Phase != phaseDisconnected || s.Status().Error == "" || s.Status().CoverageKnown {
 		t.Fatal(s.Status())
 	}
 	ee, _ := s.Store.Snapshot()

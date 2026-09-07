@@ -3,11 +3,12 @@ package hubble
 
 import (
 	"fmt"
-	flow "github.com/cilium/cilium/api/v1/flow"
-	"google.golang.org/protobuf/proto"
 	"net/netip"
 	"strconv"
 	"strings"
+
+	flow "github.com/cilium/cilium/api/v1/flow"
+	"google.golang.org/protobuf/proto"
 )
 
 type Query struct {
@@ -71,7 +72,7 @@ type Scope struct {
 	Title   string
 }
 
-func (s Scope) Contains(p Peer) bool {
+func (s Scope) Contains(p *Peer) bool {
 	for _, pod := range s.Pods {
 		if pod == p.Pod && (s.Cluster == "" || s.Cluster == p.Cluster) {
 			return true
@@ -79,16 +80,16 @@ func (s Scope) Contains(p Peer) bool {
 	}
 	return false
 }
-func (s Scope) Includes(e Event) bool {
-	return len(s.Pods) == 0 || s.Contains(e.Source) || s.Contains(e.Destination)
+func (s Scope) Includes(e *Event) bool {
+	return len(s.Pods) == 0 || s.Contains(&e.Source) || s.Contains(&e.Destination)
 }
-func (s Scope) Other(e Event) Peer {
-	if s.Contains(e.Source) {
+func (s Scope) Other(e *Event) Peer {
+	if s.Contains(&e.Source) {
 		return e.Destination
 	}
 	return e.Source
 }
-func (q Query) Match(e Event) bool { return q.Text == "" || strings.Contains(e.SearchText(), q.Text) }
+func (q Query) Match(e *Event) bool { return q.Text == "" || strings.Contains(e.SearchText(), q.Text) }
 
 // Filters expands symmetric predicates as OR branches, while preserving AND
 // between scope and each user predicate. Never protobuf.Merge repeated scope fields.

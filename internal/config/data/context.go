@@ -4,11 +4,11 @@
 package data
 
 import (
-	"github.com/derailed/k9s/internal/hubble"
 	"os"
 	"sync"
 
 	"github.com/derailed/k9s/internal/client"
+	"github.com/derailed/k9s/internal/hubble"
 	"k8s.io/client-go/tools/clientcmd/api"
 )
 

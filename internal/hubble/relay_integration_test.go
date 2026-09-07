@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+const externalTestIP = "1.1.1.1"
+
 // Opt-in: scripts/hubble/fixtures.yaml must be running in a disposable Cilium lab.
 func TestRelayIntegration(t *testing.T) {
 	address := os.Getenv("K9PLUS_HUBBLE_TEST_ADDRESS")
@@ -43,7 +45,7 @@ func TestRelayIntegration(t *testing.T) {
 				if tc.dropped && e.Verdict != "DROPPED" {
 					t.Fatalf("server verdict filter ignored: %+v", e)
 				}
-				if tc.external && e.Source.IP != "1.1.1.1" && e.Destination.IP != "1.1.1.1" {
+				if tc.external && e.Source.IP != externalTestIP && e.Destination.IP != externalTestIP {
 					t.Fatalf("server IP filter ignored: %+v", e)
 				}
 				if e.L7 != "Not reported; L7 visibility unknown" {

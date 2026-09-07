@@ -78,7 +78,8 @@ The client requests recent buffered history (number=500) and then live events
 in separate requests. Rows label their origin. **The handoff and reconnect can
 have gaps**, and clocks/Relay retention limit history. The 10,000-event local
 ring is bounded; frozen snapshots are independent of it. Local evictions and
-Relay-reported lost events have separate counters. Zero reported loss does not
+Relay-reported lost events have separate counters. Status-only mode does not
+subscribe to flows and labels loss as not observed. Zero reported loss does not
 prove complete visibility. Node coverage is Relay-reported, not a separate audit
 of all Kubernetes nodes; unavailable or unimplemented coverage is labeled unknown.
 

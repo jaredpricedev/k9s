@@ -1,9 +1,10 @@
 package view
 
 import (
+	"testing"
+
 	"github.com/derailed/k9s/internal/hubble"
 	"github.com/derailed/tcell/v2"
-	"testing"
 )
 
 func TestHubbleFrozenConversationAndSelection(t *testing.T) {
@@ -14,7 +15,7 @@ func TestHubbleFrozenConversationAndSelection(t *testing.T) {
 	w.session.Store.Add(hubble.Event{Source: a, Destination: b, Verdict: "FORWARDED"})
 	w.render()
 	w.key(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
-	for i := 0; i < 10000; i++ {
+	for range 10000 {
 		w.session.Store.Add(hubble.Event{Source: b, Destination: a, Verdict: "DROPPED"})
 	}
 	w.render()
@@ -22,11 +23,11 @@ func TestHubbleFrozenConversationAndSelection(t *testing.T) {
 		t.Fatal("inspection shifted")
 	}
 	w.key(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
-	if w.mode != "detail" || w.selected.ID != 1 {
+	if w.mode != modeDetail || w.selected.ID != 1 {
 		t.Fatal("detail lost selection")
 	}
 	w.key(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
-	if w.mode != "conversation" {
+	if w.mode != hubbleConversationMode {
 		t.Fatal(w.mode)
 	}
 	w.key(tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModNone))
@@ -45,7 +46,7 @@ func TestHubbleMalformedFilterPreservesView(t *testing.T) {
 
 func TestHubbleDetailRefreshPreservesScroll(t *testing.T) {
 	w := newHubbleView(hubble.Scope{}, false)
-	w.mode = "detail"
+	w.mode = modeDetail
 	w.frozen = true
 	w.render()
 	w.detail.ScrollTo(4, 0)
@@ -60,7 +61,7 @@ func TestHubbleHelpReturnsToStatus(t *testing.T) {
 	w := newHubbleView(hubble.Scope{}, true)
 	w.key(tcell.NewEventKey(tcell.KeyRune, '?', tcell.ModNone))
 	w.key(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
-	if w.mode != "status" {
+	if w.mode != hubbleStatusMode {
 		t.Fatal("status screen lost after help", w.mode)
 	}
 }

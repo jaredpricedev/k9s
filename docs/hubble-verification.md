@@ -10,6 +10,7 @@ Passed locally with Go 1.25.8:
 - `go test -race ./internal/hubble`
 - `go build .`
 - `git diff --check`
+- `golangci-lint v2.6.2 run --new-from-rev=origin/master` on Hubble, view and config packages: zero new issues.
 
 Coverage includes immutable bounded snapshots under 100,000 incoming events,
 frozen conversation/detail selection, malformed-filter preservation, symmetric
@@ -35,7 +36,7 @@ The opt-in native Relay integration test passed:
 | Coverage | Three connected nodes, zero unavailable |
 | Server filters | Dropped/IP predicates returned matching events |
 
-Manual tmux TUI checks exercised peers -> conversation -> detail, destination
+Manual tmux TUI checks exercised Relay status/help restoration, Deployment scope resolution, peers -> conversation -> detail, destination
 pod jump, dropped-only filtering, rejected malformed replacement, disconnect by
 stopping the test Relay port-forward, and explicit reconnect after restoring it.
 A 2,500-request nginx burst produced more than 41,000 local evictions while the

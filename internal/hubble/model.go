@@ -3,18 +3,19 @@ package hubble
 
 import (
 	"fmt"
-	flow "github.com/cilium/cilium/api/v1/flow"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
+
+	flow "github.com/cilium/cilium/api/v1/flow"
 )
 
 // Peer keeps IP identity separate from reported names: DNS names are evidence,
 // not proof of service identity or policy authorization.
 type Peer struct{ Kind, Cluster, Pod, IP, Names string }
 
-func (p Peer) Key() string {
+func (p *Peer) Key() string {
 	if p.Pod != "" {
 		return p.Cluster + "/pod/" + p.Pod
 	}
@@ -68,7 +69,13 @@ type Event struct {
 }
 
 func Normalize(f *flow.Flow, origin string) Event {
-	e := Event{Time: f.GetTime().AsTime(), Source: peer(f.GetSource(), f.GetIP().GetSource(), f.GetSourceNames()), Destination: peer(f.GetDestination(), f.GetIP().GetDestination(), f.GetDestinationNames()), Node: Clean(f.GetNodeName()), Verdict: f.GetVerdict().String(), Origin: origin, L7: "Not reported; L7 visibility unknown", Policy: "Not reported"}
+	e := Event{
+		Time:        f.GetTime().AsTime(),
+		Source:      peer(f.GetSource(), f.GetIP().GetSource(), f.GetSourceNames()),
+		Destination: peer(f.GetDestination(), f.GetIP().GetDestination(), f.GetDestinationNames()),
+		Node:        Clean(f.GetNodeName()), Verdict: f.GetVerdict().String(), Origin: origin,
+		L7: "Not reported; L7 visibility unknown", Policy: "Not reported",
+	}
 	if f.GetVerdict() == flow.Verdict_DROPPED {
 		e.DropReason = f.GetDropReasonDesc().String()
 	}
@@ -102,7 +109,10 @@ func Normalize(f *flow.Flow, origin string) Event {
 	for _, group := range []struct {
 		name     string
 		policies []*flow.Policy
-	}{{"egress allowed", f.GetEgressAllowedBy()}, {"ingress allowed", f.GetIngressAllowedBy()}, {"egress denied", f.GetEgressDeniedBy()}, {"ingress denied", f.GetIngressDeniedBy()}} {
+	}{
+		{"egress allowed", f.GetEgressAllowedBy()}, {"ingress allowed", f.GetIngressAllowedBy()},
+		{"egress denied", f.GetEgressDeniedBy()}, {"ingress denied", f.GetIngressDeniedBy()},
+	} {
 		for _, p := range group.policies {
 			pp = append(pp, group.name+": "+Clean(p.GetKind()+" "+p.GetNamespace()+"/"+p.GetName()))
 		}
@@ -126,7 +136,7 @@ func Clean(s string) string {
 	}
 	return string(r)
 }
-func (e Event) SearchText() string {
+func (e *Event) SearchText() string {
 	return strings.ToLower(fmt.Sprintf("%s %s %s %s %s %d %d %s", e.Source, e.Destination, e.Verdict, e.Protocol, e.Node, e.SourcePort, e.DestinationPort, e.DropReason))
 }
 
@@ -144,6 +154,8 @@ func NewStore(capacity int) *Store {
 	}
 	return &Store{events: make([]Event, capacity)}
 }
+
+//nolint:gocritic // Store takes ownership of an immutable event value, independent of its producer.
 func (s *Store) Add(e Event) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -158,7 +170,7 @@ func (s *Store) Add(e Event) {
 		s.full = true
 	}
 }
-func (s *Store) Snapshot() ([]Event, uint64) {
+func (s *Store) Snapshot() (events []Event, evicted uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.full {

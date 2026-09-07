@@ -7,16 +7,19 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"sync"
+	"time"
+
 	observer "github.com/cilium/cilium/api/v1/observer"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"io"
-	"os"
-	"sync"
-	"time"
 )
+
+const phaseDisconnected = "disconnected"
 
 // Config belongs to a kube context, never to a global Hubble CLI configuration.
 type Config struct {
@@ -29,7 +32,7 @@ type Config struct {
 	ServerName  string `yaml:"serverName,omitempty"`
 }
 
-func (c Config) Credentials() (credentials.TransportCredentials, error) {
+func (c *Config) Credentials() (credentials.TransportCredentials, error) {
 	if c.Address == "" {
 		return nil, errors.New("Hubble Relay not configured: set k9s.hubble.address in this context's config.yaml")
 	}
@@ -81,6 +84,7 @@ type Session struct {
 	status Status
 }
 
+//nolint:gocritic // Copy connection configuration so callers cannot mutate a running session.
 func NewSession(c Config, s Scope, q Query, capacity int) *Session {
 	return &Session{Store: NewStore(capacity), config: c, scope: s, query: q, status: Status{Phase: "connecting"}}
 }
@@ -94,7 +98,7 @@ func (s *Session) Status() Status {
 func (s *Session) update(f func(*Status)) { s.mu.Lock(); defer s.mu.Unlock(); f(&s.status) }
 func (s *Session) fail(err error) {
 	s.update(func(v *Status) {
-		v.Phase = "disconnected"
+		v.Phase = phaseDisconnected
 		v.CoverageKnown = false
 		v.Nodes = nil
 		v.Error = Clean(err.Error())
@@ -110,7 +114,7 @@ func (s *Session) poll(ctx context.Context, c observer.ObserverClient) {
 	}
 	nodes, nerr := c.GetNodes(ctx, &observer.GetNodesRequest{})
 	s.update(func(v *Status) {
-		if v.Phase == "disconnected" || ctx.Err() != nil {
+		if v.Phase == phaseDisconnected || ctx.Err() != nil {
 			return
 		}
 		v.Version = Clean(status.GetVersion())
@@ -200,7 +204,7 @@ func (s *Session) read(ctx context.Context, c observer.ObserverClient, r *observ
 		}
 		if f := msg.GetFlow(); f != nil {
 			e := Normalize(f, origin)
-			if s.scope.Includes(e) {
+			if s.scope.Includes(&e) {
 				s.Store.Add(e)
 			}
 		}

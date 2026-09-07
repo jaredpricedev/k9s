@@ -1,8 +1,9 @@
 package hubble
 
 import (
-	flow "github.com/cilium/cilium/api/v1/flow"
 	"testing"
+
+	flow "github.com/cilium/cilium/api/v1/flow"
 )
 
 func TestFilterValidation(t *testing.T) {
@@ -25,7 +26,7 @@ func TestSnapshotSurvivesEviction(t *testing.T) {
 	s.Add(Event{Verdict: "FORWARDED"})
 	s.Add(Event{Verdict: "DROPPED"})
 	frozen, _ := s.Snapshot()
-	for i := 0; i < 100000; i++ {
+	for range 100000 {
 		s.Add(Event{Verdict: "FORWARDED"})
 	}
 	now, evicted := s.Snapshot()
@@ -50,10 +51,10 @@ func TestSafeProjectionAndExternalPeers(t *testing.T) {
 
 func TestExactClusterScope(t *testing.T) {
 	s := Scope{Pods: []string{"ns/a"}, Cluster: "local"}
-	if s.Includes(Event{Source: Peer{Pod: "ns/ab", Cluster: "local"}}) || s.Includes(Event{Source: Peer{Pod: "ns/a", Cluster: "remote"}}) {
+	if s.Includes(&Event{Source: Peer{Pod: "ns/ab", Cluster: "local"}}) || s.Includes(&Event{Source: Peer{Pod: "ns/a", Cluster: "remote"}}) {
 		t.Fatal("scope leaked prefix or remote cluster")
 	}
-	if !s.Includes(Event{Destination: Peer{Pod: "ns/a", Cluster: "local"}}) {
+	if !s.Includes(&Event{Destination: Peer{Pod: "ns/a", Cluster: "local"}}) {
 		t.Fatal("reverse direction missing")
 	}
 	q, _ := Compile("protocol=tcp port=443 ip=1.1.1.1")

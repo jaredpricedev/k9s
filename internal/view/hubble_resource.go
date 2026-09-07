@@ -4,13 +4,14 @@ package view
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/hubble"
 	"github.com/derailed/tcell/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"time"
 )
 
 func hubbleResource(gvr *client.GVR) bool {
@@ -50,8 +51,8 @@ func (b *Browser) hubbleCmd(*tcell.EventKey) *tcell.EventKey {
 			return scope, fmt.Errorf("workload has no reported pod selector")
 		}
 		var selector metav1.LabelSelector
-		if err = runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &selector); err != nil {
-			return scope, err
+		if decodeErr := runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &selector); decodeErr != nil {
+			return scope, decodeErr
 		}
 		sel, err := metav1.LabelSelectorAsSelector(&selector)
 		if err != nil {
@@ -68,7 +69,8 @@ func (b *Browser) hubbleCmd(*tcell.EventKey) *tcell.EventKey {
 		if err != nil {
 			return scope, err
 		}
-		for _, pod := range pods.Items {
+		for i := range pods.Items {
+			pod := &pods.Items[i]
 			scope.Pods = append(scope.Pods, ns+"/"+pod.Name)
 		}
 		if len(scope.Pods) == 0 {

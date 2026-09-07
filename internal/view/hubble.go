@@ -5,6 +5,11 @@ package view
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
+	"sync/atomic"
+	"time"
+
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/hubble"
 	"github.com/derailed/k9s/internal/model"
@@ -12,10 +17,13 @@ import (
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
 	"k8s.io/apimachinery/pkg/labels"
-	"sort"
-	"strings"
-	"sync/atomic"
-	"time"
+)
+
+const (
+	hubbleStatusMode       = "status"
+	hubblePeersMode        = "peers"
+	hubbleConversationMode = "conversation"
+	hubbleHelpMode         = "help"
 )
 
 type hubblePeerRow struct {
@@ -56,15 +64,18 @@ type HubbleView struct {
 var _ model.Component = (*HubbleView)(nil)
 
 func newHubbleView(scope hubble.Scope, statusOnly bool) *HubbleView {
-	w := &HubbleView{statusOnly: statusOnly, Flex: tview.NewFlex().SetDirection(tview.FlexRow), scope: scope, mode: "peers", table: tview.NewTable(), detail: tview.NewTextView(), status: tview.NewTextView(), prompt: tview.NewInputField(), pages: tview.NewPages()}
+	w := &HubbleView{
+		statusOnly: statusOnly, Flex: tview.NewFlex().SetDirection(tview.FlexRow), scope: scope, mode: hubblePeersMode,
+		table: tview.NewTable(), detail: tview.NewTextView(), status: tview.NewTextView(), prompt: tview.NewInputField(), pages: tview.NewPages(),
+	}
 	if statusOnly {
-		w.mode = "status"
+		w.mode = hubbleStatusMode
 	}
 	w.table.SetSelectable(true, false).SetFixed(1, 0)
 	w.detail.SetWrap(true).SetScrollable(true)
 	w.status.SetWrap(false)
 	w.prompt.SetLabel("Filter: ")
-	w.pages.AddPage("table", w.table, true, true).AddPage("detail", w.detail, true, false)
+	w.pages.AddPage("table", w.table, true, true).AddPage(modeDetail, w.detail, true, false)
 	w.AddItem(w.status, 5, 0, false).AddItem(w.pages, 0, 1, true)
 	w.SetBorder(true)
 	w.table.SetInputCapture(w.key)
@@ -92,7 +103,14 @@ func (w *HubbleView) SetFilter(s string, _ bool)           { w.applyFilter(s) }
 func (w *HubbleView) InCmdMode() bool                      { return w.prompting }
 func (*HubbleView) ExtraHints() map[string]string          { return nil }
 func (*HubbleView) Hints() model.MenuHints {
-	return model.MenuHints{{Mnemonic: "enter", Description: "Inspect", Visible: true}, {Mnemonic: "s", Description: "Freeze/Resume", Visible: true}, {Mnemonic: "/", Description: "Filter", Visible: true}, {Mnemonic: "1/2", Description: "Source/Dest pod", Visible: true}, {Mnemonic: "r", Description: "Reconnect", Visible: true}, {Mnemonic: "esc", Description: "Back", Visible: true}}
+	return model.MenuHints{
+		{Mnemonic: "enter", Description: "Inspect", Visible: true},
+		{Mnemonic: "s", Description: "Freeze/Resume", Visible: true},
+		{Mnemonic: "/", Description: "Filter", Visible: true},
+		{Mnemonic: "1/2", Description: "Source/Dest pod", Visible: true},
+		{Mnemonic: "r", Description: "Reconnect", Visible: true},
+		{Mnemonic: "esc", Description: "Back", Visible: true},
+	}
 }
 func (w *HubbleView) Init(ctx context.Context) error {
 	var err error
@@ -195,9 +213,9 @@ func (w *HubbleView) restart() {
 			w.peer = hubble.Peer{}
 			w.rows = nil
 			if w.statusOnly {
-				w.mode = "status"
+				w.mode = hubbleStatusMode
 			} else {
-				w.mode = "peers"
+				w.mode = hubblePeersMode
 			}
 			session := w.session
 			w.render()
@@ -233,6 +251,9 @@ func (w *HubbleView) focus(p tview.Primitive) {
 	}
 }
 func (w *HubbleView) freeze() {
+	if w.statusOnly {
+		return
+	}
 	if w.frozen {
 		return
 	}
@@ -260,48 +281,10 @@ func (w *HubbleView) key(e *tcell.EventKey) *tcell.EventKey {
 		return e
 	}
 	if e.Key() == tcell.KeyEscape || e.Rune() == 'q' {
-		switch w.mode {
-		case "detail":
-			w.mode = "conversation"
-			w.table.Select(w.flowRow, 0)
-		case "conversation":
-			w.mode = "peers"
-			w.table.Select(w.peerRow, 0)
-		case "help":
-			w.mode = w.helpReturn
-		default:
-			if w.app != nil {
-				return w.app.PrevCmd(e)
-			}
-			return nil
-		}
-		w.render()
-		w.focusContent()
-		return nil
+		return w.back(e)
 	}
 	if e.Key() == tcell.KeyEnter {
-		w.freeze()
-		row, _ := w.table.GetSelection()
-		switch w.mode {
-		case "peers":
-			if row > 0 && row <= len(w.peers) {
-				w.peerRow = row
-				w.peer = w.peers[row-1].Peer
-				w.mode = "conversation"
-				w.table.Select(1, 0)
-			}
-		case "conversation":
-			if row > 0 && row <= len(w.rows) {
-				w.flowRow = row
-				w.selected = w.rows[row-1]
-				w.mode = "detail"
-			}
-		}
-		w.render()
-		if w.mode == "detail" {
-			w.focus(w.detail)
-		}
-		return nil
+		return w.inspect()
 	}
 	switch e.Rune() {
 	case 's':
@@ -309,13 +292,13 @@ func (w *HubbleView) key(e *tcell.EventKey) *tcell.EventKey {
 			w.restart()
 			return nil
 		}
-		if w.mode == "status" {
+		if w.mode == hubbleStatusMode {
 			return nil
 		}
 		if w.frozen {
 			w.frozen = false
-			if w.mode == "detail" {
-				w.mode = "conversation"
+			if w.mode == modeDetail {
+				w.mode = hubbleConversationMode
 				w.focusContent()
 			}
 		} else {
@@ -336,9 +319,9 @@ func (w *HubbleView) key(e *tcell.EventKey) *tcell.EventKey {
 	case '1', '2':
 		w.freeze()
 		var ev hubble.Event
-		if w.mode == "detail" {
+		if w.mode == modeDetail {
 			ev = w.selected
-		} else if w.mode == "conversation" {
+		} else if w.mode == hubbleConversationMode {
 			row, _ := w.table.GetSelection()
 			if row > 0 && row <= len(w.rows) {
 				ev = w.rows[row-1]
@@ -348,24 +331,24 @@ func (w *HubbleView) key(e *tcell.EventKey) *tcell.EventKey {
 		if e.Rune() == '2' {
 			p = ev.Destination
 		}
-		w.jump(p)
+		w.jump(&p)
 		return nil
 	case '?':
-		if w.mode != "help" {
+		if w.mode != hubbleHelpMode {
 			w.helpReturn = w.mode
 		}
 		w.freeze()
-		w.mode = "help"
+		w.mode = hubbleHelpMode
 		w.render()
 		w.focus(w.detail)
 		return nil
 	}
-	if e.Key() == tcell.KeyUp || e.Key() == tcell.KeyDown || e.Key() == tcell.KeyPgUp || e.Key() == tcell.KeyPgDn || e.Key() == tcell.KeyHome || e.Key() == tcell.KeyEnd || e.Rune() == 'j' || e.Rune() == 'k' || e.Rune() == 'g' || e.Rune() == 'G' {
+	if hubbleNavigation(e) {
 		w.freeze()
 	}
 	return e
 }
-func (w *HubbleView) jump(p hubble.Peer) {
+func (w *HubbleView) jump(p *hubble.Peer) {
 	if p.Pod == "" {
 		w.notice = "No reported pod for this endpoint"
 		w.render()
@@ -407,41 +390,76 @@ func (w *HubbleView) render() {
 	if st.CoverageKnown {
 		coverage = fmt.Sprintf("%d connected / %d unavailable", st.Connected, st.Unavailable)
 	}
-	w.status.SetText(fmt.Sprintf("%s | node coverage: %s | retained observed events: %d\nReported loss: %d (%s) | local evictions: %d | L7 redacted\n%s %s %s\n%s | filter: %s\nEnter inspect | s freeze/resume | / filter | 1/2 pod | r reconnect | ? help | Esc back", hubble.Clean(state), coverage, len(w.displayed), st.Lost, hubble.Clean(st.LossDetail), evicted, hubble.Clean(st.Error), hubble.Clean(st.CoverageError), hubble.Clean(st.NodeEvent), hubble.Clean(w.notice), hubble.Clean(w.expression)))
-	if w.mode == "detail" {
-		w.pages.SwitchToPage("detail")
+	loss := fmt.Sprint(st.Lost)
+	if w.statusOnly {
+		loss = "not observed (status only)"
+	}
+	w.status.SetText(fmt.Sprintf(
+		"%s | node coverage: %s | retained observed events: %d\n"+
+			"Reported loss: %s (%s) | local evictions: %d | L7 redacted\n"+
+			"%s %s %s\n"+
+			"%s | filter: %s\n"+
+			"Enter inspect | s freeze/resume | / filter | 1/2 pod | r reconnect | ? help | Esc back",
+		hubble.Clean(state), coverage, len(w.displayed), loss, hubble.Clean(st.LossDetail), evicted,
+		hubble.Clean(st.Error), hubble.Clean(st.CoverageError), hubble.Clean(st.NodeEvent),
+		hubble.Clean(w.notice), hubble.Clean(w.expression)))
+	if w.mode == modeDetail {
+		w.pages.SwitchToPage(modeDetail)
 		e := w.selected
-		w.setDetail(fmt.Sprintf("Observed event %d — %s\n%s\nSource: %s\nDestination: %s\nNode: %s\n%s %d -> %d\nVerdict: %s\nDrop reason: %s\nL7: %s\nPolicy evidence: %s", e.ID, e.Origin, e.Time.Format(time.RFC3339Nano), e.Source, e.Destination, e.Node, e.Protocol, e.SourcePort, e.DestinationPort, e.Verdict, e.DropReason, e.L7, e.Policy))
+		w.setDetail(fmt.Sprintf(
+			"Observed event %d — %s\n"+
+				"%s\n"+
+				"Source: %s\n"+
+				"Destination: %s\n"+
+				"Node: %s\n"+
+				"%s %d -> %d\n"+
+				"Verdict: %s\n"+
+				"Drop reason: %s\n"+
+				"L7: %s\n"+
+				"Policy evidence: %s", e.ID, e.Origin, e.Time.Format(time.RFC3339Nano), e.Source, e.Destination, e.Node,
+			e.Protocol, e.SourcePort, e.DestinationPort, e.Verdict, e.DropReason, e.L7, e.Policy))
 		return
 	}
-	if w.mode == "help" {
-		w.pages.SwitchToPage("detail")
-		w.setDetail("Hubble network inspection\n\nPeers count observed events in the retained dataset, not connections or requests.\nEnter freezes peers, opens both directions, then event detail. Navigation also freezes.\ns explicitly resumes. Incoming traffic cannot evict the frozen snapshot.\n1 / 2 jump to reported source / destination pods. Esc backtracks.\nr reconnects and replaces the dataset; history/live handoff can have gaps.\n\n/ plain text searches locally. Structured AND filters:\nverdict=dropped protocol=tcp port=443 ip=10.0.0.0/8\nSupported fields: verdict, protocol, port (either end), ip (either end).\nMalformed expressions leave the prior filter intact. Valid structured changes restart observation.\n\nMissing flows do not prove traffic was allowed or denied. Coverage is Relay-reported.\nNo L7 record means visibility unknown. DNS success does not prove policy authorization.\nL7 payloads are discarded; export, capture and policy changes are unavailable.")
+	if w.mode == hubbleHelpMode {
+		w.pages.SwitchToPage(modeDetail)
+		w.setDetail("Hubble network inspection\n" +
+			"\n" +
+			"Peers count observed events in the retained dataset, not connections or requests.\n" +
+			"Enter freezes peers, opens both directions, then event detail. Navigation also freezes.\n" +
+			"s explicitly resumes. Incoming traffic cannot evict the frozen snapshot.\n" +
+			"1 / 2 jump to reported source / destination pods. Esc backtracks.\n" +
+			"r reconnects and replaces the dataset; history/live handoff can have gaps.\n" +
+			"\n" +
+			"/ plain text searches locally. Structured AND filters:\n" +
+			"verdict=dropped protocol=tcp port=443 ip=10.0.0.0/8\n" +
+			"Supported fields: verdict, protocol, port (either end), ip (either end).\n" +
+			"Malformed expressions leave the prior filter intact. Valid structured changes restart observation.\n" +
+			"\n" +
+			"Missing flows do not prove traffic was allowed or denied. Coverage is Relay-reported.\n" +
+			"No L7 record means visibility unknown. DNS success does not prove policy authorization.\n" +
+			"L7 payloads are discarded; export, capture and policy changes are unavailable.")
 		return
 	}
+	w.renderTable(&st)
+}
+
+func (w *HubbleView) renderTable(st *hubble.Status) {
 	w.pages.SwitchToPage("table")
 	row, col := w.table.GetSelection()
 	offR, offC := w.table.GetOffset()
 	var selectedKey string
-	if w.mode == "peers" && row > 0 && row <= len(w.peers) {
+	if w.mode == hubblePeersMode && row > 0 && row <= len(w.peers) {
 		selectedKey = w.peers[row-1].Peer.Key()
 	}
 	var selectedID uint64
-	if w.mode == "conversation" && row > 0 && row <= len(w.rows) {
+	if w.mode == hubbleConversationMode && row > 0 && row <= len(w.rows) {
 		selectedID = w.rows[row-1].ID
 	}
 	w.table.Clear()
-	put := func(r int, values ...string) {
-		for c, v := range values {
-			cell := tview.NewTableCell(tview.Escape(hubble.Clean(v)))
-			if r == 0 {
-				cell.SetSelectable(false).SetTextColor(tcell.ColorAqua)
-			}
-			w.table.SetCell(r, c, cell)
-		}
-	}
+	put := w.putRow
+
 	switch w.mode {
-	case "status":
+	case hubbleStatusMode:
 		put(0, "NODE", "STATE", "VERSION")
 		for i, n := range st.Nodes {
 			put(i+1, n.Name, n.State, n.Version)
@@ -449,10 +467,11 @@ func (w *HubbleView) render() {
 		if len(st.Nodes) == 0 {
 			put(1, "Node detail unavailable", st.CoverageError, st.Version)
 		}
-	case "peers":
+	case hubblePeersMode:
 		put(0, "PEER", "KIND", "OBSERVED EVENTS")
 		counts := map[string]hubblePeerRow{}
-		for _, e := range w.displayed {
+		for i := range w.displayed {
+			e := &w.displayed[i]
 			if !w.query.Match(e) {
 				continue
 			}
@@ -473,16 +492,19 @@ func (w *HubbleView) render() {
 				row = i + 1
 			}
 		}
-	case "conversation":
+	case hubbleConversationMode:
 		put(0, "TIME", "SOURCE", "DESTINATION", "PROTOCOL", "VERDICT", "ORIGIN")
 		w.rows = nil
-		for _, e := range w.displayed {
+		for i := range w.displayed {
+			e := &w.displayed[i]
 			if (e.Source.Key() == w.peer.Key() || e.Destination.Key() == w.peer.Key()) && w.query.Match(e) {
-				w.rows = append(w.rows, e)
+				w.rows = append(w.rows, *e)
 			}
 		}
-		for i, e := range w.rows {
-			put(i+1, e.Time.Format("15:04:05.000"), e.Source.String(), e.Destination.String(), fmt.Sprintf("%s %d → %d", e.Protocol, e.SourcePort, e.DestinationPort), e.Verdict, e.Origin)
+		for i := range w.rows {
+			e := &w.rows[i]
+			put(i+1, e.Time.Format("15:04:05.000"), e.Source.String(), e.Destination.String(),
+				fmt.Sprintf("%s %d → %d", e.Protocol, e.SourcePort, e.DestinationPort), e.Verdict, e.Origin)
 			if e.ID == selectedID {
 				row = i + 1
 			}
@@ -509,9 +531,73 @@ func (w *HubbleView) setDetail(text string) {
 }
 
 func (w *HubbleView) focusContent() {
-	if w.mode == "detail" || w.mode == "help" {
+	if w.mode == modeDetail || w.mode == hubbleHelpMode {
 		w.focus(w.detail)
 	} else {
 		w.focus(w.table)
+	}
+}
+
+func hubbleNavigation(e *tcell.EventKey) bool {
+	switch e.Key() {
+	case tcell.KeyUp, tcell.KeyDown, tcell.KeyPgUp, tcell.KeyPgDn, tcell.KeyHome, tcell.KeyEnd:
+		return true
+	}
+	return strings.ContainsRune("jkgG", e.Rune()) && e.Rune() != 0
+}
+
+func (w *HubbleView) back(e *tcell.EventKey) *tcell.EventKey {
+	switch w.mode {
+	case modeDetail:
+		w.mode = hubbleConversationMode
+		w.table.Select(w.flowRow, 0)
+	case hubbleConversationMode:
+		w.mode = hubblePeersMode
+		w.table.Select(w.peerRow, 0)
+	case hubbleHelpMode:
+		w.mode = w.helpReturn
+	default:
+		if w.app != nil {
+			return w.app.PrevCmd(e)
+		}
+		return nil
+	}
+	w.render()
+	w.focusContent()
+	return nil
+}
+
+func (w *HubbleView) inspect() *tcell.EventKey {
+	w.freeze()
+	row, _ := w.table.GetSelection()
+	switch w.mode {
+	case hubblePeersMode:
+		if row > 0 && row <= len(w.peers) {
+			w.peerRow = row
+			w.peer = w.peers[row-1].Peer
+			w.mode = hubbleConversationMode
+			w.table.Select(1, 0)
+		}
+	case hubbleConversationMode:
+		if row > 0 && row <= len(w.rows) {
+			w.flowRow = row
+			w.selected = w.rows[row-1]
+			w.mode = modeDetail
+		}
+	}
+	w.render()
+	if w.mode == modeDetail {
+		w.focus(w.detail)
+	}
+	return nil
+}
+
+func (w *HubbleView) putRow(r int, values ...string) {
+	for c, v := range values {
+		cell := tview.NewTableCell(tview.Escape(hubble.Clean(v)))
+		if r == 0 {
+			cell.SetSelectable(false).SetTextColor(tcell.ColorAqua)
+		}
+		w.table.SetCell(r, c, cell)
 	}
 }

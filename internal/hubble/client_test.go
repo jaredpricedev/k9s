@@ -2,12 +2,13 @@ package hubble
 
 import (
 	"context"
-	flow "github.com/cilium/cilium/api/v1/flow"
-	observer "github.com/cilium/cilium/api/v1/observer"
-	"google.golang.org/grpc"
 	"net"
 	"testing"
 	"time"
+
+	flow "github.com/cilium/cilium/api/v1/flow"
+	observer "github.com/cilium/cilium/api/v1/observer"
+	"google.golang.org/grpc"
 )
 
 type testObserver struct {
@@ -31,13 +32,13 @@ func (testObserver) GetFlows(r *observer.GetFlowsRequest, s observer.Observer_Ge
 	return s.Context().Err()
 }
 func TestNativeStreamLossAndCancellation(t *testing.T) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	l, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	srv := grpc.NewServer()
 	observer.RegisterObserverServer(srv, testObserver{})
-	go srv.Serve(l)
+	go func() { _ = srv.Serve(l) }()
 	defer srv.Stop()
 	s := NewSession(Config{Address: l.Addr().String(), Plaintext: true}, Scope{Pods: []string{"ns/a"}}, Query{}, 10)
 	ctx, cancel := context.WithCancel(context.Background())
