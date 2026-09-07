@@ -840,10 +840,11 @@ func (a *App) statusIndicator() *ui.StatusIndicator {
 	return a.Views()["statusIndicator"].(*ui.StatusIndicator)
 }
 
-// Hubble presentation state is owned by the draw goroutine. The connectivity
+// Investigation presentation state is owned by the draw goroutine. The connectivity
 // poller is not; ignore queued work if navigation has changed the top component.
 func (a *App) connectivityComponent(c model.Component, connected bool) {
-	if _, ok := c.(*HubbleView); ok {
+	switch c.(type) {
+	case *HubbleView, *inspectionDetails:
 		a.QueueUpdateDraw(func() {
 			if a.Content.Top() != c {
 				return

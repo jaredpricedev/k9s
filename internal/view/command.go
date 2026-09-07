@@ -273,6 +273,10 @@ func (c *Command) defaultCmd(isRoot bool) error {
 
 func (c *Command) specialCmd(p *cmd.Interpreter, pushCmd bool) bool {
 	switch {
+	case p.Cmd() == "tlsverify" || p.Cmd() == "tlsprobe":
+		c.tlsCheckCommand(p.GetLine())
+	case p.Cmd() == actionsCommand || p.Cmd() == troubleshootCommand || p.Cmd() == tlsCommand:
+		c.investigationCommand(p.Cmd())
 	case p.Cmd() == "cilium" || p.Cmd() == "hubble":
 		if err := c.app.inject(newHubbleView(hubble.Scope{Title: "Relay status"}, true), false); err != nil {
 			c.app.Flash().Err(err)

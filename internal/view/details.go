@@ -20,9 +20,10 @@ import (
 )
 
 const (
-	detailsTitleFmt = "[fg:bg:b] %s([hilite:bg:b]%s[fg:bg:-])[fg:bg:-] "
-	contentTXT      = "text"
-	contentYAML     = "yaml"
+	detailsTitleFmt   = "[fg:bg:b] %s([hilite:bg:b]%s[fg:bg:-])[fg:bg:-] "
+	contentTXT        = "text"
+	contentInspection = "inspection"
+	contentYAML       = "yaml"
 )
 
 // Details represents a generic text viewer.
@@ -99,6 +100,8 @@ func (d *Details) InCmdMode() bool {
 // TextChanged notifies the model changed.
 func (d *Details) TextChanged(lines []string) {
 	switch d.contentType {
+	case contentInspection:
+		d.text.SetText(inspectionMarkup(d.app, strings.Join(lines, "\n")))
 	case contentYAML:
 		d.text.SetText(colorizeYAML(d.app.Styles.Views().Yaml, strings.Join(lines, "\n")))
 	default:
