@@ -3,11 +3,10 @@
 Updated 2026-09-07. These items are deferred, not active implementation commitments.
 The native Hubble first increment is in [PR #5](https://github.com/jaredpricedev/k9s/pull/5), pending review and merge approval.
 
-## Candidate next discussion: advanced TLS
+## Active roadmap
 
-Explore an advanced TLS feature for k9plus. Scope and acceptance criteria are
-not yet defined. Clarify the intended investigation workflow before implementation;
-do not assume this means only Hubble Relay TLS configuration.
+Navigation/actions, resource troubleshooting and TLS first increments are now
+tracked in [ROADMAP.md](ROADMAP.md). Deferred Hubble work remains below.
 
 ## Native Cilium / Hubble follow-up
 
