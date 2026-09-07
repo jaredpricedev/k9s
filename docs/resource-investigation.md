@@ -103,8 +103,18 @@ Focused tests cover generated PKI, wrong names, unknown roots, expired certifica
 bundle-root non-trust, cancellation and a real local TLS server that asserts zero
 HTTP requests. Fake clients cover selector scope, empty selectors, permission
 errors, truncation, context-pinned transports and cross-namespace non-fetching.
-View tests cover literal markup and readable redraws. Lab evidence is recorded
-with the PR; broader version/scale matrices remain unverified.
+View tests cover literal markup and readable redraws. The iximiuz Hubble lab verified Deployment-to-pod jumps and snapshot refresh,
+Ingress-to-Secret inspection, reverse consumer discovery, action no-match/Help,
+offline correct/wrong hostname verification, and a verified TLS 1.3 handshake
+against a disposable loopback server. Final form controls and cancellation were
+checked in a dedicated test session. Certificate and Gateway CRDs were absent:
+visibility errors were verified in the lab; their reference parsing is covered
+by fake-client tests. Broader version/scale matrices remain unverified.
+
+The functional smoke test used an isolated tmux session for capture and did not
+repeat browser-rendering validation. The recommended direct launch remains the
+user-verified workaround below. Disposable Ingress and TLS server were removed;
+existing networking and user sessions were preserved.
 
 In the iximiuz browser terminal, launch directly on **dev-machine**:
 
