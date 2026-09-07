@@ -145,3 +145,13 @@ func TestRelationshipsDoNotConfuseIstioAndGatewayAPI(t *testing.T) {
 		t.Fatal("Gateway group collision")
 	}
 }
+
+func TestRelationshipsCombineEvidenceForSameTarget(t *testing.T) {
+	refs := stableRelationships([]inspectionReference{
+		relationshipRef("", "Service", "app", "api", "ownerReference"),
+		relationshipRef("", "Service", "app", "api", "EndpointSlice service-name label"),
+	})
+	if len(refs) != 1 || !strings.Contains(refs[0].reason, "ownerReference") || !strings.Contains(refs[0].reason, "service-name label") {
+		t.Fatal("duplicate target or lost evidence", refs)
+	}
+}

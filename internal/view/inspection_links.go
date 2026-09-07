@@ -138,7 +138,7 @@ func objectReferences(o *unstructured.Unstructured) []inspectionReference {
 	for _, owner := range o.GetOwnerReferences() {
 		gv, err := schema.ParseGroupVersion(owner.APIVersion)
 		if err == nil {
-			refs = append(refs, inspectionReference{ref: certmanager.Reference{Group: gv.Group, Kind: owner.Kind, Name: owner.Name, Namespace: o.GetNamespace()}})
+			refs = append(refs, relationshipRef(gv.Group, owner.Kind, o.GetNamespace(), owner.Name, "ownerReference"))
 		}
 	}
 	if o.GetKind() == inspectionCertificateKind {

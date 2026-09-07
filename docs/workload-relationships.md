@@ -36,3 +36,12 @@ work. No policies, certificates, routing rules or L7 settings are changed.
 API semantics follow the official [EndpointSlice documentation](https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/),
 [HTTPRoute documentation](https://gateway-api.sigs.k8s.io/reference/api-types/httproute/)
 and [cross-namespace reference rules](https://gateway-api.sigs.k8s.io/reference/api-types/referencegrant/).
+
+Validation: focused view tests exercise exact/partial/empty Service selectors,
+namespace boundaries, default/rule Ingress backends, explicit EndpointSlice
+Pod targets, cross-namespace HTTPRoute references, permission/truncation notices,
+and Istio/Gateway API kind collisions. The iximiuz Hubble lab verified Service →
+EndpointSlice → Pod jumps, Pod → Service lookup, and Ingress → Service lookup.
+HTTPRoute CRDs are absent in that lab: missing-API visibility is smoke-tested;
+Gateway/HTTPRoute references are fixture-tested. Browser rendering and large
+cluster performance were not revalidated in this increment.

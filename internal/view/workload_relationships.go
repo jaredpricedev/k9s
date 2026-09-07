@@ -205,12 +205,26 @@ func referencesObject(refs []inspectionReference, o *unstructured.Unstructured, 
 }
 func stableRelationships(refs []inspectionReference) []inspectionReference {
 	seen := map[inspectionReference]bool{}
+	targets := map[certmanager.Reference]int{}
 	result := make([]inspectionReference, 0, len(refs))
 	for _, r := range refs {
-		if !seen[r] {
-			seen[r] = true
-			result = append(result, r)
+		if seen[r] {
+			continue
 		}
+		seen[r] = true
+		if r.notice == "" {
+			if index, ok := targets[r.ref]; ok {
+				if r.reason != "" {
+					if result[index].reason != "" {
+						result[index].reason += " | "
+					}
+					result[index].reason += r.reason
+				}
+				continue
+			}
+			targets[r.ref] = len(result)
+		}
+		result = append(result, r)
 	}
 	sort.SliceStable(result, func(i, j int) bool {
 		a, b := result[i], result[j]
