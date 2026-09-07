@@ -20,6 +20,7 @@ import (
 type inspectionReference struct {
 	ref    certmanager.Reference
 	notice string
+	reason string
 }
 
 func (d *inspectionDetails) openRelated() {
@@ -64,6 +65,9 @@ func (d *inspectionDetails) openRelated() {
 				text := item.notice
 				if text == "" {
 					text = item.ref.Kind + " " + client.FQN(item.ref.Namespace, item.ref.Name)
+					if item.reason != "" {
+						text += " | " + item.reason
+					}
 				}
 				p.AddItem(tview.Escape(text), "", 0, nil)
 			}
@@ -125,7 +129,8 @@ func loadInspectionReferences(ctx context.Context, conn client.Connection, gvr *
 			refs = append(refs, inspectionReference{notice: notice})
 		}
 	}
-	return refs, nil
+	refs = append(refs, networkRelationships(ctx, conn, obj)...)
+	return stableRelationships(refs), nil
 }
 
 func objectReferences(o *unstructured.Unstructured) []inspectionReference {
@@ -133,7 +138,7 @@ func objectReferences(o *unstructured.Unstructured) []inspectionReference {
 	for _, owner := range o.GetOwnerReferences() {
 		gv, err := schema.ParseGroupVersion(owner.APIVersion)
 		if err == nil {
-			refs = append(refs, inspectionReference{ref: certmanager.Reference{Group: gv.Group, Kind: owner.Kind, Name: owner.Name, Namespace: o.GetNamespace()}})
+			refs = append(refs, relationshipRef(gv.Group, owner.Kind, o.GetNamespace(), owner.Name, "ownerReference"))
 		}
 	}
 	if o.GetKind() == inspectionCertificateKind {
@@ -146,11 +151,12 @@ func objectReferences(o *unstructured.Unstructured) []inspectionReference {
 	for _, ref := range tlsSecretReferences(o) {
 		refs = append(refs, inspectionReference{ref: ref})
 	}
-	seen := map[certmanager.Reference]bool{}
+	refs = append(refs, networkReferences(o)...)
+	seen := map[inspectionReference]bool{}
 	unique := refs[:0]
 	for _, ref := range refs {
-		if !seen[ref.ref] {
-			seen[ref.ref] = true
+		if !seen[ref] {
+			seen[ref] = true
 			unique = append(unique, ref)
 		}
 	}
