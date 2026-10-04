@@ -108,7 +108,7 @@ func (c *Command) suggestionAliases() []string {
 }
 
 func (c *Command) updateSuggestionAliases() {
-	aliases := []string{providersCommand, capacityCommandToken, jobReviewCommandToken}
+	aliases := []string{providersCommand, capacityCommandToken, "operations", "ops", jobReviewCommandToken}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
 		return
@@ -312,6 +312,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.rolloutReviewCommand()
 	case jobReviewCommandToken:
 		c.jobReviewCommand()
+	case "operations", "ops":
+		c.operationsCommand()
 	case providersCommand:
 		c.providerCommand(p.GetLine())
 	default:

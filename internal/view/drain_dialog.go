@@ -73,7 +73,8 @@ func ShowDrain(view ResourceViewer, sels []string, opts dao.DrainOptions, okFn D
 	path += "?"
 	modal.SetContext(path + "\nContext: " + contextName)
 	message := "Grace: seconds; -1 = Pod default, 0 = immediate." +
-		"\nTimeout: duration (5s, 2m); 0 = no timeout."
+		"\nTimeout: duration (5s, 2m); 0 = native no-timeout." +
+		"\nThe operation wait remains bounded (at most 10m); :operations cancels remaining work."
 	modal.SetText(message)
 	f.AddButton("Cancel", dismiss)
 	f.AddButton("OK", func() {
