@@ -22,11 +22,9 @@ func (v *changeSetView) render() {
 	}
 	v.renderChrome()
 	if v.activeTab == 0 {
-		v.pages.SwitchToPage("plan")
 		v.renderRows()
 		return
 	}
-	v.pages.SwitchToPage("detail")
 	query, region := v.inspectionQuery, v.currentRegion
 	row, col := v.text.GetScrollOffset()
 	text := v.tabText()

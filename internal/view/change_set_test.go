@@ -149,6 +149,68 @@ func TestChangeSetNativeFramesTabsSelectionAndReturnState(t *testing.T) {
 	require.Empty(t, v.app.operations.list())
 }
 
+func TestChangeSetNativeApplicationDrawDoesNotRefocusPages(t *testing.T) {
+	v, _ := changeSetViewFixture(t)
+	screen := tcell.NewSimulationScreen("UTF-8")
+	require.NoError(t, screen.Init())
+	t.Cleanup(screen.Fini)
+	v.app.SetScreen(screen).SetRoot(v, true)
+	for _, tab := range []int{0, 1} {
+		v.app.SetFocus(v)
+		v.selectTab(tab)
+		var expected tview.Primitive = v.table
+		if tab != 0 {
+			expected = v.text
+		}
+		v.app.SetFocus(expected)
+		focusCalls := 0
+		// Record page focus delegation without reentering Application.SetFocus.
+		// ForceDraw holds the native Application mutex; refocusing from Draw
+		// previously deadlocked the first real terminal frame and every resize.
+		v.pages.Focus(func(p tview.Primitive) {
+			focusCalls++
+			require.Same(t, expected, p)
+		})
+		beforeDraw := focusCalls
+		for _, size := range []struct{ width, height int }{{120, 34}, {80, 24}, {60, 24}, {40, 16}} {
+			screen.SetSize(size.width, size.height)
+			v.app.ForceDraw()
+			require.Equal(t, beforeDraw, focusCalls, "Draw must not delegate focus at %dx%d", size.width, size.height)
+			require.Same(t, expected, v.app.GetFocus())
+		}
+	}
+}
+
+func TestChangeSetNativeApplicationDrawInvalidatesCapturedConfirmationWithoutRefocus(t *testing.T) {
+	v, dyn := changeSetViewFixture(t)
+	v.selected[0] = true
+	v.confirmApply()
+	modal, form := v.modal, v.form
+	screen := tcell.NewSimulationScreen("UTF-8")
+	require.NoError(t, screen.Init())
+	t.Cleanup(screen.Fini)
+	screen.SetSize(80, 24)
+	v.app.SetScreen(screen).SetRoot(v.app.Content, true).SetFocus(modal)
+	focus := v.app.GetFocus()
+	require.NoError(t, v.app.Config.SetActiveNamespace("new-namespace"))
+	// A retained destination can change between events. Draw must invalidate
+	// guidance while leaving page removal and focus changes to native events.
+	v.app.ForceDraw()
+	require.Same(t, modal, v.modal)
+	require.Same(t, form, v.form)
+	require.Same(t, focus, v.app.GetFocus())
+	require.Equal(t, "Unavailable", form.GetButton(1).GetLabel())
+	frame := drawnText(t, modal, 80, 24)
+	for _, text := range []string{"Destination changed", "cannot execute", "Cancel", "Unavailable"} {
+		require.Contains(t, frame, text)
+	}
+	acknowledgeChangeSet(form)
+	pressChangeSetButton(form, 1)
+	require.Nil(t, v.modal)
+	require.Zero(t, persistentRecoveryRequests(dyn))
+	require.Empty(t, v.app.operations.list())
+}
+
 func TestChangeSetNativeCancelAcknowledgmentPartialBatchAndRetainedReceipt(t *testing.T) {
 	v, dyn := changeSetViewFixture(t)
 	for index := range v.plan.Entries {

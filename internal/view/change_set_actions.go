@@ -81,6 +81,11 @@ func (v *changeSetView) selectTab(tab int) {
 	row, col := v.text.GetScrollOffset()
 	v.tabStates[v.activeTab] = investigationTabState{query: v.inspectionQuery, region: v.currentRegion, row: row, col: col}
 	v.activeTab = tab
+	page := "detail"
+	if tab == 0 {
+		page = "plan"
+	}
+	v.pages.SwitchToPage(page)
 	state := v.tabStates[tab]
 	v.inspectionQuery, v.currentRegion = state.query, state.region
 	v.cmdBuff.SetText(state.query, "", true)
@@ -234,6 +239,11 @@ func (v *changeSetView) confirmation(title, message string, acknowledge bool, la
 	form.AddButton("Cancel", dismiss)
 	form.AddButton(label, func() {
 		if v.modal != modal {
+			return
+		}
+		if err := v.eligible(); err != nil {
+			dismiss()
+			v.app.Flash().Warn(err.Error())
 			return
 		}
 		if !acknowledged {

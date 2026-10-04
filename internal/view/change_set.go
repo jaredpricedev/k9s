@@ -185,9 +185,17 @@ func (v *changeSetView) Draw(screen tcell.Screen) {
 		v.render()
 	}
 	if !v.destinationCurrent() && (v.loading || v.modal != nil) {
-		v.stopPreparation()
-		v.dismissForm()
+		if v.loading {
+			v.stopPreparation()
+		}
 		v.notice = "Destination changed; retained plan cannot be submitted"
+		if v.modal != nil {
+			v.modal.SetText("Destination changed. This retained confirmation cannot execute. " +
+				"Cancel or Esc returns to the captured plan; reopen review for the current destination.")
+			if v.form != nil && v.form.GetButtonCount() > 1 {
+				v.form.GetButton(1).SetLabel("Unavailable")
+			}
+		}
 	}
 	v.renderChrome()
 	v.Flex.Draw(screen)
