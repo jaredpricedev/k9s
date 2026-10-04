@@ -20,13 +20,19 @@ or reloads a source. A failed reload retains the previous source and report.
 
 | Key | Result |
 | --- | --- |
-| Enter | Open retained resource detail and safe field values |
+| Enter | Open changed fields first, with safe live/authored values |
+| `e` | Toggle Evidence/source: full paths, source hash, timestamps, scope and ownership |
 | `r` | Refresh named live reads with the retained source |
 | `n` | Choose or explicitly reload the source file |
 | `/` | Search retained kind, namespace, name and review state |
 | `i` | Investigate the selected identity-verified live resource |
 | Esc | Return from detail, then return to the previous view |
 | Ctrl-O | Search available actions |
+
+Resource detail spends its first viewport on changed values. The compact strip
+retains destination, local/read-only status, source fingerprint, observation time
+and read gaps. Evidence/source retains full provenance and latest source/read
+failures. Enter, `e`, search and Back operate on retained data.
 
 When opened from a daily workspace, review captures the **visible** workspace's
 context, namespaces, kind selection, label selector and observed UIDs. A single
@@ -83,7 +89,20 @@ coverage.
 | `5` Evidence | Source, captured identity, timestamps, conditions and collection limits |
 
 `r` explicitly refreshes. Tab, search, detail and recovery navigation use retained
-data. In Revisions, `j`/`k` select a revision and Enter previews its template.
+data. In Revisions, `j`/`k` or arrow keys choose a revision; Page Up/Down move
+the selection by a page. The selected row stays visible after navigation and
+resize. Enter previews the exact selected UID. Search and `n`/`N` navigate text
+matches independently; they never select a recovery target.
+
+In Recovery, the same selection keys change the pending choice; Enter explicitly
+updates the preview. Ctrl-F/Ctrl-B scroll retained text by a page without changing
+that choice. This keeps a long template comparison accessible while retaining the
+previewed UID.
+
+Refresh preserves a selected UID when present. If that UID disappears from the
+retained set, selection is visibly invalidated and Enter cannot preview a
+replacement. Use the selection keys to choose again. Recovery names the
+previewed ReplicaSet and keeps it separate from any pending new choice.
 Recovery always reports **not executed**. Revision numbers and creation times
 do not silently choose a recovery target. A template match identifies retained
 equivalence; it does not prove which ReplicaSet the controller selected.
@@ -99,6 +118,19 @@ Failed Deployment reads retain the prior snapshot and original capture time.
 New partial child evidence has its own capture and coverage. Known identity
 changes stop refresh; destination changes cannot redirect a captured reader.
 No restart, scale, rollback or Helm operation is submitted by this view.
+
+## Terminal layout
+
+At 80×24, each review uses one main pane with compact metadata. At 60 columns,
+manifest rows combine kind/name and retain state; full namespace/identity and
+values remain available in detail. The revision list hides secondary counts
+into Evidence and keeps its selected row visible. Narrow tabs show the current
+label and a Tab cycler. Deliberate truncation uses an ellipsis.
+
+The supported task viewport is at least 40×12, excluding application chrome
+(usually a 40×16 terminal in compact mode). Below that size, a resize/back/quit
+message replaces clipped content. Returning to a supported size restores the
+retained source, query, tab and selection.
 
 ## Remaining Horizon 2 work
 

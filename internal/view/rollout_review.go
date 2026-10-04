@@ -43,7 +43,9 @@ type rolloutReviewView struct {
 	recoveryRevisionUID  string
 	identityBar, tabsBar *tview.TextView
 	footer               *tview.TextView
-	width                int
+	width, height        int
+	selectionInvalidated bool
+	ensureSelection      bool
 	refreshFailure       string
 	retainedText         string
 }
@@ -142,6 +144,27 @@ func (v *rolloutReviewView) Init(ctx context.Context) error {
 	v.actions.Add(ui.KeyK, ui.NewKeyAction("Previous retained revision", func(event *tcell.EventKey) *tcell.EventKey {
 		return v.moveRevision(event, -1)
 	}, true))
+	for _, item := range []struct {
+		key   tcell.Key
+		step  int
+		label string
+	}{
+		{tcell.KeyDown, 1, "Next retained revision"}, {tcell.KeyUp, -1, "Previous retained revision"},
+		{tcell.KeyPgDn, 0, "Next revision page"}, {tcell.KeyPgUp, 0, "Previous revision page"},
+	} {
+		key, step := item.key, item.step
+		v.actions.Add(key, ui.NewKeyAction(item.label, func(event *tcell.EventKey) *tcell.EventKey {
+			delta := step
+			if delta == 0 {
+				_, _, _, height := v.text.GetInnerRect()
+				delta = max(1, height-4)
+				if key == tcell.KeyPgUp {
+					delta = -delta
+				}
+			}
+			return v.moveRevision(event, delta)
+		}, true))
+	}
 	v.actions.Add(tcell.KeyEnter, ui.NewSharedKeyAction("Review selected revision template", v.reviewSelectedRevision, true))
 	v.render()
 	return nil
@@ -177,12 +200,17 @@ func (v *rolloutReviewView) StylesChanged(styles *config.Styles) {
 }
 
 func (v *rolloutReviewView) Draw(screen tcell.Screen) {
-	_, _, width, _ := v.GetInnerRect()
-	if width != v.width {
-		v.width = width
+	_, _, width, height := v.GetInnerRect()
+	if ui.DrawTaskSizeNotice(screen, v.Box) {
+		return
+	}
+	if width != v.width || height != v.height {
+		v.width, v.height = width, height
+		v.ensureSelection = true
 		v.render()
 	}
 	v.renderChrome()
+	v.keepRevisionVisible()
 	v.Flex.Draw(screen)
 }
 
@@ -219,6 +247,7 @@ func (v *rolloutReviewView) selectTab(tab int) {
 	row, col := v.text.GetScrollOffset()
 	v.tabStates[v.activeTab] = investigationTabState{query: v.inspectionQuery, region: v.currentRegion, row: row, col: col}
 	v.activeTab = tab
+	v.ensureSelection = true
 	state := v.tabStates[tab]
 	v.inspectionQuery = state.query
 	v.cmdBuff.SetText(state.query, "", true)
@@ -235,15 +264,26 @@ func (v *rolloutReviewView) revisionIndex() int {
 			}
 		}
 	}
-	return 0
+	return -1
 }
 
 func (v *rolloutReviewView) moveRevision(event *tcell.EventKey, step int) *tcell.EventKey {
 	if v.cmdBuff.IsActive() || (v.activeTab != 1 && v.activeTab != rolloutRecoveryTab) || v.snapshot == nil || len(v.snapshot.Revisions) == 0 {
 		return event
 	}
-	index := (v.revisionIndex() + step + len(v.snapshot.Revisions)) % len(v.snapshot.Revisions)
+	index := v.revisionIndex()
+	if index < 0 {
+		// The first navigation after invalidation is an explicit new choice.
+		index = 0
+		if step < 0 {
+			index = len(v.snapshot.Revisions) - 1
+		}
+	} else {
+		index = (index + step%len(v.snapshot.Revisions) + len(v.snapshot.Revisions)) % len(v.snapshot.Revisions)
+	}
 	v.selectedRevisionUID = v.snapshot.Revisions[index].Identity.UID
+	v.selectionInvalidated = false
+	v.ensureSelection = true
 	v.render()
 	return nil
 }
@@ -255,7 +295,13 @@ func (v *rolloutReviewView) reviewSelectedRevision(event *tcell.EventKey) *tcell
 	if (v.activeTab != 1 && v.activeTab != rolloutRecoveryTab) || v.snapshot == nil || len(v.snapshot.Revisions) == 0 {
 		return event
 	}
-	v.recoveryRevisionUID = v.snapshot.Revisions[v.revisionIndex()].Identity.UID
+	index := v.revisionIndex()
+	if index < 0 {
+		v.selectionInvalidated = true
+		v.renderChrome()
+		return nil
+	}
+	v.recoveryRevisionUID = v.snapshot.Revisions[index].Identity.UID
 	v.selectTab(rolloutRecoveryTab)
 	v.render()
 	return nil
@@ -314,9 +360,11 @@ func (v *rolloutReviewView) acceptSnapshot(snapshot *review.RolloutSnapshot, err
 	}
 	if v.snapshot != nil && v.snapshot.Identity.UID != "" {
 		v.target.UID = types.UID(v.snapshot.Identity.UID)
-		if len(v.snapshot.Revisions) > 0 && v.selectedRevisionUID == "" {
+		if len(v.snapshot.Revisions) > 0 && v.selectedRevisionUID == "" && !v.selectionInvalidated {
 			v.selectedRevisionUID = v.snapshot.Revisions[0].Identity.UID
 		}
+		v.selectionInvalidated = v.selectedRevisionUID != "" && v.revisionIndex() < 0
+		v.ensureSelection = true
 	}
 	v.render()
 }
@@ -326,7 +374,8 @@ func (v *rolloutReviewView) render() {
 		return
 	}
 	v.renderChrome()
-	width := max(40, v.width)
+	width := max(1, v.width)
+	v.text.SetWrap(v.activeTab != 1)
 	if v.width == 0 {
 		width = 76
 	}
@@ -381,21 +430,70 @@ func (v *rolloutReviewView) renderChrome() {
 	} else if v.refreshFailure != "" {
 		third = "[~] Refresh failed; source/time retained · " + v.refreshFailure
 	}
+	if v.activeTab == 1 || v.activeTab == rolloutRecoveryTab {
+		index := v.revisionIndex()
+		if index >= 0 {
+			r := &v.snapshot.Revisions[index]
+			second = "Selected " + r.Identity.Name + " · UID " + r.Identity.UID
+		} else if v.selectedRevisionUID != "" {
+			second = "Prior selection UID " + v.selectedRevisionUID
+		}
+		if v.selectionInvalidated {
+			third = "[!] Selection removed; j/k choose again before Enter"
+		}
+	}
 	if !v.destinationCurrent() {
 		third = "[~] Destination changed; original source retained; reopen to refresh"
 	}
 	v.identityBar.SetText(detailStyled(p.Focus.String(), "b", fitInvestigation(first, width)) + "\n" +
 		detailStyled(p.Muted.String(), "", fitInvestigation(second, width)) + "\n" +
 		detailStyled(p.Warning.String(), "", fitInvestigation(third, width)))
-	var tabs strings.Builder
-	for index, name := range rolloutReviewTabs {
-		label := fmt.Sprintf("%d %s", index+1, name)
-		color, attr := p.Muted.String(), ""
-		if index == v.activeTab {
-			label, color, attr = "["+label+"]", p.Focus.String(), "b"
+	v.tabsBar.SetText(ui.TaskTabs(rolloutReviewTabs, v.activeTab, width))
+	footer := "READ ONLY · r refresh · / search · Esc back"
+	if v.activeTab == 1 || v.activeTab == rolloutRecoveryTab {
+		footer = "READ ONLY · j/k choose · Enter review · Esc back"
+		if width < 48 {
+			footer = "j/k choose · Enter review · Esc back"
 		}
-		tabs.WriteString(detailStyled(color, attr, label) + "  ")
 	}
-	v.tabsBar.SetText(tabs.String())
-	v.footer.SetText(detailStyled(p.Muted.String(), "", fitInvestigation("READ ONLY · r refresh · j/k choose revision · Enter template review", width)))
+	v.footer.SetText(detailStyled(p.Muted.String(), "", fitInvestigation(footer, width)))
+}
+
+// Selection owns the revision list viewport; free-text search keeps its own
+// highlights and tab state. Only navigation, resize and refreshed evidence
+// request a viewport adjustment, so scrolling other tabs remains independent.
+func (v *rolloutReviewView) keepRevisionVisible() {
+	if !v.ensureSelection || v.activeTab != 1 {
+		return
+	}
+	v.ensureSelection = false
+	// Search highlights may request a different scroll on the next native draw.
+	// Choosing a row takes priority; n/N can resume independent match navigation.
+	v.text.Highlight()
+	line := -1
+	for index, text := range v.model.Peek() {
+		if strings.HasPrefix(text, ">") {
+			line = index
+			break
+		}
+	}
+	if line < 0 {
+		return
+	}
+	height := max(1, v.height-5)
+	row, _ := v.text.GetScrollOffset()
+	if line < row {
+		row = line
+	}
+	if line >= row+height {
+		row = line - height + 1
+	}
+	v.text.ScrollTo(max(0, row), 0)
+}
+
+func (*rolloutReviewView) ExtraHints() map[string]string {
+	return map[string]string{
+		"Revisions": "j/k or arrows choose UID; Page keys move selection. Enter reviews the exact visible choice. Refresh removal requires a new choice.",
+		"Search":    "Case-insensitive regex; -f text for fuzzy search. n/N move matches without choosing a revision; j/k returns to the chosen row.",
+	}
 }

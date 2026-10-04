@@ -54,3 +54,27 @@ checks. They do not establish live-cluster controller coverage, server preview
 fidelity, rollback execution, application availability or human operator
 usability. Hosted CI status should be read from PR #41 for its current head;
 captured source revisions and hashes remain historical evidence.
+
+## Review UI follow-up
+
+The #42/#44/#45 follow-up keeps both authored image and memory changes visible
+on the first detail screen. `e` explicitly opens complete source, captured scope,
+timestamps, live identity and ownership evidence; Esc returns to the same table.
+Revision page navigation selects retained UIDs, while Ctrl-F/Ctrl-B scroll long
+Recovery text without changing the pending revision choice.
+
+The updated native journey passed **20 checks** at **80×24** and **120×34** against
+the exact published PR #84 source `eff72a376d40ccb0ef92392282eaf9cc4ecfef5c`.
+It checks first-screen values before opening Evidence, complete provenance after
+opening Evidence, table return, source-fixed refresh, denied/recreated target
+continuity, and original recovery-template retention. It audits every request
+for workload mutations, Secret reads, scope and bounded descendant queries.
+The synthetic fixture submitted no workload changes. The checks use the native
+Ctrl-F text scroll action so PageDown cannot alter the revision under review.
+
+Focused native SimulationScreen and semantic tests passed with Go 1.25.8:
+`go test -ldflags=-w -p 1 ./internal/ui ./internal/view ./internal/review -run 'TestTask|TestDesired|TestRollout' -count=1`.
+These include 120/80/60-column changed-value painting, the 40×12 task floor,
+25-revision selection/resize/search, and explicit removed-UID selection state.
+These follow-up checks retain the same synthetic and operator-study limits as
+the original validation above.

@@ -33,7 +33,7 @@ DEPLOYMENT_UID = "fixture-checkout-deployment"
 OLD_RS_UID = "fixture-checkout-rs-old"
 CURRENT_RS_UID = "fixture-checkout-rs-current"
 SECRET_MARKER = "fixture-secret-must-not-render"
-GUIDE_IMAGES = {"desired-resource-table", "desired-authored-detail",
+GUIDE_IMAGES = {"desired-resource-table", "desired-authored-detail", "desired-source-evidence",
                "rollout-progress-overview", "rollout-historical-preview"}
 
 
@@ -260,7 +260,9 @@ def read_pages(terminal, required=(), excluded=(), max_pages=12):
             break
         pages.append(current)
         previous = current
-        terminal.keys("\x1b[6~", .15)
+        # Ctrl-F scrolls the text page without triggering revision selection.
+        # PageDown is an exact-selection action in Revisions and Recovery.
+        terminal.keys("\x06", .15)
     else:
         raise AssertionError("Retained detail exceeded the fixture's page bound")
     seen = "\n".join(pages)
@@ -323,8 +325,13 @@ def run_width(binary, output, columns, rows):
             (output / (filename + ".png")).unlink()
         captures.append(record)
 
-    def detail(name, required=(), excluded=(), capture_required=(), max_pages=12):
-        seen = read_pages(terminal, required, excluded, max_pages)
+    def detail(name, required=(), excluded=(), capture_required=(), max_pages=12, paginate=True):
+        if paginate:
+            seen = read_pages(terminal, required, excluded, max_pages)
+        else:
+            # In Revisions, PageUp/Down now moves the exact retained selection.
+            # Both fixture rows fit, so inspect them without changing the choice.
+            seen = wait_screen(terminal, required, excluded=tuple(excluded) + (SECRET_MARKER,))
         (output / (f"{prefix}-{name}.pages.txt")).write_text(seen + "\n")
         if capture_required:
             for _ in range(64):
@@ -352,13 +359,23 @@ def run_width(binary, output, columns, rows):
             wait_screen(terminal, ["Desired-state review", "checkout", "out of scope", "excluded", original_hash[:12]])
             capture("desired-resource-table")
             terminal.keys("\r", .4)
-            detail("desired-authored-detail", ["RETAINED SOURCE", original_hash, "DECLARED INTENT", "example.test/api:v1", "example.test/api:v2",
-                                                "128Mi", "192Mi", "Live-only fields and omitted resources",
-                                                "Flux tracking marker"],
+            # Exact values must be visible immediately, before provenance. The
+            # explicit Evidence action still exposes the complete retained source.
+            wait_screen(terminal, ["CHANGED FIELDS", "example.test/api:v1", "example.test/api:v2", "128Mi", "192Mi"],
+                        excluded=("RETAINED SOURCE", SECRET_MARKER))
+            detail("desired-authored-detail", ["CHANGED FIELDS", "example.test/api:v1", "example.test/api:v2",
+                                                "128Mi", "192Mi", "Live-only fields and omitted resources"],
                    [SECRET_MARKER, "REMOVE /spec", "dnsPolicy", "terminationGracePeriodSeconds"],
-                   ["DECLARED INTENT", "example.test/api:v2", "192Mi"])
+                   ["CHANGED FIELDS", "example.test/api:v2", "192Mi"])
+            terminal.keys("e", .2)
+            detail("desired-source-evidence", ["RETAINED SOURCE", original_hash, "CAPTURED SCOPE", DEPLOYMENT_UID,
+                                               "DECLARED INTENT", "Flux tracking marker", "example.test/api:v2", "192Mi"],
+                   [SECRET_MARKER, "REMOVE /spec", "dnsPolicy", "terminationGracePeriodSeconds"])
             terminal.keys("\x1b", .2)
-            checks.append("authored image/resource changes are visible; omitted defaults are not deletion proposals")
+            wait_screen(terminal, ["Desired-state review", "checkout", "out of scope", "excluded", original_hash[:12]],
+                        excluded=("CHANGED FIELDS", "RETAINED SOURCE"))
+            checks.append("both authored changes are visible on the first detail screen; e exposes full provenance; Esc returns to the same resource table")
+            checks.append("omitted defaults are not deletion proposals; source hash, scope, UID and ownership remain accessible in Evidence")
 
             # Rewriting the file is intentionally insufficient: r keeps the
             # selected source observation and hash rather than silently reloading.
@@ -379,6 +396,7 @@ def run_width(binary, output, columns, rows):
             wait_screen(terminal, ["retained", original_hash[:12]])
             capture("desired-denied-retained")
             terminal.keys("\r", .3)
+            terminal.keys("e", .2)
             detail("desired-denied-detail", ["RETAINED EVIDENCE", "denied", "example.test/api:v2", DEPLOYMENT_UID], [SECRET_MARKER])
             terminal.keys("\x1b", .2)
             api.deployment_denied = False
@@ -388,6 +406,7 @@ def run_width(binary, output, columns, rows):
             wait_screen(terminal, ["retained", original_hash[:12]])
             capture("desired-stale-retained")
             terminal.keys("\r", .3)
+            terminal.keys("e", .2)
             detail("desired-stale-detail", ["RETAINED EVIDENCE", DEPLOYMENT_UID, "example.test/api:v2"],
                    ["fixture-recreated-deployment", SECRET_MARKER])
             terminal.keys("\x1b", .2)
@@ -402,7 +421,7 @@ def run_width(binary, output, columns, rows):
             capture("rollout-progress-overview")
             terminal.keys("2", .3)
             detail("rollout-owned-revisions", ["REPLICA SET REVISIONS", "checkout-10-old", "checkout-20-new"],
-                   ["foreign-rs", "fixture-foreign-rs", "non-controller-rs"])
+                   ["foreign-rs", "fixture-foreign-rs", "non-controller-rs"], paginate=False)
             terminal.keys("3", .3)
             detail("rollout-owned-pods", ["POD IMAGE EVIDENCE", "checkout-10-old-pod", "checkout-20-new-pod"],
                    ["foreign-pod", "foreign:v99", "non-controller-pod", "unowned:v99"])
@@ -438,26 +457,34 @@ def run_width(binary, output, columns, rows):
 
             api.stage = "rollout-denied-refresh"
             api.deployment_denied = True
+            terminal.keys("1", .2)
             terminal.keys("r", .5)
             wait_screen(terminal, ["Refresh failed", "source/time retained"])
             if captured_time(journeys.text(terminal)) != before_fail_time:
                 raise AssertionError("Failed rollout refresh replaced retained capture time")
             capture("rollout-denied-retained")
+            terminal.keys("4", .2)
+            detail("rollout-denied-recovery", ["NOT EXECUTED", OLD_RS_UID, "example.test/api:v1"],
+                   ["example.test/api:v777", "foreign-rs"])
             api.deployment_denied = False
             api.stage = "rollout-stale-refresh"
             api.deployment()["metadata"]["uid"] = "fixture-recreated-deployment"
+            terminal.keys("1", .2)
             terminal.keys("r", .5)
             wait_screen(terminal, ["Refresh failed", "source/time retained"])
             if captured_time(journeys.text(terminal)) != before_fail_time:
                 raise AssertionError("Recreated Deployment replaced the pinned rollout observation")
             capture("rollout-stale-retained")
+            terminal.keys("4", .2)
+            detail("rollout-stale-recovery", ["NOT EXECUTED", OLD_RS_UID, "example.test/api:v1"],
+                   ["example.test/api:v777", "foreign-rs"])
             checks.append("denied/recreated Deployment refreshes keep captured UID, time and selected retained recovery evidence")
 
             api.stage = "rollout-unobserved-generation"
             api.set_rollout("unobserved")
             terminal.keys("1", .2)
             terminal.keys("r", .5)
-            detail("rollout-awaiting-generation", ["PROGRESSING", "Generation 4", "controller observed 3"], ["[!] BLOCKED"])
+            detail("rollout-awaiting-generation", ["PROGRESSING", "Generation 4", "observed 3"], ["[!] BLOCKED"])
             checks.append("an older-generation Progressing=False condition does not become a current blocked verdict")
             api.stage = "rollout-complete"
             api.set_rollout("complete")
