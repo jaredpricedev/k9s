@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -28,6 +29,7 @@ type Config struct {
 	conn                client.Connection
 	settings            data.KubeSettings
 	destinationRevision atomic.Uint64
+	connectionMu        sync.RWMutex
 }
 
 // NewConfig creates a new default config.
@@ -292,12 +294,16 @@ func (c *Config) SetActiveView(view string) {
 
 // GetConnection return an api server connection.
 func (c *Config) GetConnection() client.Connection {
+	c.connectionMu.RLock()
+	defer c.connectionMu.RUnlock()
 	return c.conn
 }
 
 // SetConnection set an api server connection.
 func (c *Config) SetConnection(conn client.Connection) {
+	c.connectionMu.Lock()
 	c.conn = conn
+	c.connectionMu.Unlock()
 	if conn != nil {
 		c.K9s.resetConnection(conn)
 	}

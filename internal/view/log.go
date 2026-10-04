@@ -41,6 +41,7 @@ const (
 
 // Log represents a generic log viewer.
 type Log struct {
+	sessionStale        bool
 	childStylesAttached bool
 	*tview.Flex
 
@@ -316,6 +317,10 @@ func (l *Log) getContext() context.Context {
 // runModel serializes collection lifecycle off the draw thread. A newer request
 // cancels its predecessor and obsolete queued requests cannot resurrect streams.
 func (l *Log) runModel(action func(context.Context)) {
+	if l.sessionStale {
+		l.workbench.notice = "Session refreshed; reopen live logs to check resource identity."
+		return
+	}
 	ctx := l.getContext()
 	seq := l.lifecycleSeq.Add(1)
 	go func() {
@@ -345,7 +350,12 @@ func (l *Log) Start() {
 	l.workbench.start()
 	l.originalCapture = l.app.GetInputCapture()
 	l.app.SetInputCapture(l.captureWorkbenchKey)
-	l.runModel(l.model.Start)
+	if l.sessionStale {
+		l.workbench.collectorState.Store(logCollectorStopped)
+		l.workbench.notice = "Session refreshed; retained logs only. Reopen live logs to check resource identity."
+	} else {
+		l.runModel(l.model.Start)
+	}
 	l.updateTitle()
 }
 

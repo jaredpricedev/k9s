@@ -135,6 +135,7 @@ func (a *App) Shutdown() {
 				if a.factory != nil {
 					a.factory.Terminate()
 				}
+				closePreparedSession(a.Conn())
 			},
 			"shell pod": func() {
 				if a.Config != nil && a.Conn() != nil {

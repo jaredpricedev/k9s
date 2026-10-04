@@ -336,6 +336,8 @@ func (f *Factory) AddForwarder(pf Forwarder) {
 
 // DeleteForwarder deletes portforward for a given container.
 func (f *Factory) DeleteForwarder(path string) {
+	f.mx.Lock()
+	defer f.mx.Unlock()
 	count := f.forwarders.Kill(path)
 	slog.Warn("Deleted portforward",
 		slogs.Count, count,
@@ -343,12 +345,28 @@ func (f *Factory) DeleteForwarder(path string) {
 	)
 }
 
+// DeleteOwnedForwarder completes exactly one registered stream. A delayed exit
+// must not stop a replacement with the same pod/container/local-port ID.
+func (f *Factory) DeleteOwnedForwarder(expected Forwarder) {
+	f.mx.Lock()
+	defer f.mx.Unlock()
+	id := expected.ID()
+	if current, ok := f.forwarders[id]; ok && current == expected {
+		current.Stop()
+		delete(f.forwarders, id)
+	}
+}
+
 // Forwarders returns all portforwards.
 func (f *Factory) Forwarders() Forwarders {
 	f.mx.RLock()
 	defer f.mx.RUnlock()
 
-	return f.forwarders
+	snapshot := make(Forwarders, len(f.forwarders))
+	for id, forwarder := range f.forwarders {
+		snapshot[id] = forwarder
+	}
+	return snapshot
 }
 
 // ForwarderFor returns a portforward for a given container or nil if none exists.
@@ -364,7 +382,7 @@ func (f *Factory) ForwarderFor(path string) (Forwarder, bool) {
 // ValidatePortForwards check if pods are still around for portforwards.
 // BOZO!! Review!!!
 func (f *Factory) ValidatePortForwards() {
-	for k, fwd := range f.forwarders {
+	for k, fwd := range f.Forwarders() {
 		tokens := strings.Split(k, ":")
 		if len(tokens) != 2 {
 			slog.Error("Invalid port-forward key", slogs.Key, k)
@@ -376,8 +394,7 @@ func (f *Factory) ValidatePortForwards() {
 		}
 		o, err := f.Get(client.PodGVR, paths[0], false, labels.Everything())
 		if err != nil {
-			fwd.Stop()
-			delete(f.forwarders, k)
+			f.DeleteOwnedForwarder(fwd)
 			continue
 		}
 		var pod v1.Pod
@@ -385,8 +402,7 @@ func (f *Factory) ValidatePortForwards() {
 			continue
 		}
 		if pod.GetCreationTimestamp().Unix() > fwd.Age().Unix() {
-			fwd.Stop()
-			delete(f.forwarders, k)
+			f.DeleteOwnedForwarder(fwd)
 		}
 	}
 }
