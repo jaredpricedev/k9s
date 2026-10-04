@@ -25,6 +25,7 @@ type forwardDialogCapture struct {
 	view        ResourceViewer
 	destination forwardDestination
 	selection   string
+	generation  uint64
 }
 
 var errForwardNoCandidate = errors.New("no explicit running Pod candidate")
@@ -42,9 +43,10 @@ func prepareForwardDialog(view ResourceViewer, path string) error {
 	if err != nil {
 		return err
 	}
-	capture := &forwardDialogCapture{view: view, selection: view.GetTable().GetSelectedItem(), destination: forwardDestination{
-		app: app, factory: app.factory, owner: app.Content.Top(), revision: app.Config.DestinationRevision(),
-		origin: origin, config: rest.CopyConfig(actor)}}
+	capture := &forwardDialogCapture{view: view, selection: view.GetTable().GetSelectedItem(),
+		generation: view.GetTable().operationGeneration.Load(), destination: forwardDestination{
+			app: app, factory: app.factory, owner: app.Content.Top(), revision: app.Config.DestinationRevision(),
+			origin: origin, config: rest.CopyConfig(actor)}}
 	if origin.GVR.GVR() == client.PodGVR.GVR() {
 		pod, err := cachedLocalSessionPod(app.factory, view.GetTable().GetNamespace(), path)
 		if err != nil {
@@ -62,7 +64,8 @@ func prepareForwardDialog(view ResourceViewer, path string) error {
 func (c *forwardDialogCapture) current() bool {
 	d, app := &c.destination, c.destination.app
 	if !app.IsRunning() || app.factory != d.factory || app.Config.DestinationRevision() != d.revision ||
-		app.Content.Top() != d.owner || c.view.GetTable().GetSelectedItem() != c.selection {
+		app.Content.Top() != d.owner || c.view.GetTable().GetSelectedItem() != c.selection ||
+		c.view.GetTable().operationGeneration.Load() != c.generation {
 		return false
 	}
 	if d.origin.UID == "" {

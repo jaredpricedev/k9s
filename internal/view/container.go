@@ -209,7 +209,7 @@ func (c *Container) portFwdCmd(evt *tcell.EventKey) *tcell.EventKey {
 		c.App().Flash().Err(err)
 		return nil
 	}
-	capture := &forwardDialogCapture{view: c, selection: path, destination: forwardDestination{
+	capture := &forwardDialogCapture{view: c, selection: path, generation: c.GetTable().operationGeneration.Load(), destination: forwardDestination{
 		app: c.App(), factory: c.App().factory, owner: c.App().Content.Top(), revision: c.App().Config.DestinationRevision(),
 		target: target, path: c.GetTable().Path + "|" + path, config: rest.CopyConfig(actor)}}
 	if err := capture.showPorts(ports, ann); err != nil {

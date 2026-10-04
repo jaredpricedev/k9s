@@ -17,6 +17,7 @@ import (
 	"github.com/derailed/k9s/internal/config/mock"
 	"github.com/derailed/k9s/internal/session"
 	"github.com/derailed/k9s/internal/watch"
+	"github.com/stretchr/testify/require"
 	authv1 "k8s.io/api/authorization/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,6 +28,23 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 )
+
+func TestForwardPreparationCannotReopenAfterLeavingAndReturningToItsPage(t *testing.T) {
+	view, _, _, _ := nativeGuardFixture(t, nativeObserved)
+	app := view.App()
+	app.SetRunning(true)
+	t.Cleanup(func() { app.SetRunning(false) })
+	origin := selectedResourceForPath(view, app.Config.ActiveContextName(), view.GetSelectedItem())
+	capture := &forwardDialogCapture{view: view, selection: view.GetSelectedItem(), generation: view.operationGeneration.Load(),
+		destination: forwardDestination{app: app, factory: app.factory, owner: view, revision: app.Config.DestinationRevision(), origin: origin}}
+	require.True(t, capture.current(), "captured forwarding page was not initially current")
+	other := &discoveryOwner{Details: NewDetails(app, "other page", "", contentTXT, false)}
+	app.Content.Push(other)
+	require.False(t, capture.current(), "pending result took ownership of another page")
+	app.Content.Pop()
+	require.Same(t, view, app.Content.Top())
+	require.False(t, capture.current(), "returning to the same page re-enabled its canceled preparation")
+}
 
 const (
 	localSetupNodeName = "owned-node"

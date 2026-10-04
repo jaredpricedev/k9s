@@ -50,7 +50,7 @@ func TestLocalPluginOwnsDecoratedResourceTable(t *testing.T) {
 	pod := &Pod{ResourceViewer: browser}
 	app.Content.Push(pod)
 	invocation := &pluginInvocation{runner: browser, contextName: app.Config.ActiveContextName(),
-		revision: app.Config.DestinationRevision(), path: browser.GetSelectedItem()}
+		revision: app.Config.DestinationRevision(), path: browser.GetSelectedItem(), tableGeneration: browser.operationGeneration.Load()}
 	require.True(t, invocation.current(), "embedded runner lost ownership of its decorated Pod page")
 	replacement := NewBrowser(client.PodGVR).(*Browser)
 	require.NoError(t, replacement.Table.Init(context.WithValue(t.Context(), internal.KeyApp, app)))
@@ -58,7 +58,7 @@ func TestLocalPluginOwnsDecoratedResourceTable(t *testing.T) {
 	app.Content.Push(replacement)
 	require.False(t, invocation.current(), "another resource table inherited the captured plugin")
 	app.Content.Pop()
-	require.True(t, invocation.current(), "returning to the captured table did not restore ownership")
+	require.False(t, invocation.current(), "returning to the captured table re-enabled its canceled plugin preparation")
 }
 
 const (

@@ -26,6 +26,7 @@ type pluginInvocation struct {
 	env               Env
 	path, contextName string
 	revision          uint64
+	tableGeneration   uint64
 	target            SelectedResourceTarget
 	session           *operationSession
 	actorREST         func() (*rest.Config, error)
@@ -61,6 +62,9 @@ func capturePluginInvocation(r Runner, p *config.Plugin) (*pluginInvocation, err
 	inv := &pluginInvocation{
 		runner: r, plugin: pluginCopy, env: maps.Clone(r.EnvFn()()), path: r.GetSelectedItem(),
 		contextName: r.App().Config.ActiveContextName(), revision: r.App().Config.DestinationRevision(),
+	}
+	if owner, ok := r.(TableViewer); ok {
+		inv.tableGeneration = owner.GetTable().operationGeneration.Load()
 	}
 	inv.target = SelectedResourceTarget{Context: inv.contextName, Name: inv.path}
 	if connection := r.App().Conn(); connection != nil && connection.Config() != nil {
@@ -103,7 +107,8 @@ func (i *pluginInvocation) current() bool {
 		currentOwner, currentOK := a.Content.Top().(TableViewer)
 		// Resource decorators expose the same table as their embedded runner.
 		// Comparing wrapper pointers would reject valid Pod/Service plugins.
-		return currentOK && currentOwner.GetTable() == owner.GetTable()
+		return currentOK && currentOwner.GetTable() == owner.GetTable() &&
+			owner.GetTable().operationGeneration.Load() == i.tableGeneration
 	}
 	if owner, ok := i.runner.(Viewer); ok {
 		return a.Content.Top() == owner
