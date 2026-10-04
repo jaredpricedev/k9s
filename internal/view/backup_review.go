@@ -270,8 +270,8 @@ func (v *backupView) renderChrome() {
 		item.SetTextColor(styles.Text.Color())
 	}
 	identity := backupTitle + " / " + v.target.Path()
-	source := "Captured observation: pending"
-	state := "Read only | waiting for independent API reads"
+	source := retainedObservationPending
+	state := retainedWaitingForReads
 	if v.snapshot != nil {
 		source = v.snapshot.CapturedAt.UTC().Format("15:04:05Z")
 		state = "RO | observed page"
@@ -288,7 +288,7 @@ func (v *backupView) renderChrome() {
 		}
 	}
 	if !v.destinationCurrent() {
-		state = "Retained | destination changed; reopen"
+		state = retainedDestinationChanged
 	}
 	lines := []string{identity + " | " + v.target.Context, "Backup success != recoverability", source + " | " + state}
 	for index, line := range lines {
