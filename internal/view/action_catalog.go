@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/derailed/k9s/internal"
+	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/model"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
@@ -48,7 +49,7 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 	if resource, ok := owner.(ResourceViewer); ok && resource.GetTable() != nil {
 		for key, action := range actions {
 			switch strings.ToLower(action.Description) {
-			case "view", "describe", "yaml", "logs", "previous logs", "copy", "edit", "delete", "scale", "restart", "shell", "exec", "port-forward":
+			case "view", "describe", "yaml", "logs", "previous logs", "copy", "edit", client.DeleteVerb, "scale", "restart", "shell", "exec", "port-forward":
 				action.Opts.RequiresSelection = true
 				actions[key] = action
 			}

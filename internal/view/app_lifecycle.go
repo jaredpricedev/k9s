@@ -105,6 +105,7 @@ func (a *App) Shutdown() {
 	}
 	a.lifecycle.once.Do(func() {
 		a.requestExit(0)
+		a.operations.cancelAll()
 		// tview already calls Fini before rethrowing a render/input panic. Some
 		// custom screens do not allow a second Fini; cleanup must still cancel
 		// resources and preserve the original panic if Stop encounters that.

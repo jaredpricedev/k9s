@@ -132,7 +132,7 @@ func loadResourcePressureSnapshot(ctx context.Context, conn client.Connection, t
 		pods = []*unstructured.Unstructured{obj}
 	} else {
 		switch obj.GetKind() {
-		case "Deployment", "DaemonSet", inspectionStatefulSetKind, "ReplicaSet", "Job":
+		case "Deployment", inspectionDaemonSetKind, inspectionStatefulSetKind, "ReplicaSet", "Job":
 			pods, notice = workloadPods(ctx, conn, obj)
 		default:
 			fmt.Fprintf(&b, "\nPod inspection unavailable for %s; select a Pod, Deployment, DaemonSet, StatefulSet, ReplicaSet or Job.\n", obj.GetKind())

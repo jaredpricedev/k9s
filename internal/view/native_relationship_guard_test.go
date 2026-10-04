@@ -215,15 +215,15 @@ func TestNativeRelationshipCustomEnterStillRuns(t *testing.T) {
 	require.Zero(t, connection.permissions)
 }
 
-func TestNativeRelationshipUnrelatedEditStillAuthorizes(t *testing.T) {
+func TestNativeRelationshipUnrelatedEditRequiresItsOwnCapturedUID(t *testing.T) {
 	b, connection, _, marker := nativeGuardFixture(t, nativeObserved)
 	b.Select(2, 0)
 	stopped := false
 	b.cancelFn = func() { stopped = true }
 	require.Nil(t, b.editCmd(tcell.NewEventKey(ui.KeyE, 0, tcell.ModNone)))
-	require.True(t, stopped, "ordinary Edit must retain its normal updater lifecycle")
-	require.Equal(t, 1, connection.permissions, "the unrelated row never reached Edit authorization")
-	require.Contains(t, (<-b.App().Flash().Channel()).Text, "can't edit resource")
+	require.False(t, stopped, "a rejected Edit must keep the ordinary updater running")
+	require.Zero(t, connection.permissions, "unknown-UID Edit must fail before authorization or terminal handoff")
+	require.Contains(t, (<-b.App().Flash().Channel()).Text, "identity unavailable")
 	require.Same(t, b, b.App().Content.Top())
 	require.NoFileExists(t, marker, "denied ordinary Edit must not launch kubectl")
 	t.Cleanup(b.Stop)

@@ -17,6 +17,7 @@ import (
 
 	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/client"
+	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/config/data"
 	"github.com/derailed/k9s/internal/dao"
 	"github.com/derailed/k9s/internal/model"
@@ -588,6 +589,9 @@ func (b *Browser) describeCmd(evt *tcell.EventKey) *tcell.EventKey {
 }
 
 func (b *Browser) editCmd(evt *tcell.EventKey) *tcell.EventKey {
+	if b.app.Config.IsReadOnly() {
+		return evt
+	}
 	path := b.GetSelectedItem()
 	if path == "" {
 		return evt
@@ -597,39 +601,23 @@ func (b *Browser) editCmd(evt *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 
-	b.Stop()
-	defer b.Start()
-	if err := editRes(b.app, b.GVR(), path); err != nil {
-		b.App().Flash().Err(err)
+	target := resolveSelectedResource(b, b.app.Config.ActiveContextName())
+	if err := checkOperationTarget(&target); err != nil {
+		b.app.Flash().Err(err)
+		return nil
 	}
-
-	return nil
-}
-
-func editRes(app *App, gvr *client.GVR, path string) error {
-	if path == "" {
-		return fmt.Errorf("nothing selected %q", path)
+	args := []string{nativeEditCommand, target.GVR.FQN(target.Name)}
+	if target.Namespace != "" {
+		args = append(args, "-n", target.Namespace)
 	}
-	ns, n := client.Namespaced(path)
-	if n == "" {
-		return fmt.Errorf("missing resource name in path %q", path)
+	plugin := &config.Plugin{Command: nativeKubectlCommand, Args: args, Description: "Edit " + operationResourceName(&target), Dangerous: true}
+	invocation, err := capturePluginInvocation(b, plugin)
+	if err != nil {
+		b.app.Flash().Err(err)
+		return nil
 	}
-	if client.IsClusterScoped(ns) {
-		ns = client.BlankNamespace
-	}
-	if ok, err := app.Conn().CanI(ns, gvr, n, client.PatchAccess); !ok || err != nil {
-		return fmt.Errorf("current user can't edit resource %s", gvr)
-	}
-
-	args := make([]string, 0, 10)
-	args = append(args, "edit", gvr.FQN(n))
-	if ns != client.BlankNamespace {
-		args = append(args, "-n", ns)
-	}
-	if err := runK(app, &shellOpts{clear: true, args: args}); err != nil {
-		app.Flash().Errf("Edit command failed: %s", err)
-	}
-
+	invocation.requiredVerbs = []string{client.GetVerb, client.PatchVerb}
+	invocation.execute(nil)
 	return nil
 }
 
@@ -810,6 +798,10 @@ func (b *Browser) namespaceActions(aa *ui.KeyActions) {
 }
 
 func (b *Browser) simpleDelete(selections []string, msg string) {
+	if b.GVR() == client.HmGVR {
+		b.guardedHelmDelete(selections)
+		return
+	}
 	if len(selections) > maxOperationTargets {
 		b.app.Flash().Errf("select at most %d resources per operation", maxOperationTargets)
 		return
@@ -837,7 +829,16 @@ func (b *Browser) simpleDelete(selections []string, msg string) {
 		}
 		b.ShowDeleted()
 		session.submit("Delete", targets, func(ctx context.Context, target SelectedResourceTarget) error {
-			return nuker.Delete(ctx, target.Path(), nil, dao.DefaultGrace)
+			if b.GVR() == client.HmGVR || b.GVR() == client.HmhGVR {
+				ctx = observeHelmOperation(ctx)
+			} else {
+				operationBeginWrite(ctx)
+			}
+			err := nuker.Delete(ctx, target.Path(), nil, dao.DefaultGrace)
+			if err == nil {
+				operationAcceptWrite(ctx, "native delete "+target.Path())
+			}
+			return err
 		}, func(target SelectedResourceTarget) {
 			if b.GVR() == client.PfGVR {
 				b.app.factory.DeleteForwarder(target.Path())
