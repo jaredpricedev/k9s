@@ -13,6 +13,7 @@ import (
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/model"
+	"github.com/derailed/k9s/internal/review"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/k9s/internal/view/cmd"
 	"github.com/derailed/k9s/internal/workspace"
@@ -26,6 +27,7 @@ import (
 const (
 	dailyWorkspaceScopesMode       = "scopes"
 	dailyWorkspaceQueueMode        = "queue"
+	dailyWorkspaceHistoryMode      = "history"
 	dailyWorkspacePinsMode         = "pins"
 	dailyWorkspaceDeleteToken      = "delete"
 	dailyWorkspaceFormPage         = "daily-workspace-form"
@@ -40,6 +42,7 @@ type dailyWorkspaceRow struct {
 	cells     []string
 	ref       *workspace.ResourceRef
 	detail    string
+	evidence  string
 	scopeName string
 	key       string
 }
@@ -58,6 +61,9 @@ type dailyWorkspace struct {
 	scope                                  workspace.Scope
 	path, contextName, mode, query, notice string
 	snapshot                               workspace.Snapshot
+	observationWindow                      *workspace.QueueWindow
+	jobSources                             map[string]*review.JobReviewSnapshot
+	jobSourcesOmitted                      int
 	coverage                               []workspace.Coverage
 	rows                                   []dailyWorkspaceRow
 	tabQueries, tabSelections              map[string]string
@@ -93,6 +99,7 @@ func newDailyWorkspace(a *App, store workspace.Store, mode, query string) *daily
 		w.mode = dailyWorkspaceScopesMode
 		w.query = ""
 	}
+	w.resetObservationWindow(time.Now())
 	w.tabQueries = map[string]string{w.mode: w.query}
 	w.tabSelections = make(map[string]string)
 	w.table.SetSelectable(true, false).SetFixed(1, 0).SetEvaluateAllRows(false)
@@ -133,7 +140,7 @@ func (w *dailyWorkspace) Actions() *ui.KeyActions {
 		if w.mode == dailyWorkspaceCoverageMode {
 			action.Description = "Coverage details"
 		}
-		action.Opts.RequiresSelection = w.mode != dailyWorkspaceScopesMode
+		action.Opts.RequiresSelection = w.mode != dailyWorkspaceScopesMode && w.mode != dailyWorkspaceCoverageMode && w.mode != dailyWorkspaceHistoryMode
 		if w.mode == dailyWorkspaceCoverageMode {
 			action.Opts.RequiresSelection = false
 		}
@@ -143,7 +150,8 @@ func (w *dailyWorkspace) Actions() *ui.KeyActions {
 }
 func (w *dailyWorkspace) Hints() model.MenuHints { return actionCatalogHints(w, w.app) }
 func (*dailyWorkspace) ExtraHints() map[string]string {
-	return map[string]string{"Workspace": "1 Daily · 2 Inventory · 3 Coverage · 4 Pins · 5 Scopes. / searches retained rows; r refreshes only saved namespaces."}
+	return map[string]string{"Workspace": "1 Daily · 2 Inventory · 3 Coverage · 4 Pins · 5 Scopes · 6 History. " +
+		"J reviews selected Job/CronJob; i investigates retained identity. / searches retained rows; r refreshes only saved namespaces."}
 }
 func (w *dailyWorkspace) Init(context.Context) error {
 	w.StylesChanged(w.app.Styles)
@@ -187,6 +195,7 @@ func (w *dailyWorkspace) Stop() {
 		w.cancel = nil
 		if strings.HasPrefix(w.notice, "Reading scope") {
 			w.notice = "Observation canceled while away; retained snapshot. r refreshes."
+			w.recordQueueGap(w.notice)
 		}
 	}
 	if w.formOpen {
@@ -244,6 +253,9 @@ func (w *dailyWorkspace) makeActions() *ui.KeyActions {
 		{ui.Key3, "Coverage", false},
 		{ui.Key4, "Pins", false},
 		{ui.Key5, "Scopes", true},
+		{ui.Key6, "Observed history", true},
+		{ui.KeyI, "Investigate captured identity", false},
+		{ui.KeyShiftJ, "Job outcomes and schedule", true},
 		{ui.KeyV, "Selected row details", true},
 		{tcell.KeyTab, "Next workspace tab", true},
 		{tcell.KeyEscape, dailyWorkspaceBackLabel, false},
@@ -255,15 +267,16 @@ func (w *dailyWorkspace) makeActions() *ui.KeyActions {
 		if key == ui.KeyD {
 			action.Opts.Priority = -1
 		}
-		if key == ui.KeyP || key == ui.KeyL || key == tcell.KeyEnter {
-			action.Opts.RequiresSelection = key != tcell.KeyEnter || w.mode != dailyWorkspaceScopesMode
+		if key == ui.KeyP || key == ui.KeyL || key == ui.KeyShiftJ || key == ui.KeyI || key == tcell.KeyEnter {
+			action.Opts.RequiresSelection = key != tcell.KeyEnter ||
+				(w.mode != dailyWorkspaceScopesMode && w.mode != dailyWorkspaceCoverageMode && w.mode != dailyWorkspaceHistoryMode)
 			action.Availability = func() string {
-				if key == tcell.KeyEnter && w.mode == dailyWorkspaceCoverageMode {
+				if key == tcell.KeyEnter && (w.mode == dailyWorkspaceCoverageMode || w.mode == dailyWorkspaceHistoryMode) {
 					row, _ := w.table.GetSelection()
 					if row > 0 && row <= len(w.rows) {
 						return ""
 					}
-					return "Select a coverage source first"
+					return "Select a retained source row first"
 				}
 				if key == tcell.KeyEnter && w.mode == dailyWorkspaceScopesMode {
 					row, _ := w.table.GetSelection()
@@ -278,6 +291,11 @@ func (w *dailyWorkspace) makeActions() *ui.KeyActions {
 				}
 				if target.Context != w.app.Config.ActiveContextName() {
 					return "Context changed; reopen workspace"
+				}
+				if key == ui.KeyShiftJ {
+					if err := jobReviewTargetError(target); err != nil {
+						return err.Error()
+					}
 				}
 				if key == ui.KeyL && (target.GVR == nil || target.GVR.R() != client.PodGVR.R()) {
 					return "Select a Pod to open logs"
@@ -305,10 +323,16 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 			}
 			return nil
 		}
-		if w.mode == dailyWorkspaceCoverageMode {
+		if w.mode == dailyWorkspaceCoverageMode || w.mode == dailyWorkspaceHistoryMode {
 			w.showRowDetails()
 			return nil
 		}
+		w.app.openTargetInspection(w.SelectedResource(), troubleshootCommand)
+		return nil
+	case e.Rune() == 'J':
+		w.app.openJobReview(w.SelectedResource())
+		return nil
+	case e.Rune() == 'i':
 		w.app.openTargetInspection(w.SelectedResource(), troubleshootCommand)
 		return nil
 	case e.Rune() == 'r':
@@ -351,10 +375,10 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 			w.app.Flash().Err(err)
 		}
 		return nil
-	case strings.ContainsRune("12345", e.Rune()) && e.Rune() != 0:
+	case strings.ContainsRune("123456", e.Rune()) && e.Rune() != 0:
 		w.setMode(map[rune]string{
 			'1': dailyWorkspaceQueueMode, '2': inventoryCommand, '3': dailyWorkspaceCoverageMode,
-			'4': dailyWorkspacePinsMode, '5': dailyWorkspaceScopesMode,
+			'4': dailyWorkspacePinsMode, '5': dailyWorkspaceScopesMode, '6': dailyWorkspaceHistoryMode,
 		}[e.Rune()])
 		return nil
 	}
@@ -402,6 +426,7 @@ func (w *dailyWorkspace) refresh() {
 	}
 	if err := w.syncStore(); err != nil {
 		w.notice = "Workspace metadata unavailable; observation retained: " + err.Error()
+		w.recordQueueGap(w.notice)
 		w.render()
 		return
 	}
@@ -420,12 +445,14 @@ func (w *dailyWorkspace) refresh() {
 	connection := w.app.Conn()
 	if connection == nil {
 		w.notice = "Refresh unavailable: no Kubernetes connection; retained observation"
+		w.recordQueueGap(w.notice)
 		w.render()
 		return
 	}
 	reader, err := connection.DynDial()
 	if err != nil {
 		w.notice = "Refresh failed; retained observation: " + err.Error()
+		w.recordQueueGap(w.notice)
 		w.render()
 		return
 	}
@@ -457,6 +484,11 @@ func (w *dailyWorkspace) refresh() {
 
 //nolint:gocritic // Accept a captured observation value before retaining it as view-owned evidence.
 func (w *dailyWorkspace) acceptSnapshot(snapshot workspace.Snapshot, err error) {
+	if !w.observeSnapshot(&snapshot, err) {
+		w.notice = "Stale or undated refresh ignored; prior evidence retained. See History."
+		w.coverage = []workspace.Coverage{{State: "stale", Detail: w.notice}}
+		return
+	}
 	failed, successful := 0, 0
 	for _, coverage := range snapshot.Coverage {
 		switch coverage.State {
@@ -518,6 +550,7 @@ func (w *dailyWorkspace) useScope(name string) {
 		w.scope = *scope
 		w.contextName = scope.Context
 		w.snapshot = workspace.Snapshot{}
+		w.resetObservationWindow(time.Now())
 		w.coverage = nil
 		w.query = ""
 		w.tabQueries = make(map[string]string)
@@ -552,6 +585,7 @@ func (w *dailyWorkspace) acceptEditedScope(scope workspace.Scope) {
 	w.generation++
 	w.scope = scope
 	w.snapshot = workspace.Snapshot{}
+	w.resetObservationWindow(time.Now())
 	w.coverage = nil
 	w.rows = nil
 	w.reader = nil

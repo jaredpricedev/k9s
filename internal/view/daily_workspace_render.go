@@ -80,11 +80,11 @@ func dailyWorkspaceRowKey(row *dailyWorkspaceRow) string {
 	if row.scopeName != "" {
 		return "scope/" + row.scopeName
 	}
-	if row.ref != nil {
-		return dailyWorkspaceRefKey(row.ref)
-	}
 	if row.key != "" {
 		return row.key
+	}
+	if row.ref != nil {
+		return dailyWorkspaceRefKey(row.ref)
 	}
 	return strings.Join(row.cells, "\x00")
 }
@@ -143,6 +143,8 @@ func (w *dailyWorkspace) makeRows(terms []dailyWorkspaceTerm) ([]string, []daily
 				key:   "coverage/" + coverage.GVR + "/" + coverage.Namespace, detail: coverage.Detail,
 			})
 		}
+	case dailyWorkspaceHistoryMode:
+		headers, rows = w.historyRows(terms)
 	case dailyWorkspacePinsMode:
 		headers = []string{"KIND / API", "NAMESPACE", "NAME", statusCol}
 		for _, pin := range w.scope.Pins {
@@ -197,6 +199,8 @@ func (w *dailyWorkspace) render() {
 			w.displayColumns = []int{2, 3}
 		case dailyWorkspaceCoverageMode:
 			w.displayColumns = []int{0, 1, 3}
+		case dailyWorkspaceHistoryMode:
+			w.displayColumns = []int{0, 2, 3}
 		case dailyWorkspacePinsMode:
 			w.displayColumns = []int{2, 3}
 		case dailyWorkspaceScopesMode:
@@ -258,8 +262,10 @@ func (w *dailyWorkspace) render() {
 	w.renderFooter()
 }
 
-var dailyWorkspaceModes = []string{dailyWorkspaceQueueMode, inventoryCommand, dailyWorkspaceCoverageMode, dailyWorkspacePinsMode, dailyWorkspaceScopesMode}
-var dailyWorkspaceLabels = []string{"Daily", "Inventory", "Coverage", "Pins", "Scopes"}
+var dailyWorkspaceModes = []string{
+	dailyWorkspaceQueueMode, inventoryCommand, dailyWorkspaceCoverageMode, dailyWorkspacePinsMode, dailyWorkspaceScopesMode, dailyWorkspaceHistoryMode,
+}
+var dailyWorkspaceLabels = []string{"Daily", "Inventory", "Coverage", "Pins", "Scopes", "History"}
 
 func (w *dailyWorkspace) tabIndex() int {
 	for index, mode := range dailyWorkspaceModes {
@@ -293,6 +299,9 @@ func (w *dailyWorkspace) renderHeader() {
 	if width < 70 {
 		status = fmt.Sprintf("%s · gaps %d · findings %d", age, gaps, len(w.snapshot.Findings))
 	}
+	if w.mode == dailyWorkspaceHistoryMode {
+		status = w.historyStatus(width)
+	}
 	notice := w.notice
 	if notice == "" && gaps > 0 {
 		notice = "Partial coverage · 3 opens gaps; quiet is not health"
@@ -314,8 +323,8 @@ func (w *dailyWorkspace) renderFooter() {
 		width = 76
 	}
 	action := "Enter investigate"
-	if w.mode == dailyWorkspaceCoverageMode {
-		action = "Enter gap details"
+	if w.mode == dailyWorkspaceCoverageMode || w.mode == dailyWorkspaceHistoryMode {
+		action = "Enter evidence"
 	}
 	if w.mode == dailyWorkspaceScopesMode {
 		action = "Enter open · n new"
@@ -343,6 +352,9 @@ func (w *dailyWorkspace) showRowDetails() {
 		if selected.ref != nil {
 			message += "\nCaptured UID: " + selected.ref.UID
 		}
+		if selected.evidence != "" {
+			message += "\n\n" + selected.evidence
+		}
 	}
 	const page = "workspace-row-detail"
 	var modal *ui.MessageModal
@@ -364,6 +376,10 @@ func (w *dailyWorkspace) renderDetail() {
 			identity = selected.ref.GVR + " · " + selected.ref.Namespace + "/" + selected.ref.Name + "\n"
 		}
 		w.detail.SetText(tview.Escape(identity + selected.detail))
+		return
+	}
+	if w.mode == dailyWorkspaceHistoryMode {
+		w.detail.SetText("No retained observations yet. r reads this explicit scope; reopening starts a new window. Prior history is unavailable.")
 		return
 	}
 	w.detail.SetText("Scope observations include workload health, jobs, quotas, PVCs and certificate metadata when enabled. " +
@@ -411,6 +427,8 @@ func (w *dailyWorkspace) constrainColumns(width int) {
 		caps = []int{max(8, min(16, width/9)), max(10, min(22, width/7)), max(14, min(32, width/5)), 0, 6}
 	case dailyWorkspaceCoverageMode:
 		caps = []int{12, max(16, min(40, width/3)), max(10, min(22, width/6)), 0}
+	case dailyWorkspaceHistoryMode:
+		caps = []int{16, 8, max(12, min(28, width/4)), 0}
 	case dailyWorkspacePinsMode:
 		caps = []int{max(16, min(36, width/4)), max(10, min(22, width/6)), max(14, min(32, width/5)), 0}
 	case dailyWorkspaceScopesMode:
@@ -422,6 +440,11 @@ func (w *dailyWorkspace) constrainColumns(width int) {
 		switch w.mode {
 		case dailyWorkspaceCoverageMode:
 			caps = []int{10, min(18, width/3), 0}
+		case dailyWorkspaceHistoryMode:
+			caps = []int{12, min(14, max(6, width-30)), 0}
+			if width < 50 {
+				caps = []int{11, 6, 0}
+			}
 		case dailyWorkspaceQueueMode:
 			caps = []int{8, min(14, max(6, width-30)), 0}
 		default:
@@ -485,6 +508,8 @@ func (w *dailyWorkspace) emptyRowsMessage() string {
 		return "No resources observed. r refreshes; Coverage shows gaps."
 	case dailyWorkspacePinsMode:
 		return "No pins. Select a resource in Daily or Inventory and press p."
+	case dailyWorkspaceHistoryMode:
+		return "No retained history. r observes; reopening begins a new window."
 	case dailyWorkspaceCoverageMode:
 		return "No observation yet. r reads the saved namespaces."
 	}
