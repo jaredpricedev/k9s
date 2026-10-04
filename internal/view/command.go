@@ -112,7 +112,7 @@ func (c *Command) updateSuggestionAliases() {
 	aliases := []string{
 		providersCommand, capacityCommandToken, "operations", "ops",
 		configurationCommand, storageCommandToken, gitopsCommandToken, jobReviewCommandToken,
-		maintenanceCommandToken, accessCommandName, taskbookCommandName,
+		maintenanceCommandToken, accessCommandName, taskbookCommandName, activityCommand,
 	}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
@@ -311,7 +311,7 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.accessCommand(p.GetLine())
 	case taskbookCommandName:
 		c.taskbookCommand(p.GetLine())
-	case "workspace", dailyCommand, inventoryCommand:
+	case "workspace", dailyCommand, inventoryCommand, activityCommand:
 		c.dailyWorkspaceCommand(p.GetLine())
 	case connectionCommand, "connection-health":
 		c.connectionHealthCommand(p.GetLine())
