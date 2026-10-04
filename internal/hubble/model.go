@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	flow "github.com/cilium/cilium/api/v1/flow"
+	"github.com/derailed/k9s/internal/logstream"
 )
 
 // Peer keeps IP identity separate from reported names: DNS names are evidence,
@@ -60,22 +61,33 @@ func peer(e *flow.Endpoint, ip string, names []string) Peer {
 	return p
 }
 
-// Event intentionally cannot retain raw L7 payloads, summaries or extensions.
+// DNSReport retains bounded reported DNS fields, never arbitrary L7 payloads.
+// Missing answers or latency stay unavailable; a query is not a successful lookup.
+type DNSReport struct {
+	Reported                                                              bool
+	Query, Answers, CNames, QTypes, RTypes, ObservationSource, RecordType string
+	LatencyNs                                                             uint64
+}
+
+// Event excludes raw L7 payloads, HTTP headers/URLs, summaries and extensions.
 type Event struct {
 	ID                                                      uint64
 	Time                                                    time.Time
 	Source, Destination                                     Peer
 	Node, Verdict, Protocol, DropReason, L7, Policy, Origin string
 	SourcePort, DestinationPort                             uint32
+	DNS                                                     DNSReport
 }
 
 func Normalize(f *flow.Flow, origin string) Event {
 	e := Event{
-		Time:        f.GetTime().AsTime(),
 		Source:      peer(f.GetSource(), f.GetIP().GetSource(), f.GetSourceNames()),
 		Destination: peer(f.GetDestination(), f.GetIP().GetDestination(), f.GetDestinationNames()),
 		Node:        Clean(f.GetNodeName()), Verdict: f.GetVerdict().String(), Origin: origin,
 		L7: "Not reported; L7 visibility unknown", Policy: "Not reported",
+	}
+	if timestamp := f.GetTime(); timestamp != nil && timestamp.CheckValid() == nil {
+		e.Time = timestamp.AsTime()
 	}
 	if f.GetVerdict() == flow.Verdict_DROPPED {
 		e.DropReason = f.GetDropReasonDesc().String()
@@ -102,8 +114,11 @@ func Normalize(f *flow.Flow, origin string) Event {
 		if h := l7.GetHttp(); h != nil {
 			e.L7 = fmt.Sprintf("HTTP status=%d (payload redacted)", h.GetCode())
 		}
-		if l7.GetDns() != nil {
+		if dns := l7.GetDns(); dns != nil {
 			e.L7 = "DNS reported (payload redacted); not a policy verdict"
+			e.DNS = DNSReport{Reported: true, Query: dnsText(dns.GetQuery()), Answers: dnsValues(dns.GetIps()), CNames: dnsValues(dns.GetCnames()),
+				QTypes: dnsValues(dns.GetQtypes()), RTypes: dnsValues(dns.GetRrtypes()), ObservationSource: dnsText(dns.GetObservationSource()),
+				RecordType: l7.GetType().String(), LatencyNs: l7.GetLatencyNs()}
 		}
 	}
 	var pp []string
@@ -122,6 +137,15 @@ func Normalize(f *flow.Flow, origin string) Event {
 		e.Policy = Clean(strings.Join(pp, "; "))
 	}
 	return e
+}
+
+func dnsText(value string) string { return Clean(logstream.SafeText(value)) }
+func dnsValues(values []string) string {
+	result := make([]string, 0, min(16, len(values)))
+	for _, value := range values[:min(16, len(values))] {
+		result = append(result, dnsText(value))
+	}
+	return dnsText(strings.Join(result, ", "))
 }
 
 // Clean prevents terminal control injection and bounds untrusted display strings.
