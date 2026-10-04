@@ -867,7 +867,9 @@ func (a *App) connectivityComponent(c model.Component, connected bool) {
 
 func retainedDisconnectedWorkspace(c model.Component) bool {
 	switch c.(type) {
-	case *connectionHealthDetails, *dailyWorkspace, *desiredReviewView, *rolloutReviewView, *capacityView, *configurationView, *gitopsView, *jobReviewView, *maintenanceView, *accessView, *taskbookView:
+	case *connectionHealthDetails, *dailyWorkspace, *desiredReviewView, *rolloutReviewView,
+		*capacityView, *configurationView, *gitopsView, *jobReviewView, *maintenanceView,
+		*accessView, *taskbookView, *changeSetView:
 		return true
 	default:
 		return false

@@ -225,7 +225,7 @@ func sensitiveSnapshotKey(key string) bool {
 			return true
 		}
 	}
-	return k == "secret" || k == "secretvalue" || k == "secretdata" || k == "stringdata" || k == "data"
+	return k == "secret" || k == "secretvalue" || k == "secretdata" || k == "stringdata" || k == "data" || k == "binarydata"
 }
 
 func safeLabel(s string) string {

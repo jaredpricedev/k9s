@@ -109,7 +109,11 @@ func (c *Command) suggestionAliases() []string {
 }
 
 func (c *Command) updateSuggestionAliases() {
-	aliases := []string{providersCommand, capacityCommandToken, "operations", "ops", configurationCommand, gitopsCommandToken, jobReviewCommandToken, maintenanceCommandToken, accessCommandName, taskbookCommandName}
+	aliases := []string{
+		providersCommand, capacityCommandToken, "operations", "ops", configurationCommand,
+		gitopsCommandToken, jobReviewCommandToken, maintenanceCommandToken, accessCommandName,
+		taskbookCommandName, changeSetCommandToken,
+	}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
 		return
@@ -315,6 +319,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.configurationCommand()
 	case desiredReviewCommandToken:
 		c.desiredReviewCommand(p.GetLine())
+	case changeSetCommandToken:
+		c.changeSetCommand()
 	case "rollout":
 		c.rolloutReviewCommand()
 	case jobReviewCommandToken:
