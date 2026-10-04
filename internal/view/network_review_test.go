@@ -24,7 +24,7 @@ func networkReviewFixture(t *testing.T) *networkReviewView {
 	_, err := app.Config.ActivateContext("ct-1-1")
 	require.NoError(t, err)
 	app.Config.K9s.UI.NoIcons = true
-	target := SelectedResourceTarget{Context: app.Config.ActiveContextName(), GVR: client.SvcGVR, Namespace: "apps", Name: "api", UID: "svc-a"}
+	target := SelectedResourceTarget{Context: app.Config.ActiveContextName(), GVR: client.SvcGVR, Namespace: "apps", Name: testWorkspaceAPIName, UID: "svc-a"}
 	id := inspect.ResourceIdentity{Context: target.Context, GVR: target.GVR.String(), Namespace: target.Namespace, Name: target.Name, UID: string(target.UID)}
 	v := &networkReviewView{Details: NewDetails(app, "Network path", target.Path(), contentInspection, true), target: target,
 		scope: networkpath.Scope{Service: id, RouteNamespaces: []string{"apps", "edge"}}, destinationRevision: app.Config.DestinationRevision()}
@@ -73,8 +73,8 @@ func TestNetworkReviewNativeFramesKeepScopeUntestedAndMinimumState(t *testing.T)
 func TestNetworkReviewEvidenceReturnPartialRefreshQueryAndUID(t *testing.T) {
 	v := networkReviewFixture(t)
 	v.selectTab(2)
-	v.inspectionQuery = "api"
-	v.cmdBuff.SetText("api", "", true)
+	v.inspectionQuery = testWorkspaceAPIName
+	v.cmdBuff.SetText(testWorkspaceAPIName, "", true)
 	v.render()
 	v.selected[2] = networkpath.ItemKey(v.selectedItem())
 	v.app.Content.Push(v)
@@ -86,17 +86,17 @@ func TestNetworkReviewEvidenceReturnPartialRefreshQueryAndUID(t *testing.T) {
 	require.NotNil(t, front)
 	front.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), func(tview.Primitive) {})
 	require.False(t, v.app.Content.IsTopDialog())
-	require.Equal(t, "api", v.inspectionQuery)
+	require.Equal(t, testWorkspaceAPIName, v.inspectionQuery)
 	require.Equal(t, 2, v.activeTab)
 	retained := v.snapshot
 	v.acceptSnapshot(nil, errors.New("denied refresh"))
 	require.Same(t, retained, v.snapshot)
 	require.Equal(t, "slice-a", string(v.SelectedResource().UID))
-	require.Equal(t, "api", v.inspectionQuery)
+	require.Equal(t, testWorkspaceAPIName, v.inspectionQuery)
 	v.selectTab(6)
 	require.Contains(t, v.text.GetText(true), "Route read denied")
 	v.selectTab(2)
-	require.Equal(t, "api", v.inspectionQuery)
+	require.Equal(t, testWorkspaceAPIName, v.inspectionQuery)
 	v.destinationRevision--
 	require.False(t, v.destinationCurrent())
 	v.refresh()
@@ -157,7 +157,7 @@ func TestNetworkReviewConnectivityPollPreservesExplicitRetainedTask(t *testing.T
 	canceled := false
 	v.cancel = func() { canceled = true }
 	v.selectTab(2)
-	v.inspectionQuery = "api"
+	v.inspectionQuery = testWorkspaceAPIName
 	snapshot := v.snapshot
 	require.True(t, retainedDisconnectedWorkspace(v), "retained task must not exhaust background connection retry budget")
 	v.app.connectivityComponent(v, false)
@@ -167,7 +167,7 @@ func TestNetworkReviewConnectivityPollPreservesExplicitRetainedTask(t *testing.T
 	require.Equal(t, uint64(10), v.generation)
 	require.Same(t, snapshot, v.snapshot)
 	v.app.connectivityComponent(v, true)
-	require.Equal(t, "api", v.inspectionQuery)
+	require.Equal(t, testWorkspaceAPIName, v.inspectionQuery)
 	require.Equal(t, 2, v.activeTab)
 	require.Same(t, snapshot, v.snapshot)
 }
