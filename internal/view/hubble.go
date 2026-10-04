@@ -537,34 +537,7 @@ func (w *HubbleView) renderTable(st *hubble.Status) {
 			}
 		}
 	case hubbleConversationMode:
-		if narrow {
-			put(0, "VERDICT", "OBSERVED FLOW · Enter detail")
-		} else {
-			put(0, "TIME", "SOURCE", "DESTINATION", "PROTOCOL", "VERDICT", "ORIGIN")
-		}
-		oldRows := w.rows
-		w.rows = w.rows[:0]
-		for i := range w.displayed {
-			e := &w.displayed[i]
-			if (e.Source.Key() == w.peer.Key() || e.Destination.Key() == w.peer.Key()) && w.query.Match(e) {
-				w.rows = append(w.rows, *e)
-			}
-		}
-		if len(w.rows) < len(oldRows) {
-			clear(oldRows[len(w.rows):])
-		}
-		for i := range w.rows {
-			e := &w.rows[i]
-			if narrow {
-				put(i+1, e.Verdict, ui.Truncate(e.Time.Format("15:04:05")+" "+e.Source.String()+" → "+e.Destination.String(), max(1, width-13)))
-			} else {
-				put(i+1, e.Time.Format("15:04:05.000"), e.Source.String(), e.Destination.String(),
-					fmt.Sprintf("%s %d → %d", e.Protocol, e.SourcePort, e.DestinationPort), e.Verdict, e.Origin)
-			}
-			if e.ID == selectedID {
-				row = i + 1
-			}
-		}
+		row = w.renderConversationTable(narrow, width, selectedID, row)
 	}
 	if w.table.GetRowCount() == 1 {
 		put(1, "No observed events; visibility or traffic may be missing")
@@ -683,4 +656,36 @@ func (w *HubbleView) putRow(r int, values ...string) {
 		cell.SetBackgroundColor(p.canvas).SetTextColor(color)
 		w.table.SetCell(r, c, cell)
 	}
+}
+
+func (w *HubbleView) renderConversationTable(narrow bool, width int, selectedID uint64, selectedRow int) int {
+	if narrow {
+		w.putRow(0, "VERDICT", "OBSERVED FLOW · Enter detail")
+	} else {
+		w.putRow(0, "TIME", "SOURCE", "DESTINATION", "PROTOCOL", "VERDICT", "ORIGIN")
+	}
+	oldRows := w.rows
+	w.rows = w.rows[:0]
+	for i := range w.displayed {
+		e := &w.displayed[i]
+		if (e.Source.Key() == w.peer.Key() || e.Destination.Key() == w.peer.Key()) && w.query.Match(e) {
+			w.rows = append(w.rows, *e)
+		}
+	}
+	if len(w.rows) < len(oldRows) {
+		clear(oldRows[len(w.rows):])
+	}
+	for i := range w.rows {
+		e := &w.rows[i]
+		if narrow {
+			w.putRow(i+1, e.Verdict, ui.Truncate(e.Time.Format("15:04:05")+" "+e.Source.String()+" → "+e.Destination.String(), max(1, width-13)))
+		} else {
+			w.putRow(i+1, e.Time.Format("15:04:05.000"), e.Source.String(), e.Destination.String(),
+				fmt.Sprintf("%s %d → %d", e.Protocol, e.SourcePort, e.DestinationPort), e.Verdict, e.Origin)
+		}
+		if e.ID == selectedID {
+			selectedRow = i + 1
+		}
+	}
+	return selectedRow
 }
