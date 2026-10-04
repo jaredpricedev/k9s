@@ -133,7 +133,7 @@ func TestForwardControllerLookupUsesCapturedUIDSelectorNamespaceAndListBound(t *
 }
 
 func TestLocalSessionOriginIdentityMatchingRequiresContextKindAndUID(t *testing.T) {
-	view := localSessionUIFixture()
+	view := localSessionUIFixture(t)
 	target := &SelectedResourceTarget{Context: localSessionTestContext, GVR: client.SvcGVR, Namespace: localSessionTestNamespace,
 		Name: "source-service", UID: "service-origin-uid"}
 	spec := localSessionTestSpec()
@@ -233,7 +233,7 @@ func TestOwnedNodeAcceptedCreationKeepsReceiptAndUIDCleanupAfterCancellation(t *
 			Namespace: localSessionTestNamespace, UID: localSessionTestUID}, Status: v1.PodStatus{Phase: v1.PodPending}}}
 	server := httptest.NewServer(http.HandlerFunc(f.serve))
 	defer server.Close()
-	view := localSessionUIFixture()
+	view := localSessionUIFixture(t)
 	handle, err := view.app.localSessions.Add(localSessionTestSpec(), nil)
 	if err != nil {
 		t.Fatal(err)

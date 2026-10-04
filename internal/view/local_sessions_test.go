@@ -17,7 +17,6 @@ import (
 	"github.com/derailed/k9s/internal/session"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
-	"github.com/derailed/tview"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,8 +34,9 @@ const (
 	localSessionTestNamespace = "apps"
 )
 
-func localSessionUIFixture() *localSessions {
-	app := &App{App: &ui.App{Application: tview.NewApplication(), Configurator: ui.Configurator{Styles: config.NewStyles()}}}
+func localSessionUIFixture(t *testing.T) *localSessions {
+	t.Helper()
+	app := NewApp(mock.NewMockConfig(t))
 	app.App.Init()
 	return newLocalSessions(app)
 }
@@ -49,7 +49,7 @@ func localSessionTestSpec() *session.Spec {
 func TestLocalSessionsDistinguishesWorkflowsForTheSameTarget(t *testing.T) {
 	for _, size := range [][2]int{{80, 24}, {60, 18}} {
 		t.Run(fmt.Sprint(size), func(t *testing.T) {
-			view := localSessionUIFixture()
+			view := localSessionUIFixture(t)
 			for _, label := range []string{"Owned alpha", "Owned beta"} {
 				spec := localSessionTestSpec()
 				spec.Kind, spec.Label = session.Plugin, label
@@ -72,7 +72,7 @@ func TestLocalSessionsDistinguishesWorkflowsForTheSameTarget(t *testing.T) {
 func TestLocalSessionsReadableIdentityStateBindingAndActionsOffline(t *testing.T) {
 	for _, size := range [][2]int{{80, 24}, {60, 18}} {
 		t.Run(fmt.Sprint(size), func(t *testing.T) {
-			view := localSessionUIFixture()
+			view := localSessionUIFixture(t)
 			handle, err := view.app.localSessions.Add(localSessionTestSpec(), nil)
 			if err != nil {
 				t.Fatal(err)
@@ -97,7 +97,7 @@ func TestLocalSessionsReadableIdentityStateBindingAndActionsOffline(t *testing.T
 }
 
 func TestLocalSessionsLongPreviewKeepsBindingAndDetailsResetScroll(t *testing.T) {
-	view := localSessionUIFixture()
+	view := localSessionUIFixture(t)
 	spec := localSessionTestSpec()
 	spec.Destination.Context = strings.Repeat("context-", 20)
 	spec.Destination.Name = strings.Repeat("pod-", 20)
@@ -126,7 +126,7 @@ func TestLocalSessionsLongPreviewKeepsBindingAndDetailsResetScroll(t *testing.T)
 }
 
 func TestLocalSessionsStopTargetsExactlyTheSelectedOwnedHandle(t *testing.T) {
-	view := localSessionUIFixture()
+	view := localSessionUIFixture(t)
 	var firstStops, secondStops atomic.Int32
 	first, err := view.app.localSessions.Add(localSessionTestSpec(), func() { firstStops.Add(1) })
 	if err != nil {
@@ -150,7 +150,7 @@ func TestLocalSessionsStopTargetsExactlyTheSelectedOwnedHandle(t *testing.T) {
 }
 
 func TestLocalSessionsActionsUseLocalSelectionInReadOnlyMode(t *testing.T) {
-	view := localSessionUIFixture()
+	view := localSessionUIFixture(t)
 	view.app.Config = mock.NewMockConfig(t)
 	view.app.Config.K9s.ReadOnly = true
 	handle, err := view.app.localSessions.Add(localSessionTestSpec(), nil)
@@ -169,7 +169,7 @@ func TestLocalSessionsActionsUseLocalSelectionInReadOnlyMode(t *testing.T) {
 }
 
 func TestLocalSessionsExpiredSelectionCannotRetargetCleanup(t *testing.T) {
-	view := localSessionUIFixture()
+	view := localSessionUIFixture(t)
 	old, err := view.app.localSessions.Add(localSessionTestSpec(), nil)
 	if err != nil {
 		t.Fatal(err)
