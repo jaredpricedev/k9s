@@ -1,0 +1,199 @@
+{
+  "source": "actual PTY terminal cells; disposable local API fixture",
+  "result": "passed",
+  "binary_sha256": "41ebaf355805effdabab6f7bdf21353cd6ddc7e755edf779c0e2e6e18584267e",
+  "captures": [
+    {
+      "file": "pods-80x24-stock-true-color.png",
+      "expected": [
+        "[RO]",
+        "demo-dev",
+        "ns:apps",
+        "CrashLoopBackOff",
+        "ContainerCreating",
+        "0/1",
+        "RESTARTS",
+        "\u2026",
+        "> "
+      ],
+      "source": "actual PTY terminal cells; disposable local API fixture",
+      "color_mode": "true-color",
+      "width": 80,
+      "height": 24,
+      "captured_at": "2026-10-04T00:55:24.803560+00:00"
+    },
+    {
+      "file": "pods-80x24-stock-true-color-destination.png",
+      "expected": [
+        "demo-dev",
+        "demo-cluster",
+        "demo-user"
+      ],
+      "source": "actual PTY terminal cells; disposable local API fixture",
+      "color_mode": "true-color",
+      "width": 80,
+      "height": 24,
+      "captured_at": "2026-10-04T00:55:25.047684+00:00"
+    },
+    {
+      "file": "pods-80x24-stock-256.png",
+      "expected": [
+        "[RO]",
+        "demo-dev",
+        "ns:apps",
+        "CrashLoopBackOff",
+        "ContainerCreating",
+        "0/1",
+        "RESTARTS",
+        "\u2026",
+        "> "
+      ],
+      "source": "actual PTY terminal cells; disposable local API fixture",
+      "color_mode": "256",
+      "width": 80,
+      "height": 24,
+      "captured_at": "2026-10-04T00:55:25.598820+00:00"
+    },
+    {
+      "file": "pods-80x24-stock-256-destination.png",
+      "expected": [
+        "demo-dev",
+        "demo-cluster",
+        "demo-user"
+      ],
+      "source": "actual PTY terminal cells; disposable local API fixture",
+      "color_mode": "256",
+      "width": 80,
+      "height": 24,
+      "captured_at": "2026-10-04T00:55:25.844544+00:00"
+    },
+    {
+      "file": "pods-80x24-high-contrast-true-color.png",
+      "expected": [
+        "[RO]",
+        "demo-dev",
+        "ns:apps",
+        "CrashLoopBackOff",
+        "ContainerCreating",
+        "0/1",
+        "RESTARTS",
+        "\u2026",
+        "> "
+      ],
+      "source": "actual PTY terminal cells; disposable local API fixture",
+      "color_mode": "true-color",
+      "width": 80,
+      "height": 24,
+      "captured_at": "2026-10-04T00:55:27.406309+00:00"
+    },
+    {
+      "file": "pods-80x24-high-contrast-true-color-destination.png",
+      "expected": [
+        "demo-dev",
+        "demo-cluster",
+        "demo-user"
+      ],
+      "source": "actual PTY terminal cells; disposable local API fixture",
+      "color_mode": "true-color",
+      "width": 80,
+      "height": 24,
+      "captured_at": "2026-10-04T00:55:27.652550+00:00"
+    },
+    {
+      "file": "pods-80x24-high-contrast-256.png",
+      "expected": [
+        "[RO]",
+        "demo-dev",
+        "ns:apps",
+        "CrashLoopBackOff",
+        "ContainerCreating",
+        "0/1",
+        "RESTARTS",
+        "\u2026",
+        "> "
+      ],
+      "source": "actual PTY terminal cells; disposable local API fixture",
+      "color_mode": "256",
+      "width": 80,
+      "height": 24,
+      "captured_at": "2026-10-04T00:55:29.211227+00:00"
+    },
+    {
+      "file": "pods-80x24-high-contrast-256-destination.png",
+      "expected": [
+        "demo-dev",
+        "demo-cluster",
+        "demo-user"
+      ],
+      "source": "actual PTY terminal cells; disposable local API fixture",
+      "color_mode": "256",
+      "width": 80,
+      "height": 24,
+      "captured_at": "2026-10-04T00:55:29.454282+00:00"
+    },
+    {
+      "file": "pods-80x24-monochrome-true-color.png",
+      "expected": [
+        "[RO]",
+        "demo-dev",
+        "ns:apps",
+        "CrashLoopBackOff",
+        "ContainerCreating",
+        "0/1",
+        "RESTARTS",
+        "\u2026",
+        "> "
+      ],
+      "source": "actual PTY terminal cells; disposable local API fixture",
+      "color_mode": "true-color",
+      "width": 80,
+      "height": 24,
+      "captured_at": "2026-10-04T00:55:31.012517+00:00"
+    },
+    {
+      "file": "pods-80x24-monochrome-true-color-destination.png",
+      "expected": [
+        "demo-dev",
+        "demo-cluster",
+        "demo-user"
+      ],
+      "source": "actual PTY terminal cells; disposable local API fixture",
+      "color_mode": "true-color",
+      "width": 80,
+      "height": 24,
+      "captured_at": "2026-10-04T00:55:31.256035+00:00"
+    },
+    {
+      "file": "pods-80x24-monochrome-256.png",
+      "expected": [
+        "[RO]",
+        "demo-dev",
+        "ns:apps",
+        "CrashLoopBackOff",
+        "ContainerCreating",
+        "0/1",
+        "RESTARTS",
+        "\u2026",
+        "> "
+      ],
+      "source": "actual PTY terminal cells; disposable local API fixture",
+      "color_mode": "256",
+      "width": 80,
+      "height": 24,
+      "captured_at": "2026-10-04T00:55:32.815320+00:00"
+    },
+    {
+      "file": "pods-80x24-monochrome-256-destination.png",
+      "expected": [
+        "demo-dev",
+        "demo-cluster",
+        "demo-user"
+      ],
+      "source": "actual PTY terminal cells; disposable local API fixture",
+      "color_mode": "256",
+      "width": 80,
+      "height": 24,
+      "captured_at": "2026-10-04T00:55:33.060022+00:00"
+    }
+  ]
+}

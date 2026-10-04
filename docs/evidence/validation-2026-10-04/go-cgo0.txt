@@ -1,0 +1,31 @@
+?   	github.com/derailed/k9s	[no test files]
+ok  	github.com/derailed/k9s/cmd	0.184s
+ok  	github.com/derailed/k9s/internal	(cached)
+ok  	github.com/derailed/k9s/internal/certmanager	(cached)
+ok  	github.com/derailed/k9s/internal/client	0.033s
+ok  	github.com/derailed/k9s/internal/color	(cached)
+ok  	github.com/derailed/k9s/internal/config	0.291s
+ok  	github.com/derailed/k9s/internal/config/data	(cached)
+ok  	github.com/derailed/k9s/internal/config/json	(cached)
+?   	github.com/derailed/k9s/internal/config/mock	[no test files]
+ok  	github.com/derailed/k9s/internal/dao	3.623s
+ok  	github.com/derailed/k9s/internal/flux	(cached)
+ok  	github.com/derailed/k9s/internal/health	(cached)
+ok  	github.com/derailed/k9s/internal/hubble	0.034s
+ok  	github.com/derailed/k9s/internal/inspect	0.150s
+ok  	github.com/derailed/k9s/internal/logstream	(cached)
+ok  	github.com/derailed/k9s/internal/model	0.119s
+ok  	github.com/derailed/k9s/internal/model1	(cached)
+?   	github.com/derailed/k9s/internal/perf	[no test files]
+ok  	github.com/derailed/k9s/internal/port	(cached)
+ok  	github.com/derailed/k9s/internal/render	(cached)
+?   	github.com/derailed/k9s/internal/render/helm	[no test files]
+?   	github.com/derailed/k9s/internal/slogs	[no test files]
+ok  	github.com/derailed/k9s/internal/tchart	(cached)
+ok  	github.com/derailed/k9s/internal/ui	0.148s
+ok  	github.com/derailed/k9s/internal/ui/dialog	0.593s
+ok  	github.com/derailed/k9s/internal/view	6.574s
+ok  	github.com/derailed/k9s/internal/view/cmd	(cached)
+ok  	github.com/derailed/k9s/internal/vul	(cached)
+ok  	github.com/derailed/k9s/internal/watch	(cached)
+ok  	github.com/derailed/k9s/internal/xray	(cached)
