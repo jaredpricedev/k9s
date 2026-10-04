@@ -10,8 +10,9 @@ does not discover providers or collect release evidence in the background.
 
 Open `:review /absolute/path/manifest.yaml`, or `:review` to choose a local file.
 The file may contain several YAML documents or JSON objects. Save rendered Helm
-or Kustomize output to a regular file before opening it; this workflow does not
-run Helm, Kustomize, Git or another CLI.
+or Kustomize output to a regular file before opening it, or explicitly select a
+named source profile with `:review @/absolute/path/source.yaml`. Ordinary local
+files never run a renderer or Git command.
 
 The source observation records the absolute path, SHA256 of its exact bytes,
 size and load time. `r` reads live targets again using that same retained source;
@@ -22,6 +23,7 @@ or reloads a source. A failed reload retains the previous source and report.
 | --- | --- |
 | Enter | Open changed fields first, with safe live/authored values |
 | `e` | Toggle Evidence/source: full paths, source hash, timestamps, scope and ownership |
+| `p` | Confirm and invoke a separate server dry-run/admission preview |
 | `r` | Refresh named live reads with the retained source |
 | `n` | Choose or explicitly reload the source file |
 | `/` | Search retained kind, namespace, name and review state |
@@ -72,6 +74,75 @@ errors exclude raw YAML values. Comparisons retain at most 2,000 changes and
 use the existing bounded, heuristic credential and terminal-control projection.
 Secret documents retain identity metadata only. Heuristic redaction does not
 guarantee confidentiality for arbitrary configuration content.
+
+## Named renderer and Git sources
+
+Source profiles are one YAML or JSON object. Relative paths resolve against the
+profile directory. Select one explicitly with `:review @/path/source.yaml` or
+enter the same `@` path in the source picker. `n` reloads the profile and obtains
+a new rendered observation; `r` continues comparing the exact retained output.
+
+```yaml
+name: checkout-overlay
+provider: kustomize
+path: ./overlays/production
+root: .
+```
+
+```yaml
+name: checkout-chart
+provider: helm
+path: ./charts/checkout
+release: checkout
+namespace: apps
+values: [./values/production.yaml]
+```
+
+```yaml
+name: checkout-release
+provider: git
+path: ./checkout-repository
+revision: refs/tags/release-2
+manifest: deploy/checkout.yaml
+```
+
+`provider: file` accepts a regular manifest path. Kustomize and Helm require local
+real directories. Kustomize references must resolve inside the configured `root`
+(default: `path`). An explicit repository root supports overlays referencing
+sibling bases while keeping their complete inputs fingerprinted and bounded;
+remote bases, executable generators/transformers and nested Helm rendering are
+excluded. Helm renders a local chart with an explicit release/namespace and at
+most eight explicit local value files. Dependency installation, server lookup,
+post-renderers and arbitrary flags are not enabled. Git resolves the named
+revision to an exact commit and reads one committed manifest blob without
+fetching, checking out or using working-tree changes.
+
+Each provider records the profile hash, rendered-byte hash, input fingerprint or
+Git ref/commit, resolved executable path, renderer version and complete argv. Commands use bounded background
+execution with a 30-second source deadline, a 1 MiB output cap and cancellation.
+Renderer inputs are bounded to 512 files/16 MiB and refuse symlinks. Source errors
+retain the prior source/report and exclude raw renderer diagnostics that could
+contain authored confidential values. No source supplies an authoritative
+resource inventory; omission never establishes resource deletion or pruning.
+
+## Explicit server admission preview
+
+Press `p` and confirm the captured destination/source to invoke API admission
+and defaulting with `dryRun=All`. This can require **create or patch permissions**
+even when named live reads are permitted. Existing resources use server-side
+apply with the verified UID/resourceVersion, strict validation, field manager
+`k9plus-preview` and no Force. Missing uncaptured targets use dry-run create.
+Secrets, cluster-scoped objects, unsupported/duplicate targets, scope mismatches
+and replaced captured UIDs remain excluded before an admission request.
+
+The server preview is retained separately from local authored-field comparison.
+It shows admission acceptance/denial/conflict and safe projected field changes;
+server bookkeeping and controller status are excluded from that projection.
+Acceptance describes only this request at the shown time. No resource is
+persisted, and future apply authorization, conflicts, webhook behavior,
+controller outcomes and pruning remain unknown. `r` refreshes local comparison
+only; `p` explicitly requests another server preview. `e` opens its source/scope
+and result evidence, while Esc returns to the retained resource table.
 
 ## Review a Deployment rollout
 
@@ -134,9 +205,9 @@ retained source, query, tab and selection.
 
 ## Remaining Horizon 2 work
 
-This increment delivers the local-file foundation of TK06 and read-only native
-Deployment evidence of TK07. Named Git and provider sources, authoritative
-deletion plans, explicit server dry-runs, accepted-write outcome tracking,
+This increment delivers TK06 local/configured renderer/Git sources and explicit
+server admission preview, alongside read-only native Deployment evidence of
+TK07. Authoritative deletion inventories, accepted-write outcome tracking,
 guarded recovery execution and other rollout controllers remain pending.
 TK08 GitOps ownership/progress, TK09 reviewed change sets, TK10 configuration
 review and TK11 activity remain subsequent roadmap work. Inherited mutation

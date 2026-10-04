@@ -143,6 +143,14 @@ func (w *desiredReviewView) renderDetail() {
 	if !w.detailOpen {
 		return
 	}
+	if w.previewOpen && w.serverPreview != nil {
+		text := renderServerPreview(w.serverPreview, false, w.reviewWidth())
+		if w.evidenceOpen {
+			text = w.serverPreviewEvidence
+		}
+		w.detail.SetText(text)
+		return
+	}
 	entry, ok := w.selectedEntry()
 	if !ok {
 		text := "This retained detail is unavailable in the current report. Esc returns to the resource table."
@@ -169,7 +177,11 @@ func (w *desiredReviewView) renderHeader() {
 	sourceLine := "Source: not selected"
 	if source.SHA256 != "" {
 		fingerprint := source.SHA256[:min(12, len(source.SHA256))]
-		sourceLine = fmt.Sprintf("Source: %s · SHA256 %s · %d documents", filepath.Base(source.Path), fingerprint, source.Documents)
+		name := filepath.Base(source.Path)
+		if source.Name != "" {
+			name = source.Name + " (" + source.Provider + ")"
+		}
+		sourceLine = fmt.Sprintf("Source: %s · SHA256 %s · %d documents", name, fingerprint, source.Documents)
 	}
 	destination := w.contextName + " · " + strings.Join(w.scope.Namespaces, ", ")
 	if w.scope.LabelSelector != "" {
@@ -234,6 +246,7 @@ func (w *desiredReviewView) renderHeader() {
 		}
 		lines = []string{destination, "LOCAL READ ONLY · " + fingerprint + " · observed " + freshness, notice}
 	}
+	lines = w.serverPreviewHeader(lines, destination)
 	for i := range lines {
 		lines[i] = desiredReviewSafe(fitInvestigation(lines[i], width))
 	}
@@ -244,7 +257,7 @@ func (w *desiredReviewView) renderSourceIdentity() string {
 	source := w.source.Identity
 	return desiredReviewSafe(fmt.Sprintf("RETAINED SOURCE\nPath: %s\nSHA256: %s\nLoaded: %s · %d bytes · %d documents\nLatest read attempt: %s\nAccepted report: %s",
 		source.Path, source.SHA256, identityTime(source.LoadedAt), source.Bytes, source.Documents,
-		identityTime(w.latestObservedAt), identityTime(w.snapshot.ObservedAt)))
+		identityTime(w.latestObservedAt), identityTime(w.snapshot.ObservedAt))) + renderSourceProvenance(&source)
 }
 func renderDesiredReviewEntry(entry *review.Entry) string {
 	var out strings.Builder
@@ -297,15 +310,18 @@ func (w *desiredReviewView) reviewWidth() int {
 }
 func (w *desiredReviewView) renderFooter() {
 	width := w.reviewWidth()
-	text := "Enter detail · e evidence · / search · r refresh · n source · Esc back"
+	text := "Enter detail · e evidence · p server preview · / search · Esc back"
 	if width < 70 {
-		text = "Enter detail · e evidence · / search · Esc back"
+		text = "Enter detail · e evidence · p preview · Esc back"
 	}
 	if width < 48 {
 		text = "Enter detail · e evidence · Esc back"
 	}
 	if w.detailOpen {
-		text = "e evidence/source · ↑↓ scroll · Esc table"
+		text = "e evidence/source · p preview · Esc table"
+		if width < 48 {
+			text = "e evidence · p preview · Esc table"
+		}
 	}
 	w.footer.SetText(desiredReviewSafe(fitInvestigation(text, width)))
 }
@@ -357,4 +373,13 @@ func renderDesiredReviewEntryWidth(entry *review.Entry, width int) string {
 	}
 	out.WriteString("e evidence/source: full paths, identity, time and ownership.\nNothing executed; Secret values excluded.")
 	return desiredReviewSafe(out.String())
+}
+
+func (w *desiredReviewView) serverPreviewHeader(lines []string, destination string) []string {
+	if w.previewOpen && w.serverPreview != nil {
+		lines = []string{destination,
+			"SERVER DRY RUN · NOT PERSISTED · " + w.serverPreview.ObservedAt.UTC().Format("15:04:05Z"),
+			"Retained preview; p invokes again · e evidence/source"}
+	}
+	return lines
 }
