@@ -1,0 +1,12 @@
+Collecting dependencies for linux/amd64
+Collecting dependencies for windows/arm64
+.Collecting dependencies for linux/amd64
+.Collecting dependencies for linux/amd64
+.Collecting dependencies for linux/amd64
+.
+----------------------------------------------------------------------
+Ran 4 tests in 0.017s
+
+OK
+Saved 1 dependency modules to /tmp/tmp1_zqf_n4/output
+Saved 1 dependency modules to /tmp/tmpqauymrzj/workspace/THIRD_PARTY_LICENSES

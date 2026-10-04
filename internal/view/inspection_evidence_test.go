@@ -21,10 +21,7 @@ import (
 	ktesting "k8s.io/client-go/testing"
 )
 
-const (
-	evidenceTestNamespace = "team"
-	inspectionRetainedUID = "observed"
-)
+const evidenceTestNamespace = "team"
 
 func TestCrashLoopEvidencePrecedesOwnersAndRetainsFullMessages(t *testing.T) {
 	metas := dao.MetaAccess
@@ -77,14 +74,14 @@ func TestInspectionRefreshRetainsIdentityQueryOffsetAndPreviousSnapshotOnFailure
 	d.cmdBuff.SetText("CrashLoop", "", true)
 	d.BufferCompleted("CrashLoop", "")
 	d.text.ScrollTo(4, 2)
-	first := inspectionSnapshot{Text: strings.Repeat("CrashLoop evidence\n", 30), UID: inspectionRetainedUID, CapturedAt: time.Now()}
+	first := inspectionSnapshot{Text: strings.Repeat("CrashLoop evidence\n", 30), UID: retainedEvidenceUID, CapturedAt: time.Now()}
 	d.acceptSnapshot(first, nil)
 	row, col := d.text.GetScrollOffset()
-	if d.target.UID != inspectionRetainedUID || d.cmdBuff.GetText() != "CrashLoop" || row != 4 || col != 2 || d.maxRegions == 0 {
+	if d.target.UID != retainedEvidenceUID || d.cmdBuff.GetText() != "CrashLoop" || row != 4 || col != 2 || d.maxRegions == 0 {
 		t.Fatal("refresh lost captured identity or navigation", d.target, d.cmdBuff.GetText(), row, col, d.maxRegions)
 	}
 	d.acceptSnapshot(inspectionSnapshot{}, fmt.Errorf("identity changed; replacement UID"))
-	if d.snapshot != first || d.target.UID != inspectionRetainedUID || !strings.Contains(d.text.GetText(true), "RETAINED SNAPSHOT") || !strings.Contains(d.text.GetText(true), "identity changed") {
+	if d.snapshot != first || d.target.UID != retainedEvidenceUID || !strings.Contains(d.text.GetText(true), "RETAINED SNAPSHOT") || !strings.Contains(d.text.GetText(true), "identity changed") {
 		t.Fatal("failed observation discarded evidence or silently replaced identity", d.snapshot, d.target, d.text.GetText(true))
 	}
 	d.Stop()

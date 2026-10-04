@@ -1,0 +1,31 @@
+{
+  "captured_at_utc": "2026-10-04T01:39:19.089512+00:00",
+  "source_commit": "76ac522ff90ce3ddf25d320e911c55c7720b818a",
+  "source_clean_at_build": true,
+  "build_command": "make build GO_FLAGS=-p=2",
+  "build_exit_code": 0,
+  "go": "go1.25.8",
+  "platform": "linux/amd64",
+  "CGO_ENABLED": "0",
+  "tags": "netgo",
+  "binary_sha256": "a28a1f48b72d255348ad72bc4124d5973cc003a4070520c81743bd668aa57747",
+  "go_build_metadata": "clean-build-info.txt",
+  "cli_smoke_checks": [
+    {
+      "command": "./execs/k9plus help",
+      "exit_code": 0,
+      "output": "cli-help.txt"
+    },
+    {
+      "command": "./execs/k9plus info",
+      "exit_code": 0,
+      "output": "cli-info.txt"
+    },
+    {
+      "command": "./execs/k9plus version",
+      "exit_code": 0,
+      "output": "cli-version.txt"
+    }
+  ],
+  "scope": "Documented release-style build and read-only CLI startup; terminal journeys are separate results."
+}
