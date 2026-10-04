@@ -1,0 +1,2 @@
+ok  	github.com/derailed/k9s/internal/hubble	0.034s
+ok  	github.com/derailed/k9s/internal/view	0.105s

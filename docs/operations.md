@@ -33,3 +33,23 @@ bounded by the configured call timeout. Synthetic file, Helm and port-forward
 deletions also run in a worker; Helm uses captured context flags and binds its API
 and hook transports to the deadline. Synthetic records use their native
 identities, which do not provide Kubernetes object UID preconditions.
+
+## Disposable Kubernetes verification
+
+`TestDisposableKubernetesOperationsAndPressure` runs only when
+`K9PLUS_AUDIT_KUBECONFIG` names an isolated kubeconfig whose current context is
+`kind-k9plus-audit` and whose API endpoint is loopback. Ordinary tests skip it and
+never load a default kubeconfig. It creates and removes its own namespace,
+verifies real restart/scale/delete acceptance, resource-version and UID
+preconditions, same-name replacement rejection, and pressure/scheduling evidence
+without metrics-server. It does not establish controller completion or validate
+Hubble Relay, Gateway APIs, TLS integrations or production connectivity.
+
+```sh
+kind create cluster --name k9plus-audit --image kindest/node:v1.34.0 \
+  --kubeconfig /tmp/k9plus-audit-kubeconfig
+K9PLUS_AUDIT_KUBECONFIG=/tmp/k9plus-audit-kubeconfig \
+  go test ./internal/view -run TestDisposableKubernetesOperationsAndPressure -v
+kind delete cluster --name k9plus-audit --kubeconfig /tmp/k9plus-audit-kubeconfig
+rm /tmp/k9plus-audit-kubeconfig
+```
