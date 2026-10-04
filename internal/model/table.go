@@ -200,6 +200,13 @@ func (t *Table) Peek() *model1.TableData {
 	return t.data.Clone()
 }
 
+// PeekFiltered returns a detached, current query result with its source count.
+func (t *Table) PeekFiltered(opts model1.FilterOpts) (*model1.TableData, int, error) {
+	t.mx.RLock()
+	defer t.mx.RUnlock()
+	return t.data.FilteredSnapshot(opts)
+}
+
 func (t *Table) updater(ctx context.Context) {
 	bf := backoff.NewExponentialBackOff()
 	bf.InitialInterval, bf.MaxElapsedTime = initRefreshRate, maxReaderRetryInterval

@@ -5,6 +5,7 @@
 package model1
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/client"
@@ -230,6 +233,7 @@ func (t *TableData) rxFilter(q string, inverse bool) (*RowEvents, error) {
 	}
 	rr := NewRowEvents(t.RowCount() / 2)
 	fields := make([]byte, 0, 128)
+	needle := asciiLiteralFilter(q)
 	t.rowEvents.Range(func(_ int, re RowEvent) bool {
 		fields = fields[:0]
 		first := true
@@ -243,7 +247,7 @@ func (t *TableData) rxFilter(q string, inverse bool) (*RowEvents, error) {
 			first = false
 			fields = append(fields, re.Row.Fields[idx]...)
 		}
-		match := rx.Match(fields)
+		match := matchResourceFields(rx, fields, needle)
 		if (inverse && !match) || (!inverse && match) {
 			rr.Add(re)
 		}
@@ -252,6 +256,70 @@ func (t *TableData) rxFilter(q string, inverse bool) (*RowEvents, error) {
 	})
 
 	return rr, nil
+}
+
+// Common resource-name queries are literal ASCII substrings. All regex syntax
+// and non-ASCII queries retain RE2 matching, including Unicode simple folding.
+func asciiLiteralFilter(query string) []byte {
+	if query == "" || strings.ContainsAny(query, `\.+*?()|[]{}^$`) {
+		return nil
+	}
+	for index := range len(query) {
+		if query[index] >= utf8.RuneSelf {
+			return nil
+		}
+	}
+	return []byte(strings.ToLower(query))
+}
+
+func matchResourceFields(rx *regexp.Regexp, fields, needle []byte) bool {
+	if needle == nil {
+		return rx.Match(fields)
+	}
+	// Fold only the scratch buffer. Ordinary non-ASCII glyphs remain separators;
+	// Unicode members of an ASCII fold class (Kelvin sign, long s) become the
+	// corresponding byte. This keeps RE2's (?i) semantics without backtracking
+	// every row merely because a separate field contains a status/PF icon.
+	length := foldASCIIFilterFields(fields)
+	return bytes.Contains(fields[:length], needle)
+}
+
+func foldASCIIFilterFields(fields []byte) int {
+	write := 0
+	for read := 0; read < len(fields); {
+		value := fields[read]
+		if value < utf8.RuneSelf {
+			if value >= 'A' && value <= 'Z' {
+				value += 'a' - 'A'
+			}
+			fields[write] = value
+			write++
+			read++
+			continue
+		}
+		valueRune, size := utf8.DecodeRune(fields[read:])
+		if folded, found := asciiFoldRune(valueRune); found {
+			fields[write] = folded
+			write++
+		} else {
+			write += copy(fields[write:], fields[read:read+size])
+		}
+		read += size
+	}
+	return write
+}
+
+func asciiFoldRune(value rune) (byte, bool) {
+	for next := unicode.SimpleFold(value); next != value; next = unicode.SimpleFold(next) {
+		if next < utf8.RuneSelf {
+			folded := byte(next)
+			if folded >= 'A' && folded <= 'Z' {
+				folded += 'a' - 'A'
+			}
+			return folded, true
+		}
+	}
+	return 0, false
 }
 
 func (t *TableData) fuzzyFilter(q string) *RowEvents {
@@ -453,6 +521,23 @@ func (t *TableData) Clone() *TableData {
 		namespace: t.namespace,
 		gvr:       t.gvr,
 	}
+}
+
+// FilteredSnapshot captures the query result and source count together. Filter
+// before copying fields so narrow queries do not allocate every source row.
+// The source lock spans both matching and the deep copy; no source rows, deltas,
+// headers or indexes escape it. The temporary view has its own mutex so query
+// helpers cannot recursively take the source RWMutex while a writer waits.
+func (t *TableData) FilteredSnapshot(opts FilterOpts) (*TableData, int, error) {
+	t.mx.RLock()
+	defer t.mx.RUnlock()
+	view := NewTableDataFromTable(t)
+	total := t.rowEvents.Len()
+	filtered, err := view.FilterChecked(opts)
+	if err != nil {
+		return nil, total, err
+	}
+	return filtered.Clone(), total, nil
 }
 
 func (t *TableData) ColumnNames(w bool) []string {
