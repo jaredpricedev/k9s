@@ -80,8 +80,10 @@ func (s *operationSession) drain(ctx context.Context, target SelectedResourceTar
 	if err := s.authorize(ctx, &podsTarget, "", client.ListVerb); err != nil {
 		return err
 	}
+	guardedClient := maintenanceClient{Interface: s.typed, ctx: ctx,
+		discoveryClient: &maintenanceDiscovery{DiscoveryInterface: s.typed.Discovery(), ctx: ctx}}
 	helper := drain.Helper{
-		Ctx: ctx, Client: s.typed, GracePeriodSeconds: opts.GracePeriodSeconds, Timeout: opts.Timeout,
+		Ctx: ctx, Client: guardedClient, GracePeriodSeconds: opts.GracePeriodSeconds, Timeout: opts.Timeout,
 		DeleteEmptyDirData: opts.DeleteEmptyDirData, IgnoreAllDaemonSets: opts.IgnoreAllDaemonSets,
 		DisableEviction: opts.DisableEviction, Force: opts.Force,
 		Out: operationOutput(ctx), ErrOut: operationOutput(ctx), EvictErrorRetryDelay: 200 * time.Millisecond,
@@ -97,11 +99,14 @@ func (s *operationSession) drain(ctx context.Context, target SelectedResourceTar
 	if len(pods) > 500 {
 		return errors.New("drain is limited to 500 eligible Pods per node; review a smaller maintenance scope")
 	}
-	evictionVersion, err := drain.CheckEvictionSupport(s.typed)
-	if err != nil {
-		return err
+	usingEviction := false
+	if !opts.DisableEviction {
+		evictionVersion, err := drain.CheckEvictionSupport(guardedClient)
+		if err != nil {
+			return err
+		}
+		usingEviction = !evictionVersion.Empty()
 	}
-	usingEviction := !opts.DisableEviction && !evictionVersion.Empty()
 	expected := make(map[string]types.UID, len(pods))
 	for _, pod := range pods {
 		selectedPod := SelectedResourceTarget{Context: target.Context, GVR: client.PodGVR, Namespace: pod.Namespace, Name: pod.Name, UID: pod.UID}
@@ -125,7 +130,8 @@ func (s *operationSession) drain(ctx context.Context, target SelectedResourceTar
 	if err := s.cordon(ctx, target, true); err != nil {
 		return err
 	}
-	helper.Client = maintenanceClient{Interface: s.typed, expected: expected}
+	guardedClient.expected = expected
+	helper.Client = guardedClient
 	helper.OnPodDeletionOrEvictionFinished = func(pod *corev1.Pod, _ bool, err error) {
 		if err == nil {
 			fmt.Fprintf(operationOutput(ctx), "Observed Pod removal: %s/%s (UID %s)\n", pod.Namespace, pod.Name, pod.UID)
@@ -144,7 +150,9 @@ func (s *operationSession) drain(ctx context.Context, target SelectedResourceTar
 // replacement. UID preconditions also close the final GET-to-write race.
 type maintenanceClient struct {
 	kubernetes.Interface
-	expected map[string]types.UID
+	expected        map[string]types.UID
+	ctx             context.Context
+	discoveryClient *maintenanceDiscovery
 }
 
 func (c maintenanceClient) CoreV1() typedcorev1.CoreV1Interface {

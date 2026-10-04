@@ -41,7 +41,7 @@ func maintenanceFixture(t *testing.T) (*operationSession, SelectedResourceTarget
 		return true, &authv1.SelfSubjectAccessReview{Status: authv1.SubjectAccessReviewStatus{Allowed: true}}, nil
 	})
 	typed.Resources = []*metav1.APIResourceList{{GroupVersion: corev1.SchemeGroupVersion.String(), APIResources: []metav1.APIResource{{Name: "pods/eviction", Group: "policy", Version: corev1.SchemeGroupVersion.Version, Kind: "Eviction"}}}}
-	return &operationSession{dynamic: dyn, typed: typed}, target, dyn, typed
+	return &operationSession{dynamic: dyn, typed: maintenanceFixtureClient{Interface: typed}}, target, dyn, typed
 }
 
 func TestGuardedCordonUsesUIDAndVersionAndNeverWritesReplacement(t *testing.T) {

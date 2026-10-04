@@ -159,14 +159,31 @@ func testGuardedExecCancellationKillsDescendants(t *testing.T, background bool) 
 	case <-time.After(2 * time.Second):
 		t.Fatal("canceled process did not release its wait")
 	}
-	data, err := os.ReadFile(filepath.Join(string(filepath.Separator), "proc", strconv.Itoa(pid), "stat"))
-	if err == nil {
+	assertGuardedDescendantStopped(t, pid)
+}
+
+// SIGKILL delivery and orphan reaping are asynchronous even after the direct
+// command has exited. Bound the observation wait without accepting a live child.
+func assertGuardedDescendantStopped(t *testing.T, pid int) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	path := filepath.Join(string(filepath.Separator), "proc", strconv.Itoa(pid), "stat")
+	for {
+		data, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			return
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
 		fields := strings.Fields(string(data))
-		if len(fields) < 3 || fields[2] != "Z" {
+		if len(fields) >= 3 && fields[2] == "Z" {
+			return
+		}
+		if !time.Now().Before(deadline) {
 			t.Fatal("child remained running after cancellation", string(data))
 		}
-	} else if !os.IsNotExist(err) {
-		t.Fatal(err)
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
