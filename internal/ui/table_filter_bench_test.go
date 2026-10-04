@@ -50,7 +50,7 @@ func BenchmarkTableFilter10K(b *testing.B) {
 	data := model1.NewTableDataFull(gvr, "apps", header, rows)
 	table := ui.NewTable(gvr)
 	table.Init(makeContext())
-	table.SetModel(&mutableResourceFilterModel{mockModel: new(mockModel), data: data})
+	table.SetModel(&snapshotResourceFilterModel{&mutableResourceFilterModel{mockModel: new(mockModel), data: data}})
 	table.SetLiteralFields(true)
 	table.SetColorerFn(render.NewPod().ColorerFunc())
 	table.SetRect(0, 0, 120, 34)

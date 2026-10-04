@@ -523,6 +523,23 @@ func (t *TableData) Clone() *TableData {
 	}
 }
 
+// FilteredSnapshot captures the query result and source count together. Filter
+// before copying fields so narrow queries do not allocate every source row.
+// The source lock spans both matching and the deep copy; no source rows, deltas,
+// headers or indexes escape it. The temporary view has its own mutex so query
+// helpers cannot recursively take the source RWMutex while a writer waits.
+func (t *TableData) FilteredSnapshot(opts FilterOpts) (*TableData, int, error) {
+	t.mx.RLock()
+	defer t.mx.RUnlock()
+	view := NewTableDataFromTable(t)
+	total := t.rowEvents.Len()
+	filtered, err := view.FilterChecked(opts)
+	if err != nil {
+		return nil, total, err
+	}
+	return filtered.Clone(), total, nil
+}
+
 func (t *TableData) ColumnNames(w bool) []string {
 	t.mx.RLock()
 	defer t.mx.RUnlock()
