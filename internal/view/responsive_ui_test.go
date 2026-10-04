@@ -17,6 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const responsiveTestNS, responsiveOOMReason = "apps", "OOMKilled"
+
 func saveResponsiveFrame(t *testing.T, name, frame string) {
 	t.Helper()
 	if dir := os.Getenv("K9S_CAPTURE_RESPONSIVE_DIR"); dir != "" {
@@ -30,10 +32,10 @@ func saveResponsiveFrame(t *testing.T, name, frame string) {
 func TestWorkspaceCoveragePrioritizesGapsAndRetainsSelectionAcrossReasonUpdates(t *testing.T) {
 	w := dailyWorkspaceFixture()
 	w.mode = dailyWorkspaceCoverageMode
-	w.coverage = []workspace.Coverage{{GVR: "v1/pods", Namespace: "apps", State: "complete"}, {GVR: "v1/services", Namespace: "apps", State: "denied", Detail: "list forbidden"}, {GVR: "v1/events", Namespace: "ops", State: "truncated", Detail: "bounded events"}}
+	w.coverage = []workspace.Coverage{{GVR: podCmd, Namespace: responsiveTestNS, State: "complete"}, {GVR: "v1/services", Namespace: responsiveTestNS, State: testWorkspaceCoverageDenied, Detail: "list forbidden"}, {GVR: "v1/events", Namespace: "ops", State: "truncated", Detail: "bounded events"}}
 	w.render()
 	require.Equal(t, "truncated", w.rows[0].cells[0])
-	require.Equal(t, "denied", w.rows[1].cells[0])
+	require.Equal(t, testWorkspaceCoverageDenied, w.rows[1].cells[0])
 	require.Equal(t, "complete", w.rows[2].cells[0])
 	w.table.Select(2, 0)
 	prior := w.selectedKey()
@@ -48,8 +50,8 @@ func TestWorkspaceCoveragePrioritizesGapsAndRetainsSelectionAcrossReasonUpdates(
 func TestWorkspaceResponsiveActiveTabsAndFaultIdentity(t *testing.T) {
 	w := dailyWorkspaceFixture()
 	w.mode = dailyWorkspaceQueueMode
-	w.snapshot = workspace.Snapshot{ObservedAt: time.Now(), Findings: []workspace.Finding{{Ref: workspaceFixtureRef("京都-api-with-a-long-name"), Kind: "Pod", Severity: "warning", Reason: "CrashLoopBackOff", Detail: "current cause unconfirmed"}}}
-	w.coverage = []workspace.Coverage{{GVR: "v1/pods", Namespace: "backend", State: "denied", Detail: "Unknown coverage"}}
+	w.snapshot = workspace.Snapshot{ObservedAt: time.Now(), Findings: []workspace.Finding{{Ref: workspaceFixtureRef("京都-api-with-a-long-name"), Kind: inspectionPodKind, Severity: "warning", Reason: testWorkspaceCrashLoopReason, Detail: "current cause unconfirmed"}}}
+	w.coverage = []workspace.Coverage{{GVR: podCmd, Namespace: "backend", State: testWorkspaceCoverageDenied, Detail: "Unknown coverage"}}
 	w.Flex.SetDirection(tview.FlexRow).AddItem(w.header, 4, 0, false).AddItem(w.table, 0, 1, true).AddItem(w.detail, 3, 0, false).AddItem(w.footer, 1, 0, false)
 	w.render()
 	for _, size := range [][2]int{{120, 34}, {80, 24}, {60, 24}, {40, 16}} {
@@ -57,7 +59,7 @@ func TestWorkspaceResponsiveActiveTabsAndFaultIdentity(t *testing.T) {
 			frame := drawnText(t, w, size[0], size[1])
 			saveResponsiveFrame(t, fmt.Sprintf("workspace-%dx%d", size[0], size[1]), frame)
 			require.Contains(t, frame, "[1 Daily]")
-			require.Contains(t, frame, "CrashLoopBackOff")
+			require.Contains(t, frame, testWorkspaceCrashLoopReason)
 			require.Contains(t, frame, "gaps")
 			require.Contains(t, frame, "? help")
 		})
@@ -67,7 +69,7 @@ func TestWorkspaceResponsiveActiveTabsAndFaultIdentity(t *testing.T) {
 	require.Len(t, w.rows, 1)
 	require.Empty(t, w.query)
 	frame = drawnText(t, w, 60, 24)
-	require.Contains(t, frame, "CrashLoopBackOff")
+	require.Contains(t, frame, testWorkspaceCrashLoopReason)
 }
 
 func TestInvestigationNarrowRowsNeverWrapAndFullEvidenceRemainsAvailable(t *testing.T) {
@@ -75,10 +77,10 @@ func TestInvestigationNarrowRowsNeverWrapAndFullEvidenceRemainsAvailable(t *test
 	for _, size := range [][2]int{{120, 34}, {80, 24}, {60, 24}, {40, 12}} {
 		frame := drawInvestigation(t, d, size[0], size[1])
 		saveResponsiveFrame(t, fmt.Sprintf("investigation-%dx%d", size[0], size[1]), frame)
-		for _, want := range []string{"CURRENT FINDINGS", "CrashLoopBackOff", "OOMKilled", "NEXT CHECKS"} {
+		for _, want := range []string{"CURRENT FINDINGS", testWorkspaceCrashLoopReason, responsiveOOMReason, "NEXT CHECKS"} {
 			require.Contains(t, frame, want)
 		}
-		require.Equal(t, 1, strings.Count(frame, "CrashLoopBackOff"), "current fault rendered once")
+		require.Equal(t, 1, strings.Count(frame, testWorkspaceCrashLoopReason), "current fault rendered once")
 	}
 	for _, width := range []int{118, 78, 58, 38} {
 		text := investigationContainerTable(d.snapshot.Investigation, width, 4)

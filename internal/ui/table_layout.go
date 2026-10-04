@@ -15,6 +15,8 @@ import (
 	"github.com/derailed/tview"
 )
 
+const tableReadyColumn, tableRestartsColumn = "READY", "RESTARTS"
+
 // tablePresentation resolves expensive RGB/contrast work once per skin change.
 // Ordinary refreshes and draws only look up the already resolved colors.
 type tablePresentation struct {
@@ -92,8 +94,8 @@ func (t *Table) fitColumns(data *model1.TableData) {
 		remaining -= size + 1
 	}
 	reserve("STATUS", available["STATUS"])
-	reserve("READY", available["READY"])
-	reserve("RESTARTS", available["RESTARTS"])
+	reserve(tableReadyColumn, available[tableReadyColumn])
+	reserve(tableRestartsColumn, available[tableRestartsColumn])
 	// Namespace remains visible when viewing all namespaces. Names and scopes
 	// elide before the state, with the full identity available in detail.
 	if available["NAMESPACE"] > 0 {
@@ -138,7 +140,7 @@ func (t *Table) fitStatusColumns(data *model1.TableData, width int) {
 	if available["NAME"] == 0 {
 		return
 	}
-	critical := []string{"STATUS", "STATE", "READY", "HEALTH", "HEALTHY", "PHASE", "VERDICT", "CONDITION"}
+	critical := []string{"STATUS", "STATE", tableReadyColumn, "HEALTH", "HEALTHY", "PHASE", "VERDICT", "CONDITION"}
 	hasStatus := false
 	for _, name := range critical {
 		hasStatus = hasStatus || available[name] > 0
@@ -164,7 +166,7 @@ func (t *Table) fitStatusColumns(data *model1.TableData, width int) {
 	}
 	cols["NAME"] = max(6, min(28, remaining-1))
 	remaining -= cols["NAME"] + 1
-	for _, name := range []string{"RESTARTS", "EXPIRES", "REVISION", "KIND", "SUSPEND", "AGE", "RENEWAL", "SOURCE", "ISSUER"} {
+	for _, name := range []string{tableRestartsColumn, "EXPIRES", "REVISION", "KIND", "SUSPEND", "AGE", "RENEWAL", "SOURCE", "ISSUER"} {
 		size := available[name]
 		if size > 0 && remaining >= size+1 {
 			cols[name] = size
@@ -246,7 +248,7 @@ func (t *Table) Draw(screen tcell.Screen) {
 
 func statusColumn(name string) bool {
 	switch name {
-	case "STATUS", "STATE", "READY", "HEALTH", "HEALTHY", "PHASE", "VERDICT", "CONDITION", "RESTARTS", "VALID":
+	case "STATUS", "STATE", tableReadyColumn, "HEALTH", "HEALTHY", "PHASE", "VERDICT", "CONDITION", tableRestartsColumn, "VALID":
 		return true
 	default:
 		return false
@@ -256,7 +258,7 @@ func statusColumn(name string) bool {
 func (t *Table) statusColor(name, value string, fallback tcell.Color) tcell.Color {
 	p := &t.presentation
 	v := strings.ToLower(strings.TrimSpace(value))
-	if name == "READY" {
+	if name == tableReadyColumn {
 		counts := strings.Split(v, "/")
 		if len(counts) == 2 {
 			ready, e1 := strconv.Atoi(counts[0])
@@ -272,7 +274,7 @@ func (t *Table) statusColor(name, value string, fallback tcell.Color) tcell.Colo
 			}
 		}
 	}
-	if name == "RESTARTS" {
+	if name == tableRestartsColumn {
 		if count, err := strconv.Atoi(v); err == nil {
 			if count > 0 {
 				return p.warning

@@ -20,6 +20,8 @@ type dailyWorkspaceTerm struct{ field, value string }
 // Search is deliberately local, literal and small: all whitespace-separated
 // tokens must match, optionally qualified with a known identity/status field.
 // A mistyped structured term is rejected instead of widening the observation.
+const dailyWorkspaceCoverageAbsent = "absent"
+
 func parseDailyWorkspaceQuery(query string) ([]dailyWorkspaceTerm, error) {
 	var terms []dailyWorkspaceTerm
 	for _, token := range strings.Fields(query) {
@@ -125,7 +127,7 @@ func (w *dailyWorkspace) makeRows(terms []dailyWorkspaceTerm) ([]string, []daily
 			if !dailyWorkspaceMatch(terms, resource.Kind, resource.Ref.Namespace, resource.Ref.Name, resource.Summary) {
 				continue
 			}
-			age := "unknown"
+			age := workspaceUnknown
 			if resource.Object != nil {
 				created := resource.Object.GetCreationTimestamp()
 				if !created.IsZero() {
@@ -143,8 +145,8 @@ func (w *dailyWorkspace) makeRows(terms []dailyWorkspaceTerm) ([]string, []daily
 		coverageRows := append([]workspace.Coverage(nil), w.coverage...)
 		sort.SliceStable(coverageRows, func(i, j int) bool {
 			a, b := coverageRows[i], coverageRows[j]
-			aComplete := a.State == dailyWorkspaceCoverageComplete || a.State == "absent"
-			bComplete := b.State == dailyWorkspaceCoverageComplete || b.State == "absent"
+			aComplete := a.State == dailyWorkspaceCoverageComplete || a.State == dailyWorkspaceCoverageAbsent
+			bComplete := b.State == dailyWorkspaceCoverageComplete || b.State == dailyWorkspaceCoverageAbsent
 			if aComplete != bComplete {
 				return !aComplete
 			}
@@ -318,7 +320,7 @@ func (w *dailyWorkspace) renderHeader() {
 	}
 	gaps := 0
 	for _, coverage := range w.coverage {
-		if coverage.State != dailyWorkspaceCoverageComplete && coverage.State != "absent" {
+		if coverage.State != dailyWorkspaceCoverageComplete && coverage.State != dailyWorkspaceCoverageAbsent {
 			gaps++
 		}
 	}

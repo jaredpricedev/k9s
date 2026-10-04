@@ -21,6 +21,9 @@ import (
 )
 
 const comparisonReplacementUID = "new"
+const comparisonRunningPhase = "Running"
+const comparisonPhaseKey = "phase"
+const comparisonStatusKey = "status"
 
 func TestComparisonViewKeepsExplicitBaseline(t *testing.T) {
 	v := &comparisonView{normalize: true}
@@ -164,7 +167,7 @@ func TestComparisonOverviewLongValuesShowChangedPortion(t *testing.T) {
 
 func TestComparisonFirstStageShowsSuccessfulCaptureAndExplicitNextAction(t *testing.T) {
 	v := &comparisonView{normalize: true}
-	a := inspect.NewObservation(inspect.ResourceIdentity{Context: "lab", GVR: "v1/pods", Namespace: "team", Name: "api", UID: "retained-a"}, "API", time.Now(), map[string]any{"status": map[string]any{"phase": "Running"}})
+	a := inspect.NewObservation(inspect.ResourceIdentity{Context: "lab", GVR: "v1/pods", Namespace: "team", Name: testWorkspaceAPIName, UID: "retained-a"}, "API", time.Now(), map[string]any{comparisonStatusKey: map[string]any{comparisonPhaseKey: comparisonRunningPhase}})
 	v.acceptObservation(a, true)
 	text := comparisonOverview(inspect.Compare(*v.baseline, v.other, true), true)
 	if !strings.Contains(text, "A captured; r capture B") || strings.Contains(text, "Comparison unavailable") {

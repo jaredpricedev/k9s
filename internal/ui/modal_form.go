@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/derailed/k9s/internal/config"
+	"github.com/derailed/k9s/internal/logstream"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
 )
@@ -17,6 +18,7 @@ type ModalForm struct {
 	*tview.Box
 	form          *tview.Form
 	text          string
+	contextText   string
 	colors        config.Dialog
 	done          func(int, string)
 	textOffset    int
@@ -74,6 +76,13 @@ func (m *ModalForm) SetText(text string) *ModalForm {
 		m.textOffset = 1 << 20
 	}
 	m.text = text
+	return m
+}
+
+// SetContext pins the captured target and destination above scrollable guidance.
+// Callers retain the full destination in their confirmation model.
+func (m *ModalForm) SetContext(text string) *ModalForm {
+	m.contextText = tview.Escape(logstream.SafeText(text))
 	return m
 }
 func modalColor(color tcell.Color) config.Color {
@@ -148,6 +157,15 @@ func (m *ModalForm) Draw(screen tcell.Screen) {
 	x, y, available, innerHeight := m.GetInnerRect()
 	x++
 	available -= 2
+	contextLines := strings.Split(m.contextText, "\n")
+	for _, line := range contextLines[:min(2, len(contextLines))] {
+		if m.contextText == "" {
+			break
+		}
+		tview.Print(screen, line, x, y, available, tview.AlignLeft, m.colors.FgColor.Color())
+		y++
+		innerHeight--
+	}
 	y, infoScrollable := m.drawGuidance(screen, x, y, available, innerHeight)
 	bottom := (rows-height)/2 + height - 2
 	buttonY := m.drawButtons(screen, x, bottom, available, infoScrollable)

@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	investigationEvidenceTab = 4
-	investigationAppRole     = "app"
+	investigationCurrentColumn = "CURRENT"
+	investigationEvidenceTab   = 4
+	investigationAppRole       = "app"
 )
 
 var investigationTabs = []string{"Overview", "Containers", "Events", "Resources", "Evidence"}
@@ -324,9 +325,9 @@ func investigationCurrentTable(i *inspect.Investigation, width, limit int) strin
 			break
 		}
 	}
-	headers := []string{"CONTAINER", "CURRENT", "READY", "RESTART"}
+	headers := []string{"CONTAINER", investigationCurrentColumn, readyCol, "RESTART"}
 	if width < 50 {
-		headers = []string{"NAME", "CURRENT", "RDY", "R"}
+		headers = []string{nameCol, investigationCurrentColumn, "RDY", "R"}
 	}
 	fmt.Fprintln(&b, tableRow(headers, widths))
 	for index := range min(len(i.Containers), limit) {
@@ -371,7 +372,7 @@ func investigationContainerTable(i *inspect.Investigation, width, limit int) str
 	}
 	var b strings.Builder
 	widths := []int{18, 25, 7, 7, max(8, width-61)}
-	fmt.Fprintln(&b, tableRow([]string{"CONTAINER", "CURRENT", "READY", "RESTART", "PREVIOUS"}, widths))
+	fmt.Fprintln(&b, tableRow([]string{"CONTAINER", investigationCurrentColumn, readyCol, "RESTART", "PREVIOUS"}, widths))
 	for index := range min(len(i.Containers), limit) {
 		c := &i.Containers[index]
 		ready, restarts := investigationReady(c), "?"
