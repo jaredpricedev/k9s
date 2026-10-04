@@ -342,8 +342,7 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 		w.setMode(dailyWorkspaceModes[(w.tabIndex()+1)%len(dailyWorkspaceModes)])
 		return nil
 	case e.Rune() == 'v':
-		w.showRowDetails()
-		return nil
+		return w.showRowDetailsKey()
 	case e.Rune() == '/':
 		w.openQueryPrompt()
 		return nil
@@ -373,14 +372,23 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 		}
 		return nil
 	case strings.ContainsRune("123456", e.Rune()) && e.Rune() != 0:
-		w.setMode(map[rune]string{
-			'1': dailyWorkspaceQueueMode, '2': inventoryCommand, '3': dailyWorkspaceCoverageMode,
-			'4': dailyWorkspacePinsMode, '5': dailyWorkspaceScopesMode, '6': dailyWorkspaceHistoryMode,
-		}[e.Rune()])
+		w.setMode(dailyWorkspaceModeForDigit(e.Rune()))
 		return nil
 	}
 	return e
 }
+func (w *dailyWorkspace) showRowDetailsKey() *tcell.EventKey {
+	w.showRowDetails()
+	return nil
+}
+
+func dailyWorkspaceModeForDigit(key rune) string {
+	return map[rune]string{
+		'1': dailyWorkspaceQueueMode, '2': inventoryCommand, '3': dailyWorkspaceCoverageMode,
+		'4': dailyWorkspacePinsMode, '5': dailyWorkspaceScopesMode, '6': dailyWorkspaceHistoryMode,
+	}[key]
+}
+
 func (w *dailyWorkspace) openQueryPrompt() {
 	w.prompting = true
 	w.prompt.SetText(w.query)
