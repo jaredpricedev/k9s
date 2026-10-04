@@ -321,6 +321,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.operationsCommand()
 	case maintenanceCommandToken:
 		c.maintenanceCommand()
+	case upgradeReadinessCommand:
+		c.upgradeReadinessCommand(p.GetLine())
 	case providersCommand:
 		c.providerCommand(p.GetLine())
 	default:

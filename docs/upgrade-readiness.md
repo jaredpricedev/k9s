@@ -1,0 +1,7 @@
+# Upgrade readiness evidence
+
+`:upgrade-readiness` is an explicit, read-only first step for optional upgrade review (TK22 / #66). It records the API server version, up to 100 Node kubelet versions, and up to 100 container image references from each controller kind (Deployments, DaemonSets, StatefulSets) in the current namespace. Namespace name and UID bind the observation to the destination; every snapshot includes its capture time and per-section state. A failed read does not erase successful sections. Press `r` to make a new observation; browsing does not launch the collector.
+
+The collector does not read Secrets, annotations, environment values, or pod templates beyond container names and image references. It does not inspect deprecated API use, CRDs, or admission behavior. A discovered object inventory does not prove which API versions clients use, and RBAC-denied kinds remain unknown. Version facts do not establish compatibility or upgrade safety. The kubent/pluto provider adapters are explicitly unsupported here; no executable lookup, shell command, installation, or inferred findings are performed.
+
+This is implementation groundwork, not user-demand validation. The remaining issue gates are validating real target scenarios and deciding whether an optional kubent/pluto adapter is useful. Tests with fake clients establish bounded request shapes and fixture behavior only; live-cluster integration, realistic denied-RBAC coverage, provider validation, and operator studies remain open.
