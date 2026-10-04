@@ -597,8 +597,12 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 
 	if selectedRow >= 0 {
 		t.SelectRow(selectedRow, selectedCol, true)
+	} else if t.GetRowCount() > 1 {
+		// A zero-match view may leave tview's cursor beyond the rebuilt cells.
+		// Establish a resource selection immediately, before the next draw/input.
+		t.SelectRow(1, 0, true)
 	} else {
-		t.updateSelection(true)
+		t.SelectRow(0, 0, true)
 	}
 	t.UpdateTitle()
 }

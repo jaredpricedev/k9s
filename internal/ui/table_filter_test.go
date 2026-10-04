@@ -110,6 +110,35 @@ func TestTableFilterKeepsValidResultAndSelectionOnSyntaxError(t *testing.T) {
 	assert.Empty(t, v.CommittedFilter())
 	assert.Empty(t, v.FilterStatusText())
 	assert.Equal(t, 3, v.GetRowCount())
+	assert.NotEmpty(t, v.GetSelectedItem(), "restored rows must be actionable before another draw")
+}
+
+func TestTableFilterRestoresSelectionAfterEmptyDraw(t *testing.T) {
+	v := ui.NewTable(client.NewGVR("test"))
+	v.Init(makeContext())
+	v.SetModel(new(mockModel))
+	screen := tcell.NewSimulationScreen("UTF-8")
+	require.NoError(t, screen.Init())
+	defer screen.Fini()
+	screen.SetSize(120, 34)
+	v.SetRect(0, 0, 120, 34)
+	query := func(text string) {
+		v.CmdBuff().SetText(text, "", true)
+		v.Filter(text)
+		v.Draw(screen)
+	}
+	query("zorg")
+	require.Equal(t, "r2", v.GetSelectedItem())
+	query("never matches")
+	require.Empty(t, v.GetSelectedItem())
+	// Empty draws, resize and refresh can move the underlying cursor outside
+	// all cells. The next valid query must select an actual resource directly.
+	v.Select(8, 0)
+	v.Draw(screen)
+	query("")
+	require.NotEmpty(t, v.GetSelectedItem())
+	query("zorg")
+	require.Equal(t, "r2", v.GetSelectedItem())
 }
 
 func TestResourcePromptShowsModeAndKeepsInvalidInputEditable(t *testing.T) {
