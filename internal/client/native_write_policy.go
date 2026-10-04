@@ -6,6 +6,7 @@ package client
 import (
 	"net/http"
 
+	utilnet "k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/client-go/rest"
 )
 
@@ -43,3 +44,6 @@ func (t nativeWriteTransport) RoundTrip(request *http.Request) (*http.Response, 
 
 // Keep transport unwrapping available to Kubernetes upgrade/dial helpers.
 func (t nativeWriteTransport) WrappedRoundTripper() http.RoundTripper { return t.transport }
+
+// http.Client closes only its direct transport; forward through nested wrappers.
+func (t nativeWriteTransport) CloseIdleConnections() { utilnet.CloseIdleConnectionsFor(t.transport) }
