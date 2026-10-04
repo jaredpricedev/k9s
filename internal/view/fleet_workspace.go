@@ -10,6 +10,7 @@ import (
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/fleet"
+	"github.com/derailed/k9s/internal/inspect"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
@@ -234,7 +235,7 @@ func (v *fleetWorkspace) accept(snapshot *fleet.Snapshot, err error) {
 
 func transientFleetFailure(state string) bool {
 	switch state {
-	case "denied", "authentication unavailable", "timeout", "canceled", "actor unavailable":
+	case inspect.ObservationDenied, "authentication unavailable", "timeout", "canceled", "actor unavailable":
 		return true
 	default:
 		return strings.HasPrefix(state, "read/setup unavailable")

@@ -192,7 +192,7 @@ func loadControllerChildren(ctx context.Context, dyn dynamic.Interface, target S
 		})
 	pods, podCoverage := collectRolloutObjects(ctx, dyn, client.PodGVR.GVR(), target.Namespace, selector, "Pods", rolloutMaxPods,
 		func(o *unstructured.Unstructured) bool {
-			return o.GetAPIVersion() == rolloutPodAPI && o.GetKind() == "Pod" && rolloutOwnedBy(o, workload.GetKind(), workload.GetUID())
+			return o.GetAPIVersion() == rolloutPodAPI && o.GetKind() == inspectionPodKind && rolloutOwnedBy(o, workload.GetKind(), workload.GetUID())
 		})
 	// Direct controlling ownership does not depend on revision visibility.
 	coverage = append(coverage, revisionCoverage, podCoverage)

@@ -16,6 +16,7 @@ import (
 
 const (
 	SeverityCritical  = "critical"
+	categoryHistory   = "history"
 	SeverityWarning   = "warning"
 	SeverityInfo      = "info"
 	CertificateWindow = 14 * 24 * time.Hour
@@ -128,7 +129,7 @@ func classifyPod(object *unstructured.Unstructured, add addFinding) {
 				}
 			}
 			if last, found, _ := unstructured.NestedMap(status, "lastState", "terminated"); found && stringField(last, statusReasonField) == oomKilledReason {
-				add("history", SeverityInfo, "PreviousOOMKilled", name+": the previous container termination reports OOMKilled; this is historical state")
+				add(categoryHistory, SeverityInfo, "PreviousOOMKilled", name+": the previous container termination reports OOMKilled; this is historical state")
 			}
 		}
 	}

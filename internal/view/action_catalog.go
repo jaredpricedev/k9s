@@ -105,8 +105,10 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 	}
 	result = append(result, investigationActions(owner, app)...)
 	result = append(result, changeReviewActions(owner, app)...)
+	result = append(result, jobReviewActions(owner, app)...)
 	result = append(result, maintenanceReviewActions(owner, app)...)
 	result = append(result, configurationActions(owner, app)...)
+	result = append(result, networkReviewActions(owner, app)...)
 	result = append(result, workspaceActions(app)...)
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Category != result[j].Category {
@@ -126,12 +128,21 @@ func changeReviewActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 	if reason == "" && target.UID == "" {
 		reason = "Reopen the workload to capture its identity before review"
 	}
+	securityReason := target.UnavailableReason
+	if securityReason == "" {
+		if err := securityReviewTargetError(target); err != nil {
+			securityReason = err.Error()
+		}
+	}
 	return []ui.ActionDescriptor{
 		{ID: "command.review", Label: "Review local manifest", Category: ui.ActionInspect, Shortcut: ":review", Discoverable: true,
 			Handler: func(*tcell.EventKey) *tcell.EventKey { app.openDesiredReview(""); return nil }},
 		{ID: "resource.rollout", Label: "Controller rollout review", Category: ui.ActionInspect, Shortcut: ":rollout",
 			Discoverable: true, RequiresSelection: true, UnavailableReason: reason,
 			Handler: func(*tcell.EventKey) *tcell.EventKey { app.openRolloutReview(target); return nil }},
+		{ID: "resource.security-review", Label: "Declared security review", Category: ui.ActionInspect, Shortcut: ":security-review",
+			Discoverable: true, RequiresSelection: true, UnavailableReason: securityReason,
+			Handler: func(*tcell.EventKey) *tcell.EventKey { app.openSecurityReview(target); return nil }},
 	}
 }
 
@@ -143,6 +154,7 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		run                           func()
 	}{
 		{"resource.pressure", "Resource pressure", ":pressure", ui.ActionInspect, func() { NewCommand(app).pressureCommand() }},
+		{"resource.storage", "Storage diagnosis and expansion preview", ":storage", ui.ActionInspect, func() { NewCommand(app).storageCommand() }},
 		{"resource.capacity", "Capacity and autoscaling review", ":capacity", ui.ActionInspect, func() { NewCommand(app).capacityCommand() }},
 		{"resource.evidence", "Capture evidence preview", ":evidence", ui.ActionExport, func() { NewCommand(app).evidenceCommand("evidence") }},
 	} {
@@ -151,6 +163,11 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		_, selectedView := owner.(SelectedResource)
 		if !resourceView && !selectedView {
 			reason = "Open a resource list and select an API object first"
+		}
+		if item.id == "resource.storage" && reason == "" {
+			if err := storageTargetError(&target); err != nil {
+				reason = err.Error()
+			}
 		}
 		if item.id == "resource.capacity" && reason == "" {
 			if err := capacityTargetError(&target); err != nil {
@@ -192,7 +209,18 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		}}, ui.ActionDescriptor{
 		ID: "command.providers", Label: "Provider checks", Category: ui.ActionInspect,
 		Shortcut: ":providers", Discoverable: true,
-		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).providerCommand("providers"); return nil }})
+		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).providerCommand("providers"); return nil }}, ui.ActionDescriptor{
+		ID: "command.upgrade-readiness", Label: "Upgrade readiness evidence", Category: ui.ActionInspect, Shortcut: ":upgrade-readiness", Discoverable: true,
+		UnavailableReason: func() string {
+			if client.IsClusterWide(app.Config.ActiveNamespace()) {
+				return "Select one current namespace before collecting upgrade evidence"
+			}
+			return ""
+		}(),
+		Handler: func(*tcell.EventKey) *tcell.EventKey {
+			NewCommand(app).upgradeReadinessCommand("upgrade-readiness")
+			return nil
+		}})
 	return result
 }
 
@@ -203,18 +231,23 @@ func workspaceActions(app *App) []ui.ActionDescriptor {
 		{"command.workspace", "Saved workspaces", "workspace"},
 		{"command.daily", "Daily findings queue", dailyCommand},
 		{"command.inventory", "Scoped inventory", inventoryCommand},
+		{"command.activity", "Scoped application activity", activityCommand},
 		{"command.connection", "Connection health", connectionCommand},
+		{"command.sessions", "Local sessions", localSessionsCommand},
 	} {
 		command := item.command
 		result = append(result, ui.ActionDescriptor{
 			ID: item.id, Label: item.label, Category: ui.ActionNavigate, Shortcut: ":" + command,
 			Discoverable: true, Handler: func(*tcell.EventKey) *tcell.EventKey {
 				c := NewCommand(app)
-				if command == fleetCommandToken {
+				switch command {
+				case fleetCommandToken:
 					c.fleetCommand(command)
-				} else if command == connectionCommand {
+				case connectionCommand:
 					c.connectionHealthCommand(command)
-				} else {
+				case localSessionsCommand:
+					c.localSessionsCommand()
+				default:
 					c.dailyWorkspaceCommand(command)
 				}
 				return nil
@@ -306,5 +339,18 @@ func configurationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		ID: "resource.configuration-review", Label: "Declared configuration references", Category: ui.ActionInspect,
 		Shortcut: ":" + configurationCommand, Discoverable: true, RequiresSelection: true, UnavailableReason: reason,
 		Handler: func(*tcell.EventKey) *tcell.EventKey { app.openConfigurationReview(target); return nil },
+	}}
+}
+
+func jobReviewActions(owner actionOwner, app *App) []ui.ActionDescriptor {
+	target := actionTarget(owner, app.Config.ActiveContextName())
+	reason := ""
+	if err := jobReviewTargetError(target); err != nil {
+		reason = err.Error()
+	}
+	return []ui.ActionDescriptor{{
+		ID: "resource.job-review", Label: "Scheduled / one-off Job review", Category: ui.ActionInspect, Shortcut: ":" + jobReviewCommandToken,
+		Discoverable: true, RequiresSelection: true, UnavailableReason: reason,
+		Handler: func(*tcell.EventKey) *tcell.EventKey { app.openJobReview(target); return nil },
 	}}
 }

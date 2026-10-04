@@ -222,6 +222,12 @@ func (m *ModalForm) drawButtons(screen tcell.Screen, x, bottom, width int, infoS
 	buttonX := x + max(0, (width-buttonsWidth)/2)
 	for index := range m.form.GetButtonCount() {
 		button := m.form.GetButton(index)
+		// Direct native drawing must apply the dialog's button pairs rather
+		// than the constructor's global primary/inverse text defaults.
+		background, focusedBackground := m.colors.ButtonBgColor.Color(), m.colors.ButtonFocusBgColor.Color()
+		button.SetLabelColor(config.ReadableForeground(m.colors.ButtonFgColor.Color(), background)).
+			SetLabelColorActivated(config.ReadableForeground(m.colors.ButtonFocusFgColor.Color(), focusedBackground)).
+			SetBackgroundColorActivated(focusedBackground).SetBackgroundColor(background)
 		buttonWidth := min(width, tview.TaggedStringWidth(button.GetLabel())+4)
 		row := buttonY
 		if stacked {
@@ -230,6 +236,14 @@ func (m *ModalForm) drawButtons(screen tcell.Screen, x, bottom, width int, infoS
 		}
 		button.SetRect(buttonX, row, buttonWidth, 1)
 		button.Draw(screen)
+		// The monochrome boundary removes the focus background before native
+		// label printing. Keep the focused control visible with explicit reverse.
+		if screen.Colors() == 0 && button.HasFocus() {
+			for column := buttonX; column < buttonX+buttonWidth; column++ {
+				main, combining, style, _ := screen.GetContent(column, row)
+				screen.SetContent(column, row, main, combining, style.Reverse(true))
+			}
+		}
 		buttonX += buttonWidth + 1
 	}
 	return buttonY
