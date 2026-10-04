@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 
 	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/client"
@@ -26,12 +27,13 @@ import (
 type Table struct {
 	*ui.Table
 
-	app            *App
-	enterFn        EnterFunc
-	envFn          EnvFunc
-	bindKeysFn     []BindKeysFunc
-	command        *cmd.Interpreter
-	filterRequests resourceFilterRequests
+	app                 *App
+	enterFn             EnterFunc
+	envFn               EnvFunc
+	bindKeysFn          []BindKeysFunc
+	command             *cmd.Interpreter
+	operationGeneration atomic.Uint64
+	filterRequests      resourceFilterRequests
 }
 
 // NewTable returns a new viewer.
@@ -193,6 +195,7 @@ func (t *Table) Start() {
 
 // Stop terminates the component.
 func (t *Table) Stop() {
+	t.operationGeneration.Add(1)
 	t.filterRequests.stop()
 	t.CmdBuff().RemoveListener(t)
 	t.Styles().RemoveListener(t.Table)
