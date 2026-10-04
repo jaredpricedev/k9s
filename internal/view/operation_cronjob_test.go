@@ -40,6 +40,18 @@ func cronOperationFixture(t *testing.T) (*operationSession, SelectedResourceTarg
 
 func TestGuardedCronJobTriggerRetainsCreatedIdentityAndProviderOwnership(t *testing.T) {
 	s, target := cronOperationFixture(t)
+	cron, err := s.resource(&target).Get(t.Context(), target.Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := unstructured.SetNestedStringMap(cron.Object, map[string]string{
+		cronScheduledAnnotation: "2026-10-04T12:00:00Z", "example.org/template": "retained",
+	}, "spec", "jobTemplate", "metadata", "annotations"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.resource(&target).Update(t.Context(), cron, metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
 	typed := s.typed.(*kubefake.Clientset)
 	created := 0
 	typed.PrependReactor("create", "jobs", func(action ktesting.Action) (bool, runtime.Object, error) {
@@ -47,6 +59,12 @@ func TestGuardedCronJobTriggerRetainsCreatedIdentityAndProviderOwnership(t *test
 		job := action.(ktesting.CreateAction).GetObject().(*batchv1.Job)
 		if job.GenerateName != "nightly-manual-" || job.Namespace != guardedTestNamespace || job.Labels[investigationAppRole] != guardedTestNightly || len(job.OwnerReferences) != 1 || job.OwnerReferences[0].UID != target.UID || job.Spec.Template.Spec.Containers[0].Image != "example:1" {
 			t.Error("native template/ownership changed", job)
+		}
+		if job.Annotations[manualJobAnnotation] != "manual" || job.Annotations["example.org/template"] != "retained" {
+			t.Error("manual origin or ordinary template annotation missing", job.Annotations)
+		}
+		if _, scheduled := job.Annotations[cronScheduledAnnotation]; scheduled {
+			t.Error("manual Job inherited a scheduled-run timestamp")
 		}
 		job = job.DeepCopy()
 		job.Name = "nightly-manual-xyz"
