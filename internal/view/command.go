@@ -281,6 +281,10 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.dailyWorkspaceCommand(p.GetLine())
 	case connectionCommand, "connection-health":
 		c.connectionHealthCommand(p.GetLine())
+	case desiredReviewCommandToken:
+		c.desiredReviewCommand(p.GetLine())
+	case "rollout":
+		c.rolloutReviewCommand()
 	default:
 		return false
 	}

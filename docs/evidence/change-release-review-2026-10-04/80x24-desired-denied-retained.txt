@@ -1,0 +1,24 @@
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <esc> Back  <ctrl+o> Actions  <?> Help                                         
+┌──────────────────────────── Desired-state review ────────────────────────────┐
+│demo-dev · apps                                                               │
+│Source: release review.yaml · SHA256 be21e2713db8 · 3 documents               │
+│3 resources · 0 changed · 0 reviewed matches · 3 unavailable · 1 retained     │
+│Loaded 2026-10-04T12:27:33Z · Read 2026-10-04T12:27:39Z                       │
+│Refresh unavailable (1 reads); retained evidence from 2026-10-04T12:27:37Z.   │
+│STATUS       KIND      NAMESPACE NAME            CHANGES / COVERAGE           │
+│retained     Deploymen apps      checkout        Observed 2026-10-04T12:27:37 │
+│out of scope Deploymen outside   outside-release Authored namespace is outsid │
+│excluded     Secret    apps      excluded-auth   Secret contents are excluded │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│Enter detail · r refresh live · n select/reload source · / local search · i in│
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <desired-state review>                                         
+                                                                                

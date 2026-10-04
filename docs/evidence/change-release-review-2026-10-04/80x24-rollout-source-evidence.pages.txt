@@ -1,0 +1,600 @@
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 4s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│ ROLLOUT SOURCE EVIDENCE                                                      │
+│ Kubernetes API · retained typed facts and sanitized templates                │
+│ Each template retains its context, UID, observation time and exclusions.     │
+│ Sensitive fields are redacted heuristically; excluded fields remain          │
+│ unreviewed.                                                                  │
+│                                                                              │
+│ {                                                                            │
+│   "Identity": {                                                              │
+│     "context": "demo-dev",                                                   │
+│     "gvr": "apps/v1/deployments",                                            │
+│     "namespace": "apps",                                                     │
+│     "name": "checkout",                                                      │
+│     "uid": "fixture-checkout-deployment"                                     │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 4s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│   },                                                                         │
+│   "CapturedAt": "2026-10-04T12:27:43.642793613Z",                            │
+│   "DeploymentState": "complete",                                             │
+│   "Generation": 3,                                                           │
+│   "ObservedGeneration": 3,                                                   │
+│   "Desired": 2,                                                              │
+│   "Updated": 1,                                                              │
+│   "Ready": 1,                                                                │
+│   "Available": 1,                                                            │
+│   "Replicas": 3,                                                             │
+│   "Paused": false,                                                           │
+│   "Conditions": [                                                            │
+│     {                                                                        │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 4s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│       "Type": "Progressing",                                                 │
+│       "Status": "True",                                                      │
+│       "Reason": "ReplicaSetUpdated",                                         │
+│       "Message": "",                                                         │
+│       "UpdatedAt": "0001-01-01T00:00:00Z",                                   │
+│       "TransitionAt": "0001-01-01T00:00:00Z"                                 │
+│     }                                                                        │
+│   ],                                                                         │
+│   "Revisions": [                                                             │
+│     {                                                                        │
+│       "Identity": {                                                          │
+│         "context": "demo-dev",                                               │
+│         "gvr": "apps/v1/replicasets",                                        │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 4s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│         "namespace": "apps",                                                 │
+│         "name": "checkout-10-old",                                           │
+│         "uid": "fixture-checkout-rs-old"                                     │
+│       },                                                                     │
+│       "Revision": "8",                                                       │
+│       "Current": false,                                                      │
+│       "CurrentKnown": true,                                                  │
+│       "Replicas": 1,                                                         │
+│       "Ready": 1,                                                            │
+│       "Available": 1,                                                        │
+│       "Template": {                                                          │
+│         "identity": {                                                        │
+│           "context": "demo-dev",                                             │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 5s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│           "gvr": "apps/v1/replicasets",                                      │
+│           "namespace": "apps",                                               │
+│           "name": "checkout-10-old",                                         │
+│           "uid": "fixture-checkout-rs-old"                                   │
+│         },                                                                   │
+│         "source": "Kubernetes API /spec/template",                           │
+│         "observedAt": "2026-10-04T12:27:43.642793613Z",                      │
+│         "state": "complete",                                                 │
+│         "limits": [                                                          │
+│           "Sensitive field names and recognizable credentials redacted       │
+│ heuristically"                                                               │
+│         ],                                                                   │
+│         "object": {                                                          │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 5s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│           "spec": {                                                          │
+│             "template": {                                                    │
+│               "metadata": {                                                  │
+│                 "labels": {                                                  │
+│                   "app": "checkout"                                          │
+│                 }                                                            │
+│               },                                                             │
+│               "spec": {                                                      │
+│                 "containers": [                                              │
+│                   {                                                          │
+│                     "env": [                                                 │
+│                       {                                                      │
+│                         "name": "ACCESS_TOKEN",                              │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 5s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│                         "value": "[REDACTED]"                                │
+│                       }                                                      │
+│                     ],                                                       │
+│                     "image": "example.test/api:v1",                          │
+│                     "imagePullPolicy": "IfNotPresent",                       │
+│                     "name": "api",                                           │
+│                     "resources": {                                           │
+│                       "limits": {                                            │
+│                         "cpu": "1",                                          │
+│                         "memory": "256Mi"                                    │
+│                       },                                                     │
+│                       "requests": {                                          │
+│                         "cpu": "250m",                                       │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 5s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│                         "memory": "128Mi"                                    │
+│                       }                                                      │
+│                     }                                                        │
+│                   }                                                          │
+│                 ],                                                           │
+│                 "dnsPolicy": "ClusterFirst",                                 │
+│                 "restartPolicy": "Always",                                   │
+│                 "terminationGracePeriodSeconds": 30                          │
+│               }                                                              │
+│             }                                                                │
+│           }                                                                  │
+│         }                                                                    │
+│       }                                                                      │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 5s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│     },                                                                       │
+│     {                                                                        │
+│       "Identity": {                                                          │
+│         "context": "demo-dev",                                               │
+│         "gvr": "apps/v1/replicasets",                                        │
+│         "namespace": "apps",                                                 │
+│         "name": "checkout-20-new",                                           │
+│         "uid": "fixture-checkout-rs-current"                                 │
+│       },                                                                     │
+│       "Revision": "9",                                                       │
+│       "Current": true,                                                       │
+│       "CurrentKnown": true,                                                  │
+│       "Replicas": 1,                                                         │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 5s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│       "Ready": 0,                                                            │
+│       "Available": 0,                                                        │
+│       "Template": {                                                          │
+│         "identity": {                                                        │
+│           "context": "demo-dev",                                             │
+│           "gvr": "apps/v1/replicasets",                                      │
+│           "namespace": "apps",                                               │
+│           "name": "checkout-20-new",                                         │
+│           "uid": "fixture-checkout-rs-current"                               │
+│         },                                                                   │
+│         "source": "Kubernetes API /spec/template",                           │
+│         "observedAt": "2026-10-04T12:27:43.642793613Z",                      │
+│         "state": "complete",                                                 │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 5s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│         "limits": [                                                          │
+│           "Sensitive field names and recognizable credentials redacted       │
+│ heuristically"                                                               │
+│         ],                                                                   │
+│         "object": {                                                          │
+│           "spec": {                                                          │
+│             "template": {                                                    │
+│               "metadata": {                                                  │
+│                 "labels": {                                                  │
+│                   "app": "checkout"                                          │
+│                 }                                                            │
+│               },                                                             │
+│               "spec": {                                                      │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 6s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│                 "containers": [                                              │
+│                   {                                                          │
+│                     "env": [                                                 │
+│                       {                                                      │
+│                         "name": "ACCESS_TOKEN",                              │
+│                         "value": "[REDACTED]"                                │
+│                       }                                                      │
+│                     ],                                                       │
+│                     "image": "example.test/api:v2",                          │
+│                     "imagePullPolicy": "IfNotPresent",                       │
+│                     "name": "api",                                           │
+│                     "resources": {                                           │
+│                       "limits": {                                            │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 6s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│                         "cpu": "1",                                          │
+│                         "memory": "256Mi"                                    │
+│                       },                                                     │
+│                       "requests": {                                          │
+│                         "cpu": "250m",                                       │
+│                         "memory": "128Mi"                                    │
+│                       }                                                      │
+│                     }                                                        │
+│                   }                                                          │
+│                 ],                                                           │
+│                 "dnsPolicy": "ClusterFirst",                                 │
+│                 "restartPolicy": "Always",                                   │
+│                 "terminationGracePeriodSeconds": 30                          │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 6s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│               }                                                              │
+│             }                                                                │
+│           }                                                                  │
+│         }                                                                    │
+│       }                                                                      │
+│     }                                                                        │
+│   ],                                                                         │
+│   "Pods": [                                                                  │
+│     {                                                                        │
+│       "Identity": {                                                          │
+│         "context": "demo-dev",                                               │
+│         "gvr": "v1/pods",                                                    │
+│         "namespace": "apps",                                                 │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 6s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│         "name": "checkout-10-old-pod",                                       │
+│         "uid": "fixture-pod-8"                                               │
+│       },                                                                     │
+│       "ReplicaSetUID": "fixture-checkout-rs-old",                            │
+│       "Phase": "Running",                                                    │
+│       "Images": [                                                            │
+│         {                                                                    │
+│           "Name": "api",                                                     │
+│           "Role": "app",                                                     │
+│           "Declared": "example.test/api:v1",                                 │
+│           "ImageID": "example.test/api@sha256:                               │
+│ 8888888888888888888888888888888888888888888888888888888888888888",           │
+│           "State": "running",                                                │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 6s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│           "Reason": "",                                                      │
+│           "Ready": true,                                                     │
+│           "Restarts": 0                                                      │
+│         }                                                                    │
+│       ]                                                                      │
+│     },                                                                       │
+│     {                                                                        │
+│       "Identity": {                                                          │
+│         "context": "demo-dev",                                               │
+│         "gvr": "v1/pods",                                                    │
+│         "namespace": "apps",                                                 │
+│         "name": "checkout-20-new-pod",                                       │
+│         "uid": "fixture-pod-9"                                               │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 6s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│       },                                                                     │
+│       "ReplicaSetUID": "fixture-checkout-rs-current",                        │
+│       "Phase": "Running",                                                    │
+│       "Images": [                                                            │
+│         {                                                                    │
+│           "Name": "api",                                                     │
+│           "Role": "app",                                                     │
+│           "Declared": "example.test/api:v2",                                 │
+│           "ImageID": "example.test/api@sha256:                               │
+│ 9999999999999999999999999999999999999999999999999999999999999999",           │
+│           "State": "running",                                                │
+│           "Reason": "",                                                      │
+│           "Ready": false,                                                    │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 7s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│           "Restarts": 0                                                      │
+│         }                                                                    │
+│       ]                                                                      │
+│     }                                                                        │
+│   ],                                                                         │
+│   "Coverage": [                                                              │
+│     {                                                                        │
+│       "Source": "Deployment",                                                │
+│       "State": "complete",                                                   │
+│       "Detail": "Selected Deployment GET; counts and conditions are API      │
+│ observations"                                                                │
+│     },                                                                       │
+│     {                                                                        │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 7s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│       "Source": "ReplicaSets",                                               │
+│       "State": "complete",                                                   │
+│       "Detail": "2 retained controlling-UID-owned objects; namespace         │
+│ selector scope"                                                              │
+│     },                                                                       │
+│     {                                                                        │
+│       "Source": "Pods",                                                      │
+│       "State": "complete",                                                   │
+│       "Detail": "2 retained controlling-UID-owned objects; namespace         │
+│ selector scope"                                                              │
+│     },                                                                       │
+│     {                                                                        │
+│       "Source": "Template matching",                                         │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 7s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│       "State": "complete",                                                   │
+│       "Detail": "1 exact API template matches among 2 retained UID-owned     │
+│ ReplicaSets; matches describe template equivalence only"                     │
+│     },                                                                       │
+│     {                                                                        │
+│       "Source": "Current revision",                                          │
+│       "State": "unknown",                                                    │
+│       "Detail": "Controller-selected current ReplicaSet is not established   │
+│ by template equality, revision number or recency"                            │
+│     }                                                                        │
+│   ],                                                                         │
+│   "DeploymentTemplate": {                                                    │
+│     "identity": {                                                            │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 7s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│       "context": "demo-dev",                                                 │
+│       "gvr": "apps/v1/deployments",                                          │
+│       "namespace": "apps",                                                   │
+│       "name": "checkout",                                                    │
+│       "uid": "fixture-checkout-deployment"                                   │
+│     },                                                                       │
+│     "source": "Kubernetes API /spec/template",                               │
+│     "observedAt": "2026-10-04T12:27:43.642793613Z",                          │
+│     "state": "complete",                                                     │
+│     "limits": [                                                              │
+│       "Sensitive field names and recognizable credentials redacted           │
+│ heuristically"                                                               │
+│     ],                                                                       │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 7s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│     "object": {                                                              │
+│       "spec": {                                                              │
+│         "template": {                                                        │
+│           "metadata": {                                                      │
+│             "labels": {                                                      │
+│               "app": "checkout"                                              │
+│             }                                                                │
+│           },                                                                 │
+│           "spec": {                                                          │
+│             "containers": [                                                  │
+│               {                                                              │
+│                 "env": [                                                     │
+│                   {                                                          │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 7s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│                     "name": "ACCESS_TOKEN",                                  │
+│                     "value": "[REDACTED]"                                    │
+│                   }                                                          │
+│                 ],                                                           │
+│                 "image": "example.test/api:v2",                              │
+│                 "imagePullPolicy": "IfNotPresent",                           │
+│                 "name": "api",                                               │
+│                 "resources": {                                               │
+│                   "limits": {                                                │
+│                     "cpu": "1",                                              │
+│                     "memory": "256Mi"                                        │
+│                   },                                                         │
+│                   "requests": {                                              │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 7s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│                     "cpu": "250m",                                           │
+│                     "memory": "128Mi"                                        │
+│                   }                                                          │
+│                 }                                                            │
+│               }                                                              │
+│             ],                                                               │
+│             "dnsPolicy": "ClusterFirst",                                     │
+│             "restartPolicy": "Always",                                       │
+│             "terminationGracePeriodSeconds": 30                              │
+│           }                                                                  │
+│         }                                                                    │
+│       }                                                                      │
+│     }                                                                        │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 8s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│                   }                                                          │
+│                 }                                                            │
+│               }                                                              │
+│             ],                                                               │
+│             "dnsPolicy": "ClusterFirst",                                     │
+│             "restartPolicy": "Always",                                       │
+│             "terminationGracePeriodSeconds": 30                              │
+│           }                                                                  │
+│         }                                                                    │
+│       }                                                                      │
+│     }                                                                        │
+│   }                                                                          │
+│ }                                                                            │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                

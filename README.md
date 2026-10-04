@@ -57,6 +57,12 @@ searches and permission coverage. The investigation overview separates current
 faults from previous terminations and retained events. See the
 [daily workspace guide](docs/daily-workspace.md) for setup and limits.
 
+Use `:review /absolute/path/manifest.yaml` for a retained local source compared
+with named live targets. Select a Deployment and open `:rollout` for generation,
+replica counts, owned revisions, runtime image IDs and an explicit recovery
+template preview. Both workflows are read-only; see
+[change and release review](docs/change-release-review.md) for scope and fidelity.
+
 Start in read-only mode and choose your destination:
 
 ```sh
@@ -89,6 +95,7 @@ and [Hubble measurements](docs/hubble-performance-2026-10-04.md).
 | Destination / action discovery | `F2` / `Ctrl-O` |
 | Investigation tabs / related resources | `:troubleshoot`, then `1`–`5` / `g` |
 | Compare observations / resource pressure | `:compare` / `:pressure` |
+| Review local manifest / Deployment rollout | `:review /absolute/path.yaml` / `:rollout` |
 | Capability diagnostics | `:diagnostics` |
 | Capture / open offline evidence | `:evidence` / `:evidence-open /absolute/path.json` |
 | Related resources / full status | `g` / `i` in supported views |

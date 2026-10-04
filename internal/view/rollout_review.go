@@ -1,0 +1,401 @@
+// SPDX-License-Identifier: Apache-2.0
+// Modified for k9+; see NOTICE.
+package view
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/derailed/k9s/internal/client"
+	"github.com/derailed/k9s/internal/config"
+	"github.com/derailed/k9s/internal/review"
+	"github.com/derailed/k9s/internal/ui"
+	"github.com/derailed/tcell/v2"
+	"github.com/derailed/tview"
+	"github.com/sahilm/fuzzy"
+	"k8s.io/apimachinery/pkg/types"
+)
+
+const (
+	rolloutReviewTitle = "Rollout review"
+	rolloutEvidenceTab = 4
+	rolloutRecoveryTab = 3
+)
+
+var rolloutReviewTabs = []string{"Overview", "Revisions", "Pods", "Recovery", "Evidence"}
+
+// rolloutReviewView retains one explicitly obtained Deployment observation.
+// Its recovery view compares retained templates and never submits a write.
+type rolloutReviewView struct {
+	*Details
+	target               SelectedResourceTarget
+	snapshot             *review.RolloutSnapshot
+	loader               func(context.Context, SelectedResourceTarget) (*review.RolloutSnapshot, error)
+	cancel               context.CancelFunc
+	generation           uint64
+	destinationRevision  uint64
+	active, loading      bool
+	activeTab            int
+	tabStates            [5]investigationTabState
+	selectedRevisionUID  string
+	recoveryRevisionUID  string
+	identityBar, tabsBar *tview.TextView
+	footer               *tview.TextView
+	width                int
+	refreshFailure       string
+	retainedText         string
+}
+
+func (c *Command) rolloutReviewCommand() {
+	owner, ok := c.app.Content.Top().(actionOwner)
+	if !ok {
+		c.app.Flash().Warn("Select a native Deployment to review its rollout")
+		return
+	}
+	c.app.openRolloutReview(actionTarget(owner, c.app.Config.ActiveContextName()))
+}
+
+//nolint:gocritic // A read-only review owns the captured selection independently of later navigation.
+func (a *App) openRolloutReview(target SelectedResourceTarget) {
+	if err := rolloutTargetError(target); err != nil {
+		a.Flash().Warn(err.Error())
+		return
+	}
+	if target.Context != a.Config.ActiveContextName() {
+		a.Flash().Warn("Context changed; reopen rollout review")
+		return
+	}
+	connection, err := pinInspectionConnection(a.Conn())
+	if err != nil {
+		a.Flash().Err(err)
+		return
+	}
+	v := &rolloutReviewView{Details: NewDetails(a, rolloutReviewTitle, target.Path(), contentInspection, true), target: target,
+		destinationRevision: a.Config.DestinationRevision()}
+	v.loader = func(ctx context.Context, target SelectedResourceTarget) (*review.RolloutSnapshot, error) {
+		return loadRolloutReview(ctx, connection, target)
+	}
+	v.Update("Loading read-only Deployment rollout evidence...")
+	if err := a.inject(v, false); err != nil {
+		a.Flash().Err(err)
+	}
+}
+
+//nolint:gocritic // Validate the immutable selection without modifying it.
+func rolloutTargetError(target SelectedResourceTarget) error {
+	if err := target.Err(); err != nil {
+		return err
+	}
+	if target.GVR.String() != client.DpGVR.String() {
+		return fmt.Errorf("Select a native apps/v1 Deployment; other rollout kinds are not supported by this review")
+	}
+	if !client.IsNamespaced(target.Namespace) {
+		return fmt.Errorf("Select a namespaced Deployment")
+	}
+	if target.UID == "" {
+		return fmt.Errorf("Deployment UID unavailable; refresh the source list and select the resource again")
+	}
+	return nil
+}
+
+func (v *rolloutReviewView) SelectedResource() SelectedResourceTarget { return v.target }
+func (*rolloutReviewView) CompactWorkspace() bool                     { return true }
+
+func (v *rolloutReviewView) Init(ctx context.Context) error {
+	if err := v.Details.Init(ctx); err != nil {
+		return err
+	}
+	v.model.RemoveListener(v.Details)
+	v.model.AddListener(v)
+	v.app.Styles.RemoveListener(v.Details)
+	v.app.Styles.AddListener(v)
+	v.identityBar = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	v.tabsBar = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	v.footer = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	v.Flex.Clear().SetDirection(tview.FlexRow).
+		AddItem(v.identityBar, 3, 0, false).AddItem(v.tabsBar, 1, 0, false).
+		AddItem(v.text, 0, 1, true).AddItem(v.footer, 1, 0, false)
+	for index, key := range []tcell.Key{ui.Key1, ui.Key2, ui.Key3, ui.Key4, ui.Key5} {
+		tab := index
+		v.actions.Add(key, ui.NewKeyAction(rolloutReviewTabs[index], func(event *tcell.EventKey) *tcell.EventKey {
+			if v.cmdBuff.IsActive() {
+				return event
+			}
+			v.selectTab(tab)
+			return nil
+		}, true))
+	}
+	v.actions.Add(tcell.KeyTab, ui.NewKeyAction("Next rollout tab", v.nextTab, true))
+	v.actions.Add(tcell.KeyBacktab, ui.NewKeyAction("Previous rollout tab", v.previousTab, true))
+	v.actions.Add(ui.KeyR, ui.NewKeyAction("Refresh rollout evidence", func(event *tcell.EventKey) *tcell.EventKey {
+		if v.cmdBuff.IsActive() {
+			return event
+		}
+		v.refresh()
+		return nil
+	}, true))
+	v.actions.Add(ui.KeyJ, ui.NewKeyAction("Next retained revision", func(event *tcell.EventKey) *tcell.EventKey {
+		return v.moveRevision(event, 1)
+	}, true))
+	v.actions.Add(ui.KeyK, ui.NewKeyAction("Previous retained revision", func(event *tcell.EventKey) *tcell.EventKey {
+		return v.moveRevision(event, -1)
+	}, true))
+	v.actions.Add(tcell.KeyEnter, ui.NewSharedKeyAction("Review selected revision template", v.reviewSelectedRevision, true))
+	v.render()
+	return nil
+}
+
+func (v *rolloutReviewView) Start() {
+	v.active = true
+	v.app.Styles.RemoveListener(v.Details)
+	v.app.Styles.RemoveListener(v)
+	v.app.Styles.AddListener(v)
+	v.app.Prompt().SetModel(v.cmdBuff)
+	v.StylesChanged(v.app.Styles)
+	if v.snapshot == nil && !v.loading && v.loader != nil {
+		v.refresh()
+	}
+}
+
+func (v *rolloutReviewView) Stop() {
+	v.active = false
+	v.loading = false
+	v.generation++
+	if v.cancel != nil {
+		v.cancel()
+		v.cancel = nil
+	}
+	v.app.Styles.RemoveListener(v)
+	v.Details.Stop()
+}
+
+func (v *rolloutReviewView) StylesChanged(styles *config.Styles) {
+	v.applyStyles(styles)
+	v.render()
+}
+
+func (v *rolloutReviewView) Draw(screen tcell.Screen) {
+	_, _, width, _ := v.GetInnerRect()
+	if width != v.width {
+		v.width = width
+		v.render()
+	}
+	v.renderChrome()
+	v.Flex.Draw(screen)
+}
+
+func (v *rolloutReviewView) TextChanged(lines []string) {
+	v.text.SetText(rolloutMarkup(v.app, strings.Join(lines, "\n")))
+	v.text.ScrollToBeginning()
+}
+
+func (v *rolloutReviewView) TextFiltered(lines []string, matches fuzzy.Matches) {
+	v.Details.TextFiltered(lines, matches)
+	v.text.SetText(enableRegion(rolloutMarkup(v.app, strings.Join(linesWithRegions(lines, matches), "\n"))))
+}
+
+func (v *rolloutReviewView) nextTab(event *tcell.EventKey) *tcell.EventKey {
+	if v.cmdBuff.IsActive() {
+		return event
+	}
+	v.selectTab((v.activeTab + 1) % len(rolloutReviewTabs))
+	return nil
+}
+
+func (v *rolloutReviewView) previousTab(event *tcell.EventKey) *tcell.EventKey {
+	if v.cmdBuff.IsActive() {
+		return event
+	}
+	v.selectTab((v.activeTab + len(rolloutReviewTabs) - 1) % len(rolloutReviewTabs))
+	return nil
+}
+
+func (v *rolloutReviewView) selectTab(tab int) {
+	if tab < 0 || tab >= len(rolloutReviewTabs) || tab == v.activeTab {
+		return
+	}
+	row, col := v.text.GetScrollOffset()
+	v.tabStates[v.activeTab] = investigationTabState{query: v.inspectionQuery, region: v.currentRegion, row: row, col: col}
+	v.activeTab = tab
+	state := v.tabStates[tab]
+	v.inspectionQuery = state.query
+	v.cmdBuff.SetText(state.query, "", true)
+	v.currentRegion = state.region
+	v.text.ScrollTo(state.row, state.col)
+	v.render()
+}
+
+func (v *rolloutReviewView) revisionIndex() int {
+	if v.snapshot != nil {
+		for index := range v.snapshot.Revisions {
+			if v.snapshot.Revisions[index].Identity.UID == v.selectedRevisionUID {
+				return index
+			}
+		}
+	}
+	return 0
+}
+
+func (v *rolloutReviewView) moveRevision(event *tcell.EventKey, step int) *tcell.EventKey {
+	if v.cmdBuff.IsActive() || (v.activeTab != 1 && v.activeTab != rolloutRecoveryTab) || v.snapshot == nil || len(v.snapshot.Revisions) == 0 {
+		return event
+	}
+	index := (v.revisionIndex() + step + len(v.snapshot.Revisions)) % len(v.snapshot.Revisions)
+	v.selectedRevisionUID = v.snapshot.Revisions[index].Identity.UID
+	v.render()
+	return nil
+}
+
+func (v *rolloutReviewView) reviewSelectedRevision(event *tcell.EventKey) *tcell.EventKey {
+	if v.cmdBuff.IsActive() {
+		return v.Details.filterCmd(event)
+	}
+	if (v.activeTab != 1 && v.activeTab != rolloutRecoveryTab) || v.snapshot == nil || len(v.snapshot.Revisions) == 0 {
+		return event
+	}
+	v.recoveryRevisionUID = v.snapshot.Revisions[v.revisionIndex()].Identity.UID
+	v.selectTab(rolloutRecoveryTab)
+	v.render()
+	return nil
+}
+
+func (v *rolloutReviewView) refresh() {
+	if !v.destinationCurrent() {
+		v.refreshFailure = "Destination changed; reopen rollout review"
+		v.render()
+		return
+	}
+	if v.loader == nil {
+		return
+	}
+	if v.cancel != nil {
+		v.cancel()
+	}
+	v.generation++
+	generation, target := v.generation, v.target
+	destinationRevision := v.app.Config.DestinationRevision()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	v.cancel, v.loading = cancel, true
+	v.renderChrome()
+	go func() {
+		defer cancel()
+		snapshot, err := v.loader(ctx, target)
+		if ctx.Err() != nil {
+			err = ctx.Err()
+		}
+		if ctx.Err() == context.Canceled || !v.app.IsRunning() {
+			return
+		}
+		v.app.QueueUpdateDraw(func() {
+			if v.active && v.generation == generation && v.target.Context == v.app.Config.ActiveContextName() &&
+				v.app.Config.DestinationRevision() == destinationRevision && v.app.Content.Top() == v {
+				v.acceptSnapshot(snapshot, err)
+			}
+		})
+	}()
+}
+
+func (v *rolloutReviewView) destinationCurrent() bool {
+	return v.target.Context == v.app.Config.ActiveContextName() && v.destinationRevision == v.app.Config.DestinationRevision()
+}
+
+func (v *rolloutReviewView) acceptSnapshot(snapshot *review.RolloutSnapshot, err error) {
+	v.loading = false
+	if err != nil {
+		v.refreshFailure = err.Error()
+		if v.snapshot == nil {
+			v.snapshot = snapshot
+		}
+	} else {
+		v.refreshFailure = ""
+		v.snapshot = snapshot
+	}
+	if v.snapshot != nil && v.snapshot.Identity.UID != "" {
+		v.target.UID = types.UID(v.snapshot.Identity.UID)
+		if len(v.snapshot.Revisions) > 0 && v.selectedRevisionUID == "" {
+			v.selectedRevisionUID = v.snapshot.Revisions[0].Identity.UID
+		}
+	}
+	v.render()
+}
+
+func (v *rolloutReviewView) render() {
+	if v.identityBar == nil {
+		return
+	}
+	v.renderChrome()
+	width := max(40, v.width)
+	if v.width == 0 {
+		width = 76
+	}
+	text := "Loading read-only Deployment rollout evidence..."
+	if v.snapshot != nil {
+		v.retainedText = rolloutEvidence(v.snapshot)
+		text = rolloutTabText(v.snapshot, v.activeTab, width, v.selectedRevisionUID, v.recoveryRevisionUID)
+	} else if v.refreshFailure != "" {
+		text = "[?] Rollout evidence unavailable: " + v.refreshFailure
+	}
+	query, region := v.inspectionQuery, v.currentRegion
+	row, col := v.text.GetScrollOffset()
+	v.Update(text)
+	if query != "" {
+		v.model.Filter(query)
+		if region < v.maxRegions {
+			v.currentRegion = region
+			v.text.Highlight(fmt.Sprintf("search_%d", region))
+		}
+	}
+	v.text.ScrollTo(row, col)
+	v.updateTitle()
+}
+
+func (v *rolloutReviewView) renderChrome() {
+	if v.identityBar == nil {
+		return
+	}
+	p := v.app.Styles.Semantic()
+	for _, item := range []*tview.TextView{v.identityBar, v.tabsBar, v.footer} {
+		item.SetBackgroundColor(p.Panel.Color())
+		item.SetTextColor(p.Text.Color())
+	}
+	width := v.width
+	if width <= 0 {
+		width = 76
+	}
+	first := "Deployment " + v.target.Path() + " · " + v.target.Context
+	second := "Kubernetes API · observation not yet obtained"
+	third := "READ ONLY · native Deployment review"
+	if v.snapshot != nil {
+		s := v.snapshot
+		uid := s.Identity.UID
+		if len(uid) > 20 {
+			uid = uid[:8] + "…" + uid[len(uid)-8:]
+		}
+		second = fmt.Sprintf("UID %s · captured %s · age %s", uid, s.CapturedAt.UTC().Format("15:04:05Z"), investigationAge(s.CapturedAt, time.Now()))
+		third = rolloutCoverageLine(s.Coverage, width)
+	}
+	if v.loading {
+		third = "[~] Refreshing; retained evidence stays visible"
+	} else if v.refreshFailure != "" {
+		third = "[~] Refresh failed; source/time retained · " + v.refreshFailure
+	}
+	if !v.destinationCurrent() {
+		third = "[~] Destination changed; original source retained; reopen to refresh"
+	}
+	v.identityBar.SetText(detailStyled(p.Focus.String(), "b", fitInvestigation(first, width)) + "\n" +
+		detailStyled(p.Muted.String(), "", fitInvestigation(second, width)) + "\n" +
+		detailStyled(p.Warning.String(), "", fitInvestigation(third, width)))
+	var tabs strings.Builder
+	for index, name := range rolloutReviewTabs {
+		label := fmt.Sprintf("%d %s", index+1, name)
+		color, attr := p.Muted.String(), ""
+		if index == v.activeTab {
+			label, color, attr = "["+label+"]", p.Focus.String(), "b"
+		}
+		tabs.WriteString(detailStyled(color, attr, label) + "  ")
+	}
+	v.tabsBar.SetText(tabs.String())
+	v.footer.SetText(detailStyled(p.Muted.String(), "", fitInvestigation("READ ONLY · r refresh · j/k choose revision · Enter template review", width)))
+}

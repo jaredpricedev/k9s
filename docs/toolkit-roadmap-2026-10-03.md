@@ -109,6 +109,14 @@ First release slice: TK01 overview plus one single-context workspace and a small
 
 ### Horizon 2 Review changes and operate releases
 
+The next implementation slice provides TK06's explicit local-file source and
+TK07's read-only native Deployment review. It retains exact source identity,
+compares only reviewable authored fields, and shows generation, counts,
+UID-owned revisions/Pods and an explicitly selected recovery-template preview.
+See [change and release review](change-release-review.md). This does not complete
+Horizon 2: provider sources, server previews, mutation outcome tracking and
+execution remain pending alongside TK08–TK11.
+
 | ID | Workflow | Next useful delivery | Scope |
 | --- | --- | --- | --- |
 | TK06 | Desired-state review | Select a manifest, Kustomize rendering, Helm rendering or named Git revision. Show semantic adds/changes/deletes, explicit ownership and source identity alongside live state. Existing A/B API snapshots remain a separate comparison type. | L |
@@ -178,6 +186,11 @@ The existing 100 ms performance goal remains a target until a controlled measure
 
 ## What to build next
 
-Deliver TK01 first, followed by a minimal TK02/TK03 slice. Then TK07 with read-only TK08 ownership/progress; introduce TK06 once source fidelity and review models are defined. Extend operation lifecycles before larger change sets or maintenance execution. Storage, access and capacity are the strongest next routine-toolkit additions. Choose Horizon 4 integrations from actual user demand.
+The first TK01–TK05 implementation is delivered in PR #40. After the TK06 local
+source and TK07 Deployment foundation, add read-only TK08 ownership/progress,
+broader source adapters and accepted-write outcome tracking. Extend operation
+lifecycles before larger change sets or maintenance execution. Storage, access
+and capacity are the strongest next routine-toolkit additions. Choose Horizon 4
+integrations from actual user demand.
 
 Avoid an autonomous remediation engine, another GitOps controller, a cloud billing backend, an always-on fleet scanner or a replacement terminal/IDE. The toolkit's value is scoped visibility, understandable review, predictable actions and useful retained evidence.
