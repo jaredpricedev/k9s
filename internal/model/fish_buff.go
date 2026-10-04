@@ -94,7 +94,7 @@ func (*FishBuff) AutoSuggests() bool {
 // Suggestions returns suggestions.
 func (f *FishBuff) Suggestions() []string {
 	if f.suggestionFn != nil {
-		return f.suggestionFn(string(f.buff))
+		return f.suggestionFn(f.GetText())
 	}
 	return nil
 }
@@ -109,7 +109,7 @@ func (f *FishBuff) Notify(_ bool) {
 	if f.suggestionFn == nil {
 		return
 	}
-	f.fireSuggestionChanged(f.suggestionFn(string(f.buff)))
+	f.fireSuggestionChanged(f.suggestionFn(f.GetText()))
 }
 
 // Add adds a new character to the buffer.
