@@ -567,6 +567,7 @@ func (a *App) BailOut(exitCode int) {
 
 // Run starts the application loop.
 func (a *App) Run() error {
+	defer a.Content.ClearPageResources()
 	a.Resume()
 
 	go func() {

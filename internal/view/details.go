@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view
 
@@ -166,9 +167,12 @@ func (d *Details) keyboard(evt *tcell.EventKey) *tcell.EventKey {
 
 // StylesChanged notifies the skin changed.
 func (d *Details) StylesChanged(s *config.Styles) {
-	d.SetBackgroundColor(s.BgColor())
-	d.text.SetTextColor(s.FgColor())
-	d.SetBorderFocusColor(s.Frame().Border.FocusColor.Color())
+	p := s.Semantic()
+	d.SetBackgroundColor(p.Canvas.Color())
+	d.text.SetBackgroundColor(p.Canvas.Color())
+	d.text.SetTextColor(config.ReadableForeground(p.Text.Color(), p.Canvas.Color()))
+	d.SetTitleColor(p.Focus.Color())
+	d.SetBorderFocusColor(p.Focus.Color())
 	d.TextChanged(d.model.Peek())
 }
 
@@ -197,7 +201,11 @@ func (d *Details) Actions() *ui.KeyActions {
 func (d *Details) Name() string { return d.title }
 
 // Start starts the view updater.
-func (*Details) Start() {}
+func (d *Details) Start() {
+	d.app.Styles.RemoveListener(d)
+	d.app.Styles.AddListener(d)
+	d.StylesChanged(d.app.Styles)
+}
 
 // Stop terminates the updater.
 func (d *Details) Stop() {

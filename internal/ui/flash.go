@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package ui
 
@@ -25,6 +26,7 @@ type Flash struct {
 
 	app      *App
 	testMode bool
+	message  model.LevelMessage
 }
 
 // NewFlash returns a new flash view.
@@ -49,8 +51,9 @@ func (f *Flash) SetTestMode(b bool) {
 
 // StylesChanged notifies listener the skin changed.
 func (f *Flash) StylesChanged(s *config.Styles) {
-	f.SetBackgroundColor(s.BgColor())
-	f.SetTextColor(s.FgColor())
+	p := s.Semantic()
+	f.SetBackgroundColor(p.Canvas.Color())
+	f.SetTextColor(f.messageColor(f.message.Level))
 }
 
 // Watch watches for flash changes.
@@ -69,12 +72,20 @@ func (f *Flash) Watch(ctx context.Context, c model.FlashChan) {
 // SetMessage sets flash message and level.
 func (f *Flash) SetMessage(m model.LevelMessage) {
 	fn := func() {
+		f.message = m
 		if m.Text == "" {
 			f.Clear()
 			return
 		}
-		f.SetTextColor(flashColor(m.Level))
-		f.SetText(f.flashEmoji(m.Level) + " " + m.Text)
+		f.SetTextColor(f.messageColor(m.Level))
+		label := "INFO"
+		if m.Level == model.FlashWarn {
+			label = "WARN"
+		}
+		if m.Level == model.FlashErr {
+			label = "ERROR"
+		}
+		f.SetText(f.flashEmoji(m.Level) + " " + label + ": " + tview.Escape(m.Text))
 	}
 
 	if f.testMode {
@@ -82,6 +93,18 @@ func (f *Flash) SetMessage(m model.LevelMessage) {
 	} else {
 		f.app.QueueUpdateDraw(fn)
 	}
+}
+
+func (f *Flash) messageColor(level model.FlashLevel) tcell.Color {
+	p := f.app.Styles.Semantic()
+	color := p.Text
+	if level == model.FlashWarn {
+		color = p.Warning
+	}
+	if level == model.FlashErr {
+		color = p.Failure
+	}
+	return config.ReadableForeground(color.Color(), p.Canvas.Color())
 }
 
 func (f *Flash) flashEmoji(l model.FlashLevel) string {
@@ -96,19 +119,5 @@ func (f *Flash) flashEmoji(l model.FlashLevel) string {
 		return emoRed
 	default:
 		return emoHappy
-	}
-}
-
-// Helpers...
-
-func flashColor(l model.FlashLevel) tcell.Color {
-	//nolint:exhaustive
-	switch l {
-	case model.FlashWarn:
-		return tcell.ColorOrange
-	case model.FlashErr:
-		return tcell.ColorOrangeRed
-	default:
-		return tcell.ColorNavajoWhite
 	}
 }

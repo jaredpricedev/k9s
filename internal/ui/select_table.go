@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package ui
 
@@ -13,11 +14,12 @@ import (
 type SelectTable struct {
 	*tview.Table
 
-	model      Tabular
-	selectedFn func(string) string
-	marks      sets.Set[string]
-	selFgColor tcell.Color
-	selBgColor tcell.Color
+	model             Tabular
+	selectedFn        func(string) string
+	marks             sets.Set[string]
+	selFgColor        tcell.Color
+	selBgColor        tcell.Color
+	semanticSelection bool
 }
 
 // SetModel sets the table model.
@@ -110,13 +112,10 @@ func (s *SelectTable) SelectRow(r, c int, broadcast bool) {
 	s.Select(r, c)
 }
 
-// UpdateSelection refresh selected row.
-func (s *SelectTable) updateSelection(broadcast bool) {
-	r, c := s.GetSelection()
-	s.SelectRow(r, c, broadcast)
-}
-
 func (s *SelectTable) selectionChanged(r, c int) {
+	if s.semanticSelection {
+		return
+	}
 	if r < 0 {
 		return
 	}

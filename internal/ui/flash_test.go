@@ -20,9 +20,9 @@ func TestFlash(t *testing.T) {
 		l    model.FlashLevel
 		i, e string
 	}{
-		"info": {l: model.FlashInfo, i: "hello", e: "😎 hello\n"},
-		"warn": {l: model.FlashWarn, i: "hello", e: "😗 hello\n"},
-		"err":  {l: model.FlashErr, i: "hello", e: "😡 hello\n"},
+		"info": {l: model.FlashInfo, i: "hello", e: "😎 INFO: hello\n"},
+		"warn": {l: model.FlashWarn, i: "hello", e: "😗 WARN: hello\n"},
+		"err":  {l: model.FlashErr, i: "hello", e: "😡 ERROR: hello\n"},
 	}
 
 	for k := range uu {

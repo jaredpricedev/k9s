@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package dialog
 
@@ -80,5 +81,6 @@ func ShowDelete(styles *config.Dialog, pages *ui.Pages, msg string, ok okFunc, c
 		cancel()
 	})
 	pages.AddPage(dialogKey, confirm, false, false)
+	bindPageForm(styles, pages, dialogKey, f, confirm)
 	pages.ShowPage(dialogKey)
 }

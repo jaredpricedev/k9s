@@ -1,0 +1,15 @@
+# Every status retains its text label; selection uses an ASCII > marker.
+k9s:
+  semantic:
+    canvas: "#000000"
+    panel: "#101010"
+    text: "#ffffff"
+    muted: "#bdbdbd"
+    focus: "#ffffff"
+    healthy: "#ffffff"
+    warning: "#ffffff"
+    failure: "#ffffff"
+    progress: "#ffffff"
+    unknown: "#bdbdbd"
+    category: "#ffffff"
+    selected: "#242424"
