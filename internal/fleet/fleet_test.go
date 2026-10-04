@@ -5,6 +5,7 @@ package fleet
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -94,10 +95,11 @@ func TestStrictNamed404(t *testing.T) {
 	scope := fleetScope()
 	valid := apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "deployments"}, "api")
 	require.True(t, namedNotFound(valid, scope.GVR, "api"))
-	for _, err := range []error{errors.New("404 Not Found proxy"), apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "deployments"}, "different"), &apierrors.StatusError{ErrStatus: metav1.Status{Code: 404, Reason: metav1.StatusReasonNotFound}}} {
+	proxy404 := apierrors.NewGenericServerResponse(http.StatusNotFound, "get", scope.GVR.GroupResource(), "api", "proxy response", 0, true)
+	for _, err := range []error{errors.New("404 Not Found proxy"), proxy404, apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "deployments"}, "different"), &apierrors.StatusError{ErrStatus: metav1.Status{Code: 404, Reason: metav1.StatusReasonNotFound}}} {
 		require.False(t, namedNotFound(err, scope.GVR, "api"))
 	}
-	for _, err := range []error{valid, errors.New("proxy404")} {
+	for _, err := range []error{valid, errors.New("proxy404"), proxy404} {
 		dyn := reader("primary-uid")
 		dyn.PrependReactor("get", "deployments", func(kt.Action) (bool, runtime.Object, error) { return true, nil, err })
 		snapshot, e := Collect(t.Context(), scope, func(context.Context, string) (Actor, error) { return Actor{Reader: dyn}, nil })
@@ -107,6 +109,30 @@ func TestStrictNamed404(t *testing.T) {
 		} else {
 			require.Contains(t, snapshot.Observations[0].State, "unexpected API")
 		}
+	}
+}
+
+func TestNamespaceUIDRequiresExactNamespaceIdentity(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		obj  *unstructured.Unstructured
+	}{
+		{name: "wrong kind", obj: &unstructured.Unstructured{Object: map[string]any{"apiVersion": "v1", "kind": "ConfigMap", "metadata": map[string]any{"name": "apps", "uid": "namespace-uid"}}}},
+		{name: "missing uid", obj: &unstructured.Unstructured{Object: map[string]any{"apiVersion": "v1", "kind": "Namespace", "metadata": map[string]any{"name": "apps"}}}},
+		{name: "namespaced namespace", obj: &unstructured.Unstructured{Object: map[string]any{"apiVersion": "v1", "kind": "Namespace", "metadata": map[string]any{"name": "apps", "namespace": "wrong", "uid": "namespace-uid"}}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dyn := reader("primary-uid")
+			dyn.PrependReactor("get", "namespaces", func(kt.Action) (bool, runtime.Object, error) {
+				return true, tc.obj.DeepCopy(), nil
+			})
+			snapshot, err := Collect(t.Context(), fleetScope(), func(context.Context, string) (Actor, error) {
+				return Actor{Reader: dyn, Authority: "https://same.test"}, nil
+			})
+			require.NoError(t, err)
+			require.Empty(t, snapshot.Observations[0].NamespaceUID)
+			require.False(t, snapshot.MayAlias())
+		})
 	}
 }
 func TestCancelledSetupAndUnsupportedNeverCollect(t *testing.T) {

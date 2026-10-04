@@ -80,6 +80,37 @@ func TestFleetRetainsIndependentFailedRefreshAndSearchScroll(t *testing.T) {
 	require.NotEmpty(t, v.snapshot.Observations[0].Facts)
 	require.NotEmpty(t, v.snapshot.Observations[1].Facts)
 }
+
+func TestFleetRefreshRetainsOnlyTransientFailures(t *testing.T) {
+	v := fleetViewFixture(t)
+	priorSnapshot := v.snapshot
+	priorPrimary := priorSnapshot.Observations[0]
+	fresh := *priorSnapshot
+	fresh.Observations[0] = fleet.Observation{Context: fleetActorPrimaryContext, State: "primary replaced; reopen selection", UID: "replacement-uid"}
+	v.accept(&fresh, nil)
+	require.Equal(t, "replacement-uid", string(v.snapshot.Observations[0].UID))
+	require.Empty(t, v.snapshot.Observations[0].Facts)
+	require.Equal(t, "primary-uid", string(v.scope.PrimaryUID))
+	require.Equal(t, "primary-uid", string(v.target.UID))
+
+	for _, state := range []string{"named object absent", "unexpected object identity"} {
+		fresh = *priorSnapshot
+		fresh.Observations[0] = fleet.Observation{Context: fleetActorPrimaryContext, State: state}
+		v.accept(&fresh, nil)
+		require.Empty(t, v.snapshot.Observations[0].Facts, state)
+		require.Equal(t, state, v.snapshot.Observations[0].State)
+	}
+
+	v.snapshot = priorSnapshot
+	for _, state := range []string{"denied", "authentication unavailable", "timeout", "canceled", "actor unavailable", "read/setup unavailable (unexpected API or transport response)"} {
+		v.snapshot = priorSnapshot
+		fresh = *priorSnapshot
+		fresh.Observations[0] = fleet.Observation{Context: fleetActorPrimaryContext, State: state}
+		v.accept(&fresh, nil)
+		require.Equal(t, priorPrimary.Facts, v.snapshot.Observations[0].Facts, state)
+		require.Equal(t, priorPrimary.UID, v.snapshot.Observations[0].UID, state)
+	}
+}
 func TestFleetDisconnectedRetentionAndStopCancel(t *testing.T) {
 	v := fleetViewFixture(t)
 	require.True(t, retainedDisconnectedWorkspace(v))

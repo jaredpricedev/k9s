@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -171,13 +172,17 @@ func collectContext(parent context.Context, scope *Scope, index int, name string
 		read, c = context.WithTimeout(ctx, ReadTimeout)
 		ns, e := actor.Reader.Resource(schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}).Get(read, scope.Namespace, metav1.GetOptions{})
 		c()
-		if e == nil && ns.GetName() == scope.Namespace {
+		if e == nil && ns.GetAPIVersion() == "v1" && ns.GetKind() == "Namespace" &&
+			ns.GetName() == scope.Namespace && ns.GetNamespace() == "" && ns.GetUID() != "" && len(ns.GetUID()) <= 128 {
 			o.NamespaceUID = ns.GetUID()
 		}
 	}
 	return o
 }
 func namedNotFound(err error, gvr schema.GroupVersionResource, name string) bool {
+	if apierrors.IsUnexpectedServerError(err) {
+		return false
+	}
 	var status interface{ Status() metav1.Status }
 	if !errors.As(err, &status) {
 		return false

@@ -205,7 +205,7 @@ func (v *fleetWorkspace) accept(snapshot *fleet.Snapshot, err error) {
 		if v.snapshot != nil {
 			for i := range snapshot.Observations {
 				fresh, prior := snapshot.Observations[i], v.snapshot.Observations[i]
-				if len(fresh.Facts) == 0 && len(prior.Facts) > 0 {
+				if len(fresh.Facts) == 0 && len(prior.Facts) > 0 && transientFleetFailure(fresh.State) {
 					prior.State = "Retained; refresh " + fresh.State
 					snapshot.Observations[i] = prior
 				}
@@ -219,6 +219,16 @@ func (v *fleetWorkspace) accept(snapshot *fleet.Snapshot, err error) {
 	}
 	v.render()
 }
+
+func transientFleetFailure(state string) bool {
+	switch state {
+	case "denied", "authentication unavailable", "timeout", "canceled", "actor unavailable":
+		return true
+	default:
+		return strings.HasPrefix(state, "read/setup unavailable")
+	}
+}
+
 func (v *fleetWorkspace) chrome() {
 	if v.header == nil {
 		return
