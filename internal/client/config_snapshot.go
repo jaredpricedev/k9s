@@ -44,3 +44,13 @@ func copyConfigSlice(value *[]string) *[]string {
 	snapshot := slices.Clone(*value)
 	return &snapshot
 }
+
+// Snapshot captures flags without loading kubeconfig or contacting a cluster.
+// Its independent loader can be used while the live client switches context.
+func (c *Config) Snapshot(contextName string) *Config {
+	flags := SnapshotConfigFlags(c.flags)
+	if contextName != "" {
+		flags.Context = &contextName
+	}
+	return &Config{flags: flags, proxy: c.proxy}
+}
