@@ -255,6 +255,10 @@ func TestRolloutSelectionAndDestinationCannotExpandOrRevive(t *testing.T) {
 	require.ErrorContains(t, rolloutTargetError(target), "UID unavailable")
 	target.UID = rolloutTestUID
 	target.GVR = client.StsGVR
+	require.NoError(t, rolloutTargetError(target))
+	target.GVR = client.DsGVR
+	require.NoError(t, rolloutTargetError(target))
+	target.GVR = client.PodGVR
 	require.ErrorContains(t, rolloutTargetError(target), "native apps/v1 Deployment")
 	v := rolloutViewFixture(t)
 	prior := v.snapshot

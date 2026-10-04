@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/derailed/k9s/internal"
-	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/model"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
@@ -114,16 +113,16 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 func changeReviewActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 	target := actionTarget(owner, app.Config.ActiveContextName())
 	reason := target.UnavailableReason
-	if reason == "" && (target.GVR == nil || target.GVR.GVR() != client.DpGVR.GVR()) {
-		reason = "Select a native apps/v1 Deployment to review its rollout"
+	if reason == "" && rolloutTargetKind(target) == "" {
+		reason = "Select a native Deployment, StatefulSet or DaemonSet"
 	}
 	if reason == "" && target.UID == "" {
-		reason = "Reopen the Deployment to capture its identity before review"
+		reason = "Reopen the workload to capture its identity before review"
 	}
 	return []ui.ActionDescriptor{
 		{ID: "command.review", Label: "Review local manifest", Category: ui.ActionInspect, Shortcut: ":review", Discoverable: true,
 			Handler: func(*tcell.EventKey) *tcell.EventKey { app.openDesiredReview(""); return nil }},
-		{ID: "resource.rollout", Label: "Deployment rollout review", Category: ui.ActionInspect, Shortcut: ":rollout",
+		{ID: "resource.rollout", Label: "Controller rollout review", Category: ui.ActionInspect, Shortcut: ":rollout",
 			Discoverable: true, RequiresSelection: true, UnavailableReason: reason,
 			Handler: func(*tcell.EventKey) *tcell.EventKey { app.openRolloutReview(target); return nil }},
 	}
