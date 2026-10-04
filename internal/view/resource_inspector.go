@@ -12,6 +12,7 @@ import (
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/inspect"
+	"github.com/derailed/k9s/internal/model"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
@@ -73,6 +74,7 @@ type inspectionDetails struct {
 func (d *inspectionDetails) SelectedResource() SelectedResourceTarget { return d.target }
 
 func (d *inspectionDetails) Stop() {
+	d.cmdBuff.RemoveListener(d)
 	d.generation++
 	if d.cancel != nil {
 		d.cancel()
@@ -134,6 +136,8 @@ func (d *inspectionDetails) Init(ctx context.Context) error {
 	if err := d.Details.Init(ctx); err != nil {
 		return err
 	}
+	d.cmdBuff.RemoveListener(d.Details)
+	d.cmdBuff.AddListener(d)
 	d.app.Styles.RemoveListener(d.Details)
 	d.app.Styles.AddListener(d)
 	if d.CompactWorkspace() {
@@ -161,6 +165,7 @@ func (d *inspectionDetails) Init(ctx context.Context) error {
 	return nil
 }
 func (d *inspectionDetails) Start() {
+	d.cmdBuff.AddListener(d)
 	d.restoreNavigationNamespace()
 	d.app.Styles.RemoveListener(d.Details)
 	d.app.Styles.RemoveListener(d)
@@ -170,6 +175,26 @@ func (d *inspectionDetails) Start() {
 	if d.snapshot.Text != "" {
 		d.app.Flash().Infof("Retained snapshot from %s; r makes a new observation", d.snapshot.CapturedAt.UTC().Format(time.RFC3339))
 	}
+}
+
+// Investigation search commits when the prompt accepts its draft. Debounced
+// completion may arrive after Enter or while a related view owns the screen.
+func (d *inspectionDetails) BufferCompleted(text, suggestion string) {
+	// Preserve synchronous fixture setup; running viewers commit in BufferActive.
+	if !d.app.IsRunning() {
+		d.Details.BufferCompleted(text, suggestion)
+	}
+}
+
+func (d *inspectionDetails) BufferActive(state bool, kind model.BufferKind) {
+	if !state && kind == model.FilterBuffer {
+		text := d.cmdBuff.GetText()
+		if !d.validSearch(text) {
+			return
+		}
+		d.applyBufferCompleted(text)
+	}
+	d.Details.BufferActive(state, kind)
 }
 
 // StylesChanged recolors retained evidence without resetting its accepted search
@@ -289,7 +314,9 @@ func (d *inspectionDetails) renderSnapshotText(text string) {
 	row, col := d.text.GetScrollOffset()
 	d.Update(text)
 	if query != "" {
+		d.preserveSearchScroll = true
 		d.model.Filter(query)
+		d.preserveSearchScroll = false
 		if region < d.maxRegions {
 			d.currentRegion = region
 			d.text.Highlight(fmt.Sprintf("search_%d", region))

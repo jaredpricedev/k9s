@@ -44,6 +44,7 @@ type Details struct {
 	fullScreen                bool
 	contentType               string
 	inspectionQuery           string
+	preserveSearchScroll      bool
 }
 
 // NewDetails returns a details viewer.
@@ -128,7 +129,9 @@ func (d *Details) TextFiltered(lines []string, matches fuzzy.Matches) {
 	d.text.Highlight()
 	if len(matches) > 0 {
 		d.text.Highlight("search_0")
-		d.text.ScrollToHighlight()
+		if !d.preserveSearchScroll {
+			d.text.ScrollToHighlight()
+		}
 	}
 }
 
@@ -137,6 +140,31 @@ func (*Details) BufferChanged(_, _ string) {}
 
 // BufferCompleted indicates input was accepted.
 func (d *Details) BufferCompleted(text, _ string) {
+	if d.app.lifecycle.requested.Load() {
+		return
+	}
+	if !d.app.IsRunning() {
+		d.applyBufferCompleted(text)
+		return
+	}
+	// CmdBuff's debounce runs on a worker. Recheck the current owner and
+	// buffer on the UI loop before touching model listeners or native widgets.
+	d.app.QueueUpdateDraw(func() {
+		if d.app.lifecycle.requested.Load() || !d.app.IsRunning() || text != d.cmdBuff.GetText() {
+			return
+		}
+		owner, ok := d.app.Content.Top().(actionOwner)
+		if !ok || owner.Actions() != d.actions {
+			return
+		}
+		d.applyBufferCompleted(text)
+	})
+}
+
+func (d *Details) applyBufferCompleted(text string) {
+	if d.contentType == contentInspection && text == d.inspectionQuery {
+		return
+	}
 	if !d.validSearch(text) {
 		return
 	}
@@ -315,14 +343,19 @@ func (d *Details) validSearch(query string) bool {
 	if d.contentType != contentInspection {
 		return true
 	}
-	if _, isFuzzy := internal.IsFuzzySelector(query); isFuzzy {
-		return true
-	}
-	if _, err := regexp.Compile(query); err != nil {
+	if _, err := inspectionSearchValidation(query); err != nil {
 		d.app.Flash().Errf("Invalid inspection regex: %v", err)
 		return false
 	}
 	return true
+}
+
+func inspectionSearchValidation(query string) (string, error) {
+	if _, isFuzzy := internal.IsFuzzySelector(query); isFuzzy {
+		return "fuzzy", nil
+	}
+	_, err := regexp.Compile(query)
+	return "regex", err
 }
 
 func (d *Details) activateCmd(evt *tcell.EventKey) *tcell.EventKey {
@@ -330,6 +363,9 @@ func (d *Details) activateCmd(evt *tcell.EventKey) *tcell.EventKey {
 		return evt
 	}
 	d.app.ResetPrompt(d.cmdBuff)
+	if d.contentType == contentInspection {
+		d.app.Prompt().SetFilterValidator(inspectionSearchValidation)
+	}
 
 	return nil
 }
