@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
@@ -245,10 +246,46 @@ func (i *pluginInvocation) execute(values dialog.PluginInputValues) {
 // canceling the operation releases the operation worker even if a queued
 // callback cannot run. A late callback checks cancellation before handoff.
 func runGuardedInteractive(ctx context.Context, app *App, opts *shellOpts, statuses chan<- string, current func() bool) error {
+	return runInteractiveHandoff(ctx, app, current, func() error {
+		opts.terminalOwned = true
+		return execute(opts, statuses)
+	})
+}
+
+// A cancellation decision and terminal handoff must share one boundary. Before
+// entry, cancellation makes a queued callback ineligible. After entry, callers
+// retain their owned files and receipts until child and terminal cleanup finish.
+type interactiveHandoff struct {
+	mu                sync.Mutex
+	entered, canceled bool
+}
+
+func (h *interactiveHandoff) enter(ctx context.Context) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.canceled || ctx.Err() != nil {
+		return false
+	}
+	h.entered = true
+	return true
+}
+
+func (h *interactiveHandoff) cancelBeforeEntry() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.entered {
+		return false
+	}
+	h.canceled = true
+	return true
+}
+
+func runInteractiveHandoff(ctx context.Context, app *App, current func() bool, work func() error) error {
 	if !app.IsRunning() {
 		return fmt.Errorf("terminal handoff is unavailable")
 	}
 	result := make(chan error, 1)
+	handoff := new(interactiveHandoff)
 	go app.QueueUpdateDraw(func() {
 		if !app.IsRunning() {
 			result <- fmt.Errorf("terminal handoff is unavailable")
@@ -272,20 +309,21 @@ func runGuardedInteractive(ctx context.Context, app *App, opts *shellOpts, statu
 			result <- fmt.Errorf("plugin destination changed while waiting for terminal ownership")
 			return
 		}
-		opts.terminalOwned = true
+		if !handoff.enter(ctx) {
+			result <- ctx.Err()
+			return
+		}
 		app.Halt()
-		defer func() {
-			if app.IsRunning() {
-				app.Resume()
-			}
-		}()
 		var commandErr error
 		if !app.Suspend(func() {
 			completed := make(chan error, 1)
-			go func() { completed <- execute(opts, statuses) }()
+			go func() { completed <- work() }()
 			commandErr = <-completed
 		}) {
 			commandErr = fmt.Errorf("terminal handoff is unavailable")
+		}
+		if app.IsRunning() {
+			app.Resume()
 		}
 		result <- commandErr
 	})
@@ -293,6 +331,11 @@ func runGuardedInteractive(ctx context.Context, app *App, opts *shellOpts, statu
 	case err := <-result:
 		return err
 	case <-ctx.Done():
-		return ctx.Err()
+		if handoff.cancelBeforeEntry() {
+			return ctx.Err()
+		}
+		// execute enforces its bounded deadline and child WaitDelay. The
+		// result is sent only after Suspend has restored framework ownership.
+		return <-result
 	}
 }
