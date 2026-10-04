@@ -108,7 +108,7 @@ func (c *Command) suggestionAliases() []string {
 }
 
 func (c *Command) updateSuggestionAliases() {
-	aliases := []string{providersCommand, capacityCommandToken}
+	aliases := []string{providersCommand, capacityCommandToken, configurationCommand}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
 		return
@@ -306,6 +306,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.dailyWorkspaceCommand(p.GetLine())
 	case connectionCommand, "connection-health":
 		c.connectionHealthCommand(p.GetLine())
+	case configurationCommand:
+		c.configurationCommand()
 	case desiredReviewCommandToken:
 		c.desiredReviewCommand(p.GetLine())
 	case "rollout":
