@@ -138,6 +138,32 @@ func TestDeniedClaimsAndPodsRemainUnknownWithoutSuppressingReadablePV(t *testing
 	require.True(t, snapshot.Partial())
 }
 
+func TestHistoricalMountEventOnRunningPodKeepsItsEventSourceAndTime(t *testing.T) {
+	scope, objects := fixture(t)
+	old := time.Now().UTC().Add(-24 * time.Hour).Truncate(time.Second)
+	for _, obj := range objects {
+		o := obj.(*unstructured.Unstructured)
+		switch o.GetKind() {
+		case "Pod":
+			require.NoError(t, unstructured.SetNestedField(o.Object, "Running", "status", "phase"))
+		case "Event":
+			require.NoError(t, unstructured.SetNestedField(o.Object, old.Format(time.RFC3339), "lastTimestamp"))
+		}
+	}
+	snapshot := Collect(t.Context(), reader(objects...), scope, time.Now())
+	require.Equal(t, "Running", snapshot.Pods[0].Phase)
+	require.Contains(t, snapshot.Render(0), "Mount: event FailedMount")
+	stages := snapshot.Stages()
+	for i := range stages {
+		if stages[i].Name == StageMount {
+			require.Equal(t, "event FailedMount", stages[i].Status)
+			require.True(t, stages[i].At.Equal(old), "original event instant is retained across time-zone decoding")
+			return
+		}
+	}
+	t.Fatal("UID-related historical mount event was lost")
+}
+
 func TestExpansionRejectsShrinkUnsupportedAndUnverifiedIdentity(t *testing.T) {
 	for _, test := range []struct {
 		name, quantity, reason string

@@ -93,8 +93,8 @@ func (s *Snapshot) Stages() []Stage {
 			stage = StageResize
 		}
 		if stage != "" {
-			stages = append(stages, Stage{Name: stage, Status: e.Reason,
-				Detail: e.Message + " (UID-scoped event; Pod events may involve another volume)", Identity: e.Identity, At: e.At})
+			stages = append(stages, Stage{Name: stage, Status: "event " + e.Reason,
+				Detail: e.Message + " (UID-scoped retained event; Pod events may involve another volume)", Identity: e.Identity, At: e.At})
 		}
 	}
 	if len(s.PVCs) == 0 && s.Source(SourcePVCs).State != capacity.Complete && s.Source(SourcePVCs).State != capacity.Empty {

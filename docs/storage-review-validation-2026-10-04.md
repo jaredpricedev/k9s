@@ -8,6 +8,7 @@ live-cluster, CSI-driver integration or human operator study is claimed.
 Domain tests cover independent denied CSI/claim/Pod sources, bounded and continued
 pages, selected replacement UIDs, namespace-safe consumer joins, PV claim UID
 matching, WaitForFirstConsumer, attachRequired=false and absent attachments.
+Historical mount events on running Pods retain an explicit event label and time.
 Capacity stays separate from usage; requests, status capacity, conditions and
 allocated resize statuses remain separate. A real HTTP collection checks all
 eight source query bounds and cancels a stalled CSI request without discarding

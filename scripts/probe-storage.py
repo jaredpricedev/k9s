@@ -175,7 +175,7 @@ try:
             journeys.assert_screen(terminal, ['data', 'Bound'])
             terminal.command('storage')
             terminal.capture(args.output, 'overview-120', ['Storage diagnosis / apps/data', 'partial evidence',
-                'Bind: Bound', 'Attach: attached=false', 'Mount: FailedMount', 'FileSystemResizePending', 'e expand', 'Esc back'])
+                'Bind: Bound', 'Attach: attached=false', 'Mount: event FailedMount', 'FileSystemResizePending', 'e expand', 'Esc back'])
             for cols, rows in [(80, 24), (60, 24), (40, 16)]:
                 resize(terminal, cols, rows)
                 terminal.capture(args.output, f'overview-{cols}x{rows}', ['Storage diagnosis', 'partial evidence',

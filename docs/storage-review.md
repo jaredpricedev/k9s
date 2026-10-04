@@ -17,6 +17,12 @@ FilesystemResizePending and allocated resize statuses remain controller/node
 progress evidence; online expansion may be supported, so no automatic restart is
 recommended.
 
+Event-derived stage signals carry an explicit `event` label and retain their
+timestamps in Evidence. An old mount/resize event can remain relevant to a
+running Pod without establishing its current mount or controller state. Pod
+relations here cover PVC-backed volumes; inline/ephemeral mount implementations
+and in-container filesystem observations are outside this collection.
+
 Claims show requested storage, status capacity, conditions, allocated resource
 statuses, selected-node annotations and Pod consumer references. Topology shows
 PV node-affinity terms, class binding mode, provisioner, expansion permission and
