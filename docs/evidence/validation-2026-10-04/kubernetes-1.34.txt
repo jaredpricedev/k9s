@@ -1,0 +1,5 @@
+=== RUN   TestDisposableKubernetesOperationsAndPressure
+    operations_integration_test.go:106: real local Kubernetes accepted restart/scale/delete, enforced UID/RV preconditions, rejected same-name recreation, retained pressure/scheduling evidence without metrics
+--- PASS: TestDisposableKubernetesOperationsAndPressure (1.33s)
+PASS
+ok  	github.com/derailed/k9s/internal/view	1.397s

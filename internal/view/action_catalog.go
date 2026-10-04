@@ -94,12 +94,56 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 			Handler: func(*tcell.EventKey) *tcell.EventKey { app.openResourceComparison(target); return nil },
 		})
 	}
+	result = append(result, investigationActions(owner, app)...)
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Category != result[j].Category {
 			return ui.ActionCategoryOrder(result[i].Category) < ui.ActionCategoryOrder(result[j].Category)
 		}
 		return result[i].Label < result[j].Label
 	})
+	return result
+}
+
+func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
+	target := actionTarget(owner, app.Config.ActiveContextName())
+	var result []ui.ActionDescriptor
+	for _, item := range []struct {
+		id, label, shortcut, category string
+		run                           func()
+	}{
+		{"resource.pressure", "Resource pressure", ":pressure", ui.ActionInspect, func() { NewCommand(app).pressureCommand() }},
+		{"resource.evidence", "Capture evidence preview", ":evidence", ui.ActionExport, func() { NewCommand(app).evidenceCommand("evidence") }},
+	} {
+		reason := target.UnavailableReason
+		if _, ok := owner.(ResourceViewer); !ok {
+			reason = "Open a resource list and select an API object first"
+		}
+		if item.id == "resource.evidence" {
+			switch owner.(type) {
+			case *comparisonView, *inspectionDetails:
+				_, err := retainedEvidenceBundle(owner)
+				reason = ""
+				if err != nil {
+					reason = err.Error()
+				}
+			}
+		}
+		if item.id == "resource.pressure" && reason == "" {
+			switch target.GVR.R() {
+			case "pods", "deployments", "daemonsets", "statefulsets", "replicasets", "jobs":
+			default:
+				reason = "Select a Pod, Deployment, DaemonSet, StatefulSet, ReplicaSet or Job to inspect pressure"
+			}
+		}
+		run := item.run
+		result = append(result, ui.ActionDescriptor{ID: item.id, Label: item.label, Category: item.category, Shortcut: item.shortcut,
+			Discoverable: true, RequiresSelection: true, UnavailableReason: reason,
+			Handler: func(*tcell.EventKey) *tcell.EventKey { run(); return nil }})
+	}
+	result = append(result, ui.ActionDescriptor{
+		ID: "command.diagnostics", Label: "Capability diagnostics", Category: ui.ActionInspect,
+		Shortcut: ":diagnostics", Discoverable: true,
+		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).capabilityCommand("diagnostics"); return nil }})
 	return result
 }
 

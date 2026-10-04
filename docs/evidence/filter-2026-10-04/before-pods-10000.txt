@@ -1,0 +1,34 @@
+[RO] UNKNOWN ctx:demo-dev ns:apps  F2:destination                                                                       
+ Context: demo-dev [RO]   <0> all             <shift-h> Hubble Peers    <f> Show PortForward                     [k9+]  
+ Cluster: demo-cluster    <1> apps            <shift-j> Jump Owner      <w> Warp To Namespace                           
+ User:    demo-user       <2> default         <l>       Logs            <y> YAML                                        
+ k9+ Rev: v0.1.0-dev      <ctrl-o> Actions    <p>       Logs Previous                                                   
+ K8s Rev: v1.34.0         <d>      Describe   <shift-f> Port-Forward                                                    
+ CPU:     N/A (unavailabl <?>      Help       <o>       Show Node                                                       
+ MEM:     N/A (unavailabl                                                                                               
+┌─────────────────────────────────── pods(apps)[1] </target-00020>  regex · 1/10000 ───────────────────────────────────┐
+│ NAME↑          PF READY STATUS            RESTARTS CPU MEM IP   NODE         AGE                                     │
+│ > target-00020 ●  0/1   CrashLoopBackOff         7 n/a n/a n/a  fixture-node 25h                                     │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  <pod>                                                                                                                 
+                                                                                                                        
