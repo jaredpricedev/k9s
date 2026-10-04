@@ -8,15 +8,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config/mock"
 	"github.com/derailed/k9s/internal/inspect"
+	"github.com/derailed/k9s/internal/model"
 	"github.com/derailed/k9s/internal/review"
 	"github.com/derailed/k9s/internal/ui"
+	"github.com/derailed/k9s/internal/watch"
 	"github.com/derailed/tcell/v2"
+	"github.com/derailed/tview"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -148,6 +152,54 @@ func jobReviewViewFixture(t *testing.T) *jobReviewView {
 		{Source: "Jobs", State: inspect.ObservationComplete}, {Source: "Pods", State: inspect.ObservationDenied, Detail: "Partial retained Pod visibility"},
 	}, v.target.Context, time.Now().Add(-18*time.Second)), nil)
 	return v
+}
+
+func TestJobReviewDisconnectRetainsSnapshotAndNativeControlsBeyondRetryBudget(t *testing.T) {
+	v := jobReviewViewFixture(t)
+	a := v.app
+	conn := &disconnectedWorkspaceConnection{Connection: mock.NewMockConnection()}
+	a.Config.SetConnection(conn)
+	a.factory = watch.NewFactory(conn)
+	a.clusterModel = model.NewClusterInfo(a.factory, "test", a.Config.K9s)
+	a.Config.K9s.MaxConnRetry = 1
+	a.Content.Push(v)
+	v.Start()
+	v.BufferCompleted("DeadlineExceeded", "")
+	v.text.ScrollTo(3, 1)
+	v.selectTab(1)
+	v.selectTab(0)
+	pending, cancel := context.WithCancel(t.Context())
+	v.cancel, v.loading, v.generation = cancel, true, 11
+	defer cancel()
+	snapshot := v.snapshot
+	for range 3 {
+		require.NoError(t, a.refreshCluster(t.Context()))
+	}
+	require.Greater(t, atomic.LoadInt32(&a.conRetry), a.Config.K9s.MaxConnRetry)
+	require.Same(t, v, a.Content.Top())
+	require.Same(t, snapshot, v.snapshot)
+	require.True(t, v.active)
+	require.True(t, v.loading)
+	require.EqualValues(t, 11, v.generation)
+	require.NoError(t, pending.Err())
+	require.Equal(t, "DeadlineExceeded", v.inspectionQuery)
+	row, col := v.text.GetScrollOffset()
+	require.Equal(t, 3, row)
+	require.Equal(t, 1, col)
+	a.connectivityComponent(v, true)
+	require.EqualValues(t, 11, v.generation)
+	require.NoError(t, pending.Err())
+	v.InputHandler()(tcell.NewEventKey(tcell.KeyRune, '5', tcell.ModNone), func(p tview.Primitive) { a.SetFocus(p) })
+	require.Equal(t, 4, v.activeTab)
+	v.InputHandler()(tcell.NewEventKey(tcell.KeyRune, '1', tcell.ModNone), func(p tview.Primitive) { a.SetFocus(p) })
+	require.Equal(t, "DeadlineExceeded", v.inspectionQuery)
+	row, col = v.text.GetScrollOffset()
+	require.Equal(t, 3, row)
+	require.Equal(t, 1, col)
+	frame := drawnText(t, v, 80, 24)
+	require.Contains(t, frame, "Schedule")
+	require.Contains(t, frame, "r refresh")
+	require.Contains(t, frame, "Enter inspect")
 }
 
 func TestJobReviewNativeFramesAndMinimumRetainMeaning(t *testing.T) {
