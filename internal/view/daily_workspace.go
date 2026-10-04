@@ -10,9 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/derailed/k9s/internal/activity"
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/model"
+	"github.com/derailed/k9s/internal/review"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/k9s/internal/view/cmd"
 	"github.com/derailed/k9s/internal/workspace"
@@ -26,6 +28,8 @@ import (
 const (
 	dailyWorkspaceScopesMode       = "scopes"
 	dailyWorkspaceQueueMode        = "queue"
+	dailyWorkspaceHistoryMode      = "history"
+	dailyWorkspaceActivityMode     = "activity"
 	dailyWorkspacePinsMode         = "pins"
 	dailyWorkspaceDeleteToken      = "delete"
 	dailyWorkspaceFormPage         = "daily-workspace-form"
@@ -34,12 +38,14 @@ const (
 	dailyWorkspaceCoverageMode     = "coverage"
 	dailyWorkspaceCoverageComplete = "complete"
 	dailyWorkspaceKindCol          = "KIND"
+	dailyWorkspaceInvestigateLabel = "Investigate"
 )
 
 type dailyWorkspaceRow struct {
 	cells     []string
 	ref       *workspace.ResourceRef
 	detail    string
+	evidence  string
 	scopeName string
 	key       string
 }
@@ -58,6 +64,11 @@ type dailyWorkspace struct {
 	scope                                  workspace.Scope
 	path, contextName, mode, query, notice string
 	snapshot                               workspace.Snapshot
+	observationWindow                      *workspace.QueueWindow
+	activityWindow                         *activity.Window
+	activityEventCoverage                  []workspace.Coverage
+	jobSources                             map[string]*review.JobReviewSnapshot
+	jobSourcesOmitted                      int
 	coverage                               []workspace.Coverage
 	rows                                   []dailyWorkspaceRow
 	tabQueries, tabSelections              map[string]string
@@ -93,6 +104,7 @@ func newDailyWorkspace(a *App, store workspace.Store, mode, query string) *daily
 		w.mode = dailyWorkspaceScopesMode
 		w.query = ""
 	}
+	w.resetObservationWindow(time.Now())
 	w.tabQueries = map[string]string{w.mode: w.query}
 	w.tabSelections = make(map[string]string)
 	w.table.SetSelectable(true, false).SetFixed(1, 0).SetEvaluateAllRows(false)
@@ -126,14 +138,22 @@ func (w *dailyWorkspace) SetFilter(query string, _ bool)       { w.applyQuery(qu
 func (w *dailyWorkspace) InCmdMode() bool                      { return w.prompting }
 func (w *dailyWorkspace) Actions() *ui.KeyActions {
 	if action, ok := w.actions.Get(tcell.KeyEnter); ok {
-		action.Description = "Investigate"
+		action.Description = dailyWorkspaceInvestigateLabel
 		if w.mode == dailyWorkspaceScopesMode {
 			action.Description = "Open scope"
 		}
 		if w.mode == dailyWorkspaceCoverageMode {
 			action.Description = "Coverage details"
 		}
-		action.Opts.RequiresSelection = w.mode != dailyWorkspaceScopesMode
+		action.Opts.RequiresSelection = !w.localEvidenceMode() && w.mode != dailyWorkspaceScopesMode
+		switch {
+		case w.localEvidenceMode():
+			action.Description = "Retained evidence"
+		case w.mode == dailyWorkspaceScopesMode:
+			action.Description = "Open scope"
+		default:
+			action.Description = dailyWorkspaceInvestigateLabel
+		}
 		if w.mode == dailyWorkspaceCoverageMode {
 			action.Opts.RequiresSelection = false
 		}
@@ -143,7 +163,8 @@ func (w *dailyWorkspace) Actions() *ui.KeyActions {
 }
 func (w *dailyWorkspace) Hints() model.MenuHints { return actionCatalogHints(w, w.app) }
 func (*dailyWorkspace) ExtraHints() map[string]string {
-	return map[string]string{"Workspace": "1 Daily · 2 Inventory · 3 Coverage · 4 Pins · 5 Scopes. / searches retained rows; r refreshes only saved namespaces."}
+	return map[string]string{"Workspace": "1 Daily · 2 Inventory · 3 Coverage · 4 Pins · 5 Scopes · 6 History · 7 Activity. " +
+		"J reviews selected Job/CronJob; i investigates retained identity. / searches retained rows; r refreshes only saved namespaces."}
 }
 func (w *dailyWorkspace) Init(context.Context) error {
 	w.StylesChanged(w.app.Styles)
@@ -187,6 +208,7 @@ func (w *dailyWorkspace) Stop() {
 		w.cancel = nil
 		if strings.HasPrefix(w.notice, "Reading scope") {
 			w.notice = "Observation canceled while away; retained snapshot. r refreshes."
+			w.recordQueueGap(w.notice)
 		}
 	}
 	if w.formOpen {
@@ -229,7 +251,7 @@ func (w *dailyWorkspace) makeActions() *ui.KeyActions {
 		label   string
 		visible bool
 	}{
-		{tcell.KeyEnter, "Investigate", true},
+		{tcell.KeyEnter, dailyWorkspaceInvestigateLabel, true},
 		{ui.KeyR, "Refresh", true},
 		{ui.KeySlash, dailyWorkspaceSearchLabel, true},
 		{ui.KeyN, "New scope", true},
@@ -244,6 +266,10 @@ func (w *dailyWorkspace) makeActions() *ui.KeyActions {
 		{ui.Key3, "Coverage", false},
 		{ui.Key4, "Pins", false},
 		{ui.Key5, "Scopes", true},
+		{ui.Key6, "Observed history", true},
+		{ui.Key7, "Application activity", true},
+		{ui.KeyI, "Investigate captured identity", false},
+		{ui.KeyShiftJ, "Job outcomes and schedule", true},
 		{ui.KeyV, "Selected row details", true},
 		{tcell.KeyTab, "Next workspace tab", true},
 		{tcell.KeyEscape, dailyWorkspaceBackLabel, false},
@@ -255,15 +281,16 @@ func (w *dailyWorkspace) makeActions() *ui.KeyActions {
 		if key == ui.KeyD {
 			action.Opts.Priority = -1
 		}
-		if key == ui.KeyP || key == ui.KeyL || key == tcell.KeyEnter {
-			action.Opts.RequiresSelection = key != tcell.KeyEnter || w.mode != dailyWorkspaceScopesMode
+		if key == ui.KeyP || key == ui.KeyL || key == ui.KeyShiftJ || key == ui.KeyI || key == tcell.KeyEnter {
+			action.Opts.RequiresSelection = key != tcell.KeyEnter ||
+				(w.mode != dailyWorkspaceScopesMode && !w.localEvidenceMode())
 			action.Availability = func() string {
-				if key == tcell.KeyEnter && w.mode == dailyWorkspaceCoverageMode {
+				if key == tcell.KeyEnter && w.localEvidenceMode() {
 					row, _ := w.table.GetSelection()
 					if row > 0 && row <= len(w.rows) {
 						return ""
 					}
-					return "Select a coverage source first"
+					return "Select a retained source row first"
 				}
 				if key == tcell.KeyEnter && w.mode == dailyWorkspaceScopesMode {
 					row, _ := w.table.GetSelection()
@@ -278,6 +305,11 @@ func (w *dailyWorkspace) makeActions() *ui.KeyActions {
 				}
 				if target.Context != w.app.Config.ActiveContextName() {
 					return "Context changed; reopen workspace"
+				}
+				if key == ui.KeyShiftJ {
+					if err := jobReviewTargetError(target); err != nil {
+						return err.Error()
+					}
 				}
 				if key == ui.KeyL && (target.GVR == nil || target.GVR.R() != client.PodGVR.R()) {
 					return "Select a Pod to open logs"
@@ -298,17 +330,12 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 	case e.Key() == tcell.KeyEscape:
 		return w.app.PrevCmd(e)
 	case e.Key() == tcell.KeyEnter:
-		if w.mode == dailyWorkspaceScopesMode {
-			row, _ := w.table.GetSelection()
-			if row > 0 && row <= len(w.rows) {
-				w.useScope(w.rows[row-1].scopeName)
-			}
-			return nil
-		}
-		if w.mode == dailyWorkspaceCoverageMode {
-			w.showRowDetails()
-			return nil
-		}
+		w.activateSelection()
+		return nil
+	case e.Rune() == 'J':
+		w.app.openJobReview(w.SelectedResource())
+		return nil
+	case e.Rune() == 'i':
 		w.app.openTargetInspection(w.SelectedResource(), troubleshootCommand)
 		return nil
 	case e.Rune() == 'r':
@@ -318,13 +345,9 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 		w.setMode(dailyWorkspaceModes[(w.tabIndex()+1)%len(dailyWorkspaceModes)])
 		return nil
 	case e.Rune() == 'v':
-		w.showRowDetails()
-		return nil
+		return w.showRowDetailsKey()
 	case e.Rune() == '/':
-		w.prompting = true
-		w.prompt.SetText(w.query)
-		w.AddItem(w.prompt, 1, 0, true)
-		w.app.SetFocus(w.prompt)
+		w.openQueryPrompt()
 		return nil
 	case e.Rune() == 'n':
 		w.scopeForm(false)
@@ -351,14 +374,44 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 			w.app.Flash().Err(err)
 		}
 		return nil
-	case strings.ContainsRune("12345", e.Rune()) && e.Rune() != 0:
-		w.setMode(map[rune]string{
-			'1': dailyWorkspaceQueueMode, '2': inventoryCommand, '3': dailyWorkspaceCoverageMode,
-			'4': dailyWorkspacePinsMode, '5': dailyWorkspaceScopesMode,
-		}[e.Rune()])
+	case strings.ContainsRune("1234567", e.Rune()) && e.Rune() != 0:
+		w.setMode(dailyWorkspaceModeForDigit(e.Rune()))
 		return nil
 	}
 	return e
+}
+
+func (w *dailyWorkspace) activateSelection() {
+	if w.mode == dailyWorkspaceScopesMode {
+		row, _ := w.table.GetSelection()
+		if row > 0 && row <= len(w.rows) {
+			w.useScope(w.rows[row-1].scopeName)
+		}
+		return
+	}
+	if w.localEvidenceMode() {
+		w.showRowDetails()
+		return
+	}
+	w.app.openTargetInspection(w.SelectedResource(), troubleshootCommand)
+}
+func (w *dailyWorkspace) showRowDetailsKey() *tcell.EventKey {
+	w.showRowDetails()
+	return nil
+}
+
+func dailyWorkspaceModeForDigit(key rune) string {
+	return map[rune]string{
+		'1': dailyWorkspaceQueueMode, '2': inventoryCommand, '3': dailyWorkspaceCoverageMode,
+		'4': dailyWorkspacePinsMode, '5': dailyWorkspaceScopesMode, '6': dailyWorkspaceHistoryMode, '7': dailyWorkspaceActivityMode,
+	}[key]
+}
+
+func (w *dailyWorkspace) openQueryPrompt() {
+	w.prompting = true
+	w.prompt.SetText(w.query)
+	w.AddItem(w.prompt, 1, 0, true)
+	w.app.SetFocus(w.prompt)
 }
 func (w *dailyWorkspace) setMode(mode string) {
 	if w.tabQueries == nil {
@@ -379,8 +432,8 @@ func (w *dailyWorkspace) setMode(mode string) {
 	w.table.Select(1, 0)
 	w.render()
 	if selected := w.tabSelections[mode]; selected != "" {
-		for i, row := range w.rows {
-			if dailyWorkspaceRowKey(&row) == selected {
+		for i := range w.rows {
+			if dailyWorkspaceRowKey(&w.rows[i]) == selected {
 				w.table.Select(i+1, 0)
 				w.renderDetail()
 				break
@@ -402,6 +455,7 @@ func (w *dailyWorkspace) refresh() {
 	}
 	if err := w.syncStore(); err != nil {
 		w.notice = "Workspace metadata unavailable; observation retained: " + err.Error()
+		w.recordQueueGap(w.notice)
 		w.render()
 		return
 	}
@@ -420,12 +474,14 @@ func (w *dailyWorkspace) refresh() {
 	connection := w.app.Conn()
 	if connection == nil {
 		w.notice = "Refresh unavailable: no Kubernetes connection; retained observation"
+		w.recordQueueGap(w.notice)
 		w.render()
 		return
 	}
 	reader, err := connection.DynDial()
 	if err != nil {
 		w.notice = "Refresh failed; retained observation: " + err.Error()
+		w.recordQueueGap(w.notice)
 		w.render()
 		return
 	}
@@ -438,18 +494,32 @@ func (w *dailyWorkspace) refresh() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	w.cancel = cancel
 	scope := w.scope
+	includeActivityEvents := w.mode == dailyWorkspaceActivityMode
 	w.notice = "Reading scope… 10 second deadline"
 	w.render()
 	go func() {
 		defer cancel()
 		snapshot := w.collect(ctx, reader, scope, time.Now())
+		var events *activity.EventCollection
+		if includeActivityEvents {
+			result := activity.CollectEvents(ctx, reader, &scope, &snapshot)
+			events = &result
+		}
 		refreshErr := ctx.Err()
 		w.app.QueueUpdateDraw(func() {
 			if !dailyWorkspaceAccepts(generation, w.generation, w.contextName, w.app.Config.ActiveContextName(), w.app.Content.Top() == w) {
 				return
 			}
 			w.cancel = nil
+			priorActivityAt := w.activityWindow.LastRefreshAt
 			w.acceptSnapshot(snapshot, refreshErr)
+			if w.activityWindow.LastRefreshAt.After(priorActivityAt) {
+				w.activityWindow.ObserveEvents(events)
+				w.activityEventCoverage = nil
+				if events != nil {
+					w.activityEventCoverage = events.Coverage
+				}
+			}
 			w.render()
 		})
 	}()
@@ -457,6 +527,11 @@ func (w *dailyWorkspace) refresh() {
 
 //nolint:gocritic // Accept a captured observation value before retaining it as view-owned evidence.
 func (w *dailyWorkspace) acceptSnapshot(snapshot workspace.Snapshot, err error) {
+	if !w.observeSnapshot(&snapshot, err) {
+		w.notice = "Stale or undated refresh ignored; prior evidence retained. See History."
+		w.coverage = []workspace.Coverage{{State: "stale", Detail: w.notice}}
+		return
+	}
 	failed, successful := 0, 0
 	for _, coverage := range snapshot.Coverage {
 		switch coverage.State {
@@ -518,6 +593,7 @@ func (w *dailyWorkspace) useScope(name string) {
 		w.scope = *scope
 		w.contextName = scope.Context
 		w.snapshot = workspace.Snapshot{}
+		w.resetObservationWindow(time.Now())
 		w.coverage = nil
 		w.query = ""
 		w.tabQueries = make(map[string]string)
@@ -552,6 +628,7 @@ func (w *dailyWorkspace) acceptEditedScope(scope workspace.Scope) {
 	w.generation++
 	w.scope = scope
 	w.snapshot = workspace.Snapshot{}
+	w.resetObservationWindow(time.Now())
 	w.coverage = nil
 	w.rows = nil
 	w.reader = nil

@@ -5,6 +5,7 @@ package view
 import (
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/derailed/k9s/internal/workspace"
 )
@@ -55,6 +56,7 @@ func (w *dailyWorkspace) invalidateScope(scope workspace.Scope, message string) 
 	w.generation++
 	w.scope = scope
 	w.snapshot = workspace.Snapshot{}
+	w.resetObservationWindow(time.Now())
 	w.coverage = nil
 	w.rows = nil
 	w.reader = nil

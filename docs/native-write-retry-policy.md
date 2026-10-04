@@ -6,6 +6,9 @@ after existing caller wrappers. It clones a write response and its headers to
 remove only `Retry-After`; status, body, resource identity and other headers
 remain available to the caller. GET retries keep the server's original hint.
 The supplied config and an inner transport's response/header map remain unchanged.
+The wrapper forwards idle-connection closure through nested supported transport
+wrappers, preserving the native layer's idle-pool closure behavior for plain
+and caller-wrapped transports.
 
 This addresses client-go v0.35.3's response retry path: its REST requests default
 to ten retries and accept an integer `Retry-After` on HTTP 429 or any status at
@@ -39,3 +42,5 @@ GET retry controls. These fixtures are not live-provider validation.
 Actual typed/dynamic HTTP fixtures also pass errors through the operation
 ledger and real conflict-retry helper, proving proxy uncertainty is retained
 without another write. Existing recognized conflict retry checks still pass.
+Actual HTTP lifecycle fixtures verify session closure shuts the idle connection
+and the next read opens a new connection, for plain and nested wrapped transports.
