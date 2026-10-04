@@ -192,6 +192,7 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 func workspaceActions(app *App) []ui.ActionDescriptor {
 	var result []ui.ActionDescriptor
 	for _, item := range []struct{ id, label, command string }{
+		{"command.fleet", "Compare two explicit contexts", fleetCommandToken},
 		{"command.workspace", "Saved workspaces", "workspace"},
 		{"command.daily", "Daily findings queue", dailyCommand},
 		{"command.inventory", "Scoped inventory", inventoryCommand},
@@ -202,7 +203,9 @@ func workspaceActions(app *App) []ui.ActionDescriptor {
 			ID: item.id, Label: item.label, Category: ui.ActionNavigate, Shortcut: ":" + command,
 			Discoverable: true, Handler: func(*tcell.EventKey) *tcell.EventKey {
 				c := NewCommand(app)
-				if command == connectionCommand {
+				if command == fleetCommandToken {
+					c.fleetCommand(command)
+				} else if command == connectionCommand {
 					c.connectionHealthCommand(command)
 				} else {
 					c.dailyWorkspaceCommand(command)
