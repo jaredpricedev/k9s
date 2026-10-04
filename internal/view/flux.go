@@ -45,13 +45,14 @@ func NewFlux(gvr *client.GVR) ResourceViewer {
 }
 
 func (f *Flux) selectedEnv() Env {
-	gvr, fqn, ok := parseFluxPath(f.GetTable().GetSelectedItem())
-	if !ok {
+	target := f.SelectedResource()
+	if target.Err() != nil {
 		return Env{}
 	}
 	row := f.GetTable().GetSelectedRow(f.GetTable().GetSelectedItem())
-	env := defaultEnv(f.App().Conn().Config(), fqn, f.GetTable().GetModel().Peek().Header(), row)
-	env["RESOURCE_GROUP"], env["RESOURCE_VERSION"], env["RESOURCE_NAME"] = gvr.G(), gvr.V(), gvr.R()
+	env := defaultEnv(f.App().Conn().Config(), target.Path(), f.GetTable().GetModel().Peek().Header(), row)
+	env["RESOURCE_GROUP"], env["RESOURCE_VERSION"], env["RESOURCE_NAME"] = target.GVR.G(), target.GVR.V(), target.GVR.R()
+	env["RESOURCE_UID"] = string(target.UID)
 	return env
 }
 
@@ -122,19 +123,11 @@ func (*Flux) openResource(app *App, _ ui.Tabular, _ *client.GVR, path string) {
 }
 
 func (f *Flux) selected() (*unstructured.Unstructured, string, error) {
-	fqn := f.GetTable().GetSelectedItem()
-	if fqn == "" {
-		return nil, "", fmt.Errorf("select a Flux resource")
+	target := f.SelectedResource()
+	if err := target.Err(); err != nil {
+		return nil, "", err
 	}
-	gvr := f.GVR()
-	if gvr == client.FluxGVR {
-		var ok bool
-		gvr, fqn, ok = parseFluxPath(fqn)
-		if !ok {
-			return nil, "", fmt.Errorf("select an available Flux resource")
-		}
-	}
-	o, err := f.App().factory.CachedGet(gvr, f.GetTable().GetNamespace(), fqn)
+	o, err := f.App().factory.CachedGet(target.GVR, f.GetTable().GetNamespace(), target.Path())
 	if err != nil {
 		return nil, "", err
 	}
@@ -142,7 +135,10 @@ func (f *Flux) selected() (*unstructured.Unstructured, string, error) {
 	if !ok {
 		return nil, "", fmt.Errorf("expected a Flux resource, got %T", o)
 	}
-	return u, fqn, nil
+	if err := verifySelectedIdentity(target, u); err != nil {
+		return nil, "", err
+	}
+	return u, target.Path(), nil
 }
 
 func (f *Flux) reconcileCmd(evt *tcell.EventKey) *tcell.EventKey {

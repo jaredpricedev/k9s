@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// Modified for k9+; see NOTICE.
 package view
 
 import (
@@ -25,6 +26,7 @@ type actionPalette struct {
 	app         *App
 	path, query string
 	contextName string
+	target      SelectedResourceTarget
 	entries     []paletteAction
 }
 
@@ -50,7 +52,7 @@ func (p *actionPalette) refresh() {
 	p.Clear()
 	p.entries = nil
 	p.owner.Actions().Range(func(k tcell.Key, a ui.KeyAction) {
-		if !a.Opts.Visible || a.Action == nil || (p.app.Config.IsReadOnly() && a.Opts.Dangerous) {
+		if !a.Opts.Visible || a.Action == nil || (p.app.Config.IsReadOnly() && a.Opts.Dangerous) || (p.target.Err() != nil && (a.Opts.Dangerous || a.Opts.Plugin)) {
 			return
 		}
 		category := "Action"
@@ -68,7 +70,7 @@ func (p *actionPalette) refresh() {
 		}
 	})
 	for _, entry := range []paletteAction{{9001, "Troubleshoot snapshot (:troubleshoot)"}, {9002, "TLS certificate inspection (:tls)"}} {
-		if entry.key == 9002 && !tlsEntryResource(p.owner.GVR().R()) {
+		if p.target.Err() != nil || (entry.key == 9002 && !tlsEntryResource(p.target.GVR.R())) {
 			continue
 		}
 		if actionMatches(entry.label, p.query) {
@@ -79,7 +81,11 @@ func (p *actionPalette) refresh() {
 	for _, a := range p.entries {
 		p.AddItem(tview.Escape(a.label), "", 0, nil)
 	}
-	p.SetTitle(" Actions | " + tview.Escape(p.path) + " | search: " + tview.Escape(p.query) + " ")
+	identity := p.path
+	if p.target.Err() != nil {
+		identity = p.owner.Name() + " | " + p.target.UnavailableReason
+	}
+	p.SetTitle(" Actions | " + tview.Escape(identity) + " | search: " + tview.Escape(p.query) + " ")
 	if len(p.entries) == 0 {
 		p.AddItem("No matching actions. Backspace to revise; Esc returns.", "", 0, nil)
 	}
@@ -111,16 +117,17 @@ func (p *actionPalette) invoke(i int) {
 	}
 	key := p.entries[i].key
 	p.app.PrevCmd(nil)
-	if p.app.Config.ActiveContextName() != p.contextName || p.owner.GetTable().GetSelectedItem() != p.path {
+	current := resolveSelectedResource(p.owner, p.app.Config.ActiveContextName())
+	if p.app.Config.ActiveContextName() != p.contextName || current.GVR != p.target.GVR || current.Path() != p.target.Path() || (p.target.UID != "" && current.UID != p.target.UID) || current.UnavailableReason != p.target.UnavailableReason {
 		p.app.Flash().Err(fmt.Errorf("context or selection changed; reopen actions"))
 		return
 	}
 	if key == 9001 {
-		p.app.openInspection(p.owner, troubleshootCommand, p.path)
+		p.app.openTargetInspection(p.target, troubleshootCommand)
 		return
 	}
 	if key == 9002 {
-		p.app.openInspection(p.owner, tlsCommand, p.path)
+		p.app.openTargetInspection(p.target, tlsCommand)
 		return
 	}
 	a, ok := p.owner.Actions().Get(key)
