@@ -224,7 +224,7 @@ func (v *securityReviewView) refresh() {
 				return
 			}
 			if errors.Is(err, errSecurityIdentityChanged) {
-				v.status = "Selected UID was replaced; retained declarations describe the previous UID. Reopen the source list."
+				v.status = "Object identity changed or is unverified; retained declarations describe the previous observation. Reopen the source list."
 				v.render()
 				return
 			}
@@ -379,8 +379,8 @@ func loadSecurityDeclarations(ctx context.Context, dyn dynamic.Interface, target
 func projectSecurityDeclarations(target SelectedResourceTarget, obj *unstructured.Unstructured, captured time.Time) securityDeclarationSnapshot {
 	s := securityDeclarationSnapshot{
 		Identity: securityReviewIdentity{
-			Context: target.Context, GVR: target.GVR.String(), Namespace: target.Namespace,
-			Name: target.Name, UID: string(obj.GetUID()), ResourceVersion: obj.GetResourceVersion(), CapturedAt: captured,
+			Context: boundedSecurityValue(target.Context), GVR: target.GVR.String(), Namespace: target.Namespace,
+			Name: target.Name, UID: string(obj.GetUID()), ResourceVersion: boundedSecurityValue(obj.GetResourceVersion()), CapturedAt: captured,
 		},
 		Coverage: []string{
 			"Pod-spec section: allowlisted declarations projected from this one GET; omitted properties remain unknown.",
