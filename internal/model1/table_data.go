@@ -5,6 +5,7 @@
 package model1
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/client"
@@ -230,6 +232,7 @@ func (t *TableData) rxFilter(q string, inverse bool) (*RowEvents, error) {
 	}
 	rr := NewRowEvents(t.RowCount() / 2)
 	fields := make([]byte, 0, 128)
+	needle := asciiLiteralFilter(q)
 	t.rowEvents.Range(func(_ int, re RowEvent) bool {
 		fields = fields[:0]
 		first := true
@@ -243,7 +246,7 @@ func (t *TableData) rxFilter(q string, inverse bool) (*RowEvents, error) {
 			first = false
 			fields = append(fields, re.Row.Fields[idx]...)
 		}
-		match := rx.Match(fields)
+		match := matchResourceFields(rx, fields, needle)
 		if (inverse && !match) || (!inverse && match) {
 			rr.Add(re)
 		}
@@ -252,6 +255,37 @@ func (t *TableData) rxFilter(q string, inverse bool) (*RowEvents, error) {
 	})
 
 	return rr, nil
+}
+
+// Common resource-name queries are literal ASCII substrings. All regex syntax
+// and non-ASCII queries retain RE2 matching, including Unicode simple folding.
+func asciiLiteralFilter(query string) []byte {
+	if query == "" || strings.ContainsAny(query, `\.+*?()|[]{}^$`) {
+		return nil
+	}
+	for index := range len(query) {
+		if query[index] >= utf8.RuneSelf {
+			return nil
+		}
+	}
+	return []byte(strings.ToLower(query))
+}
+
+func matchResourceFields(rx *regexp.Regexp, fields, needle []byte) bool {
+	if needle == nil {
+		return rx.Match(fields)
+	}
+	for index, value := range fields {
+		if value >= utf8.RuneSelf {
+			// Folding the preceding ASCII bytes cannot change a (?i) match.
+			// RE2 handles Unicode folds such as Kelvin sign and long s exactly.
+			return rx.Match(fields)
+		}
+		if value >= 'A' && value <= 'Z' {
+			fields[index] = value + ('a' - 'A')
+		}
+	}
+	return bytes.Contains(fields, needle)
 }
 
 func (t *TableData) fuzzyFilter(q string) *RowEvents {

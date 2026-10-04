@@ -594,7 +594,9 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 	selectedID, _ := t.GetRowID(t.GetSelectedRowIndex())
 	_, selectedCol := t.GetSelection()
 	selectedRow := -1
-	t.fitColumns(cdata)
+	pads := make(MaxyPad, cdata.HeaderCount())
+	computeMaxColumns(pads, t.getSortCol().Name, cdata, t.getLiteralFields())
+	t.fitColumns(cdata, pads)
 	t.Clear()
 	fg := t.styles.Table().Header.FgColor.Color()
 	bg := t.styles.Table().Header.BgColor.Color()
@@ -612,8 +614,6 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 	}
 	cdata.Sort(t.getSortCol())
 
-	pads := make(MaxyPad, cdata.HeaderCount())
-	computeMaxColumns(pads, t.getSortCol().Name, cdata, t.getLiteralFields())
 	cdata.RowsRange(func(row int, re model1.RowEvent) bool {
 		ore, ok := data.FindRow(re.Row.ID)
 		if !ok {
@@ -674,7 +674,7 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 
 		original := field
 		if literalFields {
-			field = tview.Escape(field)
+			field = escapeTableField(field)
 		}
 
 		if !re.Deltas.IsBlank() && !h.IsTimeCol(c) {
@@ -724,7 +724,7 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 				if col == 0 && t.semanticSelection {
 					width = max(1, width-2)
 				}
-				cell.SetText(tview.Escape(Truncate(original, width)))
+				cell.SetText(escapeTableField(Truncate(original, width)))
 			}
 		}
 		if col == 0 {
