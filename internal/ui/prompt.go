@@ -151,18 +151,18 @@ func (p *Prompt) SetModel(m PromptModel) {
 
 // SetFilterClearHandler distinguishes an explicit clear gesture from opening a
 // replacement draft, whose empty text must retain the last committed result.
-func (p *Prompt) SetFilterClearHandler(clear func()) {
+func (p *Prompt) SetFilterClearHandler(handler func()) {
 	p.mx.Lock()
-	p.filterClear = clear
+	p.filterClear = handler
 	p.mx.Unlock()
 }
 
 func (p *Prompt) clearFilterDraft() {
 	p.mx.RLock()
-	clear := p.filterClear
+	handler := p.filterClear
 	p.mx.RUnlock()
-	if clear != nil {
-		clear()
+	if handler != nil {
+		handler()
 	}
 }
 

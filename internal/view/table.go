@@ -197,7 +197,7 @@ func (t *Table) SetEnterFn(f EnterFunc) {
 func (*Table) SetExtraActionsFn(BoostActionsFunc) {}
 
 // BufferCompleted indicates input was accepted.
-func (t *Table) BufferCompleted(text, _ string) {
+func (t *Table) BufferCompleted(_, _ string) {
 	t.app.QueueUpdateDraw(func() {
 		t.Filter(t.CmdBuff().GetText())
 	})

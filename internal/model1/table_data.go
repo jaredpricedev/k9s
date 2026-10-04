@@ -19,7 +19,7 @@ import (
 	"github.com/derailed/k9s/internal/slogs"
 	"github.com/sahilm/fuzzy"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
+	klabels "k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
@@ -167,7 +167,7 @@ func ValidateResourceFilter(q string) (string, error) {
 		if strings.HasPrefix(sel, "-l") {
 			sel = strings.TrimSpace(sel[2:])
 		}
-		if _, err := labels.Parse(sel); err != nil {
+		if _, err := klabels.Parse(sel); err != nil {
 			return "labels", fmt.Errorf("invalid label selector: %w", err)
 		}
 		return "labels", nil
