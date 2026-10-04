@@ -27,6 +27,12 @@ type mutableResourceFilterModel struct {
 
 func (m *mutableResourceFilterModel) Peek() *model1.TableData { return m.data.Clone() }
 
+type snapshotResourceFilterModel struct{ *mutableResourceFilterModel }
+
+func (m *snapshotResourceFilterModel) PeekFiltered(opts model1.FilterOpts) (*model1.TableData, int, error) {
+	return m.data.FilteredSnapshot(opts)
+}
+
 func (w resourceFilterWatcher) BufferCompleted(_, _ string) {
 	w.table.Filter(w.table.CmdBuff().GetText())
 }
@@ -230,6 +236,56 @@ func TestResourceFilterRefreshUsesCommittedProjectionWhileDraftWaits(t *testing.
 	v.CmdBuff().ClearText(false)
 	v.DeferFilterDraft("")
 	v.Filter("")
+	assert.Equal(t, 3, v.GetRowCount())
+	assert.NotEmpty(t, v.GetSelectedItem())
+}
+
+func TestSnapshotFilterKeepsIdentityAndCurrentEvidence(t *testing.T) {
+	v := ui.NewTable(client.NewGVR("test"))
+	v.Init(makeContext())
+	m := &snapshotResourceFilterModel{&mutableResourceFilterModel{mockModel: new(mockModel), data: makeTableData()}}
+	v.SetModel(m)
+	v.SetLiteralFields(true)
+	v.SetSortCol("C", true)
+	v.SetRect(0, 0, 120, 34)
+	query := func(text string) {
+		v.CmdBuff().SetText(text, "", true)
+		v.Filter(text)
+	}
+	query("[")
+	require.Error(t, v.FilterError())
+	assert.Equal(t, 2, v.GetFilteredData().RowCount(), "first malformed query retains initial source")
+	query("zorg")
+	require.Equal(t, "r2", v.GetSelectedItem())
+	assert.Contains(t, v.FilterStatusText(), "1/2", "count includes all captured source rows")
+	query("[")
+	require.Error(t, v.FilterError())
+	assert.Equal(t, "zorg", v.CommittedFilter())
+	assert.Equal(t, "r2", v.GetSelectedItem())
+	query("blee")
+	v.SelectRow(2, 0, true)
+	require.Equal(t, "r2", v.GetSelectedItem())
+	oldCell := v.GetCell(2, 1)
+	m.data.Update(model1.Rows{
+		{ID: "r1", Fields: model1.Fields{"blee", "duh", "fred"}},
+		{ID: "r2", Fields: model1.Fields{"blee", "[red] evidence", "aaa"}},
+	})
+	query("blee")
+	assert.Equal(t, "r2", v.GetSelectedItem(), "a watched sort-field change retains resource identity")
+	assert.NotSame(t, oldCell, v.GetCell(1, 1))
+	assert.Contains(t, v.GetCell(1, 1).Text, "[red[] evidence", "literal markup survives the detached snapshot")
+	sourceRow, found := m.data.FindRow("r2")
+	require.True(t, found)
+	assert.Equal(t, "[red] evidence", sourceRow.Row.Fields[1])
+	assert.Equal(t, "duh", sourceRow.Deltas[1], "display processing cannot rewrite watched deltas")
+	query("never matches")
+	assert.Empty(t, v.GetSelectedItem())
+	assert.Contains(t, v.FilterStatusText(), "0/2")
+	v.SetRect(0, 0, 60, 24)
+	v.Refresh()
+	query("!zorg")
+	assert.Equal(t, 3, v.GetRowCount(), "inverse query uses current changed fields")
+	query("")
 	assert.Equal(t, 3, v.GetRowCount())
 	assert.NotEmpty(t, v.GetSelectedItem())
 }
