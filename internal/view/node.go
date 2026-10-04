@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view
 
@@ -7,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/client"
@@ -84,6 +84,7 @@ func (n *Node) bindKeys(aa *ui.KeyActions) {
 
 	aa.Bulk(ui.KeyMap{
 		ui.KeyY: ui.NewKeyAction(yamlAction, n.yamlCmd, true),
+		ui.KeyO: ui.NewKeyActionWithOpts("Maintenance preview", n.maintenanceCmd, ui.ActionOpts{Visible: true, RequiresSelection: true}),
 	})
 }
 
@@ -96,31 +97,16 @@ func (n *Node) drainCmd(evt *tcell.EventKey) *tcell.EventKey {
 	if len(sels) == 0 {
 		return evt
 	}
-	session, err := captureOperation(n)
-	if err != nil {
-		n.App().Flash().Err(err)
+	if len(sels) != 1 {
+		n.App().Flash().Warn("Review one Node at a time before draining; o opens the selected Node preview")
 		return nil
 	}
-	targets, err := captureOperationTargets(n, session.context, sels)
-	if err != nil {
-		n.App().Flash().Err(err)
-		return nil
-	}
+	n.App().openNodeMaintenance(n, selectedResourceForPath(n, n.App().Config.ActiveContextName(), sels[0]))
+	return nil
+}
 
-	opts := dao.DrainOptions{
-		GracePeriodSeconds: -1,
-		Timeout:            5 * time.Second,
-	}
-	ShowDrain(n, sels, opts, func(_ ResourceViewer, _ []string, options dao.DrainOptions) {
-		session.timeout = maxOperationDeadline
-		if options.Timeout > 0 {
-			session.timeout = boundedOperationTimeout(options.Timeout)
-		}
-		session.submit("Drain", targets, func(ctx context.Context, target SelectedResourceTarget) error {
-			return session.drain(ctx, target, options)
-		}, nil)
-	})
-
+func (n *Node) maintenanceCmd(_ *tcell.EventKey) *tcell.EventKey {
+	n.App().openNodeMaintenance(n, resolveSelectedResource(n, n.App().Config.ActiveContextName()))
 	return nil
 }
 
