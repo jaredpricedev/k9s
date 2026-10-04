@@ -26,15 +26,16 @@ import (
 )
 
 const (
-	cpuFmt     = " %s [%s::b]%s[white::-]([%s::]%sm[white::]/[%s::]%sm[-::])"
-	memFmt     = " %s [%s::b]%s[white::-]([%s::]%sMi[white::]/[%s::]%sMi[-::])"
-	pulseTitle = "Pulses"
-	NSTitleFmt = "[fg:bg:b] %s([hilite:bg:b]%s[fg:bg:-])[fg:bg:-] "
-	dirLeft    = 1
-	dirRight   = -dirLeft
-	dirDown    = 4
-	dirUp      = -dirDown
-	grayC      = "gray"
+	cpuFmt            = " %s [%s::b]%s[white::-]([%s::]%sm[white::]/[%s::]%sm[-::])"
+	memFmt            = " %s [%s::b]%s[white::-]([%s::]%sMi[white::]/[%s::]%sMi[-::])"
+	pulseTitle        = "Pulses"
+	pulseNotCollected = "not collected"
+	NSTitleFmt        = "[fg:bg:b] %s([hilite:bg:b]%s[fg:bg:-])[fg:bg:-] "
+	dirLeft           = 1
+	dirRight          = -dirLeft
+	dirDown           = 4
+	dirUp             = -dirDown
+	grayC             = "gray"
 )
 
 var corpusGVRs = append(model.PulseGVRs, client.CpuGVR, client.MemGVR)
@@ -135,7 +136,7 @@ func (p *Pulse) Init(ctx context.Context) error {
 	for _, gvr := range p.chartGVRs[:len(p.chartGVRs)-2] {
 		p.healthPoints[gvr] = model.HealthPoint{GVR: gvr, Namespace: ns, State: model.HealthLoading}
 		p.charts[gvr] = p.makeGA(image.Point{X: x, Y: y}, image.Point{X: 2, Y: 2}, gvr)
-		p.charts[gvr].(*tchart.Gauge).SetStatus("loading")
+		p.charts[gvr].(*tchart.Gauge).SetStatus(string(model.HealthLoading))
 		col, y = col+1, y+2
 		if y > 6 {
 			y = 0
@@ -306,6 +307,8 @@ func pulseMetricText(point *dao.Point, memory bool) string {
 }
 
 // PulseChanged notifies the model data changed.
+//
+//nolint:gocritic // The queued channel observation is a value snapshot; retention must not mutate worker-owned data.
 func (p *Pulse) PulseChanged(pt model.HealthPoint) {
 	if p.model != nil && pt.Namespace != p.model.GetNamespace() {
 		return
@@ -323,18 +326,18 @@ func (p *Pulse) PulseChanged(pt model.HealthPoint) {
 		pt.State, pt.Failure = model.HealthStale, pt.State
 	}
 	p.healthPoints[pt.GVR] = pt
-	p.updateHealthChart(pt)
+	p.updateHealthChart(&pt)
 	p.updateCoverageTitle()
 }
 
-func (p *Pulse) updateHealthChart(pt model.HealthPoint) {
+func (p *Pulse) updateHealthChart(pt *model.HealthPoint) {
 	v := p.charts[pt.GVR]
 	if gauge, ok := v.(*tchart.Gauge); ok {
 		status := ""
 		if !pt.HasValue() {
 			status = string(pt.State)
 			if status == "" {
-				status = "loading"
+				status = string(model.HealthLoading)
 			}
 		}
 		gauge.SetStatus(status)
@@ -412,7 +415,9 @@ func (p *Pulse) healthSourceCmd(*tcell.EventKey) *tcell.EventKey {
 		return p.metricSourceCmd(nil)
 	}
 	pt := p.healthPoints[gvr].At(time.Now())
-	text := fmt.Sprintf("Context: %s\nNamespace: %s\nResource: %s\nState: %s\nSource: %s\nRead at: %s\nLast attempt: %s\n", p.app.Config.ActiveContextName(), p.model.GetNamespace(), gvr, pt.State, pt.Source, pulseTime(pt.ObservedAt), pulseTime(pt.CheckedAt))
+	text := fmt.Sprintf("Context: %s\nNamespace: %s\nResource: %s\nState: %s\nSource: %s\nRead at: %s\nLast attempt: %s\n",
+		p.app.Config.ActiveContextName(), p.model.GetNamespace(), gvr, pt.State, pt.Source,
+		pulseTime(pt.ObservedAt), pulseTime(pt.CheckedAt))
 	if pt.HasValue() {
 		text += fmt.Sprintf("\nRetained total: %d\nRetained faults: %d\n", pt.Total, pt.Faults)
 	}
@@ -422,7 +427,7 @@ func (p *Pulse) healthSourceCmd(*tcell.EventKey) *tcell.EventKey {
 	if pt.Message != "" {
 		text += "\n" + pt.Message + "\n"
 	}
-	text += "\n" + pulseNextCheck(pt)
+	text += "\n" + pulseNextCheck(&pt)
 	view := NewDetails(p.app, "Pulse health source", "observation", contentInspection, true).Update(text)
 	if err := p.app.inject(view, false); err != nil {
 		p.app.Flash().Err(err)
@@ -432,12 +437,12 @@ func (p *Pulse) healthSourceCmd(*tcell.EventKey) *tcell.EventKey {
 
 func pulseTime(at time.Time) string {
 	if at.IsZero() {
-		return "not collected"
+		return pulseNotCollected
 	}
 	return at.UTC().Format(time.RFC3339)
 }
 
-func pulseNextCheck(pt model.HealthPoint) string {
+func pulseNextCheck(pt *model.HealthPoint) string {
 	state := pt.State
 	if state == model.HealthStale {
 		state = pt.Failure

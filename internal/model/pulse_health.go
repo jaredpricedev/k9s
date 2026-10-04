@@ -45,11 +45,16 @@ type HealthPoint struct {
 	ObservedAt, CheckedAt      time.Time
 }
 
+// HasValue uses a value receiver so observations held in maps remain immutable.
+//
+//nolint:gocritic // HealthPoint is a channel/map snapshot, copied rather than shared with collection workers.
 func (p HealthPoint) HasValue() bool {
 	return !p.ObservedAt.IsZero() && (p.State == HealthAvailable || p.State == HealthEmpty || p.State == HealthStale)
 }
 
 // At keeps a stopped or delayed collector from presenting retained data as fresh.
+//
+//nolint:gocritic // Aging returns a copy; it must not change the retained observation or its collection timestamps.
 func (p HealthPoint) At(now time.Time) HealthPoint {
 	if p.HasValue() && p.State != HealthStale && now.Sub(p.CheckedAt) > 2*pulseRate {
 		p.State, p.Failure, p.Message = HealthStale, HealthUnavailable, "No recent collection; check the cluster connection"
@@ -221,21 +226,21 @@ func (h *PulseHealth) check(ctx context.Context, ns string, gvr *client.GVR) (He
 	if conn := h.factory.Client(); conn != nil && !conn.ConnectionOK() {
 		return HealthPoint{GVR: gvr, Namespace: ns, State: HealthUnavailable, CheckedAt: time.Now(), Message: "Cluster disconnected"}, errors.New("cluster disconnected")
 	}
-	meta, ok := Registry[gvr]
+	resourceMeta, ok := Registry[gvr]
 	if !ok {
-		meta = ResourceMeta{
+		resourceMeta = ResourceMeta{
 			DAO:      new(dao.Table),
 			Renderer: new(render.Table),
 		}
 	}
 	// Registry accessors are prototypes; a collector must not mutate the DAO
 	// being used by a browser or another Pulse generation.
-	meta.DAO = pulseAccessor(gvr)
+	resourceMeta.DAO = pulseAccessor(gvr)
 
-	meta.DAO.Init(h.factory, gvr)
-	oo, err := meta.DAO.List(ctx, ns)
+	resourceMeta.DAO.Init(h.factory, gvr)
+	oo, err := resourceMeta.DAO.List(ctx, ns)
 	c := HealthPoint{GVR: gvr, Namespace: ns, CheckedAt: time.Now(), Source: "informer cache"}
-	if _, table := meta.DAO.(*dao.Table); table {
+	if _, table := resourceMeta.DAO.(*dao.Table); table {
 		c.Source = "API table read"
 	}
 	if err != nil {
@@ -263,13 +268,13 @@ func (h *PulseHealth) check(ctx context.Context, ns string, gvr *client.GVR) (He
 		ta := oo[0].(*metav1.Table)
 		c.Total = len(ta.Rows)
 		for _, row := range ta.Rows {
-			if err := meta.Renderer.Healthy(ctx, row); err != nil {
+			if err := resourceMeta.Renderer.Healthy(ctx, row); err != nil {
 				c.Faults++
 			}
 		}
 	} else {
 		for _, o := range oo {
-			if err := meta.Renderer.Healthy(ctx, o); err != nil {
+			if err := resourceMeta.Renderer.Healthy(ctx, o); err != nil {
 				c.Faults++
 			}
 		}

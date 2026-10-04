@@ -25,9 +25,6 @@ func (p *Pulse) Draw(screen tcell.Screen) {
 		return
 	}
 	p.selectedIndex = min(max(p.selectedIndex, 0), len(p.chartGVRs)-1)
-	if graph, ok := p.app.GetFocus().(Graphable); ok {
-		p.selectedIndex = p.findIndex(graph)
-	}
 	listWidth := width
 	wide := width >= 110 && height >= 20
 	if wide {
@@ -48,7 +45,8 @@ func (p *Pulse) Draw(screen tcell.Screen) {
 	rows := height - 10
 	start := max(0, p.selectedIndex-rows+1)
 	start = min(start, max(0, len(p.chartGVRs)-rows))
-	pulsePrint(screen, fmt.Sprintf("Showing %d-%d/%d | selected %d", start+1, min(start+rows, len(p.chartGVRs)), len(p.chartGVRs), p.selectedIndex+1), x, y+2, listWidth, p.app.Styles.Semantic().Muted.Color())
+	rangeText := fmt.Sprintf("Showing %d-%d/%d | selected %d", start+1, min(start+rows, len(p.chartGVRs)), len(p.chartGVRs), p.selectedIndex+1)
+	pulsePrint(screen, rangeText, x, y+2, listWidth, p.app.Styles.Semantic().Muted.Color())
 	for row := 0; row < rows && start+row < len(p.chartGVRs); row++ {
 		index := start + row
 		gvr := p.chartGVRs[index]
@@ -78,7 +76,8 @@ func (p *Pulse) Draw(screen tcell.Screen) {
 		pulsePrint(screen, "Selected chart: "+pulseResourceName(selected), chartX, y+3, chartWidth, p.app.Styles.Semantic().Focus.Color())
 		chart := p.charts[selected]
 		if selected != client.CpuGVR && selected != client.MemGVR {
-			p.updateHealthChart(p.healthPoints[selected].At(time.Now()))
+			point := p.healthPoints[selected].At(time.Now())
+			p.updateHealthChart(&point)
 		}
 		chart.SetRect(chartX, y+5, chartWidth, height-11)
 		chart.Draw(screen)
@@ -103,19 +102,19 @@ func pulseResourceName(gvr *client.GVR) string {
 	}
 }
 
-func (p *Pulse) resourceRow(gvr *client.GVR, now time.Time) (string, string) {
+func (p *Pulse) resourceRow(gvr *client.GVR, now time.Time) (state, counts string) {
 	if gvr == client.CpuGVR || gvr == client.MemGVR {
 		sample := p.metricsSample.At(now)
-		state := string(sample.State)
+		state = string(sample.State)
 		if state == "" {
-			state = "loading"
+			state = string(model.HealthLoading)
 		}
 		return state, "m: source"
 	}
 	pt := p.healthPoints[gvr].At(now)
-	state, counts := string(pt.State), "--"
+	state, counts = string(pt.State), "--"
 	if state == "" {
-		state = "loading"
+		state = string(model.HealthLoading)
 	}
 	if pt.HasValue() {
 		counts = fmt.Sprintf("%d/%d", pt.Total, pt.Faults)
@@ -166,14 +165,14 @@ func (p *Pulse) drawSelectedDetail(screen tcell.Screen, gvr *client.GVR, x, y, w
 	pulsePrint(screen, status, x, y+1, width, p.app.Styles.Semantic().Text.Color())
 	source := pt.Source
 	if source == "" {
-		source = "not collected"
+		source = pulseNotCollected
 	}
-	readTime := "not collected"
+	readTime := pulseNotCollected
 	if !pt.ObservedAt.IsZero() {
 		readTime = pt.ObservedAt.UTC().Format("15:04:05 UTC")
 	}
 	pulsePrint(screen, "Source: "+source+" | read "+readTime, x, y+2, width, p.app.Styles.Semantic().Muted.Color())
-	next := "s: " + pulseNextCheck(pt)
+	next := "s: " + pulseNextCheck(&pt)
 	if pt.Message != "" {
 		next = "s: " + pt.Message
 	}
@@ -185,4 +184,10 @@ func (p *Pulse) Focus(delegate func(tview.Primitive)) {
 	if len(p.chartGVRs) > 0 {
 		delegate(p.charts[p.chartGVRs[p.selectedIndex]])
 	}
+}
+
+// HasFocus follows the selected chart directly. Grid visibility is populated by
+// Grid.Draw, which this responsive renderer intentionally does not call.
+func (p *Pulse) HasFocus() bool {
+	return len(p.chartGVRs) > 0 && p.charts[p.chartGVRs[p.selectedIndex]].HasFocus()
 }

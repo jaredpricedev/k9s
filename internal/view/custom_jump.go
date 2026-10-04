@@ -135,7 +135,7 @@ func determineTargetNamespace(sourcePath, targetNSConfig string, sourceObj map[s
 			return client.ClusterScope, nil
 		}
 		return sourceNS, nil
-	case "all":
+	case AllScopes:
 		return client.NamespaceAll, nil
 	default:
 		// Check if it contains template syntax
