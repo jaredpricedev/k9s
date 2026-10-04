@@ -137,6 +137,13 @@ func (c *ClusterInfo) fetchK9sLatestRev() string {
 
 // Reset resets context and reload.
 func (c *ClusterInfo) Reset(f dao.Factory) {
+	c.RebindFactory(f)
+	c.Refresh()
+}
+
+// RebindFactory invalidates queued observations before exposing a new factory.
+// It performs no API reads; Refresh may subsequently run on a worker.
+func (c *ClusterInfo) RebindFactory(f dao.Factory) {
 	if f == nil {
 		return
 	}
@@ -147,7 +154,6 @@ func (c *ClusterInfo) Reset(f dao.Factory) {
 	c.factory, c.cluster, c.data = f, NewCluster(f), NewClusterMeta()
 	c.mx.Unlock()
 
-	c.Refresh()
 }
 
 // Refresh fetches the latest cluster meta.

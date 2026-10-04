@@ -33,22 +33,24 @@ type RevValues struct {
 }
 
 // NewRevValues return a new Helm values resource model.
-func NewRevValues(gvr *client.GVR, path, rev string) *RevValues {
+func NewRevValues(gvr *client.GVR, path, rev string, factory dao.Factory) *RevValues {
 	return &RevValues{
 		gvr:       gvr,
 		path:      path,
 		rev:       rev,
 		allValues: false,
-		lines:     getRevValues(path, rev),
+		lines:     getRevValues(factory, path, rev),
 	}
 }
 
-func getHelmHistDao() *dao.HelmHistory {
-	return Registry[client.HmhGVR].DAO.(*dao.HelmHistory)
+func getHelmHistDao(factory dao.Factory) *dao.HelmHistory {
+	reader := new(dao.HelmHistory)
+	reader.Init(factory, client.HmhGVR)
+	return reader
 }
 
-func getRevValues(path, _ string) []string {
-	vals, err := getHelmHistDao().GetValues(path, true)
+func getRevValues(factory dao.Factory, path, _ string) []string {
+	vals, err := getHelmHistDao(factory).GetValues(path, true)
 	if err != nil {
 		slog.Error("Failed to get Helm values", slogs.Error, err)
 	}

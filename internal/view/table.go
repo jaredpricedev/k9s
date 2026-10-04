@@ -28,6 +28,7 @@ type Table struct {
 	*ui.Table
 
 	app                 *App
+	browser             *Browser
 	enterFn             EnterFunc
 	envFn               EnvFunc
 	bindKeysFn          []BindKeysFunc

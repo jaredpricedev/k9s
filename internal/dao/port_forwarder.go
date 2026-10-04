@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/derailed/k9s/internal/client"
@@ -33,7 +35,8 @@ type PortForwarder struct {
 	genericclioptions.IOStreams
 
 	stopChan, readyChan chan struct{}
-	active              bool
+	active              atomic.Bool
+	stopOnce            sync.Once
 	path                string
 	tunnel              port.PortTunnel
 	age                 time.Time
@@ -60,12 +63,12 @@ func (p *PortForwarder) Age() time.Time {
 
 // Active returns the forward status.
 func (p *PortForwarder) Active() bool {
-	return p.active
+	return p.active.Load()
 }
 
 // SetActive mark a portforward as active.
 func (p *PortForwarder) SetActive(b bool) {
-	p.active = b
+	p.active.Store(b)
 }
 
 // Port returns the port mapping.
@@ -100,11 +103,12 @@ func (p *PortForwarder) Container() string {
 
 // Stop terminates a port forward.
 func (p *PortForwarder) Stop() {
-	p.active = false
-	if p.stopChan != nil {
-		close(p.stopChan)
-		p.stopChan = nil
-	}
+	p.active.Store(false)
+	p.stopOnce.Do(func() {
+		if p.stopChan != nil {
+			close(p.stopChan)
+		}
+	})
 }
 
 // FQN returns the portforward unique id.
