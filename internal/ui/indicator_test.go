@@ -89,6 +89,29 @@ func TestMetricPercentStateAndIndependentMemoryTrend(t *testing.T) {
 	require.Equal(t, "30%", ui.MetricPercent(previous, current, true))
 }
 
+func TestCompactMetricPercentPreservesCompleteStatesAndDetailedFormatting(t *testing.T) {
+	now := time.Now()
+	previous := client.NewMetricSample(client.ClusterMetrics{PercCPU: 80, PercMEM: 20}, now, client.NodeMetricsSource, now)
+	current := client.NewMetricSample(client.ClusterMetrics{PercCPU: 70, PercMEM: 30}, now, client.NodeMetricsSource, now)
+	require.Equal(t, "70% ↓", ui.CompactMetricPercent(previous, current, false))
+	require.Equal(t, "30% ↑", ui.CompactMetricPercent(previous, current, true))
+	for _, state := range []client.MetricState{"", client.MetricsUnavailable, client.MetricsDenied, client.MetricsNotConfigured} {
+		sample := client.MetricSample{State: state}
+		expected := string(state)
+		if state == "" {
+			expected = string(client.MetricsUnavailable)
+		}
+		require.Equal(t, expected, ui.CompactMetricPercent(previous, sample, true))
+		require.Equal(t, "N/A ("+expected+")", ui.MetricPercent(previous, sample, true))
+	}
+	current = client.MetricFailure(current, client.MetricsNotConfigured, client.NodeMetricsSource, "metrics-server is not configured")
+	require.Equal(t, "30% stale", ui.CompactMetricPercent(previous, current, true))
+	require.Equal(t, "30% (stale: not configured)", ui.MetricPercent(previous, current, true))
+	require.Contains(t, ui.MetricDescription(current), "metrics-server is not configured")
+	zero := client.NewMetricSample(client.ClusterMetrics{}, now, client.NodeMetricsSource, now)
+	require.Equal(t, "0%", ui.CompactMetricPercent(client.MetricSample{}, zero, true))
+}
+
 func TestIndicatorDrawKeepsModeAtNarrowWidths(t *testing.T) {
 	cfg := mock.NewMockConfig(t)
 	cfg.K9s.ReadOnly = true

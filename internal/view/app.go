@@ -365,14 +365,16 @@ func (a *App) buildHeader() tview.Primitive {
 	// Measure the rendered context, user and version values on every draw so
 	// short names release their unused space and context changes resize safely.
 	header.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
-		natural := clusterInfoWidth
+		var labelWidth, valueWidth int
 		rowCount := info.GetRowCount()
 		for row := range rowCount {
 			label, value := info.GetCell(row, 0), info.GetCell(row, 1)
 			if label != nil && value != nil {
-				natural = max(natural, tview.TaggedStringWidth(label.Text)+tview.TaggedStringWidth(value.Text)+4)
+				labelWidth = max(labelWidth, tview.TaggedStringWidth(label.Text))
+				valueWidth = max(valueWidth, tview.TaggedStringWidth(value.Text))
 			}
 		}
+		natural := max(clusterInfoWidth, labelWidth+valueWidth+4)
 		infoWidth := min(natural, max(1, width/3))
 		header.ResizeItem(info, infoWidth, 1)
 		if a.showLogo {

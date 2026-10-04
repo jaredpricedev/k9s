@@ -1,0 +1,31 @@
+?   	github.com/derailed/k9s	[no test files]
+ok  	github.com/derailed/k9s/cmd	0.176s
+ok  	github.com/derailed/k9s/internal	0.007s
+ok  	github.com/derailed/k9s/internal/certmanager	0.008s
+ok  	github.com/derailed/k9s/internal/client	0.030s
+ok  	github.com/derailed/k9s/internal/color	0.003s
+ok  	github.com/derailed/k9s/internal/config	0.282s
+ok  	github.com/derailed/k9s/internal/config/data	0.016s
+ok  	github.com/derailed/k9s/internal/config/json	0.330s
+?   	github.com/derailed/k9s/internal/config/mock	[no test files]
+ok  	github.com/derailed/k9s/internal/dao	3.616s
+ok  	github.com/derailed/k9s/internal/flux	0.008s
+ok  	github.com/derailed/k9s/internal/health	0.007s
+ok  	github.com/derailed/k9s/internal/hubble	0.033s
+ok  	github.com/derailed/k9s/internal/inspect	0.155s
+ok  	github.com/derailed/k9s/internal/logstream	0.106s
+ok  	github.com/derailed/k9s/internal/model	0.090s
+ok  	github.com/derailed/k9s/internal/model1	0.021s
+?   	github.com/derailed/k9s/internal/perf	[no test files]
+ok  	github.com/derailed/k9s/internal/port	0.003s
+ok  	github.com/derailed/k9s/internal/render	0.102s
+?   	github.com/derailed/k9s/internal/render/helm	[no test files]
+?   	github.com/derailed/k9s/internal/slogs	[no test files]
+ok  	github.com/derailed/k9s/internal/tchart	0.003s
+ok  	github.com/derailed/k9s/internal/ui	0.107s
+ok  	github.com/derailed/k9s/internal/ui/dialog	0.563s
+ok  	github.com/derailed/k9s/internal/view	6.581s
+ok  	github.com/derailed/k9s/internal/view/cmd	0.009s
+ok  	github.com/derailed/k9s/internal/vul	0.030s
+ok  	github.com/derailed/k9s/internal/watch	0.007s
+ok  	github.com/derailed/k9s/internal/xray	0.071s

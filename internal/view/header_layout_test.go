@@ -3,6 +3,7 @@
 package view
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/derailed/k9s/internal/config"
@@ -94,4 +95,35 @@ func TestHeaderReclaimsUnusedClusterInfoSpace(t *testing.T) {
 	_, _, logoWidth, _ := a.Logo().GetRect()
 	require.LessOrEqual(t, logoWidth, 7, "a narrow header must compact the logo to protect shortcut text")
 	require.Contains(t, a.Logo().Logo().GetText(true), "[k9+]")
+}
+
+func TestHeaderMeasuresIndependentColumnWidthsWithinBudget(t *testing.T) {
+	a := NewApp(mock.NewMockConfig(t))
+	a.showHeader, a.showLogo = true, true
+	info := a.clusterInfo()
+	info.layout()
+	user := strings.Repeat("u", 17)
+	for row, value := range []string{"dev [RW]", "demo", user, "v0.1.0", "v1.34.0", "unavailable", "not configured"} {
+		info.setCell(row, value)
+	}
+	header := a.buildHeader()
+	screen := tcell.NewSimulationScreen("UTF-8")
+	require.NoError(t, screen.Init())
+	defer screen.Fini()
+	for _, width := range []int{80, 100, 120} {
+		screen.SetSize(width, 7)
+		header.SetRect(0, 0, width, 7)
+		header.Draw(screen)
+		_, _, actual, _ := info.GetRect()
+		// The widest label (Context:) and value (User) belong to different rows.
+		require.Equal(t, min(29, width/3), actual)
+		if width >= 100 {
+			var line strings.Builder
+			for x := range actual {
+				ch, _, _, _ := screen.GetContent(x, 2)
+				line.WriteRune(ch)
+			}
+			require.Contains(t, line.String(), user, "independent column widths must preserve the full value when it fits")
+		}
+	}
 }

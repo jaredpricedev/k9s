@@ -182,13 +182,17 @@ func (d *Details) keyboard(evt *tcell.EventKey) *tcell.EventKey {
 
 // StylesChanged notifies the skin changed.
 func (d *Details) StylesChanged(s *config.Styles) {
+	d.applyStyles(s)
+	d.TextChanged(d.model.Peek())
+}
+
+func (d *Details) applyStyles(s *config.Styles) {
 	p := s.Semantic()
 	d.SetBackgroundColor(p.Canvas.Color())
 	d.text.SetBackgroundColor(p.Canvas.Color())
 	d.text.SetTextColor(config.ReadableForeground(p.Text.Color(), p.Canvas.Color()))
 	d.SetTitleColor(p.Focus.Color())
 	d.SetBorderFocusColor(p.Focus.Color())
-	d.TextChanged(d.model.Peek())
 }
 
 // Update updates the view content.

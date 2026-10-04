@@ -88,3 +88,18 @@ K9PLUS_AUDIT_KUBECONFIG=/absolute/path/to/kind-kubeconfig go test ./internal/vie
 ```
 
 Before release, review the focused PRs together, rerun checks at the chosen revision, validate supported live integrations, update the feature matrix after merges, and perform an operator review. Merging or publishing is not performed by this validation pass.
+
+## Merge integration addendum
+
+The default branch now includes the daily-workspace delivery and workload
+relationships from [PR #7](https://github.com/jaredpricedev/k9s/pull/7), with
+related-resource UID checks, destination-aware return navigation and retained
+search/scroll state across skin changes. The [feature matrix](../ROADMAP.md) and
+[first-run guide](first-run.md) describe the shipped availability.
+
+The report above and all linked raw evidence remain unchanged historical records
+of their stated source revisions and binaries. This addendum does not recapture
+source C/D, replace the original CI snapshot, or establish passing hosted CI for
+the merged head. Integration checks at that head must be recorded separately.
+The recorded p95 miss, live Relay/Gateway coverage gap and pending operator review
+remain unchanged.

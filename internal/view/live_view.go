@@ -6,6 +6,7 @@ package view
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -43,6 +44,7 @@ type LiveView struct {
 	fullScreen                bool
 	managedField              bool
 	autoRefresh               bool
+	nativeSource              *Table
 }
 
 // NewLiveView returns a live viewer.
@@ -60,6 +62,9 @@ func NewLiveView(app *App, title string, m model.ResourceViewer) *LiveView {
 		autoRefresh:   app.Config.K9s.LiveViewAutoRefresh,
 	}
 	v.AddItem(v.text, 0, 1, true)
+	if source, ok := app.Content.Top().(ResourceViewer); ok {
+		v.nativeSource = source.GetTable()
+	}
 
 	return &v
 }
@@ -70,6 +75,11 @@ func (*LiveView) SetLabelSelector(labels.Selector, bool) {}
 
 // Init initializes the viewer.
 func (v *LiveView) Init(_ context.Context) error {
+	if v.title == yamlAction || v.title == "Describe" {
+		if reason := v.nativeRelationshipReason(false); reason != "" {
+			return errors.New(reason)
+		}
+	}
 	if v.title != "" {
 		v.SetBorder(true)
 	}
@@ -159,7 +169,9 @@ func (v *LiveView) bindKeys() {
 	})
 
 	if !v.app.Config.IsReadOnly() {
-		v.actions.Add(ui.KeyE, ui.NewKeyAction("Edit", v.editCmd, true))
+		action := ui.NewKeyAction("Edit", v.editCmd, true)
+		action.Availability = func() string { return v.nativeRelationshipReason(true) }
+		v.actions.Add(ui.KeyE, action)
 	}
 	if v.title == yamlAction {
 		v.actions.Add(ui.KeyM, ui.NewKeyAction("Toggle ManagedFields", v.toggleManagedCmd, true))
@@ -184,6 +196,10 @@ func (v *LiveView) editCmd(evt *tcell.EventKey) *tcell.EventKey {
 	path := v.model.GetPath()
 	if path == "" {
 		return evt
+	}
+	if reason := v.nativeRelationshipReason(true); reason != "" {
+		v.app.Flash().Errf("%s", reason)
+		return nil
 	}
 	v.Stop()
 	defer v.Start()

@@ -440,6 +440,10 @@ func (b *Browser) viewCmd(evt *tcell.EventKey) *tcell.EventKey {
 	if path == "" {
 		return evt
 	}
+	if reason := nativeRelationshipReason(b.GetTable(), b.GVR(), path, false); reason != "" {
+		b.app.Flash().Errf("%s", reason)
+		return nil
+	}
 
 	v := NewLiveView(b.app, yamlAction, model.NewYAML(b.GVR(), path))
 	if err := v.app.inject(v, false); err != nil {
@@ -497,6 +501,10 @@ func (b *Browser) enterCmd(evt *tcell.EventKey) *tcell.EventKey {
 	if b.filterCmd(evt) == nil || path == "" {
 		return nil
 	}
+	if _, reason := relatedSelectionReason(b.GetTable(), b.GVR(), path); reason != "" {
+		b.app.Flash().Errf("%s", reason)
+		return nil
+	}
 
 	// Check for custom jump rules first
 	if rule, ok := b.App().CustomJumps().GetRule(b.GVR()); ok {
@@ -510,6 +518,9 @@ func (b *Browser) enterCmd(evt *tcell.EventKey) *tcell.EventKey {
 	f := describeResource
 	if b.enterFn != nil {
 		f = b.enterFn
+	} else if reason := nativeRelationshipReason(b.GetTable(), b.GVR(), path, false); reason != "" {
+		b.app.Flash().Errf("%s", reason)
+		return nil
 	}
 	f(b.app, b.GetModel(), b.GVR(), path)
 
@@ -567,6 +578,10 @@ func (b *Browser) describeCmd(evt *tcell.EventKey) *tcell.EventKey {
 	if path == "" {
 		return evt
 	}
+	if reason := nativeRelationshipReason(b.GetTable(), b.GVR(), path, false); reason != "" {
+		b.app.Flash().Errf("%s", reason)
+		return nil
+	}
 	describeResource(b.app, b.GetModel(), b.GVR(), path)
 
 	return nil
@@ -576,6 +591,10 @@ func (b *Browser) editCmd(evt *tcell.EventKey) *tcell.EventKey {
 	path := b.GetSelectedItem()
 	if path == "" {
 		return evt
+	}
+	if reason := nativeRelationshipReason(b.GetTable(), b.GVR(), path, true); reason != "" {
+		b.app.Flash().Errf("%s", reason)
+		return nil
 	}
 
 	b.Stop()
@@ -709,16 +728,19 @@ func (b *Browser) refreshActions() {
 		tcell.KeyEnter: ui.NewKeyAction("View", b.enterCmd, false),
 		tcell.KeyCtrlR: ui.NewKeyAction("Refresh", b.refreshCmd, false),
 	})
+	enter, _ := aa.Get(tcell.KeyEnter)
+	enter.Availability = b.nativeEnterReason
+	aa.Add(tcell.KeyEnter, enter)
 
 	if b.app.ConOK() {
 		b.namespaceActions(aa)
 		if !b.app.Config.IsReadOnly() {
 			if client.Can(b.meta.Verbs, "edit") {
-				aa.Add(ui.KeyE, ui.NewKeyActionWithOpts("Edit", b.editCmd,
+				aa.Add(ui.KeyE, b.nativeRelationshipAction(ui.NewKeyActionWithOpts("Edit", b.editCmd,
 					ui.ActionOpts{
 						Visible:   true,
 						Dangerous: true,
-					}))
+					}), true))
 			}
 			if client.Can(b.meta.Verbs, "delete") {
 				aa.Add(tcell.KeyCtrlD, ui.NewKeyActionWithOpts("Delete", b.deleteCmd,
@@ -732,8 +754,8 @@ func (b *Browser) refreshActions() {
 		}
 	}
 	if !dao.IsK9sMeta(b.meta) {
-		aa.Add(ui.KeyY, ui.NewKeyAction(yamlAction, b.viewCmd, true))
-		aa.Add(ui.KeyD, ui.NewKeyAction("Describe", b.describeCmd, true))
+		aa.Add(ui.KeyY, b.nativeRelationshipAction(ui.NewKeyAction(yamlAction, b.viewCmd, true), false))
+		aa.Add(ui.KeyD, b.nativeRelationshipAction(ui.NewKeyAction("Describe", b.describeCmd, true), false))
 	}
 	for _, f := range b.bindKeysFn {
 		f(aa)

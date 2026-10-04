@@ -8,12 +8,11 @@ are provided under Apache-2.0; see LICENSE, COPYING, NOTICE and
 [licensing](docs/licensing.md). The upstream comparison point is
 `84852e6e47ae830b30c921ffa5838443387e096e`.
 
-This notice inventories the accumulated fork and the daily-workspace review stack
-tracked by [issue #8](https://github.com/jaredpricedev/k9s/issues/8). Inclusion here
-records a modification; it does not mean that a proposal has merged or shipped.
-[ROADMAP.md](ROADMAP.md) distinguishes delivered features from open review work.
-The existing workload-relationships feature remains on separate PR #7 and is
-excluded from this branch's file inventory.
+This notice inventories the accumulated fork and the daily-workspace increments
+tracked by [issue #8](https://github.com/jaredpricedev/k9s/issues/8). It includes the
+workload-relationships feature from original PR #7 and its integration with the
+selected resource identity, retained observations and destination ownership.
+[ROADMAP.md](ROADMAP.md) links the delivered features and their review history.
 
 Source comments identify modified and added Go files; Git history records each
 increment. The [maintenance guide](docs/maintenance.md) documents fork-owned
@@ -45,7 +44,7 @@ from k9s for interoperability and provenance, without implying upstream endorsem
   and source identity. Historical recordings and benchmarks preserve their
   original bytes and labels rather than being rewritten as current evidence.
 
-## Daily-workspace review increments
+## Daily-workspace increments
 
 | Boundary | Modification and resulting behavior |
 | --- | --- |
@@ -54,7 +53,8 @@ from k9s for interoperability and provenance, without implying upstream endorsem
 | Metrics and destination identity | Share explicit available, unavailable, denied, stale and not-configured sample states across headers, Pulse and resource rows. Missing usage stays N/A; memory trends compare memory samples. Compact chrome keeps context, namespace and access mode visible through messages and prompts. |
 | Presentation and themes | Use shared semantic health, severity, identity, focus and action colors, with custom-color fallback and stock, high-contrast and monochrome skins. Narrow tables preserve useful fault status, readiness and restarts; runtime skin changes also update dialog styles. |
 | Operations and client lifetime | Move restart, scale and delete requests off UI callbacks. Pin immutable client configuration and source handles, validate captured identities, and use UID/resource-version conditions for writes. Cancellation stops waiting work; API acceptance and controller completion remain distinct. |
-| Action discovery and return navigation | Use stable action metadata for searchable discovery and help across resource lists, Pulse, logs, Hubble and inspectors. Discovery leaves the owning stream active; unavailable actions retain their reason and existing fast keys. Inspectors retain successful evidence, accepted searches and scroll position when refreshing or returning. |
+| Action discovery and return navigation | Use stable action metadata for searchable discovery and help across resource lists, Pulse, logs, Hubble and inspectors. Discovery leaves the owning stream active; unavailable actions retain their reason and existing fast keys. Inspectors retain successful evidence, accepted searches, highlighted matches and scroll position when refreshing, returning or changing skins. Cross-namespace returns restore the source viewing destination only while the jump owns it; later context or namespace choices invalidate that ownership, including reactive disk edits and choices that return to the earlier value. Trusted nested returns preserve only the ancestor ownership captured before their jump. |
+| Workload relationships | Keep the original PR #7 implementation: namespace-scoped selector and configuration links between workloads, Pods, Services, EndpointSlices and Ingress/Gateway resources. Preserve link reasons and observed UIDs, reject known source or destination replacements, retain the target UID in its native list, and reject closed, expired or superseded navigation. The anchored row uses Inspector for UID-checked reads; live YAML, Describe and kubectl Edit require explicitly reopening its native list. Reference and endpoint evidence does not establish traffic or health. |
 | Fault evidence | Order status/reason, priority conditions, container restarts and last termination, workload evidence and UID-scoped retained events before owners. Preserve full messages; compact message display is reversible without another API request. Failed refreshes keep the previous successful snapshot with a visible failure notice. |
 | Hubble performance and scope | Reuse unchanged frozen data instead of cloning and rebuilding it each tick. Bound workload Pod resolution using namespace, selector and pagination, pin API handles, and reject identity changes or late navigation results. Visibility and truncation remain explicit. |
 | Capability diagnostics | Run only an explicitly selected API, metrics, Flux, cert-manager or Hubble readiness check. Present missing, denied, stale and unavailable prerequisites with useful next steps; no port-forward starts automatically. |
@@ -73,11 +73,13 @@ automated captures do not establish human operator usability or universal latenc
 
 ## Changed files relative to upstream
 
-The following inventory compares the complete accumulated review tree with upstream
+The following inventory compares the complete accumulated application tree with
+upstream
 `84852e6e47ae830b30c921ffa5838443387e096e`, including additions, modifications,
 removals, attribution-only updates and final filter, UI, clean-build, CLI and
-validation evidence. Files are grouped by ownership boundary; removed paths are
-marked explicitly. Generated THIRD_PARTY_LICENSES and ignored build outputs are
+validation evidence, plus the original relationship feature and its navigation
+integration. Files are grouped by ownership boundary; removed paths are marked
+explicitly. Generated THIRD_PARTY_LICENSES and ignored build outputs are
 assembled separately for distributions and are not source inventory entries.
 
 ### Project, build and release files
@@ -138,6 +140,7 @@ assembled separately for distributions and are not source inventory entries.
 - `docs/superpowers/specs/2026-09-06-flux-review-design.md`
 - `docs/superpowers/specs/2026-09-06-log-workbench.md`
 - `docs/validation-2026-10-04.md`
+- `docs/workload-relationships.md`
 
 ### Command-line entry points
 
@@ -367,6 +370,7 @@ assembled separately for distributions and are not source inventory entries.
 - `internal/view/cert_manager_test.go`
 - `internal/view/clipboard.go`
 - `internal/view/cluster_info.go`
+- `internal/view/cluster_info_test.go`
 - `internal/view/cm_test.go`
 - `internal/view/command.go`
 - `internal/view/container_test.go`
@@ -416,6 +420,8 @@ assembled separately for distributions and are not source inventory entries.
 - `internal/view/log_workbench_style.go`
 - `internal/view/log_workbench_test.go`
 - `internal/view/logger.go`
+- `internal/view/native_relationship_guard.go`
+- `internal/view/native_relationship_guard_test.go`
 - `internal/view/ns_test.go`
 - `internal/view/operation_runner.go`
 - `internal/view/operation_runner_test.go`
@@ -431,6 +437,8 @@ assembled separately for distributions and are not source inventory entries.
 - `internal/view/rbac_test.go`
 - `internal/view/reference_test.go`
 - `internal/view/registrar.go`
+- `internal/view/relationship_identity_test.go`
+- `internal/view/relationship_navigation_test.go`
 - `internal/view/resource_comparison.go`
 - `internal/view/resource_comparison_test.go`
 - `internal/view/resource_inspector.go`
@@ -446,6 +454,8 @@ assembled separately for distributions and are not source inventory entries.
 - `internal/view/table.go`
 - `internal/view/table_filter.go`
 - `internal/view/table_filter_test.go`
+- `internal/view/workload_relationships.go`
+- `internal/view/workload_relationships_test.go`
 - `internal/view/yaml_test.go`
 
 ### Reproduction and license tooling
@@ -594,6 +604,14 @@ assembled separately for distributions and are not source inventory entries.
 - `docs/evidence/hubble-2026-10-04/final-build-info.txt`
 - `docs/evidence/hubble-2026-10-04/final-latency.json`
 - `docs/evidence/hubble-2026-10-04/provenance.json`
+- `docs/evidence/merge-2026-10-04/README.md`
+- `docs/evidence/merge-2026-10-04/lint-followup.txt`
+- `docs/evidence/merge-2026-10-04/lint.txt`
+- `docs/evidence/merge-2026-10-04/ordinary-followup.txt`
+- `docs/evidence/merge-2026-10-04/ordinary.txt`
+- `docs/evidence/merge-2026-10-04/publication-50.txt`
+- `docs/evidence/merge-2026-10-04/race-followup.txt`
+- `docs/evidence/merge-2026-10-04/race.txt`
 - `docs/evidence/ui-2026-10-04/README.md`
 - `docs/evidence/ui-2026-10-04/manifest.json`
 - `docs/evidence/ui-2026-10-04/pods-80x24-high-contrast-256-destination.png`
