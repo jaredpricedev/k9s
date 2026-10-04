@@ -2,6 +2,8 @@
 
 Proposed direction, 3 October 2026. Baseline: default-branch revision `1978cb74caab53f74403e9e776d18bb2975e01e4`. The Horizon 1 implementation note records the first delivered slice; the remaining proposals do not create delivery commitments.
 
+**Implementation status, 4 October:** 31 of 41 delivery issues are closed. All 33 core implementation scopes exist, and seven optional native review foundations are implemented in the recorded source. The remaining acceptance covers operator studies and live/broader-provider validation; cost is deferred for the user's on-prem environment. See the [delivery snapshot and workflow table](#delivery-status-snapshot--4-october-2026) for exact source and issue status.
+
 Make k9plus a daily workspace for Kubernetes engineers: understand an application, review a change, follow a release, perform maintenance, and leave useful evidence. Keep the fast keyboard resource browser underneath those tasks. Start by making investigations readable at a glance, then connect existing tools into complete workflows.
 
 The first sequence should be **investigation overview → saved application workspace → daily work queue → rollout review → desired-state and GitOps review**. Storage, access, capacity and maintenance follow. Fleet, security, cost and backup providers should be added when actual users need them. The order below is a recommendation based on reviewed code, this user's feedback and selected community reports, rather than a survey or promised schedule.
@@ -12,7 +14,7 @@ The fork already includes resource browsing/editing, shells, port-forwards, metr
 
 Recent delivery added selected-resource identity guards, searchable actions, explicit metric availability, responsive guarded restart/scale/delete, retained investigation and relationship navigation, capability diagnostics, A/B API observations, resource pressure, and reviewed/offline evidence bundles. Extend these foundations. Reintroducing JSON logs, Helm rollback or a generic RBAC viewer as new features would duplicate shipped behavior.
 
-Use the current [delivery matrix](https://github.com/jaredpricedev/k9s/blob/1978cb74caab53f74403e9e776d18bb2975e01e4/ROADMAP.md) and [log workbench](https://github.com/jaredpricedev/k9s/blob/1978cb74caab53f74403e9e776d18bb2975e01e4/docs/log-workbench.md) for the baseline. The recorded 10,000-Pod filtering p95 remains 107.274 ms against a proposed 100 ms target. Operator usability, current live Relay/Gateway compatibility and broader platform verification remain open validation work.
+Use the original [delivery matrix](https://github.com/jaredpricedev/k9s/blob/1978cb74caab53f74403e9e776d18bb2975e01e4/ROADMAP.md) and [log workbench](https://github.com/jaredpricedev/k9s/blob/1978cb74caab53f74403e9e776d18bb2975e01e4/docs/log-workbench.md) for the baseline. A controlled 10,000-Pod, 20-query, 120×34 actual-CLI journey measured median 38.685 ms and p95 58.557 ms against a proposed 100 ms target (isolated baseline p95 231.736 ms). This meets the target for that journey only; it is not a general latency bound. The integrated publication-head sample measured median 40.528 ms/p95 49.108 ms but may have overlapped a linker and is marked potentially CPU-confounded. See [recorded performance evidence](https://github.com/jaredpricedev/k9s/issues/8#issuecomment-5983095681). Operator usability, live Relay/Gateway compatibility and broader platform verification remain open validation work.
 
 ## What community reports suggest
 
@@ -182,15 +184,75 @@ Each increment needs a concrete engineer task and meaningful validation:
 | Providers/fleet | Missing APIs, stale samples and RBAC gaps remain scoped. Retention/list/request bounds and cancellation are tested. No Secret fixture values enter default views or exports. |
 | Product usability | Run the operator study and report measured baseline/new-view results. Automated screenshots and fixtures establish behavior, not learnability or production diagnosis time. |
 
-The existing 100 ms performance goal remains a target until a controlled measurement meets it. New workspace watches and background tasks need performance budgets and measured bounds before they expand scope.
+The controlled filter journey currently meets the proposed 100 ms p95 goal, as recorded above; other query shapes and workloads remain unbounded by that sample. New workspace watches and background tasks need performance budgets and measured bounds before they expand scope.
 
 ## What to build next
 
-The first TK01–TK05 implementation is delivered in PR #40. After the TK06 local
-source and TK07 Deployment foundation, add read-only TK08 ownership/progress,
-broader source adapters and accepted-write outcome tracking. Extend operation
-lifecycles before larger change sets or maintenance execution. Storage, access
-and capacity are the strongest next routine-toolkit additions. Choose Horizon 4
-integrations from actual user demand.
+The bounded first slices for TK01–TK08, TK10, TK12–TK16 and TK19–TK20 are on
+master. Shared discovery and responsive presentation implementation is shipped,
+but #22 and #23 remain open for representative-operator evaluation. Core change
+review #53 has since shipped through merged PR #118. Activity (#55), network
+review (#61) and managed sessions (#62) shipped in PRs #113, #114 and #104.
+Keep TK21–TK28 demand-gated. Optional foundations do not replace concrete user
+demand, named-source evidence or live compatibility validation.
+
+
+## Delivery status snapshot — 4 October 2026
+
+This is an implementation-source snapshot at
+`e93ac663969e775c3e5dc0c6cfbbe6f1cd6b5a7a` (PR #116), not a claim that every
+change in that PR is already on the default branch. The refreshed live tracker has
+31 of 41 delivery issues closed with merged implementations. Ten delivery issues
+remain open: #22/#23 human evaluation and eight optional acceptance items
+(#65–#72). Tracking issue #8 also remains open (11 open issues total). This is a
+snapshot of issue state, not a completion percentage. All 33 core implementation
+scopes exist in this source; #22 and #23 remain open for human operator evaluation,
+and core delivery issue #53 shipped in PR #118. Seven optional native foundations
+(#65–#68, #70–#72) are implemented in this source. PR #116 contains the #71 operator
+and #72 dependency foundations; demand, live compatibility and broader-provider
+validation gates remain open. Cost review #69 is deferred after the user confirmed
+no current on-prem cost-review need.
+
+| TK | Workflow | Delivery/follow-up status at snapshot |
+| --- | --- | --- |
+| TK01 | Investigation overview | Shared discovery/presentation implementation shipped; operator study remains open (#22/#23). |
+| TK02 | Saved application workspaces | Initial single-context saved-scope workspace shipped; multi-context fleet is optional TK21. |
+| TK03 | Daily work queue | Bounded current-scope findings and observed History shipped; no continuous event history or missed-run inference (#48 closed). |
+| TK04 | Scoped search and inventory | Initial scoped inventory shipped; denied/unknown coverage remains distinct. |
+| TK05 | Connection and session health | Running-client refresh with retained diagnostics shipped (#49). |
+| TK06 | Desired-state review | Named local/Kustomize/Helm/Git sources and explicit server dry-run shipped (#50); no exhaustive prune-plan claim. |
+| TK07 | Rollout and recovery review | Captured rollout outcomes and guarded Deployment recovery shipped (#51); preserve resource-kind and action limits. |
+| TK08 | GitOps ownership and progress | Bounded native Argo/Flux evidence shipped (#52); hints are not verified ownership. |
+| TK09 | Reviewed change sets | Core workflow shipped in PR #118 (#53); guarded scope and evidence limits remain. |
+| TK10 | Configuration review | Metadata/key-name/reference review shipped; Secret values excluded (#54). |
+| TK11 | Application activity | Shipped in PR #113 (#55); bounded app-scope observations retain source/time/coverage gaps. Live-cluster and operator-study coverage remain unclaimed. |
+| TK12 | Access explanation | Scoped read-only access decision review shipped (#56). |
+| TK13 | Storage review and expansion | Bounded lifecycle evidence and guarded PVC increase shipped (#57); acceptance does not prove runtime resize/usage. |
+| TK14 | Node maintenance planner | Captured-impact preview and guarded drain shipped (#58); controller completion is observed separately. |
+| TK15 | Capacity and autoscaling | Scoped capacity/autoscaling evidence shipped (#59); no free/schedulable-capacity or cost inference. |
+| TK16 | Scheduled and one-off workloads | Bounded Job/CronJob outcome review shipped (#60); missing records remain unknown, not missed runs. |
+| TK17 | Network path review | Shipped in PR #114 (#61); selected Service configuration and reported flow evidence remain distinct from tested connectivity. Live-cluster and operator evaluation remain unclaimed. |
+| TK18 | Managed local sessions | Shipped in PR #104 (#62); captured session identities and cleanup are bounded. Native exec/forward endpoints lack atomic Pod-UID preconditions; no production claim. |
+| TK19 | Tool and provider discovery | Typed on-demand discovery shipped (#63); no automatic install/login/context switch. |
+| TK20 | Runbooks and handoffs | Bounded taskbooks and offline review shipped (#64); checks run only by explicit action. |
+| TK21 | Fleet workspace | Optional/demand-gated; bounded foundation merged in PR #106 (`ac4fa58c`); not broad fleet validation (#65). |
+| TK22 | Upgrade readiness | Optional/demand-gated; bounded native evidence foundation merged in PR #109 (`960016ff`), not a compatibility guarantee (#66). |
+| TK23 | Security and policy review | Optional/demand-gated; bounded review foundation merged in PR #117 (`84f42d50`). No complete scanner/admission-provider coverage claim (#67). |
+| TK24 | Backup and restore review | Optional/demand-gated; Velero metadata-review foundation merged in PR #107 (`22a61284`), not restore proof (#68). |
+| TK25 | Cost and waste review | Deferred after user confirmed on-prem environment and no cost-review need; no named pricing source or delivery commitment (#69). |
+| TK26 | Historical observability | Optional/demand-gated; bounded explicit Prometheus-query foundation merged in PR #108 (`0e799309`), not a bundled history service or validated provider (#70). |
+| TK27 | Operator workflow adapters | Optional/demand-gated; bounded cert-manager Certificate/Issuer foundation is implemented in [PR #115](https://github.com/jaredpricedev/k9s/pull/115) and included by [PR #116](https://github.com/jaredpricedev/k9s/pull/116) in this source snapshot. It is not broad provider or live TLS coverage (#71). |
+| TK28 | Application dependency review | Optional/demand-gated; bounded native dependency evidence is implemented in [PR #116](https://github.com/jaredpricedev/k9s/pull/116) in this source snapshot. It composes retained evidence without discovery; ownership or observed traffic alone cannot establish dependency or health (#72). |
+
+The optional PR foundations listed above remain subject to their issue acceptance,
+source-specific validation and live/provider compatibility where relevant. They do
+not change the decision to wait for demonstrated demand before adopting optional
+integrations. For #69, the latest user demand checkpoint explicitly deferred a
+cost workflow in the on-prem environment; existing capacity/request/limit review
+remains useful without inventing billing estimates.
+
+The visible acknowledgment-box/Space follow-up merged in shared UI PR #119.
+Keep the study packet's acknowledgment discoverability sentinel unrun until the
+exact candidate binary is recorded and the control is verified in that build.
 
 Avoid an autonomous remediation engine, another GitOps controller, a cloud billing backend, an always-on fleet scanner or a replacement terminal/IDE. The toolkit's value is scoped visibility, understandable review, predictable actions and useful retained evidence.
