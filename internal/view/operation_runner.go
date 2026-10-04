@@ -197,7 +197,8 @@ func (s *operationSession) submit(action string, targets []SelectedResourceTarge
 	task.start(work, nil, func(outcomes []operationOutcome) {
 		s.dispatch(func() {
 			if accepted != nil {
-				for _, outcome := range outcomes {
+				for i := range outcomes {
+					outcome := &outcomes[i]
 					if outcome.Err == nil {
 						accepted(outcome.Target)
 					}
@@ -213,7 +214,8 @@ func (s *operationSession) showResults(action string, outcomes []operationOutcom
 	var b strings.Builder
 	fmt.Fprintf(&b, "Context: %s\nOperation: %s\n\n", s.context, action)
 	var accepted, uncertain, failed int
-	for _, outcome := range outcomes {
+	for i := range outcomes {
+		outcome := &outcomes[i]
 		state := outcome.State
 		if state == "" {
 			state = operationResultState(outcome.Err, outcome.NotSubmitted, false)
@@ -231,7 +233,7 @@ func (s *operationSession) showResults(action string, outcomes []operationOutcom
 			fmt.Fprintf(&b, "  ACCEPTED: %s\n", step)
 		}
 		if outcome.Err != nil {
-			fmt.Fprintf(&b, "  %s\n", operationOutcomeError(&outcome))
+			fmt.Fprintf(&b, "  %s\n", operationOutcomeError(outcome))
 		}
 	}
 	b.WriteString("\n" +

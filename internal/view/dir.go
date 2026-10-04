@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 	"slices"
-	"strings"
 
 	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/client"
@@ -217,14 +216,4 @@ func (d *Dir) delCmd(evt *tcell.EventKey) *tcell.EventKey {
 	d.fileOperation("Delete", sel)
 
 	return nil
-}
-
-func fmtResults(res string) string {
-	res = strings.TrimSpace(res)
-	lines := strings.Split(res, "\n")
-	ll := make([]string, 0, len(lines))
-	for _, l := range lines {
-		ll = append(ll, "  "+l)
-	}
-	return strings.Join(ll, "\n")
 }

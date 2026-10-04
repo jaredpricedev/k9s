@@ -249,8 +249,8 @@ func execute(opts *shellOpts, statusChan chan<- string) (result error) {
 		// followed by some arguments (e.g. "code -w" to make it work with vscode)
 		//
 		// In such cases, the actual binary is only the first token
-		if binTokens, err := shlex.Split(env); err == nil && len(binTokens) > 0 {
-			if bin, err := exec.LookPath(binTokens[0]); err == nil {
+		if binTokens, parseErr := shlex.Split(env); parseErr == nil && len(binTokens) > 0 {
+			if bin, lookupErr := exec.LookPath(binTokens[0]); lookupErr == nil {
 				binTokens[0] = bin
 				for i := range binTokens {
 					binTokens[i] = shellQuote(binTokens[i])
@@ -269,8 +269,8 @@ func execute(opts *shellOpts, statusChan chan<- string) (result error) {
 		if len(cmds) >= 8 {
 			return errors.New("command pipelines are limited to 8 stages")
 		}
-		tokens, err := shlex.Split(p)
-		if err != nil || len(tokens) == 0 {
+		tokens, parseErr := shlex.Split(p)
+		if parseErr != nil || len(tokens) == 0 {
 			return errors.New("configured pipeline stage is invalid; review it before running the action")
 		}
 		cmd := exec.CommandContext(ctx, tokens[0], tokens[1:]...)
@@ -719,5 +719,4 @@ func pipeSingle(ctx context.Context, opts *shellOpts, statusChan chan<- string, 
 	}
 
 	return err
-
 }
