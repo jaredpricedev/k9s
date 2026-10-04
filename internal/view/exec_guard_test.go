@@ -17,12 +17,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/derailed/k9s/internal/config/mock"
 	"golang.org/x/term"
 )
 
 const (
 	guardedExecShellFlag = "-c"
 	guardedExecLinux     = "linux"
+	guardedExecPrintf    = "printf"
+	guardedExecString    = "%s"
 )
 
 func TestGuardedBackgroundExecWaitsForRealExitAndReportsUnknownEffects(t *testing.T) {
@@ -50,8 +53,32 @@ func TestGuardedBackgroundExecWaitsForRealExitAndReportsUnknownEffects(t *testin
 	}
 }
 
+func TestGuardedBackgroundExecPreservesCapturedCancellation(t *testing.T) {
+	printf, err := exec.LookPath(guardedExecPrintf)
+	if err != nil {
+		t.Skip(err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	ok, failures, statuses := run(NewApp(mock.NewMockConfig(t)), &shellOpts{binary: printf,
+		args: []string{guardedExecString, "must not start"}, background: true, ctx: ctx})
+	if !ok {
+		t.Fatal("background worker did not start")
+	}
+	var result error
+	for failure := range failures {
+		result = errors.Join(result, failure)
+	}
+	if !errors.Is(result, context.Canceled) {
+		t.Fatal("captured cancellation was replaced by the app lifetime", result)
+	}
+	for status := range statuses {
+		t.Fatal("canceled command produced output", status)
+	}
+}
+
 func TestGuardedExecPipelineCompletesWithoutWaitingForUnclosedInput(t *testing.T) {
-	printf, err := exec.LookPath("printf")
+	printf, err := exec.LookPath(guardedExecPrintf)
 	if err != nil {
 		t.Skip(err)
 	}
@@ -62,7 +89,7 @@ func TestGuardedExecPipelineCompletesWithoutWaitingForUnclosedInput(t *testing.T
 	defer cancel()
 	statuses := make(chan string, 1)
 	literal := "hello $(touch /never-create-this-file)"
-	if err := execute(&shellOpts{binary: printf, args: []string{"%s", literal}, pipes: []string{guardedTestPipeline, "cat"}, background: true, ctx: ctx}, statuses); err != nil {
+	if err := execute(&shellOpts{binary: printf, args: []string{guardedExecString, literal}, pipes: []string{guardedTestPipeline, "cat"}, background: true, ctx: ctx}, statuses); err != nil {
 		t.Fatal(err)
 	}
 	if got := <-statuses; got != outputPrefix+" "+strings.ToUpper(literal) {
@@ -82,13 +109,13 @@ func TestGuardedExecCancellationKillsForegroundDescendants(t *testing.T) {
 }
 
 func TestGuardedExecForegroundPipelinePreservesTerminalOwnership(t *testing.T) {
-	printf, err := exec.LookPath("printf")
+	printf, err := exec.LookPath(guardedExecPrintf)
 	if err != nil {
 		t.Skip(err)
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
-	if executionErr := execute(&shellOpts{binary: printf, args: []string{"%s", "guarded foreground pipeline\n"}, pipes: []string{"cat"}, ctx: ctx}, make(chan string, 1)); executionErr != nil {
+	if executionErr := execute(&shellOpts{binary: printf, args: []string{guardedExecString, "guarded foreground pipeline\n"}, pipes: []string{"cat"}, ctx: ctx}, make(chan string, 1)); executionErr != nil {
 		t.Fatal(executionErr)
 	}
 }

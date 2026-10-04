@@ -100,7 +100,9 @@ func runK(a *App, opts *shellOpts) error {
 }
 
 func run(a *App, opts *shellOpts) (ok bool, errC chan error, outC chan string) {
-	opts.ctx = a.sessionContext()
+	if opts.ctx == nil && a != nil {
+		opts.ctx = a.sessionContext()
+	}
 	errChan := make(chan error, 1)
 	statusChan := make(chan string, 1)
 
