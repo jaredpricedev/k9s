@@ -40,15 +40,19 @@ func rolloutOverview(snapshot *review.RolloutSnapshot, width int) string {
 	}
 	b.WriteString("ROLLOUT OBSERVATION\n")
 	fmt.Fprintln(&b, fitInvestigation(marker+" "+strings.ToUpper(state)+" · "+reason, width))
-	fmt.Fprintf(&b, "Generation %s · controller observed %s\n", rolloutCount(snapshot.Generation), rolloutCount(snapshot.ObservedGeneration))
-	b.WriteString("\nREPLICA COUNTS · retained Deployment status\n")
-	columns := []int{11, 11, 11, 13, 11}
-	counts := []string{
-		rolloutCount(snapshot.Desired), rolloutCount(snapshot.Updated), rolloutCount(snapshot.Ready),
-		rolloutCount(snapshot.Available), rolloutCount(snapshot.Replicas),
+	if width < 60 && len(reason) > 0 {
+		fmt.Fprintln(&b, fitInvestigation(reason, width))
 	}
-	fmt.Fprintln(&b, tableRow([]string{"DESIRED", "UPDATED", "READY", "AVAILABLE", "TOTAL"}, columns))
-	fmt.Fprintln(&b, tableRow(counts, columns))
+	fmt.Fprintf(&b, "Generation %s · observed %s\n", rolloutCount(snapshot.Generation), rolloutCount(snapshot.ObservedGeneration))
+	b.WriteString("\nREPLICA COUNTS · retained Deployment status\n")
+	if width < 60 {
+		fmt.Fprintf(&b, "Desired %s · Updated %s\nReady %s · Available %s · Total %s\n", rolloutCount(snapshot.Desired), rolloutCount(snapshot.Updated), rolloutCount(snapshot.Ready), rolloutCount(snapshot.Available), rolloutCount(snapshot.Replicas))
+	} else {
+		columns := []int{11, 11, 11, 13, 11}
+		counts := []string{rolloutCount(snapshot.Desired), rolloutCount(snapshot.Updated), rolloutCount(snapshot.Ready), rolloutCount(snapshot.Available), rolloutCount(snapshot.Replicas)}
+		fmt.Fprintln(&b, tableRow([]string{"DESIRED", "UPDATED", "READY", "AVAILABLE", "TOTAL"}, columns))
+		fmt.Fprintln(&b, tableRow(counts, columns))
+	}
 	b.WriteString("\nCONTROLLER CONDITIONS\n")
 	if len(snapshot.Conditions) == 0 {
 		b.WriteString("[?] No conditions retained; absence does not establish health.\n")
@@ -73,14 +77,19 @@ func rolloutOverview(snapshot *review.RolloutSnapshot, width int) string {
 
 func rolloutRevisions(snapshot *review.RolloutSnapshot, width int, selectedUID string) string {
 	var b strings.Builder
-	b.WriteString("REPLICA SET REVISIONS\nController=true and Deployment UID verified · retained, not full history\n\n")
-	nameWidth := max(18, width-44)
-	columns := []int{2, 7, nameWidth, 8, 8, 14}
-	fmt.Fprintln(&b, tableRow([]string{"", "REV", "REPLICA SET", "TOTAL", "READY", "TEMPLATE"}, columns))
+	b.WriteString("REPLICA SET REVISIONS · UID-owned\nRetained subset; full identity in 5 Evidence\n\n")
+	nameWidth := max(8, width-42)
+	columns := []int{1, 5, nameWidth, 6, 6, 13}
+	labels := []string{"", "REV", "REPLICA SET", "TOTAL", "READY", "TEMPLATE"}
+	if width < 70 {
+		columns = []int{1, 5, max(8, width-22), 13}
+		labels = []string{"", "REV", "REPLICA SET", "TEMPLATE"}
+	}
+	fmt.Fprintln(&b, tableRow(labels, columns))
 	for index := range snapshot.Revisions {
 		r := &snapshot.Revisions[index]
 		marker := " "
-		if r.Identity.UID == selectedUID || selectedUID == "" && index == 0 {
+		if r.Identity.UID == selectedUID {
 			marker = ">"
 		}
 		match := "differs spec"
@@ -89,7 +98,11 @@ func rolloutRevisions(snapshot *review.RolloutSnapshot, width int, selectedUID s
 		} else if r.Current {
 			match = "matches spec"
 		}
-		fmt.Fprintln(&b, tableRow([]string{marker, rolloutKnown(r.Revision), r.Identity.Name, rolloutCount(r.Replicas), rolloutCount(r.Ready), match}, columns))
+		values := []string{marker, rolloutKnown(r.Revision), r.Identity.Name, rolloutCount(r.Replicas), rolloutCount(r.Ready), match}
+		if width < 70 {
+			values = []string{marker, rolloutKnown(r.Revision), r.Identity.Name, match}
+		}
+		fmt.Fprintln(&b, tableRow(values, columns))
 	}
 	if len(snapshot.Revisions) == 0 {
 		b.WriteString("[?] No UID-owned revision obtained; inspect collection coverage.\n")
@@ -138,9 +151,10 @@ func rolloutRecovery(snapshot *review.RolloutSnapshot, revisionUID string, width
 	b.WriteString("RECOVERY CANDIDATE · NOT EXECUTED\n")
 	preview := review.RolloutRecoveryPreview(snapshot, revisionUID)
 	if preview.RevisionIdentity.UID == "" {
-		b.WriteString("[?] No retained recovery candidate selected.\n2 revisions · j/k choose ReplicaSet · Enter reviews its template.\n")
+		fmt.Fprintln(&b, "[?] "+preview.Reason)
+		b.WriteString("2 revisions · j/k choose ReplicaSet · Enter reviews its template.\n")
 	} else {
-		fmt.Fprintln(&b, fitInvestigation("Selected RS "+preview.RevisionIdentity.Name+" · revision "+rolloutKnown(preview.Revision), width))
+		fmt.Fprintln(&b, fitInvestigation("Preview RS "+preview.RevisionIdentity.Name+" · revision "+rolloutKnown(preview.Revision), width))
 		fmt.Fprintln(&b, fitInvestigation("UID "+preview.RevisionIdentity.UID+" · context "+preview.RevisionIdentity.Context, width))
 		b.WriteString("A: current Deployment template · B: selected retained RS template\n")
 		if preview.Comparison.Comparable {

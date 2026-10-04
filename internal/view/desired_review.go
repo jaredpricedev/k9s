@@ -60,6 +60,8 @@ type desiredReviewView struct {
 	cancel                          context.CancelFunc
 	prompting, formOpen, detailOpen bool
 	detailKey                       string
+	evidenceOpen                    bool
+	width, height                   int
 	originalCapture                 func(*tcell.EventKey) *tcell.EventKey
 	gate                            sync.Mutex
 	active                          bool
@@ -238,6 +240,7 @@ func (w *desiredReviewView) makeActions() *ui.KeyActions {
 		selected  bool
 	}{
 		{tcell.KeyEnter, "review.detail", "Review detail", false},
+		{ui.KeyE, "review.evidence", "Evidence / source", false},
 		{ui.KeyR, "review.refresh", "Refresh live", false},
 		{ui.KeyN, "review.source", "Select / reload source", false},
 		{ui.KeySlash, "review.search", dailyWorkspaceSearchLabel, false},
@@ -274,6 +277,7 @@ func (w *desiredReviewView) key(e *tcell.EventKey) *tcell.EventKey {
 	case e.Key() == tcell.KeyEscape:
 		if w.detailOpen {
 			w.detailOpen = false
+			w.evidenceOpen = false
 			w.pages.SwitchToPage(desiredReviewTablePage)
 			w.render()
 			w.focusContent()
@@ -286,11 +290,23 @@ func (w *desiredReviewView) key(e *tcell.EventKey) *tcell.EventKey {
 				w.detail.ScrollToBeginning()
 			}
 			w.detailOpen = true
+			w.evidenceOpen = false
 			w.detailKey = desiredReviewEntryKey(&entry)
 			w.pages.SwitchToPage(desiredReviewDetailPage)
 			w.render()
 			w.focusContent()
 		}
+		return nil
+	case e.Rune() == 'e':
+		if entry, ok := w.selectedEntry(); ok {
+			w.detailKey = desiredReviewEntryKey(&entry)
+		}
+		w.evidenceOpen = !w.evidenceOpen
+		w.detailOpen = true
+		w.detail.ScrollToBeginning()
+		w.pages.SwitchToPage(desiredReviewDetailPage)
+		w.render()
+		w.focusContent()
 		return nil
 	case e.Rune() == 'r':
 		w.refresh()
@@ -420,6 +436,7 @@ func (w *desiredReviewView) loadSource(path string) {
 			w.latestObservedAt = time.Time{}
 			w.rows = nil
 			w.detailOpen = false
+			w.evidenceOpen = false
 			w.detailKey = ""
 			w.pages.SwitchToPage(desiredReviewTablePage)
 			w.refresh()

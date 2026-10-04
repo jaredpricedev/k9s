@@ -11,6 +11,7 @@ import (
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/logstream"
 	"github.com/derailed/k9s/internal/review"
+	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
 )
@@ -44,23 +45,48 @@ func (w *desiredReviewView) render() {
 	w.renderRows(selected)
 	w.renderHeader()
 	w.renderDetail()
-	w.footer.SetText("Enter detail · r refresh live · n select/reload source · / local search · i investigate live · Esc back")
+	w.renderFooter()
 }
 func (w *desiredReviewView) renderRows(selected string) {
 	w.table.Clear()
 	palette := w.app.Styles.Semantic()
 	canvas := palette.Canvas.Color()
 	text := config.ReadableForeground(palette.Text.Color(), canvas)
-	for col, label := range []string{statusCol, dailyWorkspaceKindCol, "NAMESPACE", "NAME", "CHANGES / COVERAGE"} {
-		w.table.SetCell(0, col, tview.NewTableCell(label).SetSelectable(false).SetAttributes(tcell.AttrBold).SetTextColor(palette.Focus.Color()))
+	width := w.reviewWidth()
+	narrow := width < 70
+	labels := []string{statusCol, dailyWorkspaceKindCol, "NAMESPACE", "NAME", "CHANGES / COVERAGE"}
+	caps := []int{13, 12, 12, max(12, width-64), 0}
+	if narrow {
+		labels = []string{statusCol, "RESOURCE", "CHANGES / COVERAGE"}
+		caps = []int{10, max(12, width-30), 0}
+	}
+	for col, label := range labels {
+		w.table.SetCell(0, col, tview.NewTableCell(fitInvestigation(label, max(1, caps[col]))).SetSelectable(false).SetAttributes(tcell.AttrBold).SetTextColor(palette.Focus.Color()))
+		if caps[col] == 0 {
+			w.table.GetCell(0, col).SetText(label).SetExpansion(1)
+		}
 	}
 	selection := 1
 	for i := range w.rows {
 		entry := &w.rows[i]
 		state, summary := w.entrySummary(entry)
 		cells := []string{state, entry.Identity.Kind, entry.Identity.Namespace, entry.Identity.Name, summary}
+		if narrow {
+			cells = []string{state, entry.Identity.Kind + "/" + entry.Identity.Name, summary}
+			if entry.State == review.StateChanged || entry.State == review.StateMatch {
+				summary = fmt.Sprintf("%d changed; %d unreviewed", len(entry.Intent.Changes), len(entry.Intent.Unreviewed))
+				cells[2] = summary
+			}
+		}
 		for col, value := range cells {
-			cell := tview.NewTableCell(desiredReviewSafe(value)).SetTextColor(text)
+			cap := caps[col]
+			if cap == 0 {
+				cap = max(1, width-len(cells)+1)
+				for _, c := range caps {
+					cap -= c
+				}
+			}
+			cell := tview.NewTableCell(desiredReviewSafe(fitInvestigation(value, cap))).SetTextColor(text).SetMaxWidth(cap)
 			if col == 0 {
 				switch entry.State {
 				case review.StateChanged, review.StateCreate:
@@ -71,7 +97,7 @@ func (w *desiredReviewView) renderRows(selected string) {
 					cell.SetTextColor(palette.Unknown.Color())
 				}
 			}
-			if col == 4 {
+			if col == len(cells)-1 {
 				cell.SetExpansion(1)
 			}
 			w.table.SetCell(i+1, col, cell)
@@ -81,15 +107,15 @@ func (w *desiredReviewView) renderRows(selected string) {
 		}
 	}
 	if len(w.rows) == 0 {
-		message := "No rows match this local search. / changes or clears it."
+		message := "No search matches. / changes or clears it."
 		if w.query == "" {
-			message = "Select a manifest with n. r refreshes live with the same source."
+			message = "n selects source; r refreshes live."
 			if w.source.Identity.SHA256 != "" {
-				message = "No resource review yet. r reads the retained source's live targets."
+				message = "r reads retained source's live targets."
 			}
 		}
 		w.table.Clear()
-		w.table.SetCell(0, 0, tview.NewTableCell(message).SetSelectable(false).SetExpansion(1))
+		w.table.SetCell(0, 0, tview.NewTableCell(fitInvestigation(message, width)).SetSelectable(false).SetExpansion(1))
 		selection = 0
 	}
 	w.table.Select(selection, 0)
@@ -105,7 +131,11 @@ func (w *desiredReviewView) entrySummary(entry *review.Entry) (state, summary st
 	} else if entry.State == review.StateCreate {
 		summary = "Live object not found; local intent only"
 	}
-	return entry.State, summary
+	state = entry.State
+	if entry.State == review.StateMatch {
+		state = "match"
+	}
+	return state, summary
 }
 func (w *desiredReviewView) renderDetail() {
 	if !w.detailOpen {
@@ -113,10 +143,17 @@ func (w *desiredReviewView) renderDetail() {
 	}
 	entry, ok := w.selectedEntry()
 	if !ok {
-		w.detail.SetText("This retained detail is unavailable in the current report. Esc returns to the resource table.")
+		text := "This retained detail is unavailable in the current report. Esc returns to the resource table."
+		if w.evidenceOpen {
+			text = w.renderSourceIdentity() + "\n\n" + desiredReviewSafe("LATEST READ / SOURCE STATUS\n"+w.notice)
+		}
+		w.detail.SetText(text)
 		return
 	}
-	text := w.renderSourceIdentity() + "\n\n" + renderDesiredReviewEntry(&entry)
+	text := renderDesiredReviewEntryWidth(&entry, w.reviewWidth())
+	if w.evidenceOpen {
+		text = w.renderSourceIdentity() + "\n\n" + desiredReviewSafe("LATEST READ / SOURCE STATUS\n"+w.notice) + "\n\n" + desiredReviewSafe("CAPTURED SCOPE\nContext: "+w.contextName+"\nNamespaces: "+strings.Join(w.scope.Namespaces, ", ")+"\nKinds: "+strings.Join(w.scope.Kinds, ", ")+"\nSelector: "+w.scope.LabelSelector) + "\n\n" + renderDesiredReviewEntry(&entry)
+	}
 	if reason, retained := w.retainedReasons[desiredReviewEntryKey(&entry)]; retained {
 		text = desiredReviewSafe("RETAINED EVIDENCE · latest read "+reason+"\nOriginal observed time: "+identityTime(entry.ObservedAt)) + "\n\n" + text
 	}
@@ -143,7 +180,7 @@ func (w *desiredReviewView) renderHeader() {
 	if !w.latestObservedAt.IsZero() {
 		observed = w.latestObservedAt.UTC().Format(time.RFC3339)
 	}
-	changes, match, unknown := 0, 0, 0
+	changes, match, unknown, candidates, excluded, outScope := 0, 0, 0, 0, 0, 0
 	entries := w.latest
 	if entries == nil {
 		entries = w.snapshot.Entries
@@ -155,11 +192,25 @@ func (w *desiredReviewView) renderHeader() {
 		case review.StateMatch:
 			match++
 		case review.StateCreate:
+			candidates++
+		case review.StateExcluded:
+			excluded++
+		case review.StateOutScope:
+			outScope++
 		default:
 			unknown++
 		}
 	}
 	counts := fmt.Sprintf("%d resources · %d changed · %d reviewed matches · %d unavailable", len(w.snapshot.Entries), changes, match, unknown)
+	if candidates > 0 {
+		counts += fmt.Sprintf(" · %d create candidates", candidates)
+	}
+	if excluded > 0 {
+		counts += fmt.Sprintf(" · %d excluded", excluded)
+	}
+	if outScope > 0 {
+		counts += fmt.Sprintf(" · %d out of scope", outScope)
+	}
 	if len(w.retainedReasons) > 0 {
 		counts += fmt.Sprintf(" · %d retained", len(w.retainedReasons))
 	}
@@ -168,8 +219,21 @@ func (w *desiredReviewView) renderHeader() {
 	if w.query != "" {
 		notice = "Search: " + w.query + " · " + notice
 	}
-	w.header.SetText("[::b]" + desiredReviewSafe(destination) + "[::]\n" + desiredReviewSafe(sourceLine) + "\n" + desiredReviewSafe(counts) +
-		"\n" + desiredReviewSafe(readTimes) + "\n" + desiredReviewSafe(notice))
+	width := w.reviewWidth()
+	lines := []string{destination, sourceLine, counts, readTimes, notice}
+	if w.detailOpen || width < 70 || w.height > 0 && w.height < 16 {
+		fingerprint := source.SHA256[:min(8, len(source.SHA256))]
+		freshness := "not observed"
+		if !w.snapshot.ObservedAt.IsZero() {
+			freshness = w.snapshot.ObservedAt.UTC().Format("15:04:05Z")
+		}
+		lines = []string{destination, "LOCAL READ ONLY · " + fingerprint + " · observed " + freshness, notice}
+	}
+	for i := range lines {
+		lines[i] = desiredReviewSafe(fitInvestigation(lines[i], width))
+	}
+	w.header.SetText("[::b]" + strings.Join(lines, "\n") + "[::]")
+	w.ResizeItem(w.header, len(lines), 0)
 }
 func (w *desiredReviewView) renderSourceIdentity() string {
 	source := w.source.Identity
@@ -196,13 +260,9 @@ func renderDesiredReviewEntry(entry *review.Entry) string {
 	if entry.Intent.Truncated {
 		out.WriteString("Changes truncated; this is an incomplete preview.\n")
 	}
-	out.WriteString("\nUNREVIEWED\n")
-	if len(entry.Intent.Unreviewed) == 0 {
-		out.WriteString("API defaulting, admission, omitted live fields and pruning are outside this local comparison.\n")
-	} else {
-		for _, item := range entry.Intent.Unreviewed {
-			out.WriteString("• " + item + "\n")
-		}
+	out.WriteString("\nUNREVIEWED\nAPI defaulting, admission, omitted live fields and pruning are outside this local comparison.\n")
+	for _, item := range entry.Intent.Unreviewed {
+		out.WriteString("• " + item + "\n")
 	}
 	out.WriteString("\nOWNERSHIP EVIDENCE\n")
 	if len(entry.Ownership) == 0 {
@@ -221,22 +281,74 @@ func identityTime(at time.Time) string {
 	}
 	return at.UTC().Format(time.RFC3339)
 }
+
+// Review panes support 40×12 including their border. Below that floor, keep
+// the retained model and input handlers intact and show a resize/back state.
+func (w *desiredReviewView) reviewWidth() int {
+	if w.width <= 0 {
+		return 78
+	}
+	return w.width
+}
+func (w *desiredReviewView) renderFooter() {
+	width := w.reviewWidth()
+	text := "Enter detail · e evidence · / search · r refresh · n source · Esc back"
+	if width < 70 {
+		text = "Enter detail · e evidence · / search · Esc back"
+	}
+	if width < 48 {
+		text = "Enter detail · e evidence · Esc back"
+	}
+	if w.detailOpen {
+		text = "e evidence/source · ↑↓ scroll · Esc table"
+	}
+	w.footer.SetText(desiredReviewSafe(fitInvestigation(text, width)))
+}
 func (w *desiredReviewView) Draw(screen tcell.Screen) {
-	_, _, width, _ := w.GetInnerRect()
-	if len(w.rows) == 0 {
-		w.table.GetCell(0, 0).SetMaxWidth(max(1, width)).SetExpansion(1)
-	} else {
-		caps := []int{max(10, min(20, width/6)), max(8, min(18, width/8)), max(10, min(22, width/7)), max(14, min(30, width/5)), 0}
-		remaining := width - 8
-		for _, cap := range caps {
-			remaining -= cap
-		}
-		caps[4] = max(8, remaining)
-		for col, cap := range caps {
-			for row := range w.table.GetRowCount() {
-				w.table.GetCell(row, col).SetMaxWidth(cap)
-			}
-		}
+	_, _, width, height := w.GetInnerRect()
+	if ui.DrawTaskSizeNotice(screen, w.Box) {
+		return
+	}
+	if width != w.width || height != w.height {
+		w.width, w.height = width, height
+		w.render()
 	}
 	w.Flex.Draw(screen)
+}
+
+// Compact detail spends the first screen on values. Exact paths, identities,
+// timestamps and ownership remain in the explicit Evidence/source view.
+func renderDesiredReviewEntryWidth(entry *review.Entry, width int) string {
+	if strings.EqualFold(entry.Identity.Kind, desiredReviewSecretKind) || entry.Identity.GVR.Resource == desiredReviewSecrets {
+		return desiredReviewSafe("Secret content excluded. Values are not compared.\ne evidence/source · Esc table")
+	}
+	var out strings.Builder
+	id := entry.Identity
+	fmt.Fprintf(&out, "%s %s/%s\n", id.Kind, id.Namespace, id.Name)
+	if entry.State == review.StateChanged || entry.State == review.StateMatch || entry.State == review.StateCreate {
+		fmt.Fprintf(&out, "%s · %d changes · %d/%d matched · %d unreviewed\n", entry.State, len(entry.Intent.Changes), entry.Intent.MatchedFields, entry.Intent.DeclaredFields, len(entry.Intent.Unreviewed))
+	} else {
+		fmt.Fprintf(&out, "%s · comparison unavailable\n", entry.State)
+	}
+	if len(entry.Intent.Changes) > 0 {
+		out.WriteString("\nCHANGED FIELDS · live → authored\n")
+		for _, change := range entry.Intent.Changes {
+			path := change.Path
+			if width < 90 {
+				path = strings.TrimPrefix(path, "/spec/template/spec/")
+			}
+			fmt.Fprintf(&out, "%s\n  live: %s\n  authored: %s\n", path, change.Before, change.After)
+		}
+	} else if entry.Reason != "" {
+		out.WriteString(entry.Reason + "\n")
+	}
+	if entry.Intent.Truncated {
+		out.WriteString("[~] Changes truncated; preview incomplete.\n")
+	}
+	out.WriteString("\nLOCAL LIMITS · admission/defaulting/pruning unreviewed\n")
+	for _, item := range entry.Intent.Unreviewed {
+		out.WriteString(item + "\n")
+	}
+	out.WriteString("e evidence/source: full paths, identity, time and ownership.\nNothing executed; Secret values excluded.")
+	return desiredReviewSafe(out.String())
 }

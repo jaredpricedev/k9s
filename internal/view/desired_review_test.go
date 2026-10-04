@@ -212,6 +212,7 @@ func TestDesiredReviewCompactHeaderKeepsSourceFingerprintAndReadTimes(t *testing
 	}
 	w.detailOpen = true
 	w.detailKey = desiredReviewEntryKey(&entry)
+	w.evidenceOpen = true
 	w.render()
 	if detail := w.detail.GetText(true); !strings.Contains(detail, w.source.Identity.Path) || !strings.Contains(detail, w.source.Identity.SHA256) {
 		t.Fatal("full retained source identity unavailable in detail")
