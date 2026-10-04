@@ -23,6 +23,7 @@ func (w *HubbleView) Actions() *ui.KeyActions {
 		{ui.Key2, "hubble.destination-pod", "Destination pod", ui.ActionNavigate, false},
 		{ui.KeyR, "hubble.reconnect", "Reconnect", ui.ActionNavigate, true},
 		{ui.KeyHelp, "hubble.help", "Help", ui.ActionInspect, true},
+		{tcell.Key('S'), "hubble.status", "Full status", ui.ActionInspect, true},
 		{tcell.KeyEscape, "hubble.back", "Back", ui.ActionNavigate, false},
 	} {
 		key := item.key
