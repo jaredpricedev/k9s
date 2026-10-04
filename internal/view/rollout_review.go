@@ -538,7 +538,7 @@ func rolloutTargetKind(target SelectedResourceTarget) string {
 	case client.DpGVR.String():
 		return "Deployment"
 	case client.StsGVR.String():
-		return "StatefulSet"
+		return inspectionStatefulSetKind
 	case client.DsGVR.String():
 		return "DaemonSet"
 	default:
