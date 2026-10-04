@@ -149,3 +149,25 @@ func TestNetworkReviewReportedPinsRetainContextAcrossWindowChanges(t *testing.T)
 	require.Nil(t, v.pinFlow(tcell.NewEventKey(tcell.KeyRune, 'P', tcell.ModNone), "conversation"))
 	require.Len(t, v.flowPins, 32, "pins are bounded without evicting captured references")
 }
+
+func TestNetworkReviewConnectivityPollPreservesExplicitRetainedTask(t *testing.T) {
+	v := networkReviewFixture(t)
+	v.active, v.loading = true, true
+	v.generation = 10
+	canceled := false
+	v.cancel = func() { canceled = true }
+	v.selectTab(2)
+	v.inspectionQuery = "api"
+	snapshot := v.snapshot
+	require.True(t, retainedDisconnectedWorkspace(v), "retained task must not exhaust background connection retry budget")
+	v.app.connectivityComponent(v, false)
+	require.True(t, v.active)
+	require.True(t, v.loading)
+	require.False(t, canceled, "background connectivity must not cancel an explicitly requested bounded read")
+	require.Equal(t, uint64(10), v.generation)
+	require.Same(t, snapshot, v.snapshot)
+	v.app.connectivityComponent(v, true)
+	require.Equal(t, "api", v.inspectionQuery)
+	require.Equal(t, 2, v.activeTab)
+	require.Same(t, snapshot, v.snapshot)
+}
