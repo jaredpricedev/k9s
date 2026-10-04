@@ -120,7 +120,7 @@ func (w *dailyWorkspace) makeRows(terms []dailyWorkspaceTerm) ([]string, []daily
 			if !dailyWorkspaceMatch(terms, resource.Kind, resource.Ref.Namespace, resource.Ref.Name, resource.Summary) {
 				continue
 			}
-			age := "unknown"
+			age := workspaceUnknown
 			if resource.Object != nil {
 				created := resource.Object.GetCreationTimestamp()
 				if !created.IsZero() {
