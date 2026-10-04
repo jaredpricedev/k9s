@@ -19,6 +19,7 @@ import (
 	"github.com/derailed/k9s/internal/slogs"
 	"github.com/sahilm/fuzzy"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
@@ -147,33 +148,71 @@ func (t *TableData) HeadCol(n string, w bool) (header HeaderColumn, idx int) {
 }
 
 func (t *TableData) Filter(f FilterOpts) *TableData {
+	td, err := t.FilterChecked(f)
+	if err == nil {
+		return td
+	}
+	slog.Error("Resource filter failed", slogs.Error, err)
+	// Invalid queries must never look like a successful, unfiltered result.
+	td = NewTableDataFromTable(t)
+	td.rowEvents = NewRowEvents(0)
+	return td
+}
+
+// ValidateResourceFilter identifies the documented resource query mode and
+// validates it before a view commits the query or changes its selection.
+func ValidateResourceFilter(q string) (string, error) {
+	if internal.IsLabelSelector(q) {
+		sel := q
+		if strings.HasPrefix(sel, "-l") {
+			sel = strings.TrimSpace(sel[2:])
+		}
+		if _, err := labels.Parse(sel); err != nil {
+			return "labels", fmt.Errorf("invalid label selector: %w", err)
+		}
+		return "labels", nil
+	}
+	if _, ok := internal.IsFuzzySelector(q); ok {
+		return "fuzzy", nil
+	}
+	mode := "regex"
+	if internal.IsInverseSelector(q) {
+		mode, q = "inverse regex", q[1:]
+	}
+	if _, err := regexp.Compile(`(?i)(` + q + `)`); err != nil {
+		return mode, fmt.Errorf("invalid regex: %w", err)
+	}
+	return mode, nil
+}
+
+// FilterChecked returns no result on invalid input. Views can keep the previous
+// valid result instead of silently displaying every resource.
+func (t *TableData) FilterChecked(f FilterOpts) (*TableData, error) {
 	td := NewTableDataFromTable(t)
 
 	if f.Toast {
 		td.rowEvents = t.filterToast()
 	}
 	if f.Filter == "" || internal.IsLabelSelector(f.Filter) {
-		return td
+		if _, err := ValidateResourceFilter(f.Filter); err != nil {
+			return nil, err
+		}
+		return td, nil
 	}
 	if f, ok := internal.IsFuzzySelector(f.Filter); ok {
 		td.rowEvents = td.fuzzyFilter(f)
-		return td
+		return td, nil
 	}
 	rr, err := td.rxFilter(f.Filter, internal.IsInverseSelector(f.Filter))
-	if err == nil {
-		td.rowEvents = rr
-	} else {
-		slog.Error("RX filter failed", slogs.Error, err)
+	if err != nil {
+		return nil, err
 	}
+	td.rowEvents = rr
 
-	return td
+	return td, nil
 }
 
 func (t *TableData) rxFilter(q string, inverse bool) (*RowEvents, error) {
-	if strings.Contains(q, " ") {
-		return t.rowEvents, nil
-	}
-
 	if inverse {
 		q = q[1:]
 	}
