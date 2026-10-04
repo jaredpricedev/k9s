@@ -108,6 +108,7 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 	result = append(result, jobReviewActions(owner, app)...)
 	result = append(result, maintenanceReviewActions(owner, app)...)
 	result = append(result, configurationActions(owner, app)...)
+	result = append(result, networkReviewActions(owner, app)...)
 	result = append(result, workspaceActions(app)...)
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Category != result[j].Category {
@@ -201,16 +202,29 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).capabilityCommand("diagnostics"); return nil }}, ui.ActionDescriptor{
 		ID: "command.providers", Label: "Provider checks", Category: ui.ActionInspect,
 		Shortcut: ":providers", Discoverable: true,
-		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).providerCommand("providers"); return nil }})
+		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).providerCommand("providers"); return nil }}, ui.ActionDescriptor{
+		ID: "command.upgrade-readiness", Label: "Upgrade readiness evidence", Category: ui.ActionInspect, Shortcut: ":upgrade-readiness", Discoverable: true,
+		UnavailableReason: func() string {
+			if client.IsClusterWide(app.Config.ActiveNamespace()) {
+				return "Select one current namespace before collecting upgrade evidence"
+			}
+			return ""
+		}(),
+		Handler: func(*tcell.EventKey) *tcell.EventKey {
+			NewCommand(app).upgradeReadinessCommand("upgrade-readiness")
+			return nil
+		}})
 	return result
 }
 
 func workspaceActions(app *App) []ui.ActionDescriptor {
 	var result []ui.ActionDescriptor
 	for _, item := range []struct{ id, label, command string }{
+		{"command.fleet", "Compare two explicit contexts", fleetCommandToken},
 		{"command.workspace", "Saved workspaces", "workspace"},
 		{"command.daily", "Daily findings queue", dailyCommand},
 		{"command.inventory", "Scoped inventory", inventoryCommand},
+		{"command.activity", "Scoped application activity", activityCommand},
 		{"command.connection", "Connection health", connectionCommand},
 		{"command.sessions", "Local sessions", localSessionsCommand},
 	} {
@@ -220,6 +234,8 @@ func workspaceActions(app *App) []ui.ActionDescriptor {
 			Discoverable: true, Handler: func(*tcell.EventKey) *tcell.EventKey {
 				c := NewCommand(app)
 				switch command {
+				case fleetCommandToken:
+					c.fleetCommand(command)
 				case connectionCommand:
 					c.connectionHealthCommand(command)
 				case localSessionsCommand:

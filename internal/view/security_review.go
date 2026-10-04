@@ -322,7 +322,8 @@ func (v *securityReviewView) render() {
 				"Resource version: %s\nCaptured at: %s\n\n"+
 				"Optional scanner and policy adapters: not configured / unsupported here. "+
 				"No scanner is installed or executed. Exceptions and policy versions are unavailable.\n\n"+
-				"This screen presents authored declarations and selected status image IDs as bounded evidence. "+
+				"This screen presents current API declarations and selected status image IDs as bounded evidence. "+
+				"Defaults and admission changes may be included; original authorship is not established. "+
 				"Human demand validation and a configured scanner/admission provider remain open.\n",
 			s.Identity.GVR, s.Identity.Namespace, s.Identity.Name, s.Identity.UID,
 			s.Identity.ResourceVersion, capturedAt)

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/derailed/k9s/internal/activity"
 	"github.com/derailed/k9s/internal/inspect"
 	"github.com/derailed/k9s/internal/review"
 	"github.com/derailed/k9s/internal/workspace"
@@ -19,13 +20,19 @@ const maxWorkspaceJobSources = 64
 
 func (w *dailyWorkspace) resetObservationWindow(at time.Time) {
 	w.observationWindow = workspace.NewQueueWindow(w.scope, at)
+	w.activityWindow = activity.NewWindow(w.scope, at)
+	w.activityEventCoverage = nil
 	w.jobSources = make(map[string]*review.JobReviewSnapshot)
 	w.jobSourcesOmitted = 0
 }
 
 func (w *dailyWorkspace) recordQueueGap(reason string) {
 	if w.observationWindow != nil {
-		w.observationWindow.Observe(&workspace.Snapshot{ObservedAt: time.Now()}, errors.New(reason))
+		snapshot := workspace.Snapshot{ObservedAt: time.Now()}
+		w.observationWindow.Observe(&snapshot, errors.New(reason))
+		if w.activityWindow != nil {
+			w.activityWindow.Observe(&snapshot, errors.New(reason))
+		}
 	}
 }
 
@@ -41,10 +48,12 @@ func (w *dailyWorkspace) observeSnapshot(snapshot *workspace.Snapshot, err error
 		w.resetObservationWindow(at)
 		if !w.snapshot.ObservedAt.IsZero() {
 			w.observationWindow.Observe(&w.snapshot, nil)
+			w.activityWindow.Observe(&w.snapshot, nil)
 		}
 	}
 	prior := w.observationWindow.LastRefreshAt
 	w.observationWindow.Observe(snapshot, err)
+	w.activityWindow.Observe(snapshot, err)
 	if w.observationWindow.LastRefreshAt.After(prior) {
 		w.retainJobSources(snapshot)
 		return true

@@ -41,6 +41,9 @@ func (c *Command) dailyWorkspaceCommand(line string) {
 		}
 		open(dailyWorkspaceQueueMode, "")
 		return
+	case activityCommand:
+		open(dailyWorkspaceActivityMode, strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), words[0])))
+		return
 	case inventoryCommand:
 		open(inventoryCommand, strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), words[0])))
 		return
