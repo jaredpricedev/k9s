@@ -17,6 +17,7 @@ import (
 )
 
 const accessFormPage = "access-question"
+const accessCommandName = "access"
 
 type accessView struct {
 	*Details
@@ -29,7 +30,7 @@ type accessView struct {
 }
 
 func (c *Command) accessCommand(line string) {
-	if strings.TrimSpace(line) != "access" {
+	if strings.TrimSpace(line) != accessCommandName {
 		c.app.Flash().Warn("Use :access to enter one explicit authorization question")
 		return
 	}
@@ -110,7 +111,7 @@ type accessFormStyles struct {
 func (s *accessFormStyles) StylesChanged(styles *config.Styles) {
 	d := styles.Dialog()
 	dialog.StyleForm(&d, s.form)
-	s.modal.SetBackgroundColor(d.BgColor.Color()).SetTextColor(d.FgColor.Color())
+	s.modal.SetDialogColors(&d)
 }
 func (v *accessView) editQuestion() {
 	if v.app.Content.Top() != v {
