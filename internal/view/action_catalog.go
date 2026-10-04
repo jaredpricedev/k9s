@@ -205,15 +205,19 @@ func workspaceActions(app *App) []ui.ActionDescriptor {
 		{"command.inventory", "Scoped inventory", inventoryCommand},
 		{"command.activity", "Scoped application activity", activityCommand},
 		{"command.connection", "Connection health", connectionCommand},
+		{"command.sessions", "Local sessions", localSessionsCommand},
 	} {
 		command := item.command
 		result = append(result, ui.ActionDescriptor{
 			ID: item.id, Label: item.label, Category: ui.ActionNavigate, Shortcut: ":" + command,
 			Discoverable: true, Handler: func(*tcell.EventKey) *tcell.EventKey {
 				c := NewCommand(app)
-				if command == connectionCommand {
+				switch command {
+				case connectionCommand:
 					c.connectionHealthCommand(command)
-				} else {
+				case localSessionsCommand:
+					c.localSessionsCommand()
+				default:
 					c.dailyWorkspaceCommand(command)
 				}
 				return nil

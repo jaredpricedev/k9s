@@ -19,6 +19,7 @@ import (
 )
 
 const rolloutRecoveryFormPage = "rollout-recovery-confirm"
+const rolloutRecoveryUnavailable = "Unavailable"
 
 func (v *rolloutReviewView) prepareRecoveryCmd(event *tcell.EventKey) *tcell.EventKey {
 	if v.cmdBuff.IsActive() || v.activeTab != rolloutRecoveryTab {
@@ -154,6 +155,11 @@ func (v *rolloutReviewView) recoveryConfirmation(title, message string, unreview
 	form.AddButton("Cancel", dismiss)
 	form.AddButton(label, func() {
 		if v.recoveryModal != modal {
+			return
+		}
+		if err := v.recoveryEligibility(); err != nil {
+			dismiss()
+			v.app.Flash().Warn(err.Error())
 			return
 		}
 		if !acknowledged {
