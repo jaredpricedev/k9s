@@ -146,7 +146,7 @@ func (m *ModalForm) Draw(screen tcell.Screen) {
 		m.bindDetailsScroll(m.form.GetButton(index))
 	}
 	columns, rows := screen.Size()
-	width, height := min(96, columns-2), min(rows-2, m.form.GetFormItemCount()*2+10)
+	width, height := min(96, columns-2), min(rows-2, max(12, m.form.GetFormItemCount()*2+10))
 	m.SetRect(max(0, (columns-width)/2), max(0, (rows-height)/2), max(1, width), max(1, height))
 	m.tooSmall = columns < MinTaskWidth || rows < 16
 	if m.tooSmall {
