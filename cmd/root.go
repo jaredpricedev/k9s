@@ -70,6 +70,10 @@ func init() {
 // Execute root command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
+		var status interface{ ExitCode() int }
+		if errors.As(err, &status) {
+			os.Exit(status.ExitCode())
+		}
 		os.Exit(1)
 	}
 }
@@ -106,6 +110,7 @@ func run(*cobra.Command, []string) (runErr error) {
 		}
 	}
 	app := view.NewApp(cfg)
+	defer app.Shutdown()
 	if app.Config.K9s.DefaultView != "" {
 		app.Config.SetActiveView(app.Config.K9s.DefaultView)
 	}
