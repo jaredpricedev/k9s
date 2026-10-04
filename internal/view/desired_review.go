@@ -253,6 +253,7 @@ func (w *desiredReviewView) makeActions() *ui.KeyActions {
 		{tcell.KeyEnter, "review.detail", "Review detail", false},
 		{ui.KeyE, "review.evidence", "Evidence / source", false},
 		{ui.KeyP, "review.server-preview", "Explicit server dry-run / admission preview", false},
+		{ui.KeyB, "review.change-set", "Open reviewed change set", false},
 		{ui.KeyR, "review.refresh", "Refresh live", false},
 		{ui.KeyN, "review.source", "Select / reload source", false},
 		{ui.KeySlash, "review.search", dailyWorkspaceSearchLabel, false},
@@ -324,6 +325,9 @@ func (w *desiredReviewView) key(e *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case e.Rune() == 'p':
 		w.confirmServerPreview()
+		return nil
+	case e.Rune() == 'b':
+		w.openChangeSet()
 		return nil
 	case e.Rune() == 'r':
 		w.refresh()

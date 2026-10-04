@@ -110,10 +110,10 @@ func (c *Command) suggestionAliases() []string {
 
 func (c *Command) updateSuggestionAliases() {
 	aliases := []string{
-		providersCommand, capacityCommandToken, "operations", "ops",
-		configurationCommand, storageCommandToken, gitopsCommandToken, jobReviewCommandToken,
-		maintenanceCommandToken, accessCommandName, taskbookCommandName, activityCommand, networkReviewCommandToken,
-		dependencyReviewCommandToken,
+		operatorCommandToken, upgradeReadinessCommand, fleetCommandToken, backupCommandToken, historyCommand, providersCommand, capacityCommandToken,
+		"operations", "ops", configurationCommand, localSessionsCommand, "local-sessions", storageCommandToken, gitopsCommandToken,
+		jobReviewCommandToken, maintenanceCommandToken, accessCommandName, taskbookCommandName,
+		activityCommand, networkReviewCommandToken, changeSetCommandToken, "security-review", dependencyReviewCommandToken,
 	}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
@@ -312,6 +312,10 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.accessCommand(p.GetLine())
 	case taskbookCommandName:
 		c.taskbookCommand(p.GetLine())
+	case fleetCommandToken:
+		c.fleetCommand(p.GetLine())
+	case backupCommandToken:
+		c.backupCommand(p.GetLine())
 	case "workspace", dailyCommand, inventoryCommand, activityCommand:
 		c.dailyWorkspaceCommand(p.GetLine())
 	case connectionCommand, "connection-health":
@@ -320,14 +324,26 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.configurationCommand()
 	case desiredReviewCommandToken:
 		c.desiredReviewCommand(p.GetLine())
+	case changeSetCommandToken:
+		c.changeSetCommand()
 	case "rollout":
 		c.rolloutReviewCommand()
 	case jobReviewCommandToken:
 		c.jobReviewCommand()
 	case "operations", "ops":
 		c.operationsCommand()
+	case localSessionsCommand, "local-sessions":
+		c.localSessionsCommand()
 	case maintenanceCommandToken:
 		c.maintenanceCommand()
+	case historyCommand:
+		c.historyReviewCommand()
+	case "security-review":
+		c.securityReviewCommand()
+	case upgradeReadinessCommand:
+		c.upgradeReadinessCommand(p.GetLine())
+	case operatorCommandToken:
+		c.operatorCommand()
 	case providersCommand:
 		c.providerCommand(p.GetLine())
 	case dependencyReviewCommandToken:

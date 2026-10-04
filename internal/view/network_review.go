@@ -145,6 +145,7 @@ func (v *networkReviewView) Init(ctx context.Context) error {
 	v.Flex.Clear().SetDirection(tview.FlexRow).AddItem(v.identityBar, 3, 0, false).AddItem(v.tabsBar, 1, 0, false).
 		AddItem(v.text, 0, 1, true).AddItem(v.footer, 1, 0, false)
 	v.bindNetworkKeys()
+	v.bindExistingSessionsKey()
 	v.render()
 	return nil
 }
@@ -438,6 +439,7 @@ func (v *networkReviewView) render() {
 			v.footer.SetText("p/t endpoint · P pair · v · ? help")
 		}
 	}
+	v.updateExistingSessionsFooter(width)
 	row, col := v.text.GetScrollOffset()
 	region := v.currentRegion
 	v.Update(body)

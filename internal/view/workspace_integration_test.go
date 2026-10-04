@@ -25,7 +25,7 @@ type disconnectedWorkspaceConnection struct{ client.Connection }
 func (*disconnectedWorkspaceConnection) CheckConnectivity() bool { return false }
 
 func TestDisconnectedWorkspaceRemainsUsableBeyondBackgroundRetryBudget(t *testing.T) {
-	for _, mode := range []string{"workspace", "connection"} {
+	for _, mode := range []string{"workspace", "connection", "security", "upgrade-readiness"} {
 		t.Run(mode, func(t *testing.T) {
 			a := NewApp(mock.NewMockConfig(t))
 			conn := &disconnectedWorkspaceConnection{Connection: mock.NewMockConnection()}
@@ -35,8 +35,12 @@ func TestDisconnectedWorkspaceRemainsUsableBeyondBackgroundRetryBudget(t *testin
 			a.Config.K9s.MaxConnRetry = 1
 			if mode == "workspace" {
 				a.Content.Push(newDailyWorkspace(a, workspace.Store{Version: 1}, "scopes", ""))
-			} else {
+			} else if mode == "security" {
+				a.Content.Push(&securityReviewView{Details: NewDetails(a, "Security", "", contentInspection, true)})
+			} else if mode == "connection" {
 				a.Content.Push(&connectionHealthDetails{Details: NewDetails(a, "Connection", "", contentInspection, true)})
+			} else {
+				a.Content.Push(&upgradeReadinessDetails{Details: NewDetails(a, "Upgrade readiness", "", contentInspection, true)})
 			}
 			owner := a.Content.Top()
 			for range 3 {
@@ -46,6 +50,9 @@ func TestDisconnectedWorkspaceRemainsUsableBeyondBackgroundRetryBudget(t *testin
 			require.Greater(t, atomic.LoadInt32(&a.conRetry), a.Config.K9s.MaxConnRetry)
 		})
 	}
+
+	security := &securityReviewView{}
+	require.True(t, retainedDisconnectedWorkspace(security), "the bounded security snapshot remains usable while browsing reconnects")
 }
 
 func (w *workspaceDiscoveryOwner) SelectedResource() SelectedResourceTarget { return w.target }
