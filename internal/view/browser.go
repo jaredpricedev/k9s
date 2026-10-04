@@ -215,6 +215,9 @@ func (*Browser) BufferChanged(_, _ string) {}
 
 // BufferCompleted indicates input was accepted.
 func (b *Browser) BufferCompleted(text, _ string) {
+	if _, err := model1.ValidateResourceFilter(text); err != nil {
+		return
+	}
 	if internal.IsLabelSelector(text) {
 		if sel, err := ui.ExtractLabelSelector(text); err == nil {
 			b.GetModel().SetLabelSelector(sel)
@@ -227,6 +230,9 @@ func (b *Browser) BufferCompleted(text, _ string) {
 // BufferActive indicates the buff activity changed.
 func (b *Browser) BufferActive(state bool, _ model.BufferKind) {
 	if state {
+		return
+	}
+	if _, err := model1.ValidateResourceFilter(b.CmdBuff().GetText()); err != nil {
 		return
 	}
 	if err := b.GetModel().Refresh(b.GetContext()); err != nil {
@@ -654,8 +660,8 @@ func (b *Browser) defaultContext() context.Context {
 	ctx := context.WithValue(context.Background(), internal.KeyFactory, b.app.factory)
 	ctx = context.WithValue(ctx, internal.KeyGVR, b.GVR())
 	ctx = context.WithValue(ctx, internal.KeyPath, b.Path)
-	if internal.IsLabelSelector(b.CmdBuff().GetText()) {
-		if sel, err := ui.ExtractLabelSelector(b.CmdBuff().GetText()); err == nil {
+	if internal.IsLabelSelector(b.CommittedFilter()) {
+		if sel, err := ui.ExtractLabelSelector(b.CommittedFilter()); err == nil {
 			ctx = context.WithValue(ctx, internal.KeyLabels, sel)
 		}
 	}

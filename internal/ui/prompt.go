@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package ui
 
@@ -79,14 +80,16 @@ type PromptModel interface {
 type Prompt struct {
 	*tview.TextView
 
-	app     *App
-	noIcons bool
-	icon    rune
-	prefix  rune
-	styles  *config.Styles
-	model   PromptModel
-	spacer  int
-	mx      sync.RWMutex
+	app             *App
+	noIcons         bool
+	icon            rune
+	prefix          rune
+	styles          *config.Styles
+	model           PromptModel
+	spacer          int
+	filterValidator func(string) (string, error)
+	filterClear     func()
+	mx              sync.RWMutex
 }
 
 // NewPrompt returns a new command view.
@@ -138,7 +141,38 @@ func (p *Prompt) SetModel(m PromptModel) {
 		p.model.RemoveListener(p)
 	}
 	p.model = m
+	p.mx.Lock()
+	p.filterValidator = nil
+	p.filterClear = nil
+	p.mx.Unlock()
+	p.SetTitle("")
 	p.model.AddListener(p)
+}
+
+// SetFilterClearHandler distinguishes an explicit clear gesture from opening a
+// replacement draft, whose empty text must retain the last committed result.
+func (p *Prompt) SetFilterClearHandler(handler func()) {
+	p.mx.Lock()
+	p.filterClear = handler
+	p.mx.Unlock()
+}
+
+func (p *Prompt) clearFilterDraft() {
+	p.mx.RLock()
+	handler := p.filterClear
+	p.mx.RUnlock()
+	if handler != nil {
+		handler()
+	}
+}
+
+// SetFilterValidator enables resource-specific inline query feedback. Other
+// prompts retain their own specialized parsers and presentation.
+func (p *Prompt) SetFilterValidator(validate func(string) (string, error)) {
+	p.mx.Lock()
+	p.filterValidator = validate
+	p.mx.Unlock()
+	p.update(p.model.GetText(), p.model.GetSuggestion())
 }
 
 func (p *Prompt) keyboard(evt *tcell.EventKey) *tcell.EventKey {
@@ -162,14 +196,25 @@ func (p *Prompt) keyboard(evt *tcell.EventKey) *tcell.EventKey {
 		}
 
 	case tcell.KeyEscape:
+		p.clearFilterDraft()
 		p.model.ClearText(true)
 		p.model.SetActive(false)
 
 	case tcell.KeyEnter, tcell.KeyCtrlE:
+		p.mx.RLock()
+		validate := p.filterValidator
+		p.mx.RUnlock()
+		if validate != nil {
+			if _, err := validate(p.model.GetText()); err != nil {
+				p.update(p.model.GetText(), "")
+				return nil
+			}
+		}
 		p.model.SetText(p.model.GetText(), "", true)
 		p.model.SetActive(false)
 
 	case tcell.KeyCtrlW, tcell.KeyCtrlU:
+		p.clearFilterDraft()
 		p.model.ClearText(true)
 
 	case tcell.KeyUp:
@@ -211,7 +256,12 @@ func (p *Prompt) activate() {
 	p.Clear()
 	p.SetCursorIndex(len(p.model.GetText()))
 	p.write(p.model.GetText(), p.model.GetSuggestion())
-	p.model.Notify(false)
+	p.mx.RLock()
+	resourceFilter := p.filterValidator != nil
+	p.mx.RUnlock()
+	if !resourceFilter {
+		p.model.Notify(false)
+	}
 }
 
 func (p *Prompt) Clear() {
@@ -238,6 +288,15 @@ func (p *Prompt) write(text, suggest string) {
 	defer p.mx.Unlock()
 
 	p.SetCursorIndex(p.spacer + len(text))
+	if p.filterValidator != nil {
+		mode, err := p.filterValidator(text)
+		p.SetTitle(" Filter · " + mode + " ")
+		text = tview.Escape(text)
+		if err != nil {
+			suggest = ""
+			text += " [" + p.styles.K9s.Frame.Status.ErrorColor.String() + "::-]  " + tview.Escape(err.Error()) + " · previous results retained[-::-]"
+		}
+	}
 	if suggest != "" {
 		text += fmt.Sprintf("[%s::-]%s", p.styles.Prompt().SuggestColor, suggest)
 	}
