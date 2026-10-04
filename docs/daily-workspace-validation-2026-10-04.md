@@ -7,15 +7,22 @@ default-branch revision `1978cb74caab53f74403e9e776d18bb2975e01e4`. It is separa
 from the earlier [daily-app validation](validation-2026-10-04.md).
 
 The native terminal journeys ran the actual application against disposable
-loopback API fixtures. The captured binary used Go 1.27.1, CGO disabled, netgo
-and `-buildvcs=false`; its SHA-256 is
+loopback API fixtures. The final daily-workspace capture uses Go 1.25.8 and
+source `a84ce5ca148da9c0904d8d8f8dae70ca9e56544d`; its binary SHA-256 is
+`38e007bc0869b219d5b0607ad11a157bc2656452938cf23802e4bd2fcb9fb048`.
+The investigation/resource/skin captures use Go 1.27.1 and functional source
+`54c21d80c90b57cbbb8da826c9b9f9fb3f789aa6`; their binary SHA-256 is
 `13fc62a7137598f8e3d34590d49e2abbf7a8d57970d1d061f96270610ae86c6c`.
+Both builds disable CGO, use netgo and `-buildvcs=false`. The manifests retain
+which binary ran each journey. Later formatting and documentation commits do
+not replace these recorded source identities.
 These checks establish fixture behavior and emitted terminal cells. They do not
 establish live-provider compatibility or human usability targets.
 
 | Check | Observed result |
 | --- | --- |
-| Complete CGO-disabled Go suite, Go 1.27.1 | Passed |
+| Complete CGO-disabled Go suite, Go 1.25.8 and Go 1.27.1 | Passed |
+| Pinned golangci-lint v2.6.2 with Go 1.25.8 | Passed; zero issues |
 | CGO-enabled race checks in client/model/dao/ui/view/inspect/logstream/hubble/workspace | Passed |
 | Strict daily-workspace native journey | Passed; 21 captures, including 80×24 resize and app restart |
 | Investigation navigation, search and retained failure | Passed at 80×24 and 120×34 |
@@ -51,6 +58,10 @@ See [the evidence index](evidence/daily-workspace-toolkit-2026-10-04/README.md)
 and [usage guide](daily-workspace.md). Reproduce with the repository's versions
 from `go.mod` and `.github/workflows/lint.yml`, plus
 `scripts/terminal-requirements.txt`:
+
+Local lint additionally set `GOFLAGS='-p=4 -buildvcs=false'` to avoid restricted
+Git metadata access. Its first cold dependency load exceeded the five-minute
+timeout; the completed cached run uses the repository's normal lint rules.
 
 ```sh
 go test ./...

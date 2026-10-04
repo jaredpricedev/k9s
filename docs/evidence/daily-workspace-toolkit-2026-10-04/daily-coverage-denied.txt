@@ -3,7 +3,7 @@
 ┌────────────────────────────────────────────────── Daily workspace ───────────────────────────────────────────────────┐
 │daily · demo-dev · apps, ops                                                                                          │
 │Selector: app=daily · Kinds: pods, deployments, jobs, cronjobs, resourcequotas, certificates, ingresses               │
-│7 resources · 8 findings · 12 covered reads · 2 coverage gaps · Observed 04:52:47 (4s ago)                            │
+│7 resources · 8 findings · 12 covered reads · 2 coverage gaps · Observed 05:08:14 (4s ago)                            │
 │Partial observation: 2 coverage gaps. Successful reads updated; see Coverage for reasons.                             │
 │STATE    KIND / API                      NAMESPACE DETAIL                                                             │
 │complete v1/pods                         apps      Current resource state observed                                    │

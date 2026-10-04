@@ -13,7 +13,7 @@ the captured terminal cells; matching text files preserve their contents.
 - [80×24 investigation](investigation-native-80x24.png) · [cells](investigation-native-80x24.txt)
 - [Workspace manifest](workspace-manifest.json) and [request journal](request-journal.json)
 - [Investigation manifest](investigation-manifest.json), [skin manifest](skins-manifest.json) and [resource journeys](resource-journeys.json)
-- [Complete Go suite](go-tests.txt) and [view race checks](view-race.txt)
+- [Complete Go 1.25 suite](go125-tests.txt), [Go 1.27 suite](go-tests.txt), [pinned lint](lint.txt) and [view race checks](view-race.txt)
 
 The manifests identify the immutable binary SHA-256 and assertions. The
 workspace manifest lists all 21 captures; this directory retains a small

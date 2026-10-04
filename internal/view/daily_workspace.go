@@ -320,7 +320,10 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 		}
 		return nil
 	case strings.ContainsRune("12345", e.Rune()) && e.Rune() != 0:
-		w.setMode(map[rune]string{'1': dailyWorkspaceQueueMode, '2': inventoryCommand, '3': dailyWorkspaceCoverageMode, '4': dailyWorkspacePinsMode, '5': dailyWorkspaceScopesMode}[e.Rune()])
+		w.setMode(map[rune]string{
+			'1': dailyWorkspaceQueueMode, '2': inventoryCommand, '3': dailyWorkspaceCoverageMode,
+			'4': dailyWorkspacePinsMode, '5': dailyWorkspaceScopesMode,
+		}[e.Rune()])
 		return nil
 	}
 	return e
