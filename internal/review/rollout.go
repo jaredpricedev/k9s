@@ -32,20 +32,25 @@ const (
 	RolloutNotExecuted  = "not executed"
 )
 
-// RolloutSnapshot is retained API evidence for one native Deployment. Counts
+// RolloutSnapshot is retained API evidence for one native rollout controller. Counts
 // remain optional: absent status fields are never converted into measured zero.
 type RolloutSnapshot struct {
-	Identity                                     inspect.ResourceIdentity
-	CapturedAt                                   time.Time
-	DeploymentState                              string
-	Generation, ObservedGeneration               *int64
-	Desired, Updated, Ready, Available, Replicas *int64
-	Paused                                       bool
-	Conditions                                   []RolloutCondition
-	Revisions                                    []RolloutRevision
-	Pods                                         []RolloutPod
-	Coverage                                     []RolloutCoverage
-	DeploymentTemplate                           inspect.Observation
+	Identity                                        inspect.ResourceIdentity
+	Kind, Strategy, CurrentRevision, UpdateRevision string
+	Partition, StartOrdinal                         *int64
+	TemplateSHA256, ResourceVersion                 string
+	Configuration                                   []RolloutConfiguration
+	CapturedAt                                      time.Time
+	DeploymentState                                 string
+	Generation, ObservedGeneration                  *int64
+	Desired, Updated, Ready, Available, Replicas    *int64
+	Misscheduled                                    *int64
+	Paused                                          bool
+	Conditions                                      []RolloutCondition
+	Revisions                                       []RolloutRevision
+	Pods                                            []RolloutPod
+	Coverage                                        []RolloutCoverage
+	DeploymentTemplate                              inspect.Observation
 }
 
 type RolloutCondition struct {
@@ -57,16 +62,18 @@ type RolloutCondition struct {
 // after removing only pod-template-hash. Multiple revisions can match; neither
 // revision number nor creation time establishes the controller's chosen RS.
 type RolloutRevision struct {
-	Identity                   inspect.ResourceIdentity
-	Revision                   string
-	Current, CurrentKnown      bool
-	Replicas, Ready, Available *int64
-	Template                   inspect.Observation
+	Identity                        inspect.ResourceIdentity
+	Revision                        string
+	Current, CurrentKnown           bool
+	Replicas, Ready, Available      *int64
+	Template                        inspect.Observation
+	TemplateSHA256, ResourceVersion string
 }
 
 type RolloutPod struct {
 	Identity             inspect.ResourceIdentity
 	ReplicaSetUID, Phase string
+	OwnerKind, OwnerUID  string
 	Images               []RolloutContainerImage
 }
 
@@ -94,6 +101,10 @@ func NewRolloutSnapshot(
 	deployment *unstructured.Unstructured, replicaSets, pods []*unstructured.Unstructured,
 	coverage []RolloutCoverage, contextName string, at time.Time,
 ) *RolloutSnapshot {
+	if deployment != nil && deployment.GetAPIVersion() == rolloutAppsAPI &&
+		(deployment.GetKind() == rolloutStatefulSet || deployment.GetKind() == rolloutDaemonSet) {
+		return newControllerRollout(deployment, replicaSets, pods, coverage, contextName, at)
+	}
 	s := &RolloutSnapshot{CapturedAt: at, DeploymentState: inspect.ObservationUnknown}
 	for _, c := range coverage {
 		s.Coverage = append(s.Coverage, RolloutCoverage{Source: rolloutText(c.Source), State: rolloutText(c.State), Detail: rolloutText(c.Detail)})
@@ -108,6 +119,10 @@ func NewRolloutSnapshot(
 		return s
 	}
 	s.DeploymentState = inspect.ObservationComplete
+	s.Kind = rolloutDeployment
+	s.ResourceVersion = deployment.GetResourceVersion()
+	s.TemplateSHA256 = rolloutTemplateDigest(deployment)
+	s.Configuration = rolloutConfiguration(deployment)
 	s.Generation = rolloutNumber(deployment.Object, "metadata", "generation")
 	s.ObservedGeneration = rolloutNumber(deployment.Object, "status", "observedGeneration")
 	s.Desired = rolloutNumber(deployment.Object, "spec", "replicas")
@@ -122,15 +137,19 @@ func NewRolloutSnapshot(
 		s.addCoverage("identity", inspect.ObservationUnknown, "Deployment UID missing; continuity and descendant ownership cannot be established")
 		return s
 	}
+	s.addCoverage("Configuration revisions", inspect.ObservationUnknown, "Declared references/checksum metadata only; live ConfigMap/Secret revisions are not collected")
 	s.addRevisions(deployment, replicaSets, contextName)
 	s.addPods(pods, contextName)
 	return s
 }
 
-// Progress describes the selected Deployment's retained status. It does not
+// Progress describes the selected controller's retained status. It does not
 // establish Pod health, service availability, historical progress or the
 // outcome of any accepted write. Child coverage stays independently visible.
 func (s *RolloutSnapshot) Progress() (state, reason string) {
+	if s != nil && (s.Kind == rolloutStatefulSet || s.Kind == rolloutDaemonSet) {
+		return s.controllerProgress()
+	}
 	if s == nil || s.DeploymentState != inspect.ObservationComplete || s.Identity.UID == "" {
 		return RolloutUnknown, "Deployment identity or API observation is unavailable"
 	}
@@ -187,6 +206,7 @@ func (s *RolloutSnapshot) addRevisions(deployment *unstructured.Unstructured, ob
 			Replicas: rolloutNumber(object.Object, "status", "replicas"), Ready: rolloutNumber(object.Object, "status", "readyReplicas"),
 			Available: rolloutNumber(object.Object, "status", "availableReplicas"), Template: rolloutTemplateObservation(object, identity, s.CapturedAt, true)}
 		r.Current, r.CurrentKnown = rolloutTemplatesMatch(deployment, object)
+		r.TemplateSHA256, r.ResourceVersion = rolloutTemplateDigest(object), object.GetResourceVersion()
 		s.Revisions = append(s.Revisions, r)
 	}
 	sort.Slice(s.Revisions, func(i, j int) bool { return s.Revisions[i].Identity.Name < s.Revisions[j].Identity.Name })
@@ -256,7 +276,7 @@ func (s *RolloutSnapshot) addPods(objects []*unstructured.Unstructured, contextN
 			continue
 		}
 		phase, _, _ := unstructured.NestedString(object.Object, "status", "phase")
-		s.Pods = append(s.Pods, RolloutPod{Identity: rolloutIdentity(object, contextName, "v1/pods"), ReplicaSetUID: owner,
+		s.Pods = append(s.Pods, RolloutPod{Identity: rolloutIdentity(object, contextName, "v1/pods"), ReplicaSetUID: owner, OwnerKind: rolloutReplicaSet, OwnerUID: owner,
 			Phase: rolloutText(phase), Images: rolloutImages(object)})
 	}
 	sort.Slice(s.Pods, func(i, j int) bool { return s.Pods[i].Identity.Name < s.Pods[j].Identity.Name })
@@ -271,12 +291,12 @@ func (s *RolloutSnapshot) addPods(objects []*unstructured.Unstructured, contextN
 // dry-run or a complete reconstruction of kubectl's annotation changes.
 func RolloutRecoveryPreview(s *RolloutSnapshot, revisionUID string) RolloutRecovery {
 	preview := RolloutRecovery{State: RolloutNotExecuted, Reason: "No rollback submitted", Limits: []string{
-		"Read-only pod-template comparison; Deployment annotation replacement is not modeled",
+		"Read-only pod-template comparison; controller metadata replacement is not modeled",
 		"Admission, defaulting, apply conflicts and controller outcomes were not evaluated",
 		"Sensitive fields, args and commands are redacted; omitted differences remain unreviewed",
 	}}
 	if s == nil || s.Identity.UID == "" || revisionUID == "" {
-		preview.Reason = "Selected Deployment and revision UIDs are required; no rollback submitted"
+		preview.Reason = "Selected workload and revision UIDs are required; no rollback submitted"
 		return preview
 	}
 	for index := range s.Revisions {

@@ -78,7 +78,8 @@ guarantee confidentiality for arbitrary configuration content.
 Select a native `apps/v1` Deployment, then open `:rollout` or the Deployment
 rollout review action. Its context, namespace, name and UID are captured before
 the read. The retained observation separates API progress from child collection
-coverage.
+coverage. Native StatefulSet/DaemonSet review and explicit bounded outcome
+following are covered in [Rollout observations and outcomes](rollout-outcomes.md).
 
 | Tab | Retained evidence |
 | --- | --- |
