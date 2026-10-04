@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,7 +14,11 @@ import (
 	"github.com/derailed/k9s/internal/config/mock"
 	"github.com/derailed/k9s/internal/configreview"
 	"github.com/derailed/k9s/internal/inspect"
+	"github.com/derailed/k9s/internal/model"
 	"github.com/derailed/k9s/internal/ui"
+	"github.com/derailed/k9s/internal/watch"
+	"github.com/derailed/tcell/v2"
+	"github.com/derailed/tview"
 	"github.com/stretchr/testify/require"
 )
 
@@ -106,4 +111,49 @@ func TestConfigurationScopeRejectsSyntheticClusterWideAndUnknownUIDTargets(t *te
 		_, err := configurationScope(target)
 		require.Error(t, err)
 	}
+}
+
+func TestConfigurationDisconnectRetainsCaptureAndNativeControlsBeyondRetryBudget(t *testing.T) {
+	v := configurationViewFixture(t)
+	a := v.app
+	conn := &disconnectedWorkspaceConnection{Connection: mock.NewMockConnection()}
+	a.Config.SetConnection(conn)
+	a.factory = watch.NewFactory(conn)
+	a.clusterModel = model.NewClusterInfo(a.factory, "test", a.Config.K9s)
+	a.Config.K9s.MaxConnRetry = 1
+	a.Content.Push(v)
+	v.Start()
+	v.selectTab(1)
+	v.BufferCompleted("declared key", "")
+	v.text.ScrollTo(2, 1)
+	snapshot := v.snapshot
+	pending, cancel := context.WithCancel(t.Context())
+	v.cancel, v.loading, v.generation = cancel, true, 7
+	defer cancel()
+	for range 3 {
+		require.NoError(t, a.refreshCluster(t.Context()))
+	}
+	require.Greater(t, atomic.LoadInt32(&a.conRetry), a.Config.K9s.MaxConnRetry)
+	require.Same(t, v, a.Content.Top())
+	require.Same(t, snapshot, v.snapshot)
+	require.True(t, v.active)
+	require.True(t, v.loading)
+	require.EqualValues(t, 7, v.generation, "connectivity polling must not call view Stop/Start")
+	require.NoError(t, pending.Err(), "the background poller must not cancel explicit collection")
+	require.Equal(t, "declared key", v.inspectionQuery)
+	row, col := v.text.GetScrollOffset()
+	require.Equal(t, 2, row)
+	require.Equal(t, 1, col)
+	a.connectivityComponent(v, true)
+	require.EqualValues(t, 7, v.generation)
+	v.InputHandler()(tcell.NewEventKey(tcell.KeyRune, '5', tcell.ModNone), func(p tview.Primitive) { a.SetFocus(p) })
+	require.Equal(t, 4, v.activeTab)
+	frame := drawnText(t, v, 80, 24)
+	require.Contains(t, frame, "CAPTURED SOURCE")
+	require.Contains(t, frame, "pod-uid")
+	require.Contains(t, frame, "12:00:00Z")
+	require.Contains(t, frame, "Esc back")
+	frame = drawnText(t, v, 40, 16)
+	require.Contains(t, frame, "Evidence")
+	require.Contains(t, frame, "CAPTURED SOURCE")
 }

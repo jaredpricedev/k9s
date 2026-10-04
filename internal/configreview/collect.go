@@ -6,6 +6,7 @@ package configreview
 import (
 	"context"
 	"errors"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -124,7 +125,7 @@ func (c *collector) source(ctx context.Context) error {
 		}
 		metadata, err := c.readers.Secrets(ctx, id.Namespace, id.Name)
 		if err != nil {
-			state, _ := readState(err)
+			state, _ := readState(err, r.gvr.GroupResource(), id.Name)
 			return errors.New("captured Secret metadata " + state + "; no full-object fallback")
 		}
 		if metadata == nil || string(metadata.UID) != id.UID || metadata.Namespace != id.Namespace || metadata.Name != id.Name {
@@ -138,7 +139,7 @@ func (c *collector) source(ctx context.Context) error {
 		}
 		object, err := c.readers.Objects.Resource(r.gvr).Namespace(id.Namespace).Get(ctx, id.Name, metav1.GetOptions{})
 		if err != nil {
-			state, _ := readState(err)
+			state, _ := readState(err, r.gvr.GroupResource(), id.Name)
 			return errors.New("captured source " + state + "; retained evidence unchanged")
 		}
 		if !matches(object, &id, &r) {
@@ -285,7 +286,11 @@ func (c *collector) configurations(ctx context.Context) {
 			}
 		}
 		if err != nil {
-			object.State, object.Reason = readState(err)
+			resourceName := "configmaps"
+			if kind == SecretKind {
+				resourceName = "secrets"
+			}
+			object.State, object.Reason = readState(err, schema.GroupResource{Resource: resourceName}, name)
 		}
 		c.snapshot.Objects = append(c.snapshot.Objects, object)
 		if object.State != Present {
@@ -372,9 +377,16 @@ func (c *collector) partial(source, detail string) {
 	c.coverage(source, inspect.ObservationIncomplete, detail)
 }
 
-func readState(err error) (state, reason string) {
-	if apierrors.IsNotFound(err) {
-		return Missing, "Named object not found at this observation"
+func readState(err error, expected schema.GroupResource, name string) (state, reason string) {
+	// client-go also synthesizes NotFound for proxy/plain HTTP 404 responses.
+	// Only a verified named-object status establishes absence in this review.
+	var apiStatus apierrors.APIStatus
+	if apierrors.IsNotFound(err) && !apierrors.IsUnexpectedServerError(err) && errors.As(err, &apiStatus) {
+		status := apiStatus.Status()
+		if status.Code == http.StatusNotFound && status.Reason == metav1.StatusReasonNotFound && status.Details != nil &&
+			status.Details.Name == name && status.Details.Kind == expected.Resource && status.Details.Group == expected.Group {
+			return Missing, "Named object not found at this observation"
+		}
 	}
 	if apierrors.IsForbidden(err) || apierrors.IsUnauthorized(err) {
 		return Denied, "Named read denied; key existence and runtime use remain unknown"
