@@ -5,20 +5,26 @@ package fleet
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
 	fake "k8s.io/client-go/dynamic/fake"
+	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/rest"
 	kt "k8s.io/client-go/testing"
 )
 
@@ -200,4 +206,48 @@ func TestBoundedFieldsAndMissingStatus(t *testing.T) {
 	require.Equal(t, "declared image (template)", facts[1].Category)
 	require.Len(t, []rune(clean(strings.Repeat("x", 1000))), 512)
 	require.NotContains(t, clean("image\x1b[31m\n"), "\x1b")
+}
+
+// The real typed decoder clears TypeMeta; metadata still proves this exact read.
+func TestTypedNamespaceHTTPIdentity(t *testing.T) {
+	for _, namespace := range []string{"", "wrong"} {
+		t.Run("namespace="+namespace, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.URL.Path == "/api/v1/namespaces/apps" {
+					_, _ = fmt.Fprintf(w, `{"apiVersion":"v1","kind":"Namespace","metadata":{"name":"apps","namespace":%q,"uid":"namespace-uid"}}`, namespace)
+					return
+				}
+				if r.URL.Path == "/apis/apps/v1/namespaces/apps/deployments/api" {
+					_, _ = w.Write([]byte(`{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"api","namespace":"apps","uid":"primary-uid"}}`))
+					return
+				}
+				w.WriteHeader(http.StatusNotFound)
+			}))
+			defer server.Close()
+			cfg := &rest.Config{Host: server.URL}
+			dyn, err := dynamic.NewForConfig(cfg)
+			require.NoError(t, err)
+			core, err := typedcorev1.NewForConfig(cfg)
+			require.NoError(t, err)
+			get := func(ctx context.Context, name string) (*corev1.Namespace, error) {
+				return core.Namespaces().Get(ctx, name, metav1.GetOptions{})
+			}
+			ns, err := get(t.Context(), "apps")
+			require.NoError(t, err)
+			require.Empty(t, ns.APIVersion)
+			require.Empty(t, ns.Kind)
+			snapshot, err := Collect(t.Context(), fleetScope(), func(context.Context, string) (Actor, error) {
+				return Actor{Reader: dyn, NamespaceGet: get, Authority: server.URL}, nil
+			})
+			require.NoError(t, err)
+			if namespace == "" {
+				require.Equal(t, types.UID("namespace-uid"), snapshot.Observations[0].NamespaceUID)
+				require.True(t, snapshot.MayAlias())
+			} else {
+				require.Empty(t, snapshot.Observations[0].NamespaceUID)
+				require.False(t, snapshot.MayAlias())
+			}
+		})
+	}
 }

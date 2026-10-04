@@ -14,7 +14,10 @@ import (
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
 	"github.com/mattn/go-runewidth"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
+	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
 const fleetCommandToken = "fleet"
@@ -98,7 +101,16 @@ func fleetActorFactory(cfg *client.Config, scope *fleet.Scope) fleet.Factory {
 		}
 		restConfig.Timeout = fleet.ReadTimeout
 		reader, err := dynamic.NewForConfig(restConfig)
-		return fleet.Actor{Reader: reader, Authority: restConfig.Host}, err
+		if err != nil {
+			return fleet.Actor{}, err
+		}
+		core, err := typedcorev1.NewForConfig(restConfig)
+		if err != nil {
+			return fleet.Actor{}, err
+		}
+		return fleet.Actor{Reader: reader, Authority: restConfig.Host, NamespaceGet: func(ctx context.Context, name string) (*corev1.Namespace, error) {
+			return core.Namespaces().Get(ctx, name, metav1.GetOptions{})
+		}}, nil
 	}
 }
 
@@ -248,7 +260,7 @@ func (v *fleetWorkspace) chrome() {
 		state = v.failure
 	}
 	if !v.destinationCurrent() {
-		state = "Retained | destination changed; reopen"
+		state = retainedDestinationChanged
 	}
 	lines := []string{"Fleet facts / " + v.target.Path(), v.scope.Contexts[0] + " <> " + v.scope.Contexts[1], state}
 	for i, line := range lines {

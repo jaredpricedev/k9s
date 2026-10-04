@@ -12,11 +12,13 @@ import (
 	"time"
 	"unicode"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/dynamic"
 )
 
@@ -35,8 +37,9 @@ type Scope struct {
 	PrimaryUID      types.UID
 }
 type Actor struct {
-	Reader    dynamic.Interface
-	Authority string
+	Reader       dynamic.Interface
+	NamespaceGet func(context.Context, string) (*corev1.Namespace, error)
+	Authority    string
 }
 type Factory func(context.Context, string) (Actor, error)
 type Fact struct{ Category, Name, Value string }
@@ -59,7 +62,7 @@ func (s *Scope) Validate() error {
 	if s.Contexts[0] == "" || s.Contexts[1] == "" || s.Contexts[0] == s.Contexts[1] {
 		return fmt.Errorf("name exactly two distinct contexts")
 	}
-	if s.Namespace == "" || s.Name == "" {
+	if len(validation.IsDNS1123Label(s.Namespace)) != 0 || len(validation.IsDNS1123Subdomain(s.Name)) != 0 {
 		return fmt.Errorf("explicit namespace and name required")
 	}
 	switch s.GVR {
@@ -153,7 +156,7 @@ func collectContext(parent context.Context, scope *Scope, index int, name string
 		return o
 	}
 	expectedKind := map[string]string{"deployments": "Deployment", "statefulsets": "StatefulSet", "daemonsets": "DaemonSet", "jobs": "Job"}[scope.GVR.Resource]
-	if obj.GetAPIVersion() != scope.GVR.GroupVersion().String() || obj.GetKind() != expectedKind ||
+	if obj == nil || obj.GetAPIVersion() != scope.GVR.GroupVersion().String() || obj.GetKind() != expectedKind ||
 		obj.GetName() != scope.Name || obj.GetNamespace() != scope.Namespace || obj.GetUID() == "" || len(obj.GetUID()) > 128 {
 		o.State = "unexpected object identity"
 		return o
@@ -170,12 +173,20 @@ func collectContext(parent context.Context, scope *Scope, index int, name string
 	}
 	if ctx.Err() == nil {
 		read, c = context.WithTimeout(ctx, ReadTimeout)
-		ns, e := actor.Reader.Resource(schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}).Get(read, scope.Namespace, metav1.GetOptions{})
-		c()
-		if e == nil && ns.GetAPIVersion() == "v1" && ns.GetKind() == "Namespace" &&
-			ns.GetName() == scope.Namespace && ns.GetNamespace() == "" && ns.GetUID() != "" && len(ns.GetUID()) <= 128 {
-			o.NamespaceUID = ns.GetUID()
+		if actor.NamespaceGet != nil {
+			ns, e := actor.NamespaceGet(read, scope.Namespace)
+			// Typed decoding establishes the schema and can clear TypeMeta.
+			if e == nil && ns != nil && ns.Name == scope.Namespace && ns.Namespace == "" && ns.UID != "" && len(ns.UID) <= 128 {
+				o.NamespaceUID = ns.UID
+			}
+		} else {
+			ns, e := actor.Reader.Resource(schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}).Get(read, scope.Namespace, metav1.GetOptions{})
+			if e == nil && ns != nil && ns.GetAPIVersion() == "v1" && ns.GetKind() == "Namespace" &&
+				ns.GetName() == scope.Namespace && ns.GetNamespace() == "" && ns.GetUID() != "" && len(ns.GetUID()) <= 128 {
+				o.NamespaceUID = ns.GetUID()
+			}
 		}
+		c()
 	}
 	return o
 }
