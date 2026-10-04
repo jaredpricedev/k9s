@@ -14,6 +14,8 @@ import (
 	"github.com/derailed/tview"
 )
 
+const jobReviewIdleMarker, jobReviewSelectedMarker = "  ", "> "
+
 func (v *jobReviewView) render() {
 	if v.identityBar == nil {
 		return
@@ -171,9 +173,9 @@ func jobReviewRuns(s *review.JobReviewSnapshot, selected, width, rows int) strin
 	fmt.Fprintln(&b, tableRow([]string{"JOB", "OUTCOME"}, columns))
 	for index := start; index < min(len(s.Runs), start+limit); index++ {
 		run := &s.Runs[index]
-		marker := "  "
+		marker := jobReviewIdleMarker
 		if index == selected {
-			marker = "> "
+			marker = jobReviewSelectedMarker
 		}
 		state, _ := run.Outcome()
 		fmt.Fprintln(&b, tableRow([]string{marker + run.Identity.Name, state}, columns))
@@ -201,9 +203,9 @@ func jobReviewPods(s *review.JobReviewSnapshot, selected, width, rows int) strin
 	fmt.Fprintln(&b, tableRow([]string{"POD", "PHASE"}, columns))
 	for index := start; index < min(len(s.Pods), start+limit); index++ {
 		pod := &s.Pods[index]
-		marker := "  "
+		marker := jobReviewIdleMarker
 		if index == selected {
-			marker = "> "
+			marker = jobReviewSelectedMarker
 		}
 		fmt.Fprintln(&b, tableRow([]string{marker + pod.Identity.Name, rolloutKnown(pod.Phase)}, columns))
 	}
