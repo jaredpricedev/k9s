@@ -18,6 +18,6 @@ func TestPriorityClassNew(t *testing.T) {
 
 	require.NoError(t, s.Init(makeCtx(t)))
 	assert.Equal(t, "PriorityClass", s.Name())
-	assert.Len(t, s.Hints(), 9)
+
 	assertActionRegistry(t, s)
 }

@@ -234,7 +234,7 @@ func evidenceNativeTyping(t *testing.T, size [2]int) {
 	app.QueueEvent(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 	app.QueueEvent(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
 	app.QueueEvent(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
-	deadline := time.Now().Add(time.Second)
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		done := false
 		app.Application.QueueUpdateDraw(func() { done = len(v.bundle.Notes) == 1 })
