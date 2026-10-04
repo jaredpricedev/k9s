@@ -56,7 +56,7 @@ type changeSetView struct {
 func (c *Command) changeSetCommand() {
 	w, ok := c.app.Content.Top().(*desiredReviewView)
 	if !ok {
-		c.app.Flash().Warn("Open :desired with a retained manifest or @source profile, then use b or :changeset")
+		c.app.Flash().Warn("Open :" + desiredReviewCommandToken + " with a retained manifest or @source profile, then use b or :changeset")
 		return
 	}
 	w.openChangeSet()

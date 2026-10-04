@@ -1,6 +1,6 @@
 # Reviewed change sets
 
-Open `:desired /absolute/path/to/manifests.yaml` or an explicitly configured `@source-profile.yaml`. Press `b` (or `:changeset` while in desired review) to open a retained change set. Opening or drawing this view does not invoke admission, a renderer, Git, or a persisted write.
+Open `:review /absolute/path/to/manifests.yaml` or `:review @source-profile.yaml` for an explicitly configured source. Press `b` (or `:changeset` while in desired review) to open a retained change set. Opening or drawing this view does not invoke admission, a renderer, Git, or a persisted write.
 
 1. Press `p` and explicitly confirm the server preview. The default button is Cancel. Eligible targets receive strict `dryRun=All` create or server-side apply requests using the same `k9plus-change-set` field manager as eventual execution. Force is never requested.
 2. Review Plan, Changes, Ownership and Evidence. The plan shows captured context, source digest, namespace/kind selection, per-target UID/resourceVersion/generation or verified named absence, admission changes and omitted fields. Incomplete projections, excluded Secrets, denied reads, ambiguous ownership and cluster-scoped resources remain visible and cannot execute.
