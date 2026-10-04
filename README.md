@@ -60,7 +60,8 @@ faults from previous terminations and retained events. See the
 Use `:review /absolute/path/manifest.yaml` for a retained local source compared
 with named live targets. Select a Deployment and open `:rollout` for generation,
 replica counts, owned revisions, runtime image IDs and an explicit recovery
-template preview. Both workflows are read-only; see
+template preview. These screens start with review; guarded writes require their
+own explicit confirmation and honor read-only mode and RBAC. See
 [change and release review](docs/change-release-review.md) for scope and fidelity.
 
 Start in read-only mode and choose your destination:
@@ -86,6 +87,10 @@ and [Hubble measurements](docs/hubble-performance-2026-10-04.md).
 | --- | --- |
 | Browse pods / deployments / logs | `:pods`, `:deployments`, `l` |
 | Saved scopes / daily queue / scoped search | `:workspace` / `:daily` / `:inventory` |
+| Application activity / reviewed changes | `:activity` / `:review /path/to/manifest.yaml`, then `b` or `:changeset` |
+| Scheduled job review | `:job-review` |
+| Access, capacity, storage, node maintenance | `:access`, `:capacity`, `:storage`; select a Node then `:maintenance` or `o` |
+| Network path / task handoff | Select a Service then `:network-review`; `:taskbook save` / `:taskbook open` |
 | Connection checks and session reconnect | `:connection`, then `r` to retry checks or `R` to reconnect the same context while retaining workspace/navigation |
 | Owned port-forwards / shells / plugins | `:sessions`, then `Enter` for lifecycle details, `r` for local state or `c` to stop the selected owned session |
 | Combined Flux dashboard | `:flux all` |
@@ -101,6 +106,32 @@ and [Hubble measurements](docs/hubble-performance-2026-10-04.md).
 | Capture / open offline evidence | `:evidence` / `:evidence-open /absolute/path.json` |
 | Related resources / full status | `g` / `i` in supported views |
 | Help / command prompt / quit | `?` / `:` / `:quit` |
+
+Guides: [application activity](docs/application-activity.md),
+[reviewed changes](docs/reviewed-change-sets.md), [scheduled jobs](docs/job-review.md),
+[access](docs/toolkit/access-review.md), [capacity](docs/capacity-review.md),
+[storage](docs/storage-review.md), [node maintenance](docs/node-maintenance.md),
+[network paths](docs/network-path-review.md), and
+[task handoffs](docs/toolkit/task-handoffs.md).
+
+Optional review tools open only when requested. `:fleet peer-context` compares
+explicitly selected contexts without discovering contexts or proving cluster
+identity; `:upgrade-readiness` compares reported versions and images, not
+compatibility; `:security-review` summarizes declared facts, not scanner or
+admission results; `:backup-review <controller-namespace>` reviews bounded
+Velero metadata, not recoverability; and `:history-review` runs bounded queries
+for the selected Pod against an explicitly configured Prometheus endpoint, not
+complete or UID-continuous history. Select a cert-manager Certificate and use
+`:operator-review` for bounded Certificate/Issuer evidence, not independent TLS
+verification; select a Service and use `:dependency-review` or Network review's
+`d` / Edges tab to inspect retained relationships, not prove dependency or health.
+See [fleet workspace](docs/fleet-workspace.md),
+[upgrade readiness](docs/upgrade-readiness.md),
+[security review](docs/security-declaration-review.md),
+[backup review](docs/backup-review.md), and
+[historical observability](docs/historical-observability.md),
+[operator review](docs/operator-review.md), and
+[dependency evidence review](docs/dependency-evidence-review.md).
 
 Native write actions honor read-only mode and Kubernetes RBAC. Flux and
 cert-manager views require the corresponding CRDs; the rest of the app works
