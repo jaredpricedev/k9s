@@ -110,8 +110,10 @@ func (c *Command) suggestionAliases() []string {
 
 func (c *Command) updateSuggestionAliases() {
 	aliases := []string{
-		upgradeReadinessCommand, providersCommand, capacityCommandToken, "operations", "ops", configurationCommand,
-		storageCommandToken, gitopsCommandToken, jobReviewCommandToken, maintenanceCommandToken, accessCommandName, taskbookCommandName,
+		upgradeReadinessCommand, fleetCommandToken, providersCommand, capacityCommandToken, "operations", "ops", configurationCommand,
+		localSessionsCommand, "local-sessions", storageCommandToken, gitopsCommandToken,
+		jobReviewCommandToken, maintenanceCommandToken, accessCommandName, taskbookCommandName,
+		activityCommand, networkReviewCommandToken, changeSetCommandToken,
 	}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
@@ -310,7 +312,9 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.accessCommand(p.GetLine())
 	case taskbookCommandName:
 		c.taskbookCommand(p.GetLine())
-	case "workspace", dailyCommand, inventoryCommand:
+	case fleetCommandToken:
+		c.fleetCommand(p.GetLine())
+	case "workspace", dailyCommand, inventoryCommand, activityCommand:
 		c.dailyWorkspaceCommand(p.GetLine())
 	case connectionCommand, "connection-health":
 		c.connectionHealthCommand(p.GetLine())
@@ -318,18 +322,24 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.configurationCommand()
 	case desiredReviewCommandToken:
 		c.desiredReviewCommand(p.GetLine())
+	case changeSetCommandToken:
+		c.changeSetCommand()
 	case "rollout":
 		c.rolloutReviewCommand()
 	case jobReviewCommandToken:
 		c.jobReviewCommand()
 	case "operations", "ops":
 		c.operationsCommand()
+	case localSessionsCommand, "local-sessions":
+		c.localSessionsCommand()
 	case maintenanceCommandToken:
 		c.maintenanceCommand()
 	case upgradeReadinessCommand:
 		c.upgradeReadinessCommand(p.GetLine())
 	case providersCommand:
 		c.providerCommand(p.GetLine())
+	case networkReviewCommandToken:
+		c.networkReviewCommand(p.GetLine())
 	case gitopsCommandToken:
 		c.gitopsCommand(p.GetLine())
 	default:

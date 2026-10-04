@@ -115,8 +115,9 @@ func gotoCmd(r Runner, cmd, path string, clearStack bool) ui.ActionHandler {
 }
 
 func pluginActions(r Runner, aa *ui.KeyActions) error {
-	// Skip plugin loading if no valid connection
-	if r.App().Conn() == nil || !r.App().Conn().ConnectionOK() {
+	// Static action discovery does not depend on a coarse connection-health
+	// flag. Explicit launches independently preflight their captured actor.
+	if r.App().Conn() == nil {
 		return nil
 	}
 
@@ -173,7 +174,8 @@ func bindPluginAction(r Runner, aa *ui.KeyActions, name string, key tcell.Key, p
 		slog.Debug("Plugin overrode action shortcut", slogs.Plugin, name, slogs.Key, plugin.ShortCut)
 	}
 	aa.Add(key, ui.NewKeyActionWithOpts(plugin.Description, pluginAction(r, plugin), ui.ActionOpts{
-		Visible: true, Plugin: true, Dangerous: plugin.Dangerous,
+		Visible: true, Plugin: true,
+		Dangerous: plugin.Dangerous || len(pluginDebugCommands(plugin.Command, plugin.Args, plugin.Pipes)) > 0,
 	}))
 	return nil
 }

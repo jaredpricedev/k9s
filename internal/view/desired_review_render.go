@@ -314,7 +314,7 @@ func (w *desiredReviewView) reviewWidth() int {
 }
 func (w *desiredReviewView) renderFooter() {
 	width := w.reviewWidth()
-	text := "Enter detail · e evidence · p server preview · / search · Esc back"
+	text := "Enter detail · e evidence · p preview · b change set · Esc back"
 	if width < 70 {
 		text = "Enter detail · e evidence · p preview · Esc back"
 	}

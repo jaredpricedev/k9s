@@ -27,6 +27,7 @@ const (
 	operationPending      operationState = "PENDING"
 	operationRunning      operationState = "RUNNING"
 	operationAccepted     operationState = "ACCEPTED"
+	operationObserved     operationState = "OBSERVED"
 	operationCompleted    operationState = "COMPLETED"
 	operationFailed       operationState = "FAILED"
 	operationCancelled    operationState = "CANCELED"
@@ -50,6 +51,19 @@ type operationProgress struct {
 	dropped         int
 	publishAccepted func([]string)
 	localCompleted  bool
+	observed        bool
+}
+
+// OBSERVED is set only by a worker after an independent bounded named API read
+// verifies its accepted UID/generation and admitted fields. The worker records
+// the observed resourceVersion, source and time separately in its receipt.
+// It is not an API acceptance response or a runtime/controller readiness claim.
+func operationObserveWrite(ctx context.Context) {
+	if progress, ok := ctx.Value(operationProgressKey{}).(*operationProgress); ok {
+		progress.mu.Lock()
+		progress.observed = true
+		progress.mu.Unlock()
+	}
 }
 
 func operationBeginWrite(ctx context.Context) {
@@ -197,6 +211,9 @@ func (t *operationTask) start(work func(context.Context, SelectedResourceTarget)
 			if err == nil && progress.localCompleted {
 				outcome.State = operationCompleted
 			}
+			if err == nil && progress.observed {
+				outcome.State = operationObserved
+			}
 			progress.mu.Unlock()
 			t.mu.Lock()
 			t.outcomes[i] = outcome
@@ -242,11 +259,11 @@ func operationResultState(err error, notSubmitted, attempted bool) operationStat
 	var networkError net.Error
 	var commandError *exec.ExitError
 	var serverStatus apierrors.APIStatus
-	serverError := errors.As(err, &serverStatus) && serverStatus.Status().Code >= 500 && serverStatus.Status().Code < 600
+	serverError := errors.As(err, &serverStatus) && serverStatus.Status().Code >= 500
 	uncertain := errors.Is(err, errExternalOperationOutcome) || errors.Is(err, errOperationWorkerFailure) ||
 		errors.As(err, &commandError) || errors.As(err, &networkError) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
 		apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err) ||
-		apierrors.IsInternalError(err) || apierrors.IsServiceUnavailable(err) || serverError
+		apierrors.IsInternalError(err) || apierrors.IsServiceUnavailable(err) || apierrors.IsUnexpectedServerError(err) || serverError
 	if attempted && uncertain {
 		return operationUnknown
 	}
@@ -391,6 +408,7 @@ func operationReceiptText(receipt operationReceipt, index, count int) string {
 	}
 	b.WriteString("Acceptance is distinct from controller completion.\nCOMPLETED records an external command exit, not " +
 		"an observed Kubernetes outcome.\nCancellation stops remaining work; it does not roll back accepted " +
-		"writes.\nUNKNOWN: inspect the captured destination before retrying. No automatic retry.\n")
+		"writes.\nOBSERVED records an independent named API observation of admitted fields; runtime/controller readiness remains separate.\n" +
+		"UNKNOWN: inspect the captured destination before retrying. No automatic retry.\n")
 	return b.String()
 }
