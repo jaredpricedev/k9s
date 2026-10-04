@@ -55,14 +55,14 @@ func (e flagError) Error() string { return e.err.Error() }
 
 func init() {
 	if err := config.InitLogLoc(); err != nil {
-		fmt.Printf("Fail to init k9+ logs location %s\n", err)
+		fmt.Fprintf(os.Stderr, "Fail to init k9+ logs location %s\n", err)
 	}
 
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return flagError{err: err}
 	})
 
-	rootCmd.AddCommand(versionCmd(), infoCmd())
+	rootCmd.AddCommand(versionCmd(), infoCmd(), taskCmd())
 	initK9sFlags()
 	initK8sFlags()
 }
@@ -70,6 +70,10 @@ func init() {
 // Execute root command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
+		var status interface{ ExitCode() int }
+		if errors.As(err, &status) {
+			os.Exit(status.ExitCode())
+		}
 		os.Exit(1)
 	}
 }
