@@ -4,9 +4,11 @@
 package cmd
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -26,7 +28,9 @@ func TestFatalRecoveryReturnsFailureAndPreservesNormalQuit(t *testing.T) {
 	}
 	for _, mode := range []string{"panic", "quit"} {
 		t.Run(mode, func(t *testing.T) {
-			command := exec.Command(os.Args[0], "-test.run=^TestFatalRecoveryReturnsFailureAndPreservesNormalQuit$")
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			command := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestFatalRecoveryReturnsFailureAndPreservesNormalQuit$")
 			command.Env = append(os.Environ(), "K9PLUS_FATAL_EXIT_CHILD="+mode)
 			output, err := command.CombinedOutput()
 			if mode == "panic" {

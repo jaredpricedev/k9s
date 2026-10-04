@@ -125,7 +125,7 @@ func run(*cobra.Command, []string) (runErr error) {
 
 // A recovered fatal failure must reach Execute's nonzero exit path. Ordinary
 // quit still returns nil and keeps the existing successful exit behavior.
-func recoverFatalPanic(result *error) {
+func recoverFatalPanic(result *error) { //nolint:gocritic // Deferred recovery must update the named return value.
 	if recovered := recover(); recovered != nil {
 		slog.Error("Boom!! k9+ failed", slogs.Error, recovered)
 		slog.Error("", slogs.Stack, string(debug.Stack()))
