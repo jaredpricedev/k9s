@@ -38,6 +38,7 @@ const (
 	dailyWorkspaceCoverageMode     = "coverage"
 	dailyWorkspaceCoverageComplete = "complete"
 	dailyWorkspaceKindCol          = "KIND"
+	dailyWorkspaceInvestigateLabel = "Investigate"
 )
 
 type dailyWorkspaceRow struct {
@@ -137,7 +138,7 @@ func (w *dailyWorkspace) SetFilter(query string, _ bool)       { w.applyQuery(qu
 func (w *dailyWorkspace) InCmdMode() bool                      { return w.prompting }
 func (w *dailyWorkspace) Actions() *ui.KeyActions {
 	if action, ok := w.actions.Get(tcell.KeyEnter); ok {
-		action.Description = "Investigate"
+		action.Description = dailyWorkspaceInvestigateLabel
 		if w.mode == dailyWorkspaceScopesMode {
 			action.Description = "Open scope"
 		}
@@ -151,7 +152,7 @@ func (w *dailyWorkspace) Actions() *ui.KeyActions {
 		case w.mode == dailyWorkspaceScopesMode:
 			action.Description = "Open scope"
 		default:
-			action.Description = "Investigate"
+			action.Description = dailyWorkspaceInvestigateLabel
 		}
 		if w.mode == dailyWorkspaceCoverageMode {
 			action.Opts.RequiresSelection = false
@@ -250,7 +251,7 @@ func (w *dailyWorkspace) makeActions() *ui.KeyActions {
 		label   string
 		visible bool
 	}{
-		{tcell.KeyEnter, "Investigate", true},
+		{tcell.KeyEnter, dailyWorkspaceInvestigateLabel, true},
 		{ui.KeyR, "Refresh", true},
 		{ui.KeySlash, dailyWorkspaceSearchLabel, true},
 		{ui.KeyN, "New scope", true},
