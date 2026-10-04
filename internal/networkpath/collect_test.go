@@ -216,3 +216,33 @@ func TestNetworkReadStateRequiresMatchingAPIStatusForAbsence(t *testing.T) {
 	require.Equal(t, inspect.ObservationUnknown, coverageError(missingDetails, ServiceGVR, "api"))
 	require.Equal(t, inspect.ObservationUnknown, coverageError(apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, "api"), ServiceGVR, "api"))
 }
+
+func TestNetworkOwnerMetadataIsBoundedAndExcludesSecretTargets(t *testing.T) {
+	object := testObject(NativeAPI, "Pod", "apps", "api-a", "pod-a")
+	controller := true
+	object.SetOwnerReferences([]metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: "api-rs", UID: "rs-a", Controller: &controller},
+		{APIVersion: NativeAPI, Kind: "Secret", Name: "PRIVATE-SECRET-NAME", UID: "private-secret"}})
+	retained := source(object, PodGVR, "lab", time.Now())
+	require.Equal(t, "apps/v1/replicasets", retained.Owners[0].GVR)
+	require.True(t, retained.Owners[0].Controller)
+	raw, err := json.Marshal(retained)
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "PRIVATE-SECRET-NAME")
+	require.NotContains(t, string(raw), "private-secret")
+	owners := object.GetOwnerReferences()
+	for len(owners) < 18 {
+		owners = append(owners, owners[0])
+	}
+	object.SetOwnerReferences(owners)
+	retained = source(object, PodGVR, "lab", time.Now())
+	require.Len(t, retained.Owners, 16)
+	require.Equal(t, 2, retained.OwnerOmitted)
+}
+
+func TestNetworkFlowRowKeysDoNotRetargetResetLocalRecordIDs(t *testing.T) {
+	first := hubble.Event{ID: 1, Source: hubble.Peer{Pod: "apps/api-a"}, Destination: hubble.Peer{IP: "10.0.0.1"}}
+	second := first
+	second.Source.Pod = "apps/replacement"
+	window := ComposeFlows(&FlowSample{Events: []hubble.Event{first, second}})
+	require.NotEqual(t, ItemKey(&window.Items[0]), ItemKey(&window.Items[1]), "native reconnect can reset local store IDs")
+}

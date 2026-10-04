@@ -12,9 +12,31 @@ import (
 )
 
 func source(object *unstructured.Unstructured, gvr, contextName string, at time.Time) Source {
-	return Source{Identity: inspect.ResourceIdentity{Context: contextName, GVR: gvr,
+	value := Source{Identity: inspect.ResourceIdentity{Context: contextName, GVR: gvr,
 		Namespace: object.GetNamespace(), Name: object.GetName(), UID: string(object.GetUID())},
 		Kind: object.GetKind(), ResourceVersion: object.GetResourceVersion(), CapturedAt: at}
+	owners := object.GetOwnerReferences()
+	value.OwnerOmitted = max(0, len(owners)-16)
+	for _, owner := range owners[:min(16, len(owners))] {
+		ref := OwnerReference{GVR: ownerGVR(owner.APIVersion, owner.Kind), Kind: safe(owner.Kind), APIVersion: safe(owner.APIVersion),
+			Name: safe(owner.Name), UID: safe(string(owner.UID)),
+			ControllerReported: owner.Controller != nil}
+		if owner.Controller != nil {
+			ref.Controller = *owner.Controller
+		}
+		if ref.GVR == "" {
+			ref.Name, ref.UID = "", ""
+		}
+		value.Owners = append(value.Owners, ref)
+	}
+	return value
+}
+
+func ownerGVR(api, kind string) string {
+	kinds := map[string]string{"v1/Service": ServiceGVR, "v1/Pod": PodGVR, "v1/ConfigMap": "v1/configmaps",
+		"apps/v1/Deployment": "apps/v1/deployments", "apps/v1/ReplicaSet": "apps/v1/replicasets", "apps/v1/StatefulSet": "apps/v1/statefulsets",
+		"apps/v1/DaemonSet": "apps/v1/daemonsets", "batch/v1/Job": "batch/v1/jobs", "batch/v1/CronJob": "batch/v1/cronjobs"}
+	return kinds[api+"/"+kind]
 }
 
 func scalar(object map[string]any, path ...string) string {

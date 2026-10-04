@@ -10,6 +10,7 @@ import (
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
+	"github.com/derailed/k9s/internal/dependency"
 	"github.com/derailed/k9s/internal/hubble"
 	"github.com/derailed/k9s/internal/inspect"
 	"github.com/derailed/k9s/internal/networkpath"
@@ -29,7 +30,10 @@ func networkReviewActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 	}
 	return []ui.ActionDescriptor{{ID: "resource.network-path", Label: "Network path and flow evidence", Category: ui.ActionInspect,
 		Shortcut: ":" + networkReviewCommandToken, Discoverable: true, RequiresSelection: true, UnavailableReason: reason,
-		Handler: func(*tcell.EventKey) *tcell.EventKey { app.openNetworkReview(target, nil); return nil }}}
+		Handler: func(*tcell.EventKey) *tcell.EventKey { app.openNetworkReview(target, nil); return nil }},
+		{ID: "resource.dependency-evidence", Label: "Explicit dependency evidence", Category: ui.ActionInspect, Shortcut: ":" + dependencyReviewCommandToken,
+			Discoverable: true, RequiresSelection: true, UnavailableReason: reason,
+			Handler: func(*tcell.EventKey) *tcell.EventKey { app.openNetworkReviewTab(target, nil, 7); return nil }}}
 }
 
 type networkReviewView struct {
@@ -38,13 +42,15 @@ type networkReviewView struct {
 	connection                      client.Connection
 	scope                           networkpath.Scope
 	snapshot                        *networkpath.Snapshot
+	dependencies                    *dependency.Review
+	edgeItems                       []networkpath.Item
 	loader                          func(context.Context, networkpath.Scope) (*networkpath.Snapshot, error)
 	cancel                          context.CancelFunc
 	generation, destinationRevision uint64
 	active, loading                 bool
 	activeTab                       int
-	tabStates                       [7]investigationTabState
-	selected                        [7]string
+	tabStates                       [8]investigationTabState
+	selected                        [8]string
 	identityBar, tabsBar, footer    *tview.TextView
 	width, height                   int
 	refreshFailure, selectionNotice string
@@ -73,6 +79,11 @@ func (c *Command) networkReviewCommand(line string) {
 
 //nolint:gocritic // Capture the destination independently before any background read.
 func (a *App) openNetworkReview(target SelectedResourceTarget, namespaces []string) {
+	a.openNetworkReviewTab(target, namespaces, 0)
+}
+
+//nolint:gocritic // Capture an independent destination for the explicitly selected read-only task.
+func (a *App) openNetworkReviewTab(target SelectedResourceTarget, namespaces []string, initialTab int) {
 	if target.Err() != nil || target.GVR == nil || target.GVR.GVR() != client.SvcGVR.GVR() {
 		a.Flash().Warn("Select a native v1 Service with captured UID")
 		return
@@ -93,7 +104,7 @@ func (a *App) openNetworkReview(target SelectedResourceTarget, namespaces []stri
 		return
 	}
 	v := &networkReviewView{Details: NewDetails(a, "Network path", target.Path(), contentInspection, true), target: target, connection: connection,
-		scope: scope, destinationRevision: a.Config.DestinationRevision()}
+		scope: scope, destinationRevision: a.Config.DestinationRevision(), activeTab: initialTab}
 	v.loader = func(ctx context.Context, scope networkpath.Scope) (*networkpath.Snapshot, error) {
 		reader, err := connection.DynDial()
 		if err != nil {
@@ -115,7 +126,7 @@ func (v *networkReviewView) SelectedResource() SelectedResourceTarget {
 		}
 		return SelectedResourceTarget{Context: i.Context, GVR: client.NewGVR(i.GVR), Namespace: i.Namespace, Name: i.Name, UID: types.UID(i.UID)}
 	}
-	if v.activeTab > 0 && v.activeTab < 6 {
+	if v.activeTab > 0 && v.activeTab != 6 {
 		return SelectedResourceTarget{Context: v.target.Context, UnavailableReason: "No verified retained source selected; inspect Evidence coverage"}
 	}
 	return v.target
@@ -140,7 +151,7 @@ func (v *networkReviewView) Init(ctx context.Context) error {
 }
 
 func (v *networkReviewView) bindNetworkKeys() {
-	for index, key := range []tcell.Key{ui.Key1, ui.Key2, ui.Key3, ui.Key4, ui.Key5, ui.Key6, ui.Key7} {
+	for index, key := range []tcell.Key{ui.Key1, ui.Key2, ui.Key3, ui.Key4, ui.Key5, ui.Key6, ui.Key7, ui.Key8} {
 		tab := index
 		v.actions.Add(key, ui.NewKeyAction(networkpath.Tabs[index], func(e *tcell.EventKey) *tcell.EventKey {
 			if v.cmdBuff.IsActive() {
@@ -162,6 +173,16 @@ func (v *networkReviewView) bindNetworkKeys() {
 			return e
 		}
 		v.refresh()
+		return nil
+	}, true))
+	targetAction := ui.NewKeyAction("Inspect captured edge target reference", v.inspectEdgeTarget, true)
+	targetAction.Availability = func() string { return v.edgeTarget().UnavailableReason }
+	v.actions.Add(ui.KeyB, targetAction)
+	v.actions.Add(ui.KeyD, ui.NewKeyAction("Explicit dependency evidence edges", func(e *tcell.EventKey) *tcell.EventKey {
+		if v.cmdBuff.IsActive() {
+			return e
+		}
+		v.selectTab(7)
 		return nil
 	}, true))
 	v.actions.Add(ui.KeyJ, ui.NewKeyAction("Next retained path source", func(e *tcell.EventKey) *tcell.EventKey { return v.moveSelection(e, 1) }, true))
@@ -241,9 +262,22 @@ func (v *networkReviewView) selectTab(tab int) {
 	v.text.ScrollTo(state.row, state.col)
 	v.render()
 }
+func (v *networkReviewView) taskItems(tab int) []*networkpath.Item {
+	if v.snapshot == nil {
+		return nil
+	}
+	if tab != 7 {
+		return v.snapshot.TabItems(tab)
+	}
+	items := make([]*networkpath.Item, 0, len(v.edgeItems))
+	for i := range v.edgeItems {
+		items = append(items, &v.edgeItems[i])
+	}
+	return items
+}
 func (v *networkReviewView) selectedIndex() int {
 	if v.snapshot != nil {
-		for i, item := range v.snapshot.TabItems(v.activeTab) {
+		for i, item := range v.taskItems(v.activeTab) {
 			if networkpath.ItemKey(item) == v.selected[v.activeTab] {
 				return i
 			}
@@ -255,7 +289,7 @@ func (v *networkReviewView) selectedItem() *networkpath.Item {
 	if v.snapshot == nil {
 		return nil
 	}
-	items := v.snapshot.TabItems(v.activeTab)
+	items := v.taskItems(v.activeTab)
 	if len(items) == 0 {
 		return nil
 	}
@@ -265,7 +299,7 @@ func (v *networkReviewView) moveSelection(e *tcell.EventKey, step int) *tcell.Ev
 	if v.cmdBuff.IsActive() || v.snapshot == nil {
 		return e
 	}
-	items := v.snapshot.TabItems(v.activeTab)
+	items := v.taskItems(v.activeTab)
 	if len(items) == 0 {
 		return e
 	}
@@ -319,6 +353,8 @@ func (v *networkReviewView) acceptSnapshot(snapshot *networkpath.Snapshot, err e
 		v.refreshFailure = ""
 		v.snapshot = snapshot
 	}
+	v.captureFlows()
+	v.rebuildDependencies()
 	v.selectionNotice = ""
 	if v.snapshot != nil {
 		for tab, key := range v.selected {
@@ -326,7 +362,7 @@ func (v *networkReviewView) acceptSnapshot(snapshot *networkpath.Snapshot, err e
 				continue
 			}
 			found := false
-			for _, item := range v.snapshot.TabItems(tab) {
+			for _, item := range v.taskItems(tab) {
 				if networkpath.ItemKey(item) == key {
 					found = true
 				}
@@ -337,7 +373,6 @@ func (v *networkReviewView) acceptSnapshot(snapshot *networkpath.Snapshot, err e
 			}
 		}
 	}
-	v.captureFlows()
 	v.render()
 }
 
@@ -345,6 +380,10 @@ func (v *networkReviewView) render() {
 	if v.identityBar == nil {
 		return
 	}
+	v.rebuildDependencies()
+	// Retained source lists occupy fixed physical rows; full fields are in evidence.
+	// The terminal widget's paragraph wrapper splits UTF-8 by bytes at narrow widths.
+	v.text.SetWrap(v.activeTab == 0 || v.activeTab == 6)
 	width, height := v.width, v.height
 	if width == 0 {
 		width = 78
@@ -357,6 +396,13 @@ func (v *networkReviewView) render() {
 	if v.snapshot != nil {
 		status = fmt.Sprintf("Untested · %sZ · gaps %d · omitted %d", v.snapshot.CapturedAt.UTC().Format("15:04"), v.snapshot.GapCount(), v.snapshot.Omitted)
 		body = v.snapshot.Render(v.activeTab, v.selectedIndex(), width, height-5)
+		if v.activeTab == 7 {
+			status = fmt.Sprintf("References/reports · %sZ · gaps %d", v.snapshot.CapturedAt.UTC().Format("15:04"), len(v.dependencies.Gaps))
+			body = v.dependencies.Summary() + "\n\n" + v.renderEdges(width, height)
+			if len(v.edgeItems) == 0 {
+				body = v.dependencies.Summary() + "\n\n" + v.dependencies.Evidence()
+			}
+		}
 	}
 	if v.loading {
 		status = "Reading captured scope · 15s deadline"
@@ -368,8 +414,11 @@ func (v *networkReviewView) render() {
 	if v.selectionNotice != "" {
 		body = v.selectionNotice + "\n" + body
 	}
-	v.identityBar.SetText(tview.Escape(fmt.Sprintf("%s · Service %s\n%s\nRoutes: %s", v.target.Context, v.target.Path(), status,
-		strings.Join(v.scope.RouteNamespaces, ", "))))
+	scopeLabel := "Routes: " + strings.Join(v.scope.RouteNamespaces, ", ")
+	if v.activeTab == 7 {
+		scopeLabel = "Edge group: " + v.scope.Service.Namespace + " · no federation"
+	}
+	v.identityBar.SetText(tview.Escape(fmt.Sprintf("%s · Service %s\n%s\n%s", v.target.Context, v.target.Path(), status, scopeLabel)))
 	v.tabsBar.SetText(ui.TaskTabs(networkpath.Tabs, v.activeTab, width))
 	v.footer.SetText("r refresh · h Hubble · v evidence · Enter inspect · ? help")
 	if width < 80 {
@@ -377,6 +426,12 @@ func (v *networkReviewView) render() {
 	}
 	if width < 50 {
 		v.footer.SetText("Enter inspect · v evidence · ? help")
+	}
+	if v.activeTab == 7 {
+		v.footer.SetText("Enter source · b target · v evidence · ? help")
+		if width < 50 {
+			v.footer.SetText("Enter/b source/target · v · ? help")
+		}
 	}
 	if v.activeTab == 5 {
 		v.footer.SetText("p source · t dest · P conversation · v evidence · ? help")
@@ -420,7 +475,15 @@ func (v *networkReviewView) showEvidence(e *tcell.EventKey) *tcell.EventKey {
 	}
 	const page = "network-review-retained-evidence"
 	done := func() { v.app.Content.Pages.RemovePage(page); v.app.SetFocus(v) }
-	modal := ui.NewMessageModal(v.app.Styles, "Network evidence · retained", v.snapshot.Evidence(v.selectedItem()), done)
+	title, body := "Network evidence · retained", v.snapshot.Evidence(v.selectedItem())
+	if v.activeTab == 7 {
+		index := v.selectedIndex()
+		if v.selectedItem() == nil {
+			index = -1
+		}
+		title, body = "Dependency evidence · retained", v.dependencies.EvidenceFor(index)
+	}
+	modal := ui.NewMessageModal(v.app.Styles, title, body, done)
 	v.app.Content.Pages.AddPage(page, modal, true, true)
 	v.app.Content.Pages.SetPageCleanup(page, modal.Cleanup)
 	v.app.SetFocus(modal)
