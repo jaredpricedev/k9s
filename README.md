@@ -86,7 +86,7 @@ and [Hubble measurements](docs/hubble-performance-2026-10-04.md).
 | --- | --- |
 | Browse pods / deployments / logs | `:pods`, `:deployments`, `l` |
 | Saved scopes / daily queue / scoped search | `:workspace` / `:daily` / `:inventory` |
-| Connection and selected-namespace checks | `:connection`, then `r` to retry |
+| Connection checks and session reconnect | `:connection`, then `r` to retry checks or `R` to reconnect the same context while retaining workspace/navigation |
 | Combined Flux dashboard | `:flux all` |
 | HelmReleases and Kustomizations | `:helmreleases`, `:kustomizations` |
 | Reconcile without leaving the UI | `Shift-R`, then confirm |

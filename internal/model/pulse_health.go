@@ -233,6 +233,7 @@ func (h *PulseHealth) check(ctx context.Context, ns string, gvr *client.GVR) (He
 			Renderer: new(render.Table),
 		}
 	}
+	resourceMeta = resourceMeta.instantiate()
 	// Registry accessors are prototypes; a collector must not mutate the DAO
 	// being used by a browser or another Pulse generation.
 	resourceMeta.DAO = pulseAccessor(gvr)
