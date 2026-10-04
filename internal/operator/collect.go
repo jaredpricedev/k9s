@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/derailed/k9s/internal/provider"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -28,7 +29,7 @@ const (
 	MaxConditions       = 128
 	MaxFacts            = 32
 	MaxFieldBytes       = 256
-	MaxReads            = 3
+	MaxReads            = 2
 	ReadTimeout         = 3 * time.Second
 	CollectionTimeout   = 8 * time.Second
 	Complete            = "observed"
@@ -97,12 +98,32 @@ func safe(value string) string {
 		value = strings.ToValidUTF8(value[:MaxFieldBytes], "")
 	}
 	return strings.Clone(strings.Map(func(r rune) rune {
-		if r < 32 || r == 127 {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
 			return -1
 		}
 		return r
 	}, value))
 }
+
+// ValidScope requires one bounded, exact captured Certificate identity.
+func ValidScope(scope *provider.Scope) bool {
+	return scope != nil && Supports(scope.GVR) && scope.Context != "" && safe(scope.Context) == scope.Context &&
+		scope.UID != "" && safe(scope.UID) == scope.UID &&
+		len(validation.IsDNS1123Label(scope.TargetNamespace)) == 0 && len(validation.IsDNS1123Subdomain(scope.Name)) == 0
+}
+func boundedScope(scope *provider.Scope) provider.Scope {
+	if scope == nil {
+		return provider.Scope{}
+	}
+	result := *scope
+	result.Context, result.Namespace, result.TargetNamespace = safe(scope.Context), safe(scope.Namespace), safe(scope.TargetNamespace)
+	result.GVR, result.Name, result.UID = safe(scope.GVR), safe(scope.Name), safe(scope.UID)
+	if result.UID != scope.UID {
+		result.UID = ""
+	}
+	return result
+}
+
 func str(obj *unstructured.Unstructured, path ...string) string {
 	v, _, _ := unstructured.NestedString(obj.Object, path...)
 	return safe(v)
@@ -126,7 +147,7 @@ func timestamp(obj *unstructured.Unstructured, path ...string) *time.Time {
 	return &parsed
 }
 func identity(scope *provider.Scope, gvr schema.GroupVersionResource, obj *unstructured.Unstructured) Identity {
-	return Identity{Context: scope.Context, GVR: gvr.Group + "/" + gvr.Version + "/" + gvr.Resource, Kind: obj.GetKind(),
+	return Identity{Context: safe(scope.Context), GVR: gvr.Group + "/" + gvr.Version + "/" + gvr.Resource, Kind: obj.GetKind(),
 		Namespace: obj.GetNamespace(), Name: obj.GetName(), UID: safe(string(obj.GetUID())), ResourceVersion: safe(obj.GetResourceVersion()),
 		Generation: integer(obj, "metadata", "generation")}
 }
@@ -154,7 +175,7 @@ func read(ctx context.Context, reader dynamic.Interface, gvr schema.GroupVersion
 	readCtx, cancel := context.WithTimeout(ctx, ReadTimeout)
 	defer cancel()
 	obj, err := reader.Resource(gvr).Namespace(namespace).Get(readCtx, name, metav1.GetOptions{})
-	coverage := Coverage{Source: gvr.Group + "/" + gvr.Version + "/" + gvr.Resource + " " + namespace + "/" + name, State: Complete, ReadAt: time.Now()}
+	coverage := Coverage{Source: safe(gvr.Group + "/" + gvr.Version + "/" + gvr.Resource + " " + namespace + "/" + name), State: Complete, ReadAt: time.Now()}
 	if err != nil {
 		coverage.State = Unknown
 		if apierrors.IsForbidden(err) || apierrors.IsUnauthorized(err) {
@@ -166,22 +187,25 @@ func read(ctx context.Context, reader dynamic.Interface, gvr schema.GroupVersion
 	return obj, coverage
 }
 
-// Collect uses at most two of the three permitted named reads. No lists,
+// Collect uses at most two named reads. No lists,
 // discovery, Secrets, CLI execution, arbitrary provider URLs or probes occur.
 func Collect(parent context.Context, reader dynamic.Interface, scope *provider.Scope, customJump bool, now time.Time) *Report {
 	ctx, cancel := context.WithTimeout(parent, CollectionTimeout)
 	defer cancel()
-	report := &Report{Scope: *scope, CapturedAt: now, CustomJump: customJump,
+	report := &Report{Scope: boundedScope(scope), CapturedAt: now, CustomJump: customJump,
 		Actions: []Action{{Kind: "yaml", Label: "Return to browser: generic YAML"}, {Kind: "describe", Label: "Return to browser: generic describe"}}}
 	if customJump {
 		report.Actions = append(report.Actions, Action{Kind: "custom jump", Label: "Return to browser: configured custom jump (Enter)"})
 	}
-	if !Supports(scope.GVR) {
-		report.Coverage = []Coverage{{Source: scope.GVR, State: Unsupported, ReadAt: now}}
+	if scope == nil || reader == nil || ctx.Err() != nil {
+		report.Coverage = []Coverage{{Source: CertificateGVR, State: Unknown, ReadAt: now}}
 		return report
 	}
-	if scope.Context == "" || scope.UID == "" || len(validation.IsDNS1123Label(scope.TargetNamespace)) > 0 ||
-		len(validation.IsDNS1123Subdomain(scope.Name)) > 0 {
+	if !Supports(scope.GVR) {
+		report.Coverage = []Coverage{{Source: safe(scope.GVR), State: Unsupported, ReadAt: now}}
+		return report
+	}
+	if !ValidScope(scope) {
 		report.Coverage = []Coverage{{Source: CertificateGVR, State: "unknown identity", ReadAt: now}}
 		return report
 	}
@@ -268,12 +292,19 @@ func (r *Report) projectConditions(obj *unstructured.Unstructured) {
 			continue
 		}
 		obj := &unstructured.Unstructured{Object: fields}
-		kind := str(obj, "type")
+		kind, found, fieldErr := unstructured.NestedString(obj.Object, "type")
+		if fieldErr != nil || !found {
+			r.SchemaIssues++
+			continue
+		}
 		if kind != ConditionReady && kind != ConditionIssuing {
 			r.UnsupportedConditions++
 			continue
 		}
-		status := str(obj, "status")
+		status, found, fieldErr := unstructured.NestedString(obj.Object, "status")
+		if fieldErr != nil || !found {
+			status = ""
+		}
 		if status != ConditionTrue && status != ConditionFalse && status != ConditionUnknown {
 			status = ConditionUnknown
 			r.SchemaIssues++
@@ -425,7 +456,7 @@ func (r *Report) Render(tab int) string {
 		fmt.Fprintf(&out, "Declared issuerRef: %s / %s / %s / %s\n%s\n", ref.Group, ref.Kind, ref.Namespace, ref.Name, r.Issuer.Coverage.State)
 		if r.Issuer.Observed != nil {
 			id := r.Issuer.Observed
-			fmt.Fprintf(&out, "Named target observed UID %s | RV %s\n", id.UID, id.ResourceVersion)
+			fmt.Fprintf(&out, "Named target observed UID %s | RV %s\n", showReference(id.UID), showReference(id.ResourceVersion))
 		}
 		fmt.Fprintln(&out, "Name reference only; source does not report target UID. Ownership unverified.")
 		fmt.Fprintf(&out, "Declared Secret reference: %s (not read; not TLS proof)\n", showReference(r.SecretReference))
@@ -435,7 +466,7 @@ func (r *Report) Render(tab int) string {
 	case 3:
 		fmt.Fprintf(&out, "Captured %s\nContext %s\n%s / %s / %s\nCaptured selected UID %s\nObserved UID %s | RV %s\n",
 			r.CapturedAt.UTC().Format(time.RFC3339), safe(r.Scope.Context), safe(r.Scope.GVR), safe(r.Scope.TargetNamespace),
-			safe(r.Scope.Name), safe(r.Scope.UID), r.Identity.UID, r.Identity.ResourceVersion)
+			safe(r.Scope.Name), showReference(r.Scope.UID), showReference(r.Identity.UID), showReference(r.Identity.ResourceVersion))
 		for _, coverage := range r.Coverage {
 			fmt.Fprintf(&out, "%s: %s | %s\n", coverage.Source, coverage.State, coverage.ReadAt.UTC().Format(time.RFC3339))
 		}

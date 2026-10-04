@@ -84,8 +84,9 @@ func operatorTargetError(target *SelectedResourceTarget) error {
 	if !operator.Supports(target.GVR.String()) {
 		return fmt.Errorf("Unsupported operator semantics for %s; generic YAML/describe and configured custom jumps remain available", target.GVR.String())
 	}
-	if target.UID == "" {
-		return fmt.Errorf("Certificate UID unavailable; refresh source list and select again")
+	scope := provider.Scope{Context: target.Context, GVR: target.GVR.String(), TargetNamespace: target.Namespace, Name: target.Name, UID: string(target.UID)}
+	if !operator.ValidScope(&scope) {
+		return fmt.Errorf("Certificate captured identity unavailable or unsafe; refresh source list and select again")
 	}
 	return nil
 }
@@ -216,7 +217,7 @@ func (v *operatorView) refresh() {
 	}
 	v.generation++
 	generation, target := v.generation, v.target
-	ctx, cancel := context.WithTimeout(context.Background(), operator.CollectionTimeout)
+	ctx, cancel := context.WithTimeout(v.app.sessionContext(), operator.CollectionTimeout)
 	v.cancel, v.loading = cancel, true
 	v.renderChrome()
 	go func() {
@@ -294,8 +295,8 @@ func (v *operatorView) renderChrome() {
 		item.SetTextColor(styles.Text.Color())
 	}
 	identity := operatorTitle + " / " + v.target.Path()
-	source := "Captured observation: pending"
-	state := "Read only | waiting for independent API reads"
+	source := retainedObservationPending
+	state := retainedWaitingForReads
 	if v.snapshot != nil {
 		source = v.snapshot.CapturedAt.UTC().Format("15:04:05Z")
 		state = "RO | controller report"
@@ -304,7 +305,9 @@ func (v *operatorView) renderChrome() {
 		}
 	}
 	if v.loading {
-		state = "RO | refreshing; retained"
+		if v.snapshot != nil {
+			state = retainedRefreshing
+		}
 	} else if v.refreshFailure != "" {
 		state = "Unavailable | r retry | " + v.refreshFailure
 		if v.snapshot != nil {
@@ -312,7 +315,7 @@ func (v *operatorView) renderChrome() {
 		}
 	}
 	if !v.destinationCurrent() {
-		state = "Retained | destination changed; reopen"
+		state = retainedDestinationChanged
 	}
 	lines := []string{identity + " | " + v.target.Context, "Controller report != live TLS proof", source + " | " + state}
 	for index, line := range lines {

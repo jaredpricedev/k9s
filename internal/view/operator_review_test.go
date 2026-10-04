@@ -27,7 +27,7 @@ func operatorReportFixture(target *SelectedResourceTarget) *operator.Report {
 	return &operator.Report{Scope: provider.Scope{Context: target.Context, GVR: operator.CertificateGVR, TargetNamespace: target.Namespace, Name: target.Name, UID: string(target.UID)}, CapturedAt: time.Now(),
 		Identity:   operator.Identity{Context: target.Context, GVR: operator.CertificateGVR, Namespace: target.Namespace, Name: target.Name, UID: string(target.UID), ResourceVersion: "12", Generation: &generation},
 		Conditions: []operator.Condition{{Type: "Ready", Status: "True", Meaning: "controller reports ready", ObservedGeneration: &generation}},
-		Coverage:   []operator.Coverage{{Source: operator.CertificateGVR, State: operator.Complete, ReadAt: time.Now()}, {Source: "issuerRef", State: "denied", ReadAt: time.Now()}}}
+		Coverage:   []operator.Coverage{{Source: operator.CertificateGVR, State: operator.Complete, ReadAt: time.Now()}, {Source: "issuerRef", State: testWorkspaceCoverageDenied, ReadAt: time.Now()}}}
 }
 func operatorViewFixture(t *testing.T) *operatorView {
 	t.Helper()
