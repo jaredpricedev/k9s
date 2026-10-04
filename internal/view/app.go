@@ -51,6 +51,7 @@ type App struct {
 	filterHistory      *model.History
 	fluxActions        map[fluxActionKey]struct{}
 	logRecordings      logRecordingRegistry
+	operations         operationRegistry
 	conRetry           int32
 	showHeader         bool
 	showLogo           bool

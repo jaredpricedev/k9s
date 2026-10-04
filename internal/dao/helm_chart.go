@@ -6,7 +6,9 @@ package dao
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -59,9 +61,9 @@ func (h *HelmChart) List(_ context.Context, ns string) ([]runtime.Object, error)
 }
 
 // Get returns a resource.
-func (h *HelmChart) Get(_ context.Context, path string) (runtime.Object, error) {
+func (h *HelmChart) Get(ctx context.Context, path string) (runtime.Object, error) {
 	ns, n := client.Namespaced(path)
-	cfg, err := ensureHelmConfig(h.Client().Config().Flags(), ns)
+	cfg, err := ensureHelmOperationConfig(ctx, h.Client().Config().Flags(), ns)
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +127,12 @@ func (h *HelmChart) Delete(ctx context.Context, path string, _ *metav1.DeletionP
 	return uninstallHelm(ctx, h.Client().Config().Flags(), path, false)
 }
 
+// DeleteSnapshot checks provider identity before invoking native Helm uninstall.
+// Helm owns the operation; this check is not an atomic release lock.
+func (h *HelmChart) DeleteSnapshot(ctx context.Context, path, fingerprint string) error {
+	return uninstallHelmSnapshot(ctx, h.Client().Config().Flags(), path, false, fingerprint)
+}
+
 // Uninstall uninstalls a HelmChart.
 func (h *HelmChart) Uninstall(path string, keepHist bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), h.Client().Config().CallTimeout())
@@ -135,26 +143,36 @@ func (h *HelmChart) Uninstall(path string, keepHist bool) error {
 // Helm's uninstall API does not accept a context. Bind every request to the
 // operation deadline through the transport, including storage and hook clients.
 func uninstallHelm(ctx context.Context, flags *genericclioptions.ConfigFlags, path string, keepHist bool) error {
+	return uninstallHelmSnapshot(ctx, flags, path, keepHist, "")
+}
+
+func uninstallHelmSnapshot(ctx context.Context, flags *genericclioptions.ConfigFlags, path string, keepHist bool, fingerprint string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	ns, n := client.Namespaced(path)
-	pinned := client.SnapshotConfigFlags(flags)
-	previous := pinned.WrapConfigFn
-	pinned.WrapConfigFn = func(cfg *rest.Config) *rest.Config {
-		if previous != nil {
-			cfg = previous(cfg)
-		}
-		cfg = rest.CopyConfig(cfg)
-		if deadline, ok := ctx.Deadline(); ok {
-			cfg.Timeout = time.Until(deadline)
-		}
-		cfg.Wrap(func(base http.RoundTripper) http.RoundTripper { return helmOperationTransport{ctx: ctx, base: base} })
-		return cfg
-	}
-	cfg, err := ensureHelmConfig(pinned, ns)
+	cfg, err := ensureHelmOperationConfig(ctx, flags, ns)
 	if err != nil {
 		return err
+	}
+	if fingerprint != "" {
+		current, readErr := cfg.Releases.Last(n)
+		if readErr != nil {
+			return readErr
+		}
+		actual, fingerprintErr := HelmRevisionFingerprint(current)
+		if fingerprintErr != nil {
+			return fingerprintErr
+		}
+		if actual != fingerprint {
+			return fmt.Errorf("Helm release changed; review before uninstalling")
+		}
+		if current.Info == nil || current.Info.Status.IsPending() {
+			return fmt.Errorf("Helm release is pending another operation; review before uninstalling")
+		}
+	}
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
 	}
 	u := action.NewUninstall(cfg)
 	u.KeepHistory = keepHist
@@ -171,6 +189,39 @@ func uninstallHelm(ctx context.Context, flags *genericclioptions.ConfigFlags, pa
 	return nil
 }
 
+func ensureHelmOperationConfig(ctx context.Context, flags *genericclioptions.ConfigFlags, ns string) (*action.Configuration, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if os.Getenv("HELM_DRIVER") == "sql" {
+		return nil, fmt.Errorf("bounded Helm operations require Secret or ConfigMap storage; SQL storage does not expose cancellation")
+	}
+	pinned := client.SnapshotConfigFlags(flags)
+	previous := pinned.WrapConfigFn
+	pinned.WrapConfigFn = func(cfg *rest.Config) *rest.Config {
+		if previous != nil {
+			cfg = previous(cfg)
+		}
+		cfg = rest.CopyConfig(cfg)
+		cfg.Timeout = 10 * time.Second
+		if deadline, ok := ctx.Deadline(); ok {
+			cfg.Timeout = max(time.Nanosecond, time.Until(deadline))
+		}
+		cfg.Wrap(func(base http.RoundTripper) http.RoundTripper { return helmOperationTransport{ctx: ctx, base: base} })
+		return cfg
+	}
+	return ensureHelmConfig(pinned, ns)
+}
+
+type helmOperationObserverKey struct{}
+
+// WithHelmOperationObserver reports request attempts and acknowledged writes
+// without exposing release manifests, Secret values, credentials or response
+// bodies. The callback may be invoked concurrently by the Helm kube client.
+func WithHelmOperationObserver(ctx context.Context, observe func(method, resourcePath string, accepted bool)) context.Context {
+	return context.WithValue(ctx, helmOperationObserverKey{}, observe)
+}
+
 type helmOperationTransport struct {
 	ctx  context.Context
 	base http.RoundTripper
@@ -180,7 +231,53 @@ func (t helmOperationTransport) RoundTrip(req *http.Request) (*http.Response, er
 	if err := t.ctx.Err(); err != nil {
 		return nil, err
 	}
-	return t.base.RoundTrip(req.Clone(t.ctx))
+	observe, _ := t.ctx.Value(helmOperationObserverKey{}).(func(string, string, bool))
+	write := req.Method != http.MethodGet && req.Method != http.MethodHead
+	if write && observe != nil {
+		observe(req.Method, req.URL.EscapedPath(), false)
+	}
+	// Retain request-scoped cancellation (for example a native Helm watch) as
+	// well as the enclosing operation lifetime. Keep the lifetime attached to
+	// the response body until it is closed, not just until headers arrive.
+	ctx, cancel := context.WithCancel(req.Context())
+	if deadline, bounded := t.ctx.Deadline(); bounded {
+		cancel()
+		ctx, cancel = context.WithDeadline(req.Context(), deadline)
+	}
+	stop := context.AfterFunc(t.ctx, func() {
+		// A deadline context supplies its own DeadlineExceeded reason. Do not
+		// race that timer with a generic cancellation of the same deadline.
+		if !errors.Is(t.ctx.Err(), context.DeadlineExceeded) {
+			cancel()
+		}
+	})
+	response, err := t.base.RoundTrip(req.Clone(ctx))
+	if err != nil || response == nil {
+		stop()
+		cancel()
+	} else if response.Body != nil {
+		response.Body = helmOperationBody{ReadCloser: response.Body, cancel: cancel, stop: stop}
+	} else {
+		stop()
+		cancel()
+	}
+	if write && observe != nil && err == nil && response != nil && response.StatusCode >= 200 && response.StatusCode < 300 {
+		observe(req.Method, req.URL.EscapedPath(), true)
+	}
+	return response, err
+}
+
+type helmOperationBody struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+	stop   func() bool
+}
+
+func (b helmOperationBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.stop()
+	b.cancel()
+	return err
 }
 
 // ensureHelmConfig return a new configuration.
