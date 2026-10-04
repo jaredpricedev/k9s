@@ -176,7 +176,10 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 	result = append(result, ui.ActionDescriptor{
 		ID: "command.diagnostics", Label: "Capability diagnostics", Category: ui.ActionInspect,
 		Shortcut: ":diagnostics", Discoverable: true,
-		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).capabilityCommand("diagnostics"); return nil }})
+		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).capabilityCommand("diagnostics"); return nil }}, ui.ActionDescriptor{
+		ID: "command.providers", Label: "Provider checks", Category: ui.ActionInspect,
+		Shortcut: ":providers", Discoverable: true,
+		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).providerCommand("providers"); return nil }})
 	return result
 }
 
