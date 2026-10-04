@@ -43,8 +43,8 @@ func (c *Command) upgradeReadinessCommand(line string) {
 		Context: c.app.Config.ActiveContextName(), Namespace: c.app.Config.ActiveNamespace(),
 		Revision: c.app.Config.DestinationRevision(),
 	}
-	if request.Namespace == "" || client.IsClusterWide(request.Namespace) || request.Namespace == client.NotNamespaced {
-		c.app.Flash().Warn("Upgrade readiness requires one explicit current namespace; select a namespace and retry")
+	if !upgrade.ValidNamespace(request.Namespace) || upgrade.SafeField(request.Context) != request.Context {
+		c.app.Flash().Warn("Upgrade readiness requires one explicit namespace and a bounded context name without control characters")
 		return
 	}
 	connection, err := pinInspectionConnection(c.app.Conn())
@@ -65,7 +65,13 @@ func (d *upgradeReadinessDetails) Init(ctx context.Context) error {
 	if err := d.Details.Init(ctx); err != nil {
 		return err
 	}
-	d.actions.Add(ui.KeyR, ui.NewKeyAction("Refresh upgrade evidence", func(*tcell.EventKey) *tcell.EventKey { d.refresh(); return nil }, true))
+	d.actions.Add(ui.KeyR, ui.NewKeyAction("Refresh upgrade evidence", func(event *tcell.EventKey) *tcell.EventKey {
+		if d.cmdBuff.IsActive() {
+			return event
+		}
+		d.refresh()
+		return nil
+	}, true))
 	return nil
 }
 func (d *upgradeReadinessDetails) Start() {
@@ -104,7 +110,7 @@ func (d *upgradeReadinessDetails) refresh() {
 	}
 	d.generation++
 	generation, request := d.generation, d.request
-	ctx, cancel := context.WithTimeout(context.Background(), upgradeReadinessTimeout)
+	ctx, cancel := context.WithTimeout(d.app.sessionContext(), upgradeReadinessTimeout)
 	d.cancel = cancel
 	d.status = "Reading bounded native facts..."
 	d.Update(renderUpgradeReadiness(&d.snapshot, d.status, upgradeReadinessWidth(d)))
@@ -120,11 +126,24 @@ func (d *upgradeReadinessDetails) refresh() {
 		}
 		d.app.QueueUpdateDraw(func() {
 			if d.current(generation) {
-				d.snapshot, d.status = snapshot, ""
-				d.Update(renderUpgradeReadiness(&snapshot, "", upgradeReadinessWidth(d)))
+				d.acceptSnapshot(&snapshot)
+				d.Update(renderUpgradeReadiness(&d.snapshot, d.status, upgradeReadinessWidth(d)))
 			}
 		})
 	}()
+}
+
+func (d *upgradeReadinessDetails) acceptSnapshot(snapshot *upgrade.Snapshot) {
+	if snapshot.Context != d.request.Context || snapshot.Namespace != d.request.Namespace {
+		return
+	}
+	if snapshot.AllFactReadsFailed() && !d.snapshot.ObservedAt.IsZero() {
+		d.status = fmt.Sprintf("Refresh failed at %s; retained earlier evidence. API:%s nodes:%s deployments:%s daemonsets:%s statefulsets:%s",
+			evidenceTime(snapshot.ObservedAt), snapshot.ServerVersionState, snapshot.Nodes.State,
+			snapshot.Deployments.State, snapshot.DaemonSets.State, snapshot.StatefulSets.State)
+		return
+	}
+	d.snapshot, d.status = *snapshot, ""
 }
 
 func upgradeReadinessWidth(d *upgradeReadinessDetails) int {
@@ -133,8 +152,15 @@ func upgradeReadinessWidth(d *upgradeReadinessDetails) int {
 }
 
 func loadUpgradeReadiness(ctx context.Context, conn client.Connection, request connectionHealthRequest) upgrade.Snapshot {
-	snapshot := upgrade.Snapshot{Context: request.Context, Namespace: request.Namespace, ObservedAt: time.Now()}
-	if conn == nil {
+	ctx, cancel := context.WithTimeout(ctx, upgrade.CollectionTimeout)
+	defer cancel()
+	snapshot := upgrade.Snapshot{
+		Context: upgrade.SafeField(request.Context), Namespace: upgrade.SafeField(request.Namespace), NamespaceUID: "unknown",
+		NamespaceState: upgradeUnavailableState, ObservedAt: time.Now(),
+		Nodes: upgrade.Section{State: upgradeUnavailableState}, Deployments: upgrade.Section{State: upgradeUnavailableState},
+		DaemonSets: upgrade.Section{State: upgradeUnavailableState}, StatefulSets: upgrade.Section{State: upgradeUnavailableState},
+	}
+	if !upgrade.ValidNamespace(request.Namespace) || upgrade.SafeField(request.Context) != request.Context || conn == nil {
 		snapshot.ServerVersionState, snapshot.ServerVersion = upgradeUnavailableState, upgradeUnavailableState
 		return snapshot
 	}
@@ -148,7 +174,9 @@ func loadUpgradeReadiness(ctx context.Context, conn client.Connection, request c
 	if restClient == nil {
 		snapshot.ServerVersionState, snapshot.ServerVersion = upgradeUnavailableState, upgradeUnavailableState
 	} else {
-		body, readErr := restClient.Get().AbsPath("/version").Do(ctx).Raw()
+		readCtx, readCancel := context.WithTimeout(ctx, upgrade.ReadTimeout)
+		body, readErr := restClient.Get().AbsPath("/version").Do(readCtx).Raw()
+		readCancel()
 		if readErr == nil {
 			readErr = json.Unmarshal(body, &info)
 		}
@@ -157,7 +185,7 @@ func loadUpgradeReadiness(ctx context.Context, conn client.Connection, request c
 		} else if info.GitVersion == "" {
 			snapshot.ServerVersionState, snapshot.ServerVersion = "unsupported/404", upgradeUnavailableState
 		} else {
-			snapshot.ServerVersionState, snapshot.ServerVersion = upgrade.StateForError(nil), info.GitVersion
+			snapshot.ServerVersionState, snapshot.ServerVersion = upgrade.StateForError(nil), upgrade.SafeField(info.GitVersion)
 		}
 	}
 	if ctx.Err() != nil {
@@ -166,7 +194,6 @@ func loadUpgradeReadiness(ctx context.Context, conn client.Connection, request c
 	}
 	reader := typed
 	collected := upgrade.Collect(ctx, reader, request.Namespace, request.Context, snapshot.ServerVersion, snapshot.ObservedAt)
-	collected.Context, collected.Namespace = request.Context, request.Namespace
 	collected.ServerVersionState, collected.ServerVersion = snapshot.ServerVersionState, snapshot.ServerVersion
 	return collected
 }
@@ -194,7 +221,7 @@ func renderUpgradeReadiness(s *upgrade.Snapshot, status string, width int) strin
 		appendCompactUpgradeFacts(&b, "sts", s.StatefulSets, width, factRows)
 		fmt.Fprintf(&b, "Source: native Kubernetes API\nObserved: %s\n", evidenceTime(s.ObservedAt))
 		if status != "" {
-			fmt.Fprintf(&b, "Status: %s\n", shortEvidence(status, 32))
+			fmt.Fprintf(&b, "Status: %s\n", upgrade.SafeField(status))
 		}
 		b.WriteString("kubent/pluto: unsupported\nVersions do not prove compatibility.\nDeprecated API usage not exhausted.\n")
 		return b.String()
@@ -224,6 +251,7 @@ func appendCompactUpgradeFacts(b *strings.Builder, label string, section upgrade
 	}
 	for _, fact := range section.Items[:count] {
 		fmt.Fprintf(b, "  %s %s %s\n", label, shortEvidence(fact.Name, nameWidth), shortEvidence(fact.Version, versionWidth))
+		fmt.Fprintf(b, "  UID:%s RV:%s\n", shortEvidence(fact.UID, 12), shortEvidence(fact.ResourceVersion, 12))
 	}
 	remaining := len(section.Items) - count
 	if remaining > 0 {
@@ -236,7 +264,11 @@ func sectionCoverage(section upgrade.Section) string {
 	if section.Truncated {
 		coverage += "; first 100"
 	}
-	return coverage + ")"
+	coverage += ")"
+	if section.Detail != "" {
+		coverage += " partial/unknown"
+	}
+	return coverage
 }
 
 func renderUpgradeSection(b *strings.Builder, name string, section upgrade.Section) {
@@ -246,7 +278,7 @@ func renderUpgradeSection(b *strings.Builder, name string, section upgrade.Secti
 	}
 	b.WriteByte('\n')
 	for _, fact := range section.Items {
-		fmt.Fprintf(b, "  %s  %s  UID:%s\n", fact.Name, fact.Version, shortEvidence(fact.UID, 12))
+		fmt.Fprintf(b, "  %s  %s  UID:%s RV:%s\n", fact.Name, fact.Version, shortEvidence(fact.UID, 12), shortEvidence(fact.ResourceVersion, 12))
 	}
 }
 

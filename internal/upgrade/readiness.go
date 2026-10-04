@@ -11,17 +11,50 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/kubernetes"
 )
 
 const maxItems = 100
+const ReadTimeout = 3 * time.Second
+const CollectionTimeout = 10 * time.Second
+
+// ValidNamespace requires a single explicit Kubernetes namespace.
+func ValidNamespace(namespace string) bool {
+	return namespace != "" && namespace != "all" && len(validation.IsDNS1123Label(namespace)) == 0
+}
+
+// SafeField bounds retained text and flattens terminal control characters.
+func SafeField(value string) string {
+	var b strings.Builder
+	count := 0
+	for _, r := range value {
+		if count == 512 {
+			break
+		}
+		count++
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+			r = ' '
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+func validIdentity(m metav1.Object, namespace string) bool {
+	uid := string(m.GetUID())
+	return m.GetNamespace() == namespace && m.GetName() != "" && len(validation.IsDNS1123Subdomain(m.GetName())) == 0 &&
+		uid != "" && utf8.RuneCountInString(uid) <= 512 && SafeField(uid) == uid
+}
 
 const (
+	stateUnknown         = "unknown"
 	stateObserved        = "observed"
 	stateDenied          = "denied"
 	stateUnavailable     = "unavailable"
@@ -32,7 +65,7 @@ const (
 
 // Fact contains the deliberately small identity and version-like fields kept by the collector.
 type Fact struct {
-	Name, UID, Version string
+	Name, UID, ResourceVersion, Version string
 }
 
 // Section records one bounded capability/read result.
@@ -50,23 +83,42 @@ type Snapshot struct {
 	Nodes, Deployments, DaemonSets, StatefulSets      Section
 }
 
+// AllFactReadsFailed excludes the independent namespace identity read.
+func (s *Snapshot) AllFactReadsFailed() bool {
+	return s.ServerVersionState != stateObserved && s.Nodes.State != stateObserved &&
+		s.Deployments.State != stateObserved && s.DaemonSets.State != stateObserved &&
+		s.StatefulSets.State != stateObserved
+}
+
 // Collect reads the namespace identity, server version-independent node facts,
 // and three explicit controller kinds in the captured namespace. Every list is
 // capped at 100. A failed section is retained as denied/unknown evidence.
 func Collect(ctx context.Context, client kubernetes.Interface, namespace, contextName, serverVersion string, observedAt time.Time) Snapshot {
-	s := Snapshot{Context: contextName, Namespace: namespace, ServerVersion: serverVersion, ObservedAt: observedAt}
+	ctx, cancel := context.WithTimeout(ctx, CollectionTimeout)
+	defer cancel()
+	s := Snapshot{Context: SafeField(contextName), Namespace: SafeField(namespace), ServerVersion: SafeField(serverVersion), ObservedAt: observedAt}
+	if !ValidNamespace(namespace) || client == nil {
+		s.NamespaceState, s.NamespaceUID = stateUnavailable, stateUnknown
+		s.Nodes = Section{State: stateUnavailable, Detail: "explicit namespace required"}
+		s.Deployments, s.DaemonSets, s.StatefulSets = Section{State: stateUnavailable}, Section{State: stateUnavailable}, Section{State: stateUnavailable}
+		return s
+	}
 	if ctx.Err() != nil {
-		s.NamespaceUID, s.NamespaceState = stateUnavailable, StateForError(ctx.Err())
+		s.NamespaceUID, s.NamespaceState = stateUnknown, StateForError(ctx.Err())
 		s.Nodes = Section{State: StateForError(ctx.Err())}
 		s.Deployments = Section{State: StateForError(ctx.Err())}
 		s.DaemonSets = Section{State: StateForError(ctx.Err())}
 		s.StatefulSets = Section{State: StateForError(ctx.Err())}
 		return s
 	}
-	ns, err := client.CoreV1().Namespaces().Get(ctx, s.Namespace, metav1.GetOptions{})
+	readCtx, readCancel := context.WithTimeout(ctx, ReadTimeout)
+	ns, err := client.CoreV1().Namespaces().Get(readCtx, namespace, metav1.GetOptions{})
+	readCancel()
 	if err != nil {
-		s.NamespaceUID = stateUnavailable
+		s.NamespaceUID = stateUnknown
 		s.NamespaceState = StateForError(err)
+	} else if ns == nil || ns.Name != namespace || !validIdentity(ns, "") {
+		s.NamespaceUID, s.NamespaceState = stateUnknown, stateUnavailable
 	} else {
 		s.NamespaceUID = string(ns.UID)
 		s.NamespaceState = stateObserved
@@ -79,6 +131,8 @@ func Collect(ctx context.Context, client kubernetes.Interface, namespace, contex
 }
 
 func collectNodes(ctx context.Context, client kubernetes.Interface) Section {
+	ctx, cancel := context.WithTimeout(ctx, ReadTimeout)
+	defer cancel()
 	if ctx.Err() != nil {
 		return Section{State: StateForError(ctx.Err()), Detail: safeError(ctx.Err())}
 	}
@@ -94,17 +148,26 @@ func collectNodes(ctx context.Context, client kubernetes.Interface) Section {
 	}
 	for index := range list.Items[:limit] {
 		node := &list.Items[index]
+		if !validIdentity(node, "") {
+			s.Detail = "partial: invalid object identity"
+			continue
+		}
 		version := node.Status.NodeInfo.KubeletVersion
 		if version == "" {
-			version = "unknown"
+			version = stateUnknown
 		}
-		s.Items = append(s.Items, Fact{Name: node.Name, UID: string(node.UID), Version: version})
+		s.Items = append(s.Items, Fact{Name: SafeField(node.Name), UID: string(node.UID), ResourceVersion: SafeField(node.ResourceVersion), Version: SafeField(version)})
 	}
 	s.Truncated = s.Truncated || list.Continue != ""
+	if limit > 0 && len(s.Items) == 0 {
+		s.State = stateUnavailable
+	}
 	return s
 }
 
 func collectDeployments(ctx context.Context, client kubernetes.Interface, namespace string) Section {
+	ctx, cancel := context.WithTimeout(ctx, ReadTimeout)
+	defer cancel()
 	if ctx.Err() != nil {
 		return Section{State: StateForError(ctx.Err()), Detail: safeError(ctx.Err())}
 	}
@@ -112,11 +175,13 @@ func collectDeployments(ctx context.Context, client kubernetes.Interface, namesp
 	if err != nil {
 		return Section{State: StateForError(err), Detail: safeError(err)}
 	}
-	return controllers(list.Items, func(x appsv1.Deployment) (string, string, []corev1.Container) {
-		return x.Name, string(x.UID), x.Spec.Template.Spec.Containers
-	}, list.Continue)
+	return controllers(list.Items, func(x appsv1.Deployment) (metav1.Object, []corev1.Container) {
+		return &x, x.Spec.Template.Spec.Containers
+	}, list.Continue, namespace)
 }
 func collectDaemonSets(ctx context.Context, client kubernetes.Interface, namespace string) Section {
+	ctx, cancel := context.WithTimeout(ctx, ReadTimeout)
+	defer cancel()
 	if ctx.Err() != nil {
 		return Section{State: StateForError(ctx.Err()), Detail: safeError(ctx.Err())}
 	}
@@ -124,11 +189,13 @@ func collectDaemonSets(ctx context.Context, client kubernetes.Interface, namespa
 	if err != nil {
 		return Section{State: StateForError(err), Detail: safeError(err)}
 	}
-	return controllers(list.Items, func(x appsv1.DaemonSet) (string, string, []corev1.Container) {
-		return x.Name, string(x.UID), x.Spec.Template.Spec.Containers
-	}, list.Continue)
+	return controllers(list.Items, func(x appsv1.DaemonSet) (metav1.Object, []corev1.Container) {
+		return &x, x.Spec.Template.Spec.Containers
+	}, list.Continue, namespace)
 }
 func collectStatefulSets(ctx context.Context, client kubernetes.Interface, namespace string) Section {
+	ctx, cancel := context.WithTimeout(ctx, ReadTimeout)
+	defer cancel()
 	if ctx.Err() != nil {
 		return Section{State: StateForError(ctx.Err()), Detail: safeError(ctx.Err())}
 	}
@@ -136,27 +203,45 @@ func collectStatefulSets(ctx context.Context, client kubernetes.Interface, names
 	if err != nil {
 		return Section{State: StateForError(err), Detail: safeError(err)}
 	}
-	return controllers(list.Items, func(x appsv1.StatefulSet) (string, string, []corev1.Container) {
-		return x.Name, string(x.UID), x.Spec.Template.Spec.Containers
-	}, list.Continue)
+	return controllers(list.Items, func(x appsv1.StatefulSet) (metav1.Object, []corev1.Container) {
+		return &x, x.Spec.Template.Spec.Containers
+	}, list.Continue, namespace)
 }
 
-func controllers[T any](items []T, fields func(T) (string, string, []corev1.Container), continuation string) Section {
-	s := Section{State: stateObserved, Truncated: continuation != ""}
-	for _, item := range items {
-		name, uid, containers := fields(item)
+func controllers[T any](items []T, fields func(T) (metav1.Object, []corev1.Container), continuation, namespace string) Section {
+	s := Section{State: stateObserved, Truncated: continuation != "" || len(items) > maxItems}
+	limit := min(len(items), maxItems)
+	for _, item := range items[:limit] {
+		object, containers := fields(item)
+		if !validIdentity(object, namespace) {
+			s.Detail = "partial: invalid object identity"
+			continue
+		}
+		if len(containers) == 0 {
+			containers = []corev1.Container{{Image: stateUnknown}}
+		}
 		for index := range containers {
-			container := &containers[index]
 			if len(s.Items) == maxItems {
 				s.Truncated = true
 				return s
 			}
+			container := &containers[index]
 			image := container.Image
 			if image == "" {
-				image = "unknown"
+				image = stateUnknown
 			}
-			s.Items = append(s.Items, Fact{Name: name + "/" + container.Name, UID: uid, Version: image})
+			name := object.GetName()
+			if container.Name != "" {
+				name += "/" + container.Name
+			}
+			s.Items = append(s.Items, Fact{
+				Name: SafeField(name), UID: string(object.GetUID()),
+				ResourceVersion: SafeField(object.GetResourceVersion()), Version: SafeField(image),
+			})
 		}
+	}
+	if limit > 0 && len(s.Items) == 0 {
+		s.State = stateUnavailable
 	}
 	return s
 }
