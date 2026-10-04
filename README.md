@@ -87,6 +87,7 @@ and [Hubble measurements](docs/hubble-performance-2026-10-04.md).
 | Browse pods / deployments / logs | `:pods`, `:deployments`, `l` |
 | Saved scopes / daily queue / scoped search | `:workspace` / `:daily` / `:inventory` |
 | Connection checks and session reconnect | `:connection`, then `r` to retry checks or `R` to reconnect the same context while retaining workspace/navigation |
+| Owned port-forwards / shells / plugins | `:sessions`, then `Enter` for lifecycle details, `r` for local state or `c` to stop the selected owned session |
 | Combined Flux dashboard | `:flux all` |
 | HelmReleases and Kustomizations | `:helmreleases`, `:kustomizations` |
 | Reconcile without leaving the UI | `Shift-R`, then confirm |
@@ -106,6 +107,7 @@ cert-manager views require the corresponding CRDs; the rest of the app works
 without them. Optional CLI plugins need their respective tools.
 
 See [Flux workflows](docs/flux.md), [certificate workflows](docs/certificates.md),
+[owned local sessions](docs/local-sessions.md),
 [workload relationships](docs/workload-relationships.md), [optional plugins](plugins/README.md)
 and the [review findings](docs/review-2026-09-06.md).
 Start with the [first-run task guide](docs/first-run.md). The

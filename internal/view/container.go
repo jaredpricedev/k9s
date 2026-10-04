@@ -17,6 +17,7 @@ import (
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/rest"
 )
 
 const containerTitle = "Containers"
@@ -156,40 +157,24 @@ func (c *Container) portForwardContext(ctx context.Context) context.Context {
 }
 
 func (c *Container) shellCmd(evt *tcell.EventKey) *tcell.EventKey {
-	path := c.GetTable().GetSelectedItem()
-	if path == "" {
+	container := c.GetTable().GetSelectedItem()
+	if container == "" {
 		return evt
 	}
-
-	var err error
-	c.Stop()
-	defer func() {
-		c.Start()
-		if err != nil {
-			c.App().QueueUpdate(func() {
-				if err != nil {
-					c.App().Flash().Errf("Shell exec failed: %s", err)
-				}
-			})
-
-			c.App().Flash().Err(err)
-		}
-	}()
-	err = shellIn(c.App(), c.GetTable().Path, path)
-
+	if err := containerShellIn(c.App(), c, c.GetTable().Path, container); err != nil {
+		c.App().Flash().Err(err)
+	}
 	return nil
 }
 
 func (c *Container) attachCmd(evt *tcell.EventKey) *tcell.EventKey {
-	sel := c.GetTable().GetSelectedItem()
-	if sel == "" {
+	container := c.GetTable().GetSelectedItem()
+	if container == "" {
 		return evt
 	}
-
-	c.Stop()
-	defer c.Start()
-	attachIn(c.App(), c.GetTable().Path, sel)
-
+	if err := containerAttachIn(c.App(), c, c.GetTable().Path, container); err != nil {
+		c.App().Flash().Err(err)
+	}
 	return nil
 }
 
@@ -208,7 +193,28 @@ func (c *Container) portFwdCmd(evt *tcell.EventKey) *tcell.EventKey {
 	if !ok {
 		return nil
 	}
-	ShowPortForwards(c, c.GetTable().Path+"|"+path, ports, ann, startFwdCB)
+	pod, err := cachedLocalSessionPod(c.App().factory, c.App().Config.CachedNamespace(), c.GetTable().Path)
+	if err != nil {
+		c.App().Flash().Err(err)
+		return nil
+	}
+	actor, err := c.App().Conn().RestConfig()
+	if err != nil {
+		c.App().Flash().Err(err)
+		return nil
+	}
+	target := resourceTargetForPath(client.PodGVR, c.App().Config.ActiveContextName(), c.GetTable().Path)
+	target.UID = pod.UID
+	if err := checkOperationTarget(&target); err != nil {
+		c.App().Flash().Err(err)
+		return nil
+	}
+	capture := &forwardDialogCapture{view: c, selection: path, destination: forwardDestination{
+		app: c.App(), factory: c.App().factory, owner: c.App().Content.Top(), revision: c.App().Config.DestinationRevision(),
+		target: target, path: c.GetTable().Path + "|" + path, config: rest.CopyConfig(actor)}}
+	if err := capture.showPorts(ports, ann); err != nil {
+		c.App().Flash().Err(err)
+	}
 
 	return nil
 }
@@ -242,7 +248,7 @@ func locateContainer(co string, cc []v1.Container) (*v1.Container, error) {
 }
 
 func (c *Container) listForwardable(path string) (port.ContainerPortSpecs, map[string]string, bool) {
-	po, err := fetchPod(c.App().factory, c.GetTable().Path)
+	po, err := cachedLocalSessionPod(c.App().factory, c.App().Config.CachedNamespace(), c.GetTable().Path)
 	if err != nil {
 		return nil, nil, false
 	}

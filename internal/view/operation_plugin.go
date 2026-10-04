@@ -8,13 +8,13 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
+	"github.com/derailed/k9s/internal/session"
 	"github.com/derailed/k9s/internal/ui/dialog"
 	"k8s.io/client-go/rest"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -33,9 +33,15 @@ type pluginInvocation struct {
 	requiredVerbs     []string
 	destination       *clientcmdapi.Config
 	prepared          bool
+	debugWrite        bool
 }
 
 func capturePluginInvocation(r Runner, p *config.Plugin) (*pluginInvocation, error) {
+	effective := *p
+	if len(pluginDebugCommands(effective.Command, effective.Args, effective.Pipes)) > 0 {
+		effective.Dangerous = true
+	}
+	p = &effective
 	if p.Dangerous && r.App().Config.IsReadOnly() {
 		return nil, fmt.Errorf("plugin is unavailable in read-only mode")
 	}
@@ -73,11 +79,11 @@ func capturePluginInvocation(r Runner, p *config.Plugin) (*pluginInvocation, err
 				if err := checkOperationTarget(&selected); err != nil {
 					return nil, err
 				}
-				session, err := captureOperation(v)
+				operation, err := captureOperation(v)
 				if err != nil {
 					return nil, err
 				}
-				inv.session = session
+				inv.session = operation
 			}
 		}
 	}
@@ -93,6 +99,12 @@ func (i *pluginInvocation) current() bool {
 	if i.session != nil {
 		return i.session.current()
 	}
+	if owner, ok := i.runner.(TableViewer); ok {
+		currentOwner, currentOK := a.Content.Top().(TableViewer)
+		// Resource decorators expose the same table as their embedded runner.
+		// Comparing wrapper pointers would reject valid Pod/Service plugins.
+		return currentOK && currentOwner.GetTable() == owner.GetTable()
+	}
 	if owner, ok := i.runner.(Viewer); ok {
 		return a.Content.Top() == owner
 	}
@@ -100,8 +112,7 @@ func (i *pluginInvocation) current() bool {
 }
 
 func (i *pluginInvocation) resolveDestination() (*clientcmdapi.Config, error) {
-	binary := filepath.Base(i.plugin.Command)
-	if binary != nativeKubectlCommand && binary != "helm" && binary != "kubectl.exe" && binary != "helm.exe" {
+	if !pluginUsesNativeDestination(i.plugin.Command, i.plugin.Pipes) {
 		return nil, nil
 	}
 	if i.actorREST == nil {
@@ -162,6 +173,12 @@ func (i *pluginInvocation) execute(values dialog.PluginInputValues) {
 		}
 		args[index] = value
 	}
+	if len(pluginDebugCommands(i.plugin.Command, args, i.plugin.Pipes)) > 0 {
+		if err := i.guardDebugWrite(); err != nil {
+			i.runner.App().Flash().Err(err)
+			return
+		}
+	}
 	start := func() {
 		if !i.current() {
 			i.runner.App().Flash().Warn("Plugin destination, selection or read-only mode changed; reopen the action")
@@ -174,6 +191,24 @@ func (i *pluginInvocation) execute(values dialog.PluginInputValues) {
 			return
 		}
 		i.runner.App().Flash().Info("Plugin started; :operations reviews or cancels remaining work")
+		spec := localSessionSpec(session.Plugin, i.plugin.Description, &i.target, i.revision)
+		if i.destination != nil {
+			if entry := i.destination.Contexts[i.contextName]; entry != nil {
+				if cluster := i.destination.Clusters[entry.Cluster]; cluster != nil {
+					spec.Destination.Server = localSessionEndpoint(cluster.Server)
+				}
+			}
+		}
+		spec.OperationID = fmt.Sprintf("#%d", task.receipt().ID)
+		spec.IdentityNote = "External plugin owns its explicit destinations and arguments; captured UID does not impose a CLI write precondition."
+		handle, err := i.runner.App().localSessions.Add(spec, task.cancelRemaining)
+		if err != nil {
+			task.cancelRemaining()
+			task.start(func(context.Context, SelectedResourceTarget) error { return context.Canceled }, nil, nil)
+			i.runner.App().Flash().Err(err)
+			return
+		}
+		launch := i.runner.App().ownLocalLaunch(handle, i.runner.App().Content.Top())
 		task.start(func(ctx context.Context, target SelectedResourceTarget) error {
 			if i.session != nil {
 				verbs := i.requiredVerbs
@@ -186,8 +221,14 @@ func (i *pluginInvocation) execute(values dialog.PluginInputValues) {
 				if _, err := i.session.readTarget(ctx, &target); err != nil {
 					return err
 				}
+				if i.debugWrite {
+					if err := i.authorizeDebugWrite(ctx, &target, args); err != nil {
+						return err
+					}
+				}
 			}
-			opts := shellOpts{binary: i.plugin.Command, background: i.plugin.Background, args: args, pipes: i.plugin.Pipes, ctx: ctx}
+			opts := shellOpts{binary: i.plugin.Command, background: i.plugin.Background, args: args, pipes: i.plugin.Pipes, ctx: ctx,
+				onStart: func() { launch.running("") }}
 			// Freeze the default kubeconfig for native CLIs. Explicit plugin
 			// destination arguments remain owned by that configured plugin.
 			if i.destination != nil {
@@ -222,7 +263,13 @@ func (i *pluginInvocation) execute(values dialog.PluginInputValues) {
 				}
 			}
 			return nil
-		}, nil, nil)
+		}, nil, func(outcomes []operationOutcome) {
+			if len(outcomes) == 1 {
+				finishLocalCommand(handle, outcomes[0].Err)
+			} else {
+				handle.Finish(session.Unknown, "Local command completion was not fully reported; inspect the operation receipt.")
+			}
+		})
 	}
 	if i.plugin.Dangerous || i.plugin.ShouldConfirm() {
 		identity := string(i.target.UID)
