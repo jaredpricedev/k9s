@@ -84,7 +84,7 @@ func (s *ImageExtender) showImageDialog(path string) error {
 	if err != nil {
 		return err
 	}
-	confirm := tview.NewModalForm("<Set image>", form)
+	confirm := ui.NewModalForm("<Set image>", form)
 	confirm.SetText(fmt.Sprintf("Set image %s %s", s.GVR(), path))
 	confirm.SetDoneFunc(func(int, string) {
 		s.dismissDialog()

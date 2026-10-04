@@ -161,3 +161,16 @@ func TestComparisonOverviewLongValuesShowChangedPortion(t *testing.T) {
 		t.Fatal("long values hid their actual difference", before, after)
 	}
 }
+
+func TestComparisonFirstStageShowsSuccessfulCaptureAndExplicitNextAction(t *testing.T) {
+	v := &comparisonView{normalize: true}
+	a := inspect.NewObservation(inspect.ResourceIdentity{Context: "lab", GVR: "v1/pods", Namespace: "team", Name: "api", UID: "retained-a"}, "API", time.Now(), map[string]any{"status": map[string]any{"phase": "Running"}})
+	v.acceptObservation(a, true)
+	text := comparisonOverview(inspect.Compare(*v.baseline, v.other, true), true)
+	if !strings.Contains(text, "A captured; r capture B") || strings.Contains(text, "Comparison unavailable") {
+		t.Fatal(text)
+	}
+	if !strings.Contains(text, "team/api") || v.other.Source != "not captured" || !v.other.ObservedAt.IsZero() || v.baseline.Identity.UID != "retained-a" {
+		t.Fatal("first stage implied new observations", text)
+	}
+}

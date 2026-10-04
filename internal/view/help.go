@@ -13,7 +13,6 @@ import (
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/model"
-	"github.com/derailed/k9s/internal/render"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/k9s/internal/view/cmd"
 	"github.com/derailed/tcell/v2"
@@ -33,16 +32,19 @@ type HelpFunc func() model.MenuHints
 type Help struct {
 	*Table
 
-	styles                   *config.Styles
-	hints                    HelpFunc
-	maxKey, maxDesc, maxRows int
+	styles          *config.Styles
+	hints           HelpFunc
+	maxKey, maxDesc int
+	width           int
+	extras          map[string]string
 }
 
 // NewHelp returns a new help viewer.
 func NewHelp(app *App) *Help {
 	h := &Help{
-		Table: NewTable(client.HlpGVR),
-		hints: app.Content.Top().Hints,
+		Table:  NewTable(client.HlpGVR),
+		hints:  app.Content.Top().Hints,
+		extras: app.Content.Top().ExtraHints(),
 	}
 	if owner, ok := app.Content.Top().(actionOwner); ok {
 		h.hints = func() model.MenuHints { return actionCatalogHints(owner, app) }
@@ -93,123 +95,78 @@ func (h *Help) bindKeys() {
 	})
 }
 
-func (h *Help) computeMaxes(hh model.MenuHints) {
-	h.maxKey, h.maxDesc = 0, 0
-	for _, hint := range hh {
-		if len(hint.Mnemonic) > h.maxKey {
-			h.maxKey = len(hint.Mnemonic)
-		}
-		if len(hint.Description) > h.maxDesc {
-			h.maxDesc = len(hint.Description)
-		}
-	}
-	h.maxKey += 2
-}
-
-func (h *Help) computeExtraMaxes(ee map[string]string) {
-	for k, v := range ee {
-		if len(k) > h.maxDesc {
-			h.maxDesc = len(k)
-		}
-		if len(v) > h.maxKey {
-			h.maxKey = len(v)
-		}
-	}
-}
-
+// build keeps a key and its action together in one scrollable list. Long
+// availability reasons use continuation rows rather than forcing the action
+// description beyond the viewport. No universal Space/Tab/l behavior is
+// invented: the owned action snapshot supplies the current mode's bindings.
 func (h *Help) build() {
 	h.Clear()
-
-	sections := []string{"RESOURCE", "GENERAL", "NAVIGATION"}
-	h.maxRows = len(h.showGeneral())
-	ff := []HelpFunc{
-		h.hints,
-		h.showGeneral,
-		h.showNav,
+	width := h.width
+	if width <= 0 {
+		width = 160
 	}
-
-	var col int
-	extras := h.app.Content.Top().ExtraHints()
-	for i, section := range sections {
-		hh := ff[i]()
-		sort.Sort(hh)
-		h.computeMaxes(hh)
-		if extras != nil {
-			h.computeExtraMaxes(extras)
-		}
-		h.addSection(col, section, hh)
-		if i == 0 && extras != nil {
-			h.addExtras(extras, col, len(hh))
-		}
-		col += 2
+	h.maxKey = 0
+	hints := h.hints()
+	sort.Sort(hints)
+	for _, hint := range hints {
+		h.maxKey = max(h.maxKey, tview.TaggedStringWidth(ui.ToMnemonic(hint.Mnemonic)))
 	}
-	if hh, err := h.showHotKeys(); err == nil {
-		h.computeMaxes(hh)
-		h.addSection(col, "HOTKEYS", hh)
+	h.maxKey = min(h.maxKey, max(8, width/3))
+	h.maxDesc = max(1, width-h.maxKey-2)
+	row := h.addHelpSection(0, "RESOURCE", hints)
+	if len(h.extras) > 0 {
+		var extra model.MenuHints
+		for label, value := range h.extras {
+			extra = append(extra, model.MenuHint{Mnemonic: label, Description: value})
+		}
+		sort.Sort(extra)
+		row = h.addHelpSection(row+1, "DETAILS", extra)
+	}
+	if hints, err := h.showHotKeys(); err == nil && len(hints) > 0 {
+		row = h.addHelpSection(row+1, "HOTKEYS", hints)
+	}
+	h.addHelpSection(row+1, "HELP CONTROLS", model.MenuHints{
+		{Mnemonic: "up/down", Description: "Scroll help"},
+		{Mnemonic: "PgUp/PgDn", Description: "Page through all actions and reasons"},
+		{Mnemonic: "esc", Description: "Return to retained view"},
+	})
+	if h.styles != nil {
+		h.updateStyle()
 	}
 }
 
-func (h *Help) addExtras(extras map[string]string, col, size int) {
-	kk := make([]string, 0, len(extras))
-	for k := range extras {
-		kk = append(kk, k)
+func (h *Help) addHelpSection(row int, title string, hints model.MenuHints) int {
+	h.SetCell(row, 0, h.titleCell(title).SetReference("heading"))
+	h.SetCell(row, 1, tview.NewTableCell(""))
+	row++
+	for _, hint := range hints {
+		key := ui.ToMnemonic(hint.Mnemonic)
+		h.SetCell(row, 0, tview.NewTableCell(key).SetReference(hint.Mnemonic).SetMaxWidth(h.maxKey))
+		lines := tview.WordWrap(tview.Escape(hint.Description), h.maxDesc)
+		if len(lines) == 0 {
+			lines = []string{""}
+		}
+		for index, line := range lines {
+			if index > 0 {
+				h.SetCell(row, 0, tview.NewTableCell(""))
+			}
+			h.SetCell(row, 1, tview.NewTableCell(line).SetMaxWidth(h.maxDesc).SetExpansion(1))
+			row++
+		}
 	}
-	sort.StringSlice(kk).Sort()
-	row := size + 1
-	for _, k := range kk {
-		h.SetCell(row, col, padCell(extras[k], h.maxKey))
-		h.SetCell(row, col+1, padCell(k, h.maxDesc))
-		row++
-	}
+	return row
 }
 
-func (*Help) showNav() model.MenuHints {
-	return model.MenuHints{
-		{
-			Mnemonic:    "g",
-			Description: "Goto Top",
-		},
-		{
-			Mnemonic:    "Shift-g",
-			Description: "Goto Bottom",
-		},
-		{
-			Mnemonic:    "Ctrl-b",
-			Description: "Page Up",
-		},
-		{
-			Mnemonic:    "Ctrl-f",
-			Description: "Page Down",
-		},
-		{
-			Mnemonic:    "h",
-			Description: "Left",
-		},
-		{
-			Mnemonic:    "l",
-			Description: "Right",
-		},
-		{
-			Mnemonic:    "k",
-			Description: "Up",
-		},
-		{
-			Mnemonic:    "j",
-			Description: "Down",
-		},
-		{
-			Mnemonic:    "[",
-			Description: "History Back",
-		},
-		{
-			Mnemonic:    "]",
-			Description: "History Forward",
-		},
-		{
-			Mnemonic:    "-",
-			Description: "Last Used Command",
-		},
+// Draw recalculates wrapping after resize without losing the reader's place.
+func (h *Help) Draw(screen tcell.Screen) {
+	_, _, width, _ := h.GetInnerRect()
+	if width != h.width {
+		row, col := h.GetOffset()
+		h.width = width
+		h.build()
+		h.SetOffset(row, col)
 	}
+	h.Table.Draw(screen)
 }
 
 func (h *Help) showHotKeys() (model.MenuHints, error) {
@@ -233,125 +190,8 @@ func (h *Help) showHotKeys() (model.MenuHints, error) {
 	return mm, nil
 }
 
-func (*Help) showGeneral() model.MenuHints {
-	return model.MenuHints{
-		{
-			Mnemonic:    "?",
-			Description: "Help",
-		},
-		{
-			Mnemonic:    "Ctrl-a",
-			Description: "Aliases",
-		},
-		{
-			Mnemonic:    ":cmd",
-			Description: "Command mode",
-		},
-		{
-			Mnemonic:    "/term",
-			Description: "Filter mode",
-		},
-		{
-			Mnemonic:    "esc",
-			Description: "Back/Clear",
-		},
-		{
-			Mnemonic:    "q",
-			Description: "Back",
-		},
-		{
-			Mnemonic:    "tab",
-			Description: "Field Next",
-		},
-		{
-			Mnemonic:    "backtab",
-			Description: "Field Previous",
-		},
-		{
-			Mnemonic:    "Ctrl-r",
-			Description: "Reload",
-		},
-		{
-			Mnemonic:    "Ctrl-u",
-			Description: "Command Clear",
-		},
-		{
-			Mnemonic:    "Ctrl-e",
-			Description: "Toggle Header",
-		},
-		{
-			Mnemonic:    "Ctrl-g",
-			Description: "Toggle Crumbs",
-		},
-		{
-			Mnemonic:    ":q",
-			Description: "Quit",
-		},
-		{
-			Mnemonic:    "space",
-			Description: "Mark",
-		},
-		{
-			Mnemonic:    "Ctrl-space",
-			Description: "Mark Range",
-		},
-		{
-			Mnemonic:    "Ctrl-\\",
-			Description: "Mark Clear",
-		},
-		{
-			Mnemonic:    "Ctrl-s",
-			Description: "Save",
-		},
-		{
-			Mnemonic:    "shift-left",
-			Description: "Select Previous Column",
-		},
-		{
-			Mnemonic:    "shift-right",
-			Description: "Select Next Column",
-		},
-	}
-}
-
 func (h *Help) resetTitle() {
-	h.SetTitle(fmt.Sprintf(helpTitleFmt, helpTitle))
-}
-
-func (h *Help) addSpacer(c int) {
-	cell := tview.NewTableCell(render.Pad("", h.maxKey))
-	cell.SetExpansion(1)
-	h.SetCell(0, c, cell)
-}
-
-func (h *Help) addSection(c int, title string, hh model.MenuHints) {
-	if len(hh) > h.maxRows {
-		h.maxRows = len(hh)
-	}
-	row := 0
-	h.SetCell(row, c, h.titleCell(title))
-	h.addSpacer(c + 1)
-	row++
-
-	for _, hint := range hh {
-		col := c
-		h.SetCell(row, col, padCellWithRef(ui.ToMnemonic(hint.Mnemonic), h.maxKey, hint.Mnemonic))
-		col++
-		h.SetCell(row, col, padCell(hint.Description, h.maxDesc))
-		row++
-	}
-
-	if len(hh) >= h.maxRows {
-		return
-	}
-
-	for i := h.maxRows - len(hh); i > 0; i-- {
-		col := c
-		h.SetCell(row, col, padCell("", h.maxKey))
-		col++
-		h.SetCell(row, col, padCell("", h.maxDesc))
-		row++
-	}
+	h.SetTitle(fmt.Sprintf(helpTitleFmt, helpTitle+" · arrows/PgUp/PgDn scroll · Esc back"))
 }
 
 func (h *Help) updateStyle() {
@@ -370,7 +210,7 @@ func (h *Help) updateStyle() {
 				continue
 			}
 			switch {
-			case row == 0:
+			case extractRef(c) == "heading":
 				c.SetStyle(heading)
 			case col%2 != 0:
 				c.SetStyle(info)
@@ -404,12 +244,4 @@ func (h *Help) titleCell(title string) *tview.TableCell {
 	c.SetAlign(tview.AlignLeft)
 
 	return c
-}
-
-func padCellWithRef(s string, width int, ref any) *tview.TableCell {
-	return padCell(s, width).SetReference(ref)
-}
-
-func padCell(s string, width int) *tview.TableCell {
-	return tview.NewTableCell(render.Pad(s, width))
 }

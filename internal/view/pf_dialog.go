@@ -91,7 +91,7 @@ func ShowPortForwards(v ResourceViewer, path string, ports port.ContainerPortSpe
 		}
 	}
 
-	modal := tview.NewModalForm("<PortForward>", f)
+	modal := ui.NewModalForm("<PortForward>", f)
 	msg := path
 	if len(ports) >= 1 {
 		msg += "\n\nExposed Ports:\n" + ports.Dump()

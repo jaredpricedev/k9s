@@ -35,6 +35,7 @@ type ActionDescriptor struct {
 	Visible, Discoverable, RequiresSelection bool
 	UnavailableReason                        string
 	Handler                                  ActionHandler
+	Priority                                 int
 }
 
 func (a *ActionDescriptor) Available() bool { return a.UnavailableReason == "" && a.Handler != nil }
@@ -69,7 +70,8 @@ func DescribeActions(actions *KeyActions, context ActionContext) []ActionDescrip
 			ID: action.ID, Label: action.Description, Category: action.Category,
 			Key: key, Shortcut: tcell.KeyNames[key], Visible: action.Opts.Visible,
 			Discoverable: action.Opts.Discoverable, RequiresSelection: action.Opts.RequiresSelection,
-			Handler: action.Action,
+			Handler:  action.Action,
+			Priority: PrimaryActionPriority(key, action.Opts.Priority),
 		}
 		if item.Category == "" {
 			item.Category = actionCategory(action.Description, action.Opts)
@@ -100,6 +102,33 @@ func DescribeActions(actions *KeyActions, context ActionContext) []ActionDescrip
 		return result[i].Key < result[j].Key
 	})
 	return result
+}
+
+// PrimaryActionPriority uses stable binding identity, rather than translated
+// or custom action descriptions. A view can supply its own positive priority.
+func PrimaryActionPriority(key tcell.Key, priority int) int {
+	if priority != 0 {
+		return priority
+	}
+	switch key {
+	case tcell.KeyEnter:
+		return 1
+	case KeySpace:
+		return 2
+	case KeyD:
+		return 2
+	case KeySlash:
+		return 3
+	case KeyR:
+		return 4
+	case KeyL:
+		return 3
+	case tcell.KeyTab:
+		return 6
+	case tcell.KeyEscape:
+		return 7
+	}
+	return 0
 }
 
 func actionID(label string) string {

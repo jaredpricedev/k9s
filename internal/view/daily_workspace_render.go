@@ -4,10 +4,12 @@ package view
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/derailed/k9s/internal/config"
+	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/k9s/internal/workspace"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
@@ -79,6 +81,9 @@ func dailyWorkspaceRowKey(row dailyWorkspaceRow) string {
 	if row.ref != nil {
 		return dailyWorkspaceRefKey(row.ref)
 	}
+	if row.key != "" {
+		return row.key
+	}
 	return strings.Join(row.cells, "\x00")
 }
 func (w *dailyWorkspace) selectedKey() string {
@@ -135,11 +140,24 @@ func (w *dailyWorkspace) makeRows(terms []dailyWorkspaceTerm) ([]string, []daily
 		}
 	case dailyWorkspaceCoverageMode:
 		headers = []string{"STATE", "KIND / API", "NAMESPACE", "DETAIL"}
-		for _, coverage := range w.coverage {
+		coverageRows := append([]workspace.Coverage(nil), w.coverage...)
+		sort.SliceStable(coverageRows, func(i, j int) bool {
+			a, b := coverageRows[i], coverageRows[j]
+			aComplete := a.State == dailyWorkspaceCoverageComplete || a.State == "absent"
+			bComplete := b.State == dailyWorkspaceCoverageComplete || b.State == "absent"
+			if aComplete != bComplete {
+				return !aComplete
+			}
+			return a.GVR+"/"+a.Namespace < b.GVR+"/"+b.Namespace
+		})
+		for _, coverage := range coverageRows {
 			if !dailyWorkspaceMatch(terms, coverage.GVR, coverage.Namespace, "", coverage.State+" "+coverage.Detail) {
 				continue
 			}
-			add(dailyWorkspaceRow{cells: []string{coverage.State, coverage.GVR, coverage.Namespace, coverage.Detail}, detail: coverage.Detail})
+			add(dailyWorkspaceRow{
+				cells: []string{coverage.State, coverage.GVR, coverage.Namespace, coverage.Detail},
+				key:   "coverage/" + coverage.GVR + "/" + coverage.Namespace, detail: coverage.Detail,
+			})
 		}
 	case dailyWorkspacePinsMode:
 		headers = []string{"KIND / API", "NAMESPACE", "NAME", statusCol}
@@ -185,16 +203,36 @@ func (w *dailyWorkspace) render() {
 	terms, _ := parseDailyWorkspaceQuery(w.query)
 	headers, rows := w.makeRows(terms)
 	w.rows = rows
+	w.displayColumns = make([]int, len(headers))
+	for col := range headers {
+		w.displayColumns[col] = col
+	}
+	if w.viewportWidth > 0 && w.viewportWidth < 80 {
+		switch w.mode {
+		case inventoryCommand:
+			w.displayColumns = []int{2, 3}
+		case dailyWorkspaceCoverageMode:
+			w.displayColumns = []int{0, 1, 3}
+		case dailyWorkspacePinsMode:
+			w.displayColumns = []int{2, 3}
+		case dailyWorkspaceScopesMode:
+			w.displayColumns = []int{1, 2}
+		default:
+			w.displayColumns = []int{0, 3, 4}
+		}
+	}
 	w.table.Clear()
 	palette := w.app.Styles.Semantic()
 	canvas := palette.Canvas.Color()
 	text := config.ReadableForeground(palette.Text.Color(), canvas)
-	for col, header := range headers {
+	for col, original := range w.displayColumns {
+		header := headers[original]
 		w.table.SetCell(0, col, tview.NewTableCell(header).SetSelectable(false).SetTextColor(palette.Focus.Color()).SetBackgroundColor(canvas).SetAttributes(tcell.AttrBold))
 	}
 	selectRow := 1
 	for i, row := range rows {
-		for col, value := range row.cells {
+		for col, original := range w.displayColumns {
+			value := row.cells[original]
 			cell := tview.NewTableCell(tview.Escape(value)).SetTextColor(text).SetBackgroundColor(canvas)
 			if col == 0 && w.mode == dailyWorkspaceQueueMode {
 				switch value {
@@ -213,7 +251,7 @@ func (w *dailyWorkspace) render() {
 					cell.SetTextColor(palette.Warning.Color())
 				}
 			}
-			if col == len(row.cells)-1 {
+			if col == len(w.displayColumns)-1 {
 				cell.SetMaxWidth(70).SetExpansion(1)
 			}
 			w.table.SetCell(i+1, col, cell)
@@ -250,47 +288,108 @@ func (w *dailyWorkspace) render() {
 	w.table.Select(selectRow, 0)
 	w.renderHeader()
 	w.renderDetail()
-	w.footer.SetText("[::b]1[::] Daily  [::b]2[::] Inventory  [::b]3[::] Coverage  [::b]4[::] Pins  [::b]5[::] Scopes   / search  r refresh  Enter investigate")
+	w.renderFooter()
+}
+
+var dailyWorkspaceModes = []string{dailyWorkspaceQueueMode, inventoryCommand, dailyWorkspaceCoverageMode, dailyWorkspacePinsMode, dailyWorkspaceScopesMode}
+var dailyWorkspaceLabels = []string{"Daily", "Inventory", "Coverage", "Pins", "Scopes"}
+
+func (w *dailyWorkspace) tabIndex() int {
+	for index, mode := range dailyWorkspaceModes {
+		if mode == w.mode {
+			return index
+		}
+	}
+	return 0
 }
 func (w *dailyWorkspace) renderHeader() {
-	title := "Choose or create a scope"
-	scopeLine := "Context: " + w.contextName + " · Namespace access stays explicit"
+	w.header.SetWrap(false)
+	width := w.viewportWidth
+	if width <= 0 {
+		width = 76
+	}
+	title := "Choose or create a scope · " + w.contextName
 	if w.scope.Name != "" {
-		title = w.scope.Name + " · " + w.scope.Context + " · " + strings.Join(w.scope.Namespaces, ", ")
-		selector := w.scope.LabelSelector
-		if selector == "" {
-			selector = "all labels within saved namespaces"
-		}
-		kinds := w.scope.Kinds
-		if len(kinds) == 0 {
-			kinds = workspace.DefaultKinds()
-		}
-		scopeLine = "Selector: " + selector + " · Kinds: " + strings.Join(kinds, ", ")
+		title = w.scope.Name + " · " + w.scope.Context
 	}
-	age := "No observation"
+	age := "No observation · r reads scope"
 	if !w.snapshot.ObservedAt.IsZero() {
-		age = "Observed " + w.snapshot.ObservedAt.Local().Format("15:04:05") + " (" + dailyWorkspaceAge(w.snapshot.ObservedAt, time.Now()) + " ago)"
+		age = "Observed " + dailyWorkspaceAge(w.snapshot.ObservedAt, time.Now()) + " ago"
 	}
-	complete, gaps := 0, 0
+	gaps := 0
 	for _, coverage := range w.coverage {
-		if coverage.State == dailyWorkspaceCoverageComplete || coverage.State == "absent" {
-			complete++
-		} else {
+		if coverage.State != dailyWorkspaceCoverageComplete && coverage.State != "absent" {
 			gaps++
 		}
 	}
-	counts := fmt.Sprintf("%d resources · %d findings · %d covered reads · %d coverage gaps · %s", len(w.snapshot.Resources), len(w.snapshot.Findings), complete, gaps, age)
+	status := fmt.Sprintf("%s · %d findings · %d coverage gaps", age, len(w.snapshot.Findings), gaps)
+	if width < 70 {
+		status = fmt.Sprintf("%s · gaps %d · findings %d", age, gaps, len(w.snapshot.Findings))
+	}
 	notice := w.notice
+	if notice == "" && gaps > 0 {
+		notice = "Partial coverage · 3 opens gaps; quiet is not health"
+	}
+	if notice == "" {
+		notice = "Retained scope · v shows exact scope and row"
+	}
 	if w.query != "" {
 		notice = "Search: " + w.query + " · " + notice
 	}
-	w.header.SetText("[::b]" + tview.Escape(title) + "[::]\n" + tview.Escape(scopeLine) + "\n" + tview.Escape(counts) + "\n" + tview.Escape(notice))
+	w.SetTitle(" Workspace · " + dailyWorkspaceLabels[w.tabIndex()] + " ")
+	w.header.SetText("[::b]" + tview.Escape(fitInvestigation(title, width)) + "[::]\n" +
+		tview.Escape(fitInvestigation(status, width)) + "\n" + tview.Escape(fitInvestigation(notice, width)) + "\n" +
+		ui.TaskTabs(dailyWorkspaceLabels, w.tabIndex(), width))
+}
+func (w *dailyWorkspace) renderFooter() {
+	width := w.viewportWidth
+	if width <= 0 {
+		width = 76
+	}
+	action := "Enter investigate"
+	if w.mode == dailyWorkspaceCoverageMode {
+		action = "Enter gap details"
+	}
+	if w.mode == dailyWorkspaceScopesMode {
+		action = "Enter open · n new"
+	}
+	hints := action + " · / search · r refresh · v details · Esc back · ? help"
+	if width < 70 {
+		hints = action + " · / search · r refresh · ? help"
+	}
+	if width < 50 {
+		hints = "Enter details · / search · ? help"
+	}
+	w.footer.SetText(tview.Escape(hints))
+}
+func (w *dailyWorkspace) scopeDetail() string {
+	return fmt.Sprintf("Context: %s\nNamespaces: %s\nSelector: %s\nKinds: %s\nCaptured: %s\n",
+		w.scope.Context, strings.Join(w.scope.Namespaces, ", "), w.scope.LabelSelector,
+		strings.Join(w.scope.Kinds, ", "), fullAt(w.snapshot.ObservedAt))
+}
+func (w *dailyWorkspace) showRowDetails() {
+	row, _ := w.table.GetSelection()
+	message := w.scopeDetail()
+	if row > 0 && row <= len(w.rows) {
+		selected := w.rows[row-1]
+		message += "\n" + strings.Join(selected.cells, "\n") + "\n\n" + selected.detail
+	}
+	const page = "workspace-row-detail"
+	var modal *ui.MessageModal
+	done := func() { w.app.Content.Pages.RemovePage(page); w.app.SetFocus(w.table) }
+	modal = ui.NewMessageModal(w.app.Styles, "Workspace evidence · retained", message, done)
+	w.app.Content.Pages.AddPage(page, modal, false, true)
+	w.app.Content.Pages.SetPageCleanup(page, modal.Cleanup)
+	w.app.SetFocus(modal)
 }
 func (w *dailyWorkspace) renderDetail() {
 	row, _ := w.table.GetSelection()
 	if row > 0 && row <= len(w.rows) {
 		selected := w.rows[row-1]
 		identity := ""
+		if w.mode == dailyWorkspaceCoverageMode && len(selected.cells) > 2 {
+			identity = selected.cells[1] + " · " + selected.cells[2] + "\n"
+		}
 		if selected.ref != nil {
 			identity = selected.ref.GVR + " · " + selected.ref.Namespace + "/" + selected.ref.Name + "\n"
 		}
@@ -317,7 +416,14 @@ func dailyWorkspaceAge(from, to time.Time) string {
 // Adapt column widths at paint time so both a laptop terminal and a wide desk
 // keep the status/finding column visible. Full identity stays in the detail bar.
 func (w *dailyWorkspace) Draw(screen tcell.Screen) {
+	if ui.DrawTaskSizeNotice(screen, w.Box) {
+		return
+	}
 	_, _, width, _ := w.GetInnerRect()
+	if width != w.viewportWidth {
+		w.viewportWidth = width
+		w.render()
+	}
 	w.constrainColumns(width)
 	w.Flex.Draw(screen)
 }
@@ -341,6 +447,16 @@ func (w *dailyWorkspace) constrainColumns(width int) {
 		caps = []int{1, max(14, min(24, width/5)), max(14, min(32, width/5)), max(14, min(28, width/5)), 0}
 	default:
 		caps = []int{8, max(8, min(16, width/9)), max(10, min(22, width/7)), max(14, min(32, width/5)), 0}
+	}
+	if width < 80 {
+		switch w.mode {
+		case dailyWorkspaceCoverageMode:
+			caps = []int{10, min(18, width/3), 0}
+		case dailyWorkspaceQueueMode:
+			caps = []int{8, min(14, max(6, width-30)), 0}
+		default:
+			caps = []int{min(18, width/3), 0}
+		}
 	}
 	available := width - (len(caps)-1)*2
 	for _, cap := range caps {

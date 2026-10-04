@@ -62,7 +62,13 @@ func (t *Table) fitColumns(data *model1.TableData) {
 	t.columnWidths = nil
 	_, _, width, _ := t.GetInnerRect()
 	t.layoutWidth = width
-	if t.gvr.GVR().Resource != "pods" || width <= 0 || t.wide {
+	if width <= 0 || t.wide {
+		return
+	}
+	if t.gvr.GVR().Resource != "pods" {
+		if width < 96 {
+			t.fitStatusColumns(data, width)
+		}
 		return
 	}
 	pads := make(MaxyPad, data.HeaderCount())
@@ -112,6 +118,57 @@ func (t *Table) fitColumns(data *model1.TableData) {
 		}
 		if remaining >= size+1 {
 			reserve(name, size)
+		}
+	}
+	t.columnWidths = cols
+}
+
+// fitStatusColumns keeps native/provider status facts readable in a split.
+// Secondary columns are omitted only when their complete values cannot fit;
+// source rows remain intact for Describe, YAML, filter and export.
+func (t *Table) fitStatusColumns(data *model1.TableData, width int) {
+	pads := make(MaxyPad, data.HeaderCount())
+	computeMaxColumns(pads, t.getSortCol().Name, data, t.getLiteralFields())
+	available := make(map[string]int)
+	for index, column := range data.Header() {
+		if !t.shouldExcludeColumn(column) {
+			available[column.Name] = max(1, pads[index]+2)
+		}
+	}
+	if available["NAME"] == 0 {
+		return
+	}
+	critical := []string{"STATUS", "STATE", "READY", "HEALTH", "HEALTHY", "PHASE", "VERDICT", "CONDITION"}
+	hasStatus := false
+	for _, name := range critical {
+		hasStatus = hasStatus || available[name] > 0
+	}
+	if !hasStatus {
+		return
+	}
+	cols := make(map[string]int)
+	remaining := width
+	for _, name := range critical {
+		size := available[name]
+		if size > 0 && size+10 <= remaining {
+			cols[name] = size
+			remaining -= size + 1
+		}
+	}
+	if len(cols) == 0 {
+		return
+	}
+	if available["NAMESPACE"] > 0 && width >= 60 && remaining > 22 {
+		cols["NAMESPACE"] = min(12, available["NAMESPACE"])
+		remaining -= cols["NAMESPACE"] + 1
+	}
+	cols["NAME"] = max(6, min(28, remaining-1))
+	remaining -= cols["NAME"] + 1
+	for _, name := range []string{"RESTARTS", "EXPIRES", "REVISION", "KIND", "SUSPEND", "AGE", "RENEWAL", "SOURCE", "ISSUER"} {
+		size := available[name]
+		if size > 0 && remaining >= size+1 {
+			cols[name] = size
+			remaining -= size + 1
 		}
 	}
 	t.columnWidths = cols

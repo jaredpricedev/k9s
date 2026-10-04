@@ -56,7 +56,7 @@ func ShowConfirmAck(app *ui.App, pages *ui.Pages, acceptStr string, override boo
 		b.SetLabelColorActivated(styles.ButtonFocusFgColor.Color())
 	}
 	f.SetFocus(0)
-	modal := tview.NewModalForm("<"+title+">", f)
+	modal := ui.NewModalForm("<"+title+">", f)
 	modal.SetText(msg)
 	modal.SetTextColor(styles.FgColor.Color())
 	modal.SetDoneFunc(func(int, string) {
@@ -94,7 +94,7 @@ func ShowConfirm(styles *config.Dialog, pages *ui.Pages, title, msg string, ack 
 		}
 	}
 	f.SetFocus(0)
-	modal := tview.NewModalForm("<"+title+">", f)
+	modal := ui.NewModalForm("<"+title+">", f)
 	modal.SetText(msg)
 	modal.SetTextColor(styles.FgColor.Color())
 	modal.SetDoneFunc(func(int, string) {

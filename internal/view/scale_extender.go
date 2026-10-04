@@ -74,7 +74,7 @@ func (s *ScaleExtender) scaleCmd(*tcell.EventKey) *tcell.EventKey {
 	styles := s.App().Styles.Dialog()
 	form := tview.NewForm().SetButtonsAlign(tview.AlignCenter).
 		SetButtonBackgroundColor(styles.ButtonBgColor.Color()).SetButtonTextColor(styles.ButtonFgColor.Color())
-	loading := tview.NewModalForm("<Scale>", form)
+	loading := ui.NewModalForm("<Scale>", form)
 	loading.SetText(fmt.Sprintf("Loading desired replicas in context %s...\n%s", session.context, operationDestination(targets)))
 	dismiss := func() { cancel(); s.dismissDialog() }
 	form.AddButton("Cancel", dismiss)
@@ -132,7 +132,7 @@ func (s *ScaleExtender) showScaleDialog(session *operationSession, targets []Sel
 	for i := range f.GetButtonCount() {
 		f.GetButton(i).SetBackgroundColorActivated(styles.ButtonFocusBgColor.Color()).SetLabelColorActivated(styles.ButtonFocusFgColor.Color())
 	}
-	confirm := tview.NewModalForm("<Scale>", f)
+	confirm := ui.NewModalForm("<Scale>", f)
 	msg := fmt.Sprintf("Scale in context %s?\n%s\n\nDesired replicas are submitted to the API; watch READY / STATUS for completion.",
 		session.context, operationDestination(targets))
 	if notice != "" {

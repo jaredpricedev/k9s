@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/derailed/k9s/internal/client"
+	"github.com/derailed/k9s/internal/config"
+	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/k9s/internal/workspace"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
@@ -33,32 +35,34 @@ func (w *dailyWorkspace) form(title, message string, build func(*tview.Form, fun
 	frame := tview.NewFrame(form).SetBorders(0, 0, 1, 0, 0, 0)
 	frame.SetBorder(true).SetBorderPadding(1, 1, 1, 1).SetTitle(title).SetTitleColor(w.app.Styles.Semantic().Focus.Color()).SetBackgroundColor(styles.BgColor.Color())
 	form.SetBackgroundColor(styles.BgColor.Color())
-	modal := &dailyWorkspaceModal{Frame: frame, form: form, message: tview.Escape(message), color: styles.FgColor.Color()}
+	modal := &dailyWorkspaceModal{Frame: frame, form: form, message: tview.Escape(message), color: styles.FgColor.Color(), colors: styles}
 	w.app.Content.Pages.AddPage(dailyWorkspaceFormPage, modal, false, true)
 	w.app.SetFocus(modal)
 }
 
-// The shared ModalForm fixes its width at one third of the terminal. Workspace
-// fields need room for namespace lists and selectors, so size this overlay to
-// the available terminal instead. Frame delegates keyboard focus to the Form.
+// Workspace forms share the responsive host while retaining native Form focus.
 type dailyWorkspaceModal struct {
 	*tview.Frame
-	form    *tview.Form
-	message string
-	color   tcell.Color
+	form       *tview.Form
+	message    string
+	color      tcell.Color
+	colors     config.Dialog
+	responsive *ui.ModalForm
 }
 
+func (*dailyWorkspaceModal) IsDialog() bool { return true }
+
 func (m *dailyWorkspaceModal) Draw(screen tcell.Screen) {
-	columns, rows := screen.Size()
-	width := max(1, min(96, columns-4))
-	lines := tview.WordWrap(m.message, max(1, width-4))
-	m.Frame.Clear()
-	for _, line := range lines {
-		m.Frame.AddText(line, true, tview.AlignLeft, m.color)
+	if m.responsive == nil {
+		m.responsive = ui.NewModalForm(m.GetTitle(), m.form)
+		if m.colors.FgColor != "" {
+			m.responsive.SetDialogColors(&m.colors)
+		}
+		m.responsive.SetText(m.message).SetTextColor(m.color)
 	}
-	height := min(max(1, rows-2), len(lines)+m.form.GetFormItemCount()+10)
-	m.Frame.SetRect(max(0, (columns-width)/2), max(0, (rows-height)/2), width, height)
-	m.Frame.Draw(screen)
+	m.responsive.Draw(screen)
+	x, y, width, height := m.responsive.GetRect()
+	m.Frame.SetRect(x, y, width, height)
 }
 
 func (w *dailyWorkspace) editingScope() workspace.Scope {
