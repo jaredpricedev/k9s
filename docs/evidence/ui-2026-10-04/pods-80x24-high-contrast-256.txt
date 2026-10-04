@@ -1,0 +1,23 @@
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination
+ <d> Describe  <l> Logs  <ctrl+o> Actions  <?> Help
+┌─────────────────────────────── pods(apps)[2] ────────────────────────────────┐
+│ NAME^                               READY STATUS             RESTARTS        │
+│ > payments-api-with-a-deliberately… 0/1   CrashLoopBackOff          7        │
+│   payments-api-with-a-deliberately… 0/1   ContainerCreating         7        │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <pod>

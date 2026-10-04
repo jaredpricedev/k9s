@@ -1,0 +1,2 @@
+# Raw tool output and terminal cells retain their original padding for provenance.
+docs/evidence/**/*.txt whitespace=-blank-at-eol,-blank-at-eof

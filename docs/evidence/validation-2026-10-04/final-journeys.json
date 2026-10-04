@@ -1,0 +1,46 @@
+{
+  "captured_at": "2026-10-04T01:41:51.139592+00:00",
+  "binary_sha256": "a28a1f48b72d255348ad72bc4124d5973cc003a4070520c81743bd668aa57747",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "cpu_count": 5,
+  "journeys": [
+    {
+      "columns": 80,
+      "rows": 24,
+      "no_icons": true,
+      "elapsed_seconds": 34.745,
+      "result": "passed"
+    },
+    {
+      "columns": 100,
+      "rows": 30,
+      "no_icons": false,
+      "elapsed_seconds": 34.904,
+      "result": "passed"
+    },
+    {
+      "columns": 120,
+      "rows": 34,
+      "no_icons": false,
+      "elapsed_seconds": 35.108,
+      "result": "passed"
+    },
+    {
+      "fixture": "selected Pod, metrics 503, OOM last state and UID-scoped FailedScheduling event",
+      "columns": 120,
+      "rows": 34,
+      "elapsed_seconds": 44.233,
+      "assertions": [
+        "on-demand selected identity and unavailable-metrics diagnostics",
+        "explicit A/B capture keeps A, adds/removes/changes, reversible API-noise toggle",
+        "pressure retains configuration/OOM/events and N/A metrics for both containers",
+        "comparison A/B and incomplete inspection text export their retained source/time without refreshing",
+        "explicit JSON export -> offline import -> identical Markdown export/import; mode 0600",
+        "UID-scoped bounded events; no resource mutation or offline resource refetch"
+      ],
+      "result": "passed"
+    }
+  ],
+  "coverage": "Real PTY and disposable loopback Kubernetes API fixtures; no live Kubernetes or Relay integration.",
+  "timing": "Journey durations include deliberate drain waits; they are not keystroke-to-paint latency measurements."
+}

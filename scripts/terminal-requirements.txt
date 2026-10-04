@@ -1,0 +1,4 @@
+# Modified for k9+; see NOTICE.
+Pillow==12.3.0
+pyte==0.8.2
+wcwidth==0.9.1
