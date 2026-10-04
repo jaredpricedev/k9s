@@ -86,6 +86,9 @@ func TestMakeSAR(t *testing.T) {
 
 func TestIsValidNamespace(t *testing.T) {
 	c := NewTestAPIClient()
+	// Namespace membership is under test, not wall-clock cache expiration.
+	cacheClock := clocktesting.NewFakeClock(time.Unix(0, 0))
+	c.cache = cache.NewLRUExpireCacheWithClock(cacheSize, cacheClock)
 
 	uu := map[string]struct {
 		ns    string
