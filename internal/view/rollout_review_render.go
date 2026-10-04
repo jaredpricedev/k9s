@@ -40,16 +40,19 @@ func rolloutOverview(snapshot *review.RolloutSnapshot, width int) string {
 	}
 	b.WriteString("ROLLOUT OBSERVATION\n")
 	fmt.Fprintln(&b, fitInvestigation(marker+" "+strings.ToUpper(state)+" · "+reason, width))
-	if width < 60 && len(reason) > 0 {
+	if width < 60 && reason != "" {
 		fmt.Fprintln(&b, fitInvestigation(reason, width))
 	}
 	fmt.Fprintf(&b, "Generation %s · observed %s\n", rolloutCount(snapshot.Generation), rolloutCount(snapshot.ObservedGeneration))
 	b.WriteString("\nREPLICA COUNTS · retained Deployment status\n")
 	if width < 60 {
-		fmt.Fprintf(&b, "Desired %s · Updated %s\nReady %s · Available %s · Total %s\n", rolloutCount(snapshot.Desired), rolloutCount(snapshot.Updated), rolloutCount(snapshot.Ready), rolloutCount(snapshot.Available), rolloutCount(snapshot.Replicas))
+		fmt.Fprintf(&b, "Desired %s · Updated %s\nReady %s · Available %s · Total %s\n",
+			rolloutCount(snapshot.Desired), rolloutCount(snapshot.Updated),
+			rolloutCount(snapshot.Ready), rolloutCount(snapshot.Available), rolloutCount(snapshot.Replicas))
 	} else {
 		columns := []int{11, 11, 11, 13, 11}
-		counts := []string{rolloutCount(snapshot.Desired), rolloutCount(snapshot.Updated), rolloutCount(snapshot.Ready), rolloutCount(snapshot.Available), rolloutCount(snapshot.Replicas)}
+		counts := []string{rolloutCount(snapshot.Desired), rolloutCount(snapshot.Updated),
+			rolloutCount(snapshot.Ready), rolloutCount(snapshot.Available), rolloutCount(snapshot.Replicas)}
 		fmt.Fprintln(&b, tableRow([]string{"DESIRED", "UPDATED", "READY", "AVAILABLE", "TOTAL"}, columns))
 		fmt.Fprintln(&b, tableRow(counts, columns))
 	}

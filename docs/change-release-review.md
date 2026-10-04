@@ -94,6 +94,11 @@ the selection by a page. The selected row stays visible after navigation and
 resize. Enter previews the exact selected UID. Search and `n`/`N` navigate text
 matches independently; they never select a recovery target.
 
+In Recovery, the same selection keys change the pending choice; Enter explicitly
+updates the preview. Ctrl-F/Ctrl-B scroll retained text by a page without changing
+that choice. This keeps a long template comparison accessible while retaining the
+previewed UID.
+
 Refresh preserves a selected UID when present. If that UID disappears from the
 retained set, selection is visibly invalidated and Enter cannot preview a
 replacement. Use the selection keys to choose again. Recovery names the

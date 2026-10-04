@@ -61,7 +61,9 @@ func (w *desiredReviewView) renderRows(selected string) {
 		caps = []int{10, max(12, width-30), 0}
 	}
 	for col, label := range labels {
-		w.table.SetCell(0, col, tview.NewTableCell(fitInvestigation(label, max(1, caps[col]))).SetSelectable(false).SetAttributes(tcell.AttrBold).SetTextColor(palette.Focus.Color()))
+		header := tview.NewTableCell(fitInvestigation(label, max(1, caps[col]))).
+			SetSelectable(false).SetAttributes(tcell.AttrBold).SetTextColor(palette.Focus.Color())
+		w.table.SetCell(0, col, header)
 		if caps[col] == 0 {
 			w.table.GetCell(0, col).SetText(label).SetExpansion(1)
 		}
@@ -79,14 +81,14 @@ func (w *desiredReviewView) renderRows(selected string) {
 			}
 		}
 		for col, value := range cells {
-			cap := caps[col]
-			if cap == 0 {
-				cap = max(1, width-len(cells)+1)
+			cellWidth := caps[col]
+			if cellWidth == 0 {
+				cellWidth = max(1, width-len(cells)+1)
 				for _, c := range caps {
-					cap -= c
+					cellWidth -= c
 				}
 			}
-			cell := tview.NewTableCell(desiredReviewSafe(fitInvestigation(value, cap))).SetTextColor(text).SetMaxWidth(cap)
+			cell := tview.NewTableCell(desiredReviewSafe(fitInvestigation(value, cellWidth))).SetTextColor(text).SetMaxWidth(cellWidth)
 			if col == 0 {
 				switch entry.State {
 				case review.StateChanged, review.StateCreate:
@@ -152,7 +154,10 @@ func (w *desiredReviewView) renderDetail() {
 	}
 	text := renderDesiredReviewEntryWidth(&entry, w.reviewWidth())
 	if w.evidenceOpen {
-		text = w.renderSourceIdentity() + "\n\n" + desiredReviewSafe("LATEST READ / SOURCE STATUS\n"+w.notice) + "\n\n" + desiredReviewSafe("CAPTURED SCOPE\nContext: "+w.contextName+"\nNamespaces: "+strings.Join(w.scope.Namespaces, ", ")+"\nKinds: "+strings.Join(w.scope.Kinds, ", ")+"\nSelector: "+w.scope.LabelSelector) + "\n\n" + renderDesiredReviewEntry(&entry)
+		scope := "CAPTURED SCOPE\nContext: " + w.contextName + "\nNamespaces: " + strings.Join(w.scope.Namespaces, ", ") +
+			"\nKinds: " + strings.Join(w.scope.Kinds, ", ") + "\nSelector: " + w.scope.LabelSelector
+		text = w.renderSourceIdentity() + "\n\n" + desiredReviewSafe("LATEST READ / SOURCE STATUS\n"+w.notice) +
+			"\n\n" + desiredReviewSafe(scope) + "\n\n" + renderDesiredReviewEntry(&entry)
 	}
 	if reason, retained := w.retainedReasons[desiredReviewEntryKey(&entry)]; retained {
 		text = desiredReviewSafe("RETAINED EVIDENCE · latest read "+reason+"\nOriginal observed time: "+identityTime(entry.ObservedAt)) + "\n\n" + text
@@ -326,7 +331,8 @@ func renderDesiredReviewEntryWidth(entry *review.Entry, width int) string {
 	id := entry.Identity
 	fmt.Fprintf(&out, "%s %s/%s\n", id.Kind, id.Namespace, id.Name)
 	if entry.State == review.StateChanged || entry.State == review.StateMatch || entry.State == review.StateCreate {
-		fmt.Fprintf(&out, "%s · %d changes · %d/%d matched · %d unreviewed\n", entry.State, len(entry.Intent.Changes), entry.Intent.MatchedFields, entry.Intent.DeclaredFields, len(entry.Intent.Unreviewed))
+		fmt.Fprintf(&out, "%s · %d changes · %d/%d matched · %d unreviewed\n",
+			entry.State, len(entry.Intent.Changes), entry.Intent.MatchedFields, entry.Intent.DeclaredFields, len(entry.Intent.Unreviewed))
 	} else {
 		fmt.Fprintf(&out, "%s · comparison unavailable\n", entry.State)
 	}
