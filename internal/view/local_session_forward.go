@@ -176,7 +176,7 @@ func localForwardSetupNote(err error) string {
 	case errors.Is(err, dao.ErrForwardEndpointDenied) || apierrors.IsForbidden(err) || apierrors.IsUnauthorized(err):
 		return "Endpoint access denied; no local listener started. Check access for the captured destination."
 	case apierrors.IsNotFound(err):
-		return "Captured Pod is absent; no local listener started. Reopen the resource list."
+		return "Requested read or endpoint unavailable (404); Pod absence unverified. No local listener started."
 	case errors.Is(err, context.DeadlineExceeded):
 		return "Bounded setup deadline reached; no local listener started. Inspect the captured destination before retrying."
 	default:

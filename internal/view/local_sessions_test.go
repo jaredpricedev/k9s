@@ -37,6 +37,7 @@ const (
 
 func localSessionUIFixture() *localSessions {
 	app := &App{App: &ui.App{Application: tview.NewApplication(), Configurator: ui.Configurator{Styles: config.NewStyles()}}}
+	app.App.Init()
 	return newLocalSessions(app)
 }
 

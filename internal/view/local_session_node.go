@@ -222,7 +222,7 @@ func cleanupOwnedDebugPod(operationCtx context.Context, clientset kubernetes.Int
 	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	current, err := clientset.CoreV1().Pods(pod.Namespace).Get(ctx, pod.Name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
+	if localSessionNamedPodMissing(err, pod) {
 		handle.Event("Owned debug Pod is already absent; no delete was sent.")
 		return nil
 	}
@@ -236,7 +236,7 @@ func cleanupOwnedDebugPod(operationCtx context.Context, clientset kubernetes.Int
 	}
 	uid := pod.UID
 	err = clientset.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid}})
-	if apierrors.IsNotFound(err) {
+	if localSessionNamedPodMissing(err, pod) {
 		return nil
 	}
 	if err != nil {
@@ -246,4 +246,18 @@ func cleanupOwnedDebugPod(operationCtx context.Context, clientset kubernetes.Int
 	operationAcceptWrite(operationCtx, "Owned debug Pod deletion accepted for UID "+string(uid)+"; final disappearance was not separately observed")
 	handle.Event("Owned debug Pod deletion accepted using a UID precondition; final disappearance was not separately observed.")
 	return nil
+}
+
+// A proxy or unsupported route 404 does not establish absence of this Pod.
+func localSessionNamedPodMissing(err error, pod *v1.Pod) bool {
+	if err == nil || apierrors.IsUnexpectedServerError(err) {
+		return false
+	}
+	var status apierrors.APIStatus
+	if !errors.As(err, &status) {
+		return false
+	}
+	value := status.Status()
+	return value.Reason == metav1.StatusReasonNotFound && value.Code == 404 && value.Details != nil &&
+		value.Details.Name == pod.Name && value.Details.Group == "" && value.Details.Kind == "pods"
 }

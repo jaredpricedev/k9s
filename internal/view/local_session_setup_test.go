@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 )
@@ -246,4 +248,24 @@ func TestOwnedNodeAcceptedCreationKeepsReceiptAndUIDCleanupAfterCancellation(t *
 	if len(progress.accepted) != 2 || !strings.Contains(progress.accepted[0], localSessionTestUID) || !strings.Contains(progress.accepted[1], localSessionTestUID) {
 		t.Fatal("cancellation erased create/delete acceptance facts", progress.accepted)
 	}
+}
+
+func TestOwnedDebugCleanupDoesNotTreatProxy404AsConfirmedAbsence(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Error("unverified cleanup sent a write", r.Method)
+		}
+		http.Error(w, "proxy route unavailable", http.StatusNotFound)
+	}))
+	defer server.Close()
+	clientset, err := kubernetes.NewForConfig(localSetupConfig(server))
+	require.NoError(t, err)
+	registry := &session.Registry{}
+	handle, err := registry.Add(localSessionTestSpec(), nil)
+	require.NoError(t, err)
+	err = cleanupOwnedDebugPod(t.Context(), clientset, &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "owned", Namespace: "apps", UID: "owned-uid"}}, handle)
+	require.ErrorIs(t, err, errExternalOperationOutcome)
+	record, ok := registry.Find(handle.ID())
+	require.True(t, ok)
+	require.NotContains(t, fmt.Sprint(record.Events), "already absent")
 }
