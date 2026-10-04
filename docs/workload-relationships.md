@@ -17,6 +17,18 @@ The destination resource list carries that expected UID into subsequent
 inspection. Closing the picker cancels a pending jump, and responses after a
 context change or deadline cannot navigate another view.
 
+For the row opened from a relationship, live YAML, Describe and kubectl Edit
+require reopening its native resource list to select the current object. Those
+by-name paths cannot retain the relationship's UID guarantee. Use Inspector for
+UID-checked evidence, or explicitly reopen the list for the usual native actions.
+Other rows in the list keep their ordinary actions.
+
+Nested relationship jumps retain each source snapshot. Back restores the earlier
+viewing namespace only while that jump still owns its destination. Manual context
+or namespace changes, including reactive disk edits and changes away and back,
+end that ownership. A valid nested return preserves the outer jump's ownership
+without reviving a ticket invalidated by a user change.
+
 | Starting resource | Related resources and evidence |
 | --- | --- |
 | Deployment, StatefulSet, DaemonSet, ReplicaSet, Job | Existing selector-matching pods and owners; Services whose selectors match pod-template labels. Template matches are configuration evidence, not current endpoints. |
@@ -65,11 +77,12 @@ HTTPRoute CRDs are absent in that lab: missing-API visibility is smoke-tested;
 Gateway/HTTPRoute references are fixture-tested. Browser rendering and large
 cluster performance were not revalidated in this increment.
 
-The final integration passes the complete ordinary Go suite, all eight race
+The combined integration passes the complete ordinary Go suite, all eight race
 suites, and full lint with zero issues. Additional regressions cover failed
-context switches, destination changes away and back, repeated cross-namespace
-jumps, expired pickers, and retained inspection search/scroll state through skin
-changes and Back. Raw output and source provenance are recorded in
+context switches, reactive disk destination changes, nested and repeated
+cross-namespace returns, changes away and back, expired pickers, native action
+UID guards, and retained inspection search/scroll state through skin changes and
+Back. Raw output and source provenance are recorded in
 [the integration evidence](evidence/merge-2026-10-04/README.md). VCS stamping was
 disabled for managed worktree checks because automatic Git status collection
 cannot read the worktree metadata in the sandbox.

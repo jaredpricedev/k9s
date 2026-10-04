@@ -208,7 +208,7 @@ func (c *Configurator) ConfigWatcher(ctx context.Context, s synchronizer) error 
 							s.Logo().Warn("k9+ config reload failed!")
 						}
 					} else {
-						if err := c.Config.K9s.Reload(); err != nil {
+						if err := c.Config.Reload(); err != nil {
 							slog.Error("k9+ context config reload failed", slogs.Error, err)
 							s.Flash().Warn("Context config reload failed. Check k9+ logs!")
 							s.Logo().Warn("Context config reload failed!")

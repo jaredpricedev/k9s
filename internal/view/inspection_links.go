@@ -193,17 +193,18 @@ func (d *inspectionDetails) applyRelatedJump(ctx context.Context, p *relatedPick
 		return
 	}
 	sourceNamespace := d.app.Config.ActiveNamespace()
+	ownership := d.ownedReturnDestinations(sourceNamespace)
 	d.app.PrevCmd(nil)
 	d.app.gotoResource(command, path, false, true)
 	if v, ok := d.app.Content.Top().(ResourceViewer); ok && v.GetTable() != nil && v.GVR() == observed.GVR {
 		v.GetTable().expectedTarget = &observed
 		// Only the successful jump owns a return namespace. A subsequent user
 		// namespace/context change invalidates it before Back can restore it.
-		d.rememberRelatedDestination(sourceNamespace)
+		d.rememberRelatedDestination(sourceNamespace, ownership)
 	} else if d.app.Content.Top() == d {
 		// A command can change the namespace before destination Init fails.
 		// Keep the still-visible source snapshot and destination chrome coherent.
-		d.rememberRelatedDestination(sourceNamespace)
+		d.rememberRelatedDestination(sourceNamespace, ownership)
 		d.restoreNavigationNamespace()
 	}
 	if observed.UID == "" {
@@ -211,11 +212,28 @@ func (d *inspectionDetails) applyRelatedJump(ctx context.Context, p *relatedPick
 	}
 }
 
-func (d *inspectionDetails) rememberRelatedDestination(sourceNamespace string) {
+func (d *inspectionDetails) ownedReturnDestinations(sourceNamespace string) []inspectionReturnOwnership {
+	var ownership []inspectionReturnOwnership
+	revision := d.app.Config.DestinationRevision()
+	for _, component := range d.app.Content.Peek() {
+		ancestor, ok := component.(*inspectionDetails)
+		if !ok || ancestor == d || ancestor.contextName != d.contextName {
+			continue
+		}
+		destination := ancestor.returnDestination
+		if destination != nil && destination.revision == revision && destination.destinationNamespace == sourceNamespace {
+			ownership = append(ownership, inspectionReturnOwnership{inspector: ancestor, destination: destination, revision: revision})
+		}
+	}
+	return ownership
+}
+
+func (d *inspectionDetails) rememberRelatedDestination(sourceNamespace string, ownership []inspectionReturnOwnership) {
 	d.returnDestination = &inspectionReturnDestination{
 		sourceNamespace:      sourceNamespace,
 		destinationNamespace: d.app.Config.ActiveNamespace(),
 		revision:             d.app.Config.DestinationRevision(),
+		ancestors:            ownership,
 	}
 }
 

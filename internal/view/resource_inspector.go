@@ -34,6 +34,13 @@ type inspectionSnapshot struct {
 type inspectionReturnDestination struct {
 	sourceNamespace, destinationNamespace string
 	revision                              uint64
+	ancestors                             []inspectionReturnOwnership
+}
+
+type inspectionReturnOwnership struct {
+	inspector   *inspectionDetails
+	destination *inspectionReturnDestination
+	revision    uint64
 }
 
 // inspectionDetails cancels on exit and never updates a replaced screen.
@@ -173,6 +180,17 @@ func (d *inspectionDetails) restoreNavigationNamespace() {
 	}
 	if err := d.app.switchNS(destination.sourceNamespace); err != nil {
 		d.app.Flash().Err(err)
+		return
+	}
+	// This still-owned nested return may renew only the exact ancestor tickets
+	// that owned its source before the nested jump. User changes never renew them.
+	for _, ownership := range destination.ancestors {
+		ancestor := ownership.inspector
+		if ancestor.contextName == d.contextName && ancestor.returnDestination == ownership.destination &&
+			ownership.destination.revision == ownership.revision &&
+			ownership.destination.destinationNamespace == destination.sourceNamespace {
+			ownership.destination.revision = d.app.Config.DestinationRevision()
+		}
 	}
 }
 

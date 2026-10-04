@@ -39,3 +39,48 @@ inventory were finalized afterward. VCS stamping was disabled for sandbox reads.
 This record makes no hosted-CI, CLI, terminal-journey or live-cluster claim for the
 new merge head. The earlier source C/D report and raw evidence remain unchanged;
 subsequent merge-head checks must retain their own source and binary identity.
+
+## Follow-up source checks
+
+These separate logs cover the source fixes prepared on top of integration and
+documentation head `a67b0fe89672ce4bfad461f8711fddf320b8820c`, before the
+consolidated follow-up commit. The original merge history from D and PR #7 is
+retained. The initial raw logs above and the dated C/D evidence remain unchanged.
+
+Reactive configuration reloads now invalidate destination ownership after actual
+namespace or context changes. Valid nested Back navigation renews only the exact,
+still-owned ancestor tickets captured before the child jump. Manual, reactive
+and context changes away and back continue to invalidate those tickets.
+Regressions cover nested returns through three transitions, retained UID,
+snapshot, query, highlight and scroll state, and intervening user changes.
+
+A matching relationship row directs live YAML, Describe and kubectl Edit to an
+explicitly reopened native list, while Inspector retains UID-checked evidence.
+Native action regressions cover stale context/UID rejection and normal unrelated
+rows. Compact metric wording and header column sizing have draw-loop regressions.
+Atomic file publication also fixes the cross-process test helper's readiness and
+result exchange; it makes no change to production lease logic.
+
+| Check | Raw output | Result |
+| --- | --- | --- |
+| Complete ordinary suite, CGO disabled | [ordinary-followup.txt](ordinary-followup.txt) | Pass |
+| Eight-package race suite, CGO enabled | [race-followup.txt](race-followup.txt) | Pass |
+| Full lint, CGO enabled | [lint-followup.txt](lint-followup.txt) | Zero issues |
+| Cross-process publication fixtures, 50 repetitions | [publication-50.txt](publication-50.txt) | Pass |
+
+The first three checks used the same Go 1.25.8, lint 2.6.0, caches, environment and
+commands recorded above. Their exact source has 24 Go paths changed from D and combined
+SHA256 `df31740778de24f2e1ea09497d6480b422d45be226e043edb83e3c627b7b3e77`,
+using the same sorted path/NUL/bytes/NUL algorithm. All three checks passed on
+this source after the final test-only lint cleanup. Documentation was finalized
+afterward.
+
+The publication fixtures passed 50 repetitions before the other follow-up edits;
+their helper source is identical in the final source. The exact command was:
+
+```sh
+GOMAXPROCS=2 CGO_ENABLED=0 go test -p 2 -buildvcs=false ./internal/view -run '^(TestPrepareLogSessionWaitsForCrossProcessRootLease|TestConcurrentProcessesPublishOnlyOneLeasedSessionAtCap)$' -count=50
+```
+
+This follow-up record reports local source checks. A clean binary, terminal
+journeys and subsequent hosted CI require their own source and binary identity.

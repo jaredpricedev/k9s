@@ -193,11 +193,27 @@ func (s *StatusIndicator) Info(msg string) { s.app.Flash().SetMessage(model.Flas
 //
 //nolint:gocritic // Keep captured observations immutable across worker and UI boundaries.
 func MetricPercent(previous, current client.MetricSample, memory bool) string {
+	return metricPercent(previous, current, memory, false)
+}
+
+// CompactMetricPercent keeps complete availability states in the narrow cluster
+// pane. Detailed failure reasons, observation time and source remain in F2.
+//
+//nolint:gocritic // Keep captured observations immutable across worker and UI boundaries.
+func CompactMetricPercent(previous, current client.MetricSample, memory bool) string {
+	return metricPercent(previous, current, memory, true)
+}
+
+//nolint:gocritic // Keep captured observations immutable across worker and UI boundaries.
+func metricPercent(previous, current client.MetricSample, memory, compact bool) string {
 	current = current.At(time.Now())
 	if !current.HasValue() {
 		state := current.State
 		if state == "" {
 			state = client.MetricsUnavailable
+		}
+		if compact {
+			return string(state)
 		}
 		return "N/A (" + string(state) + ")"
 	}
@@ -206,6 +222,9 @@ func MetricPercent(previous, current client.MetricSample, memory bool) string {
 		oldValue, value = previous.Values.PercMEM, current.Values.PercMEM
 	}
 	if current.State == client.MetricsStale {
+		if compact {
+			return render.PrintPerc(value) + " stale"
+		}
 		label := "stale"
 		if current.Failure != "" {
 			label += ": " + string(current.Failure)

@@ -53,8 +53,8 @@ from k9s for interoperability and provenance, without implying upstream endorsem
 | Metrics and destination identity | Share explicit available, unavailable, denied, stale and not-configured sample states across headers, Pulse and resource rows. Missing usage stays N/A; memory trends compare memory samples. Compact chrome keeps context, namespace and access mode visible through messages and prompts. |
 | Presentation and themes | Use shared semantic health, severity, identity, focus and action colors, with custom-color fallback and stock, high-contrast and monochrome skins. Narrow tables preserve useful fault status, readiness and restarts; runtime skin changes also update dialog styles. |
 | Operations and client lifetime | Move restart, scale and delete requests off UI callbacks. Pin immutable client configuration and source handles, validate captured identities, and use UID/resource-version conditions for writes. Cancellation stops waiting work; API acceptance and controller completion remain distinct. |
-| Action discovery and return navigation | Use stable action metadata for searchable discovery and help across resource lists, Pulse, logs, Hubble and inspectors. Discovery leaves the owning stream active; unavailable actions retain their reason and existing fast keys. Inspectors retain successful evidence, accepted searches, highlighted matches and scroll position when refreshing, returning or changing skins. Cross-namespace returns restore the source viewing destination only while the jump owns it; later context or namespace choices invalidate that ownership, including choices that return to the earlier value. |
-| Workload relationships | Keep the original PR #7 implementation: namespace-scoped selector and configuration links between workloads, Pods, Services, EndpointSlices and Ingress/Gateway resources. Preserve link reasons and observed UIDs, reject known source or destination replacements, retain the target UID in its native list, and reject closed, expired or superseded navigation. Reference and endpoint evidence does not establish traffic or health. |
+| Action discovery and return navigation | Use stable action metadata for searchable discovery and help across resource lists, Pulse, logs, Hubble and inspectors. Discovery leaves the owning stream active; unavailable actions retain their reason and existing fast keys. Inspectors retain successful evidence, accepted searches, highlighted matches and scroll position when refreshing, returning or changing skins. Cross-namespace returns restore the source viewing destination only while the jump owns it; later context or namespace choices invalidate that ownership, including reactive disk edits and choices that return to the earlier value. Trusted nested returns preserve only the ancestor ownership captured before their jump. |
+| Workload relationships | Keep the original PR #7 implementation: namespace-scoped selector and configuration links between workloads, Pods, Services, EndpointSlices and Ingress/Gateway resources. Preserve link reasons and observed UIDs, reject known source or destination replacements, retain the target UID in its native list, and reject closed, expired or superseded navigation. The anchored row uses Inspector for UID-checked reads; live YAML, Describe and kubectl Edit require explicitly reopening its native list. Reference and endpoint evidence does not establish traffic or health. |
 | Fault evidence | Order status/reason, priority conditions, container restarts and last termination, workload evidence and UID-scoped retained events before owners. Preserve full messages; compact message display is reversible without another API request. Failed refreshes keep the previous successful snapshot with a visible failure notice. |
 | Hubble performance and scope | Reuse unchanged frozen data instead of cloning and rebuilding it each tick. Bound workload Pod resolution using namespace, selector and pagination, pin API handles, and reject identity changes or late navigation results. Visibility and truncation remain explicit. |
 | Capability diagnostics | Run only an explicitly selected API, metrics, Flux, cert-manager or Hubble readiness check. Present missing, denied, stale and unavailable prerequisites with useful next steps; no port-forward starts automatically. |
@@ -370,6 +370,7 @@ assembled separately for distributions and are not source inventory entries.
 - `internal/view/cert_manager_test.go`
 - `internal/view/clipboard.go`
 - `internal/view/cluster_info.go`
+- `internal/view/cluster_info_test.go`
 - `internal/view/cm_test.go`
 - `internal/view/command.go`
 - `internal/view/container_test.go`
@@ -419,6 +420,8 @@ assembled separately for distributions and are not source inventory entries.
 - `internal/view/log_workbench_style.go`
 - `internal/view/log_workbench_test.go`
 - `internal/view/logger.go`
+- `internal/view/native_relationship_guard.go`
+- `internal/view/native_relationship_guard_test.go`
 - `internal/view/ns_test.go`
 - `internal/view/operation_runner.go`
 - `internal/view/operation_runner_test.go`
@@ -602,8 +605,12 @@ assembled separately for distributions and are not source inventory entries.
 - `docs/evidence/hubble-2026-10-04/final-latency.json`
 - `docs/evidence/hubble-2026-10-04/provenance.json`
 - `docs/evidence/merge-2026-10-04/README.md`
+- `docs/evidence/merge-2026-10-04/lint-followup.txt`
 - `docs/evidence/merge-2026-10-04/lint.txt`
+- `docs/evidence/merge-2026-10-04/ordinary-followup.txt`
 - `docs/evidence/merge-2026-10-04/ordinary.txt`
+- `docs/evidence/merge-2026-10-04/publication-50.txt`
+- `docs/evidence/merge-2026-10-04/race-followup.txt`
 - `docs/evidence/merge-2026-10-04/race.txt`
 - `docs/evidence/ui-2026-10-04/README.md`
 - `docs/evidence/ui-2026-10-04/manifest.json`

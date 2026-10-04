@@ -167,6 +167,18 @@ func (c *Config) ActivateContext(n string) (*data.Context, error) {
 	return ct, nil
 }
 
+// Reload reloads the active context config and records a changed destination.
+func (c *Config) Reload() error {
+	contextName, namespace := c.ActiveContextName(), c.ActiveNamespace()
+	if err := c.K9s.Reload(); err != nil {
+		return err
+	}
+	if c.ActiveContextName() != contextName || c.ActiveNamespace() != namespace {
+		c.destinationRevision.Add(1)
+	}
+	return nil
+}
+
 // DestinationRevision changes whenever the active namespace or context changes,
 // including a round trip back to its earlier value. Retained navigation uses it
 // to distinguish its own destination from a later user choice.

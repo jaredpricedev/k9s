@@ -111,8 +111,8 @@ func (c *ClusterInfo) ClusterInfoChanged(prev, curr *model.ClusterMeta) {
 			row = c.setCell(row, curr.K9sVer)
 		}
 		row = c.setCell(row, curr.K8sVer)
-		row = c.setCell(row, ui.MetricPercent(prev.Metrics, curr.Metrics, false))
-		_ = c.setCell(row, ui.MetricPercent(prev.Metrics, curr.Metrics, true))
+		row = c.setCell(row, ui.CompactMetricPercent(prev.Metrics, curr.Metrics, false))
+		_ = c.setCell(row, ui.CompactMetricPercent(prev.Metrics, curr.Metrics, true))
 		if curr.Metrics.Fresh() {
 			c.setDefCon(curr.Cpu, curr.Mem)
 		}

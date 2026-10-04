@@ -1177,9 +1177,7 @@ func TestLogSessionProcessHelper(t *testing.T) {
 	if root == "" {
 		return
 	}
-	if err := os.WriteFile(os.Getenv("K9S_TEST_LOG_SESSION_RESULT")+".ready", []byte("ready"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	publishLogSessionHelperResult(t, os.Getenv("K9S_TEST_LOG_SESSION_RESULT")+".ready", "ready")
 	start := os.Getenv("K9S_TEST_LOG_SESSION_START")
 	for {
 		if _, err := os.Stat(start); err == nil {
@@ -1194,9 +1192,7 @@ func TestLogSessionProcessHelper(t *testing.T) {
 	} else {
 		result += err.Error()
 	}
-	if writeErr := os.WriteFile(os.Getenv("K9S_TEST_LOG_SESSION_RESULT"), []byte(result), 0600); writeErr != nil {
-		t.Fatal(writeErr)
-	}
+	publishLogSessionHelperResult(t, os.Getenv("K9S_TEST_LOG_SESSION_RESULT"), result)
 	if lease == nil {
 		return
 	}
@@ -1208,6 +1204,19 @@ func TestLogSessionProcessHelper(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	if err := lease.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func publishLogSessionHelperResult(t *testing.T, path, result string) {
+	t.Helper()
+	// The parent polls this path; publish complete bytes in one rename so it
+	// cannot observe the empty file between creation and WriteFile's write.
+	temporary := path + ".tmp"
+	if err := os.WriteFile(temporary, []byte(result), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(temporary, path); err != nil {
 		t.Fatal(err)
 	}
 }

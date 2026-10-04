@@ -4,7 +4,7 @@
 | --- | --- |
 | Resource identity | The context, API resource kind, namespace, name and observed UID that identify an object. A name alone does not establish continuity. |
 | Viewing destination | The active context and namespace shown by the application. |
-| Navigation ownership | A page may restore the viewing destination established by its own jump while no later user context or namespace change has superseded it. Changing away and back does not revive that ownership. |
+| Navigation ownership | A page may restore the viewing destination established by its own jump while no later user context or namespace change has superseded it. Changing away and back does not revive that ownership. Trusted nested returns preserve still-valid ancestor ownership. |
 | Observation | Evidence obtained from a named source at a stated time, with its resource identity and completeness. It does not imply desired configuration or health. |
 | Snapshot | A retained observation that remains independent of later source changes. |
 | Chosen baseline A | The observation the user explicitly chose as the comparison baseline. Obtaining another comparison observation does not replace it. |

@@ -5,19 +5,25 @@ package view
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/client"
+	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/config/mock"
 	"github.com/derailed/k9s/internal/dao"
 	"github.com/derailed/k9s/internal/watch"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic/fake"
 )
+
+const navigationContextChange = "context"
 
 func retainedNavigationFixture(t *testing.T) (*App, *inspectionDetails) {
 	t.Helper()
@@ -59,7 +65,7 @@ func TestRelatedCrossNamespaceBackRestoresDestinationAndRetainedNavigation(t *te
 	app, d := retainedNavigationFixture(t)
 	snapshot := d.snapshot
 	require.NoError(t, app.switchNS("destination"))
-	d.rememberRelatedDestination("source")
+	d.rememberRelatedDestination("source", nil)
 	child := NewDetails(app, "Pod", "destination/child", contentInspection, true)
 	app.Content.Push(child)
 	require.Contains(t, app.statusIndicator().FullDestination(), "Namespace: destination")
@@ -76,13 +82,13 @@ func TestRelatedCrossNamespaceBackRestoresDestinationAndRetainedNavigation(t *te
 }
 
 func TestRelatedBackPreservesLaterNamespaceOrContextChoice(t *testing.T) {
-	for _, changed := range []string{"namespace", "context", "namespace-round-trip", "context-round-trip"} {
+	for _, changed := range []string{"namespace", navigationContextChange, "namespace-round-trip", "context-round-trip"} {
 		t.Run(changed, func(t *testing.T) {
 			app, d := retainedNavigationFixture(t)
 			require.NoError(t, app.switchNS("destination"))
-			d.rememberRelatedDestination("source")
+			d.rememberRelatedDestination("source", nil)
 			app.Content.Push(NewDetails(app, "Pod", "destination/child", contentInspection, true))
-			if strings.HasPrefix(changed, "context") {
+			if strings.HasPrefix(changed, navigationContextChange) {
 				_, err := app.Config.ActivateContext("ct-1-2")
 				require.NoError(t, err)
 			}
@@ -100,10 +106,10 @@ func TestRelatedBackPreservesLaterNamespaceOrContextChoice(t *testing.T) {
 			require.Nil(t, d.returnDestination, "a stale return ticket must be consumed")
 			// A later jump returns to the scope chosen just before that jump.
 			require.NoError(t, app.switchNS("next-destination"))
-			d.rememberRelatedDestination(namespace)
+			d.rememberRelatedDestination(namespace, nil)
 			app.Content.Push(NewDetails(app, "Pod", "next-destination/child", contentInspection, true))
 			app.PrevCmd(nil)
-			if changed != "context" {
+			if changed != navigationContextChange {
 				require.Equal(t, namespace, app.Config.ActiveNamespace())
 			}
 		})
@@ -111,7 +117,7 @@ func TestRelatedBackPreservesLaterNamespaceOrContextChoice(t *testing.T) {
 }
 
 func TestRelatedLateJumpCannotLeaveClosedPickerOrExpiredDestination(t *testing.T) {
-	for _, stale := range []string{"closed", "expired", "context", "namespace", "namespace-round-trip", "context-round-trip"} {
+	for _, stale := range []string{"closed", "expired", navigationContextChange, "namespace", "namespace-round-trip", "context-round-trip"} {
 		t.Run(stale, func(t *testing.T) {
 			app, d := retainedNavigationFixture(t)
 			p := &relatedPicker{Picker: NewPicker(), generation: 4, namespace: app.Config.ActiveNamespace(), revision: app.Config.DestinationRevision()}
@@ -126,7 +132,7 @@ func TestRelatedLateJumpCannotLeaveClosedPickerOrExpiredDestination(t *testing.T
 				var cancel context.CancelFunc
 				ctx, cancel = context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 				defer cancel()
-			case "context":
+			case navigationContextChange:
 				_, err := app.Config.ActivateContext("ct-1-2")
 				require.NoError(t, err)
 			case "namespace", "namespace-round-trip":
@@ -183,4 +189,188 @@ func TestRelatedAnchorContextMismatchDoesNotSubmitCachedReplacement(t *testing.T
 	case <-time.After(time.Second):
 		t.Fatal("operation cancellation did not complete")
 	}
+}
+
+func TestRelatedNestedBackRestoresEachOwnedSourceDestination(t *testing.T) {
+	app, a := retainedNavigationFixture(t)
+	first := a.snapshot
+	require.NoError(t, app.switchNS("nested-b"))
+	a.rememberRelatedDestination("source", nil)
+	app.Content.Push(NewDetails(app, "Pod", "nested-b/child", contentInspection, true))
+	b := &inspectionDetails{Details: NewDetails(app, troubleshootCommand, "nested-b/child", contentInspection, true)}
+	require.NoError(t, b.Init(context.WithValue(t.Context(), internal.KeyApp, app)))
+	app.Content.Push(b)
+	b.acceptSnapshot(inspectionSnapshot{Text: "Retained child evidence", UID: "child-uid", CapturedAt: time.Now()}, nil)
+	second := b.snapshot
+	ownership := b.ownedReturnDestinations("nested-b")
+	require.NoError(t, app.switchNS("nested-c"))
+	b.rememberRelatedDestination("nested-b", ownership)
+	app.Content.Push(NewDetails(app, "Pod", "nested-c/child", contentInspection, true))
+	app.PrevCmd(nil)
+	require.Same(t, b, app.Content.Top())
+	require.Equal(t, "nested-b", app.Config.ActiveNamespace())
+	require.Equal(t, second, b.snapshot)
+	app.PrevCmd(nil)
+	app.PrevCmd(nil)
+	require.Same(t, a, app.Content.Top())
+	require.Equal(t, "source", app.Config.ActiveNamespace())
+	require.Contains(t, app.statusIndicator().FullDestination(), "Namespace: source")
+	assertRetainedNavigation(t, a, first)
+}
+
+func TestRelatedDiskReloadRoundTripInvalidatesDestinationOwnership(t *testing.T) {
+	app, d := retainedNavigationFixture(t)
+	require.NoError(t, app.switchNS("destination"))
+	d.rememberRelatedDestination("source", nil)
+	app.Content.Push(NewDetails(app, "Pod", "destination/child", contentInspection, true))
+	oldRevision := app.Config.DestinationRevision()
+	for _, namespace := range []string{"disk-choice", "destination"} {
+		reloadDiskNamespace(t, app, namespace)
+	}
+	require.Greater(t, app.Config.DestinationRevision(), oldRevision)
+	app.PrevCmd(nil)
+	require.Equal(t, "destination", app.Config.ActiveNamespace(), "a reactive disk edit must invalidate the original return ticket")
+}
+
+func reloadDiskNamespace(t *testing.T, app *App, namespace string) {
+	t.Helper()
+	contextName := app.Config.ActiveContextName()
+	clusterName, err := app.Config.ActiveClusterName(contextName)
+	require.NoError(t, err)
+	path := config.AppContextConfig(clusterName, contextName)
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	var document map[string]any
+	require.NoError(t, yaml.Unmarshal(content, &document))
+	ctx := document["k9s"].(map[string]any)
+	ctx["namespace"].(map[string]any)["active"] = namespace
+	content, err = yaml.Marshal(document)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, content, 0o600))
+	require.NoError(t, app.Config.Reload())
+	require.Equal(t, namespace, app.Config.ActiveNamespace())
+}
+
+func TestRelatedNestedReturnNeverRenewsAfterUserDestinationRoundTrip(t *testing.T) {
+	for _, stage := range []string{"before-child-jump", "at-child", "after-child-return"} {
+		for _, change := range []string{"namespace", navigationContextChange, "reload"} {
+			t.Run(stage+"/"+change, func(t *testing.T) {
+				app, a := retainedNavigationFixture(t)
+				first := a.snapshot
+				require.NoError(t, app.switchNS("nested-b"))
+				a.rememberRelatedDestination("source", nil)
+				app.Content.Push(NewDetails(app, "Pod", "nested-b/child", contentInspection, true))
+				b := pushNestedInspection(t, app, "nested-b/child", "child-uid")
+				if stage == "before-child-jump" {
+					navigationDestinationRoundTrip(t, app, change, "nested-b")
+				}
+				ownership := b.ownedReturnDestinations("nested-b")
+				require.NoError(t, app.switchNS("nested-c"))
+				b.rememberRelatedDestination("nested-b", ownership)
+				app.Content.Push(NewDetails(app, "Pod", "nested-c/child", contentInspection, true))
+				if stage == "at-child" {
+					navigationDestinationRoundTrip(t, app, change, "nested-c")
+				}
+				app.PrevCmd(nil)
+				if stage == "after-child-return" {
+					require.Equal(t, "nested-b", app.Config.ActiveNamespace())
+					navigationDestinationRoundTrip(t, app, change, "nested-b")
+				}
+				namespace := app.Config.ActiveNamespace()
+				app.PrevCmd(nil)
+				app.PrevCmd(nil)
+				require.Same(t, a, app.Content.Top())
+				require.Equal(t, namespace, app.Config.ActiveNamespace())
+				require.NotEqual(t, "source", namespace, "a nested unwind revived the stale ancestor ticket")
+				assertRetainedNavigation(t, a, first)
+			})
+		}
+	}
+}
+
+func TestRelatedThreeNestedReturnsRestoreOnlyTheirOwnedChain(t *testing.T) {
+	app, a := retainedNavigationFixture(t)
+	first := a.snapshot
+	require.NoError(t, app.switchNS("nested-b"))
+	a.rememberRelatedDestination("source", nil)
+	app.Content.Push(NewDetails(app, "Pod", "nested-b/child", contentInspection, true))
+	b := pushNestedInspection(t, app, "nested-b/child", "child-b")
+	bOwnership := b.ownedReturnDestinations("nested-b")
+	require.NoError(t, app.switchNS("nested-c"))
+	b.rememberRelatedDestination("nested-b", bOwnership)
+	app.Content.Push(NewDetails(app, "Pod", "nested-c/child", contentInspection, true))
+	c := pushNestedInspection(t, app, "nested-c/child", "child-c")
+	cOwnership := c.ownedReturnDestinations("nested-c")
+	require.NoError(t, app.switchNS("nested-d"))
+	c.rememberRelatedDestination("nested-c", cOwnership)
+	app.Content.Push(NewDetails(app, "Pod", "nested-d/child", contentInspection, true))
+	for _, expected := range []string{"nested-c", "nested-c", "nested-b", "nested-b", "source"} {
+		app.PrevCmd(nil)
+		require.Equal(t, expected, app.Config.ActiveNamespace())
+	}
+	require.Same(t, a, app.Content.Top())
+	assertRetainedNavigation(t, a, first)
+}
+
+func TestRelatedDiskReloadAlsoRejectsPendingPickerRoundTrip(t *testing.T) {
+	app, d := retainedNavigationFixture(t)
+	p := &relatedPicker{Picker: NewPicker(), generation: 4, namespace: app.Config.ActiveNamespace(), revision: app.Config.DestinationRevision()}
+	app.Content.Push(p)
+	for _, namespace := range []string{"disk-choice", "source"} {
+		reloadDiskNamespace(t, app, namespace)
+	}
+	target := SelectedResourceTarget{Context: app.Config.ActiveContextName(), GVR: client.PodGVR,
+		Namespace: "destination", Name: "child", UID: "child-uid"}
+	d.applyRelatedJump(t.Context(), p, 4, target, nil, "v1/pods destination", "destination/child")
+	require.Same(t, p, app.Content.Top())
+	require.Equal(t, "source", app.Config.ActiveNamespace())
+	require.Nil(t, d.returnDestination)
+}
+
+func pushNestedInspection(t *testing.T, app *App, path, uid string) *inspectionDetails {
+	t.Helper()
+	d := &inspectionDetails{Details: NewDetails(app, troubleshootCommand, path, contentInspection, true)}
+	require.NoError(t, d.Init(context.WithValue(t.Context(), internal.KeyApp, app)))
+	app.Content.Push(d)
+	d.acceptSnapshot(inspectionSnapshot{Text: "Retained child evidence", UID: types.UID(uid), CapturedAt: time.Now()}, nil)
+	return d
+}
+
+func navigationDestinationRoundTrip(t *testing.T, app *App, change, returnNamespace string) {
+	t.Helper()
+	switch change {
+	case "namespace":
+		require.NoError(t, app.switchNS("manual-choice"))
+		require.NoError(t, app.switchNS(returnNamespace))
+	case navigationContextChange:
+		contextName := app.Config.ActiveContextName()
+		_, err := app.Config.ActivateContext("ct-1-2")
+		require.NoError(t, err)
+		_, err = app.Config.ActivateContext(contextName)
+		require.NoError(t, err)
+		require.NoError(t, app.switchNS(returnNamespace))
+	case "reload":
+		reloadDiskNamespace(t, app, "disk-choice")
+		reloadDiskNamespace(t, app, returnNamespace)
+	}
+}
+
+func TestRelatedUnchangedOrFailedReloadKeepsCurrentReturnOwnership(t *testing.T) {
+	app, d := retainedNavigationFixture(t)
+	require.NoError(t, app.switchNS("destination"))
+	d.rememberRelatedDestination("source", nil)
+	app.Content.Push(NewDetails(app, "Pod", "destination/child", contentInspection, true))
+	revision := app.Config.DestinationRevision()
+	reloadDiskNamespace(t, app, "destination")
+	require.Equal(t, revision, app.Config.DestinationRevision())
+	contextName := app.Config.ActiveContextName()
+	clusterName, err := app.Config.ActiveClusterName(contextName)
+	require.NoError(t, err)
+	path := config.AppContextConfig(clusterName, contextName)
+	require.NoError(t, os.WriteFile(path, []byte("k9s: [broken: ["), 0o600))
+	require.Error(t, app.Config.Reload())
+	require.Equal(t, revision, app.Config.DestinationRevision())
+	require.Equal(t, "destination", app.Config.ActiveNamespace())
+	app.PrevCmd(nil)
+	require.Equal(t, "source", app.Config.ActiveNamespace())
 }
