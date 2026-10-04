@@ -1,0 +1,24 @@
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 4s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  [3 Pods]  4 Recovery  5 Evidence                    │
+│ POD IMAGE EVIDENCE                                                           │
+│ Deployment → controlling ReplicaSet UID → controlling Pod UID                │
+│                                                                              │
+│ checkout-10-old-pod · Running                                                │
+│   api (app) · running · ready yes                                            │
+│   declared: example.test/api:v1                                              │
+│   observed imageID: example.test/api@sha256:                                 │
+│ 8888888888888888888888888888888…                                             │
+│                                                                              │
+│ checkout-20-new-pod · Running                                                │
+│   api (app) · running · ready no                                             │
+│   declared: example.test/api:v2                                              │
+│   observed imageID: example.test/api@sha256:                                 │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                

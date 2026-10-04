@@ -1,0 +1,24 @@
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 8s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                    │
+│ ROLLOUT SOURCE EVIDENCE                                                      │
+│ Kubernetes API · retained typed facts and sanitized templates                │
+│ Each template retains its context, UID, observation time and exclusions.     │
+│ Sensitive fields are redacted heuristically; excluded fields remain          │
+│ unreviewed.                                                                  │
+│                                                                              │
+│ {                                                                            │
+│   "Identity": {                                                              │
+│     "context": "demo-dev",                                                   │
+│     "gvr": "apps/v1/deployments",                                            │
+│     "namespace": "apps",                                                     │
+│     "name": "checkout",                                                      │
+│     "uid": "fixture-checkout-deployment"                                     │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                

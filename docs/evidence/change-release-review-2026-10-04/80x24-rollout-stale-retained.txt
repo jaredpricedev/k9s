@@ -1,0 +1,24 @@
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:43Z · age 10s                         │
+│ [~] Refresh failed; source/time retained · identity changed for apps/checko… │
+│ 1 Overview  2 Revisions  3 Pods  [4 Recovery]  5 Evidence                    │
+│ RECOVERY CANDIDATE · NOT EXECUTED                                            │
+│ Selected RS checkout-10-old · revision 8                                     │
+│ UID fixture-checkout-rs-old · context demo-dev                               │
+│ A: current Deployment template · B: selected retained RS template            │
+│                                                                              │
+│ 1 changed retained template fields                                           │
+│ CHANGED /spec/template/spec/containers                                       │
+│   A …age":"example.test/api:v2","imagePullPolicy":"IfNotPresent","name":     │
+│ "ap…                                                                         │
+│   B …age":"example.test/api:v1","imagePullPolicy":"IfNotPresent","name":     │
+│ "ap…                                                                         │
+│                                                                              │
+│ PREVIEW LIMITS                                                               │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                

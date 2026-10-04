@@ -1,0 +1,34 @@
+[RO] CONNECTED ctx:demo-dev ns:apps  CPU N/A (unavailable)  MEM N/A (unavailable)  F2:destination                       
+ <esc> Back  <ctrl+o> Actions  <?> Help                                                                                 
+┌──────────────────────────────────────────────── Desired-state review ────────────────────────────────────────────────┐
+│demo-dev · apps                                                                                                       │
+│Source: release review.yaml · SHA256 be21e2713db8 · 3 documents                                                       │
+│3 resources · 1 changed · 0 reviewed matches · 2 unavailable                                                          │
+│Loaded 2026-10-04T12:28:01Z · Read 2026-10-04T12:28:01Z                                                               │
+│Local declared-field preview. No execution or pruning plan. r refreshes live only.                                    │
+│STATUS       KIND       NAMESPACE NAME            CHANGES / COVERAGE                                                  │
+│changes      Deployment apps      checkout        2 changes · 8/10 reviewed match · 3 unreviewed                      │
+│out of scope Deployment outside   outside-release Authored namespace is outside the explicit review scope             │
+│excluded     Secret     apps      excluded-auth   Secret contents are excluded from change review                     │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│Enter detail · r refresh live · n select/reload source · / local search · i investigate live · Esc back               │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <desired-state review>                                                                                 
+                                                                                                                        

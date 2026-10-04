@@ -1,0 +1,72 @@
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:54Z · age 0s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ [1 Overview]  2 Revisions  3 Pods  4 Recovery  5 Evidence                    │
+│ ROLLOUT OBSERVATION                                                          │
+│ [~] PROGRESSING · Controller has not observed the current generation;        │
+│ older…                                                                       │
+│ Generation 4 · controller observed 3                                         │
+│                                                                              │
+│ REPLICA COUNTS · retained Deployment status                                  │
+│ DESIRED     UPDATED     READY       AVAILABLE     TOTAL                      │
+│ 2           1           1           1             3                          │
+│                                                                              │
+│ CONTROLLER CONDITIONS                                                        │
+│ Progressing=False · ProgressDeadlineExceeded                                 │
+│                                                                              │
+│ RETAINED WORKLOAD EVIDENCE                                                   │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:54Z · age 1s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ [1 Overview]  2 Revisions  3 Pods  4 Recovery  5 Evidence                    │
+│ 2 UID-owned ReplicaSets · 2 UID-owned Pods                                   │
+│ 2 revisions: exact templates · 3 Pods: declared image / imageID              │
+│ 4 recovery: selected template comparison; nothing executed                   │
+│                                                                              │
+│ VISIBILITY                                                                   │
+│ Deployment: complete · Selected Deployment GET; counts and conditions are    │
+│ A…                                                                           │
+│ ReplicaSets: complete · 2 retained controlling-UID-owned objects;            │
+│ namespace…                                                                   │
+│ Pods: complete · 2 retained controlling-UID-owned objects; namespace         │
+│ select…                                                                      │
+│ Template matching: complete · 1 exact API template matches among 2           │
+│ retained…                                                                    │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌─────────────────────── Rollout review(apps/checkout) ────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                          │
+│ UID fixture-…ployment · captured 12:27:54Z · age 1s                          │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaS… │
+│ [1 Overview]  2 Revisions  3 Pods  4 Recovery  5 Evidence                    │
+│ A…                                                                           │
+│ ReplicaSets: complete · 2 retained controlling-UID-owned objects;            │
+│ namespace…                                                                   │
+│ Pods: complete · 2 retained controlling-UID-owned objects; namespace         │
+│ select…                                                                      │
+│ Template matching: complete · 1 exact API template matches among 2           │
+│ retained…                                                                    │
+│ Current revision: unknown · Controller-selected current ReplicaSet is not    │
+│ e…                                                                           │
+│                                                                              │
+│ Controller status is an observation, not proof of an accepted write's        │
+│ outcome.                                                                     │
+│                                                                              │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review          │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                               
+                                                                                

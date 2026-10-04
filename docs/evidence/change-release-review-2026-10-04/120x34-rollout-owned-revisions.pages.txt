@@ -1,0 +1,68 @@
+[RO] CONNECTED ctx:demo-dev ns:apps  CPU N/A (unavailable)  MEM N/A (unavailable)  F2:destination                       
+ <ctrl+o> Actions  <?> Help                                                                                             
+┌─────────────────────────────────────────── Rollout review(apps/checkout) ────────────────────────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                                                                  │
+│ UID fixture-…ployment · captured 12:28:10Z · age 2s                                                                  │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaSets: complete · Pods: complete · Templat… │
+│ 1 Overview  [2 Revisions]  3 Pods  4 Recovery  5 Evidence                                                            │
+│ REPLICA SET REVISIONS                                                                                                │
+│ Controller=true and Deployment UID verified · retained, not full history                                             │
+│                                                                                                                      │
+│    REV     REPLICA SET                                                              TOTAL    READY    TEMPLATE       │
+│ >  8       checkout-10-old                                                          1        1        differs spec   │
+│    9       checkout-20-new                                                          1        0        matches spec   │
+│                                                                                                                      │
+│ j/k selects a retained ReplicaSet; Enter compares its exact template.                                                │
+│ Matching the current template does not prove the controller's chosen RS.                                             │
+│ Revision number and creation age do not choose a recovery target.                                                    │
+│ Retained revisions can be pruned by revisionHistoryLimit.                                                            │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review                                                  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                                                                       
+                                                                                                                        
+[RO] CONNECTED ctx:demo-dev ns:apps  CPU N/A (unavailable)  MEM N/A (unavailable)  F2:destination                       
+ <ctrl+o> Actions  <?> Help                                                                                             
+┌─────────────────────────────────────────── Rollout review(apps/checkout) ────────────────────────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                                                                  │
+│ UID fixture-…ployment · captured 12:28:10Z · age 3s                                                                  │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaSets: complete · Pods: complete · Templat… │
+│ 1 Overview  [2 Revisions]  3 Pods  4 Recovery  5 Evidence                                                            │
+│ REPLICA SET REVISIONS                                                                                                │
+│ Controller=true and Deployment UID verified · retained, not full history                                             │
+│                                                                                                                      │
+│    REV     REPLICA SET                                                              TOTAL    READY    TEMPLATE       │
+│ >  8       checkout-10-old                                                          1        1        differs spec   │
+│    9       checkout-20-new                                                          1        0        matches spec   │
+│                                                                                                                      │
+│ j/k selects a retained ReplicaSet; Enter compares its exact template.                                                │
+│ Matching the current template does not prove the controller's chosen RS.                                             │
+│ Revision number and creation age do not choose a recovery target.                                                    │
+│ Retained revisions can be pruned by revisionHistoryLimit.                                                            │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review                                                  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                                                                       
+                                                                                                                        

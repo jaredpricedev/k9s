@@ -114,3 +114,5 @@ execution is added.
 Validation uses bounded fake clients and the running terminal application
 against a disposable API. These checks establish request scope and observed
 behavior; production controller coverage and operator usability remain separate.
+See the [dated validation record](change-release-validation-2026-10-04.md) and
+[actual terminal captures](evidence/change-release-review-2026-10-04/README.md).

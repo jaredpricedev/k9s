@@ -1,0 +1,277 @@
+{
+  "result": "passed",
+  "source": "actual PTY terminal cells; disposable localhost fixtures",
+  "binary": "/tmp/k9plus-change-release",
+  "binary_sha256": "26c60694130fe6381e29c571e4497dcb3c0b3ceb815e4991b773482f486d749c",
+  "script": "scripts/change-release-journeys.py",
+  "script_sha256": "73972cfed2b3649b579189140983f5a773d01d9010dc107b9a8fa0a05e4fb021",
+  "captured_at": "2026-10-04T12:28:23Z",
+  "elapsed_seconds": 53.488,
+  "limitations": "Synthetic read-only evidence; no live-cluster or operator-study validation; no workload writes submitted",
+  "runs": [
+    {
+      "terminal": {
+        "columns": 80,
+        "rows": 24
+      },
+      "checks": [
+        "authored image/resource changes are visible; omitted defaults are not deletion proposals",
+        "explicit live refresh retains the original authored source and SHA256 after file changes",
+        "denied and replacement-UID refreshes retain prior evidence without claiming a current match",
+        "same-label foreign and non-controlling ReplicaSets and Pods are excluded by actual controlling-owner UIDs",
+        "synthetic workload credential values are redacted in retained source evidence and all captured text",
+        "historical RS chosen by retained UID; preview keeps original template and issues no additional resource reads",
+        "denied/recreated Deployment refreshes keep captured UID, time and selected retained recovery evidence",
+        "an older-generation Progressing=False condition does not become a current blocked verdict",
+        "explicit refresh reports converged Deployment counts separately from child evidence coverage"
+      ],
+      "captures": [
+        {
+          "text": "80x24-desired-resource-table.txt",
+          "columns": 80,
+          "rows": 24,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "file": "80x24-desired-resource-table.png"
+        },
+        {
+          "text": "80x24-desired-authored-detail.txt",
+          "columns": 80,
+          "rows": 24,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "80x24-desired-authored-detail.pages.txt",
+          "file": "80x24-desired-authored-detail.png"
+        },
+        {
+          "text": "80x24-desired-fixed-source.txt",
+          "columns": 80,
+          "rows": 24,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "80x24-desired-fixed-source.pages.txt"
+        },
+        {
+          "text": "80x24-desired-denied-retained.txt",
+          "columns": 80,
+          "rows": 24,
+          "source": "actual PTY terminal cells; disposable localhost fixture"
+        },
+        {
+          "text": "80x24-desired-denied-detail.txt",
+          "columns": 80,
+          "rows": 24,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "80x24-desired-denied-detail.pages.txt"
+        },
+        {
+          "text": "80x24-desired-stale-retained.txt",
+          "columns": 80,
+          "rows": 24,
+          "source": "actual PTY terminal cells; disposable localhost fixture"
+        },
+        {
+          "text": "80x24-desired-stale-detail.txt",
+          "columns": 80,
+          "rows": 24,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "80x24-desired-stale-detail.pages.txt"
+        },
+        {
+          "text": "80x24-rollout-progress-overview.txt",
+          "columns": 80,
+          "rows": 24,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "file": "80x24-rollout-progress-overview.png"
+        },
+        {
+          "text": "80x24-rollout-owned-revisions.txt",
+          "columns": 80,
+          "rows": 24,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "80x24-rollout-owned-revisions.pages.txt"
+        },
+        {
+          "text": "80x24-rollout-owned-pods.txt",
+          "columns": 80,
+          "rows": 24,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "80x24-rollout-owned-pods.pages.txt"
+        },
+        {
+          "text": "80x24-rollout-source-evidence.txt",
+          "columns": 80,
+          "rows": 24,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "80x24-rollout-source-evidence.pages.txt"
+        },
+        {
+          "text": "80x24-rollout-historical-preview.txt",
+          "columns": 80,
+          "rows": 24,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "80x24-rollout-historical-preview.pages.txt",
+          "file": "80x24-rollout-historical-preview.png"
+        },
+        {
+          "text": "80x24-rollout-denied-retained.txt",
+          "columns": 80,
+          "rows": 24,
+          "source": "actual PTY terminal cells; disposable localhost fixture"
+        },
+        {
+          "text": "80x24-rollout-stale-retained.txt",
+          "columns": 80,
+          "rows": 24,
+          "source": "actual PTY terminal cells; disposable localhost fixture"
+        },
+        {
+          "text": "80x24-rollout-awaiting-generation.txt",
+          "columns": 80,
+          "rows": 24,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "80x24-rollout-awaiting-generation.pages.txt"
+        },
+        {
+          "text": "80x24-rollout-complete-overview.txt",
+          "columns": 80,
+          "rows": 24,
+          "source": "actual PTY terminal cells; disposable localhost fixture"
+        }
+      ],
+      "request_journal": "80x24-request-journal.json",
+      "original_source_sha256": "be21e2713db84695ff05e80172691c6295c90bd9a07c3222b2afad10a3b9c646",
+      "resource_read_count": 15,
+      "request_count": 49
+    },
+    {
+      "terminal": {
+        "columns": 120,
+        "rows": 34
+      },
+      "checks": [
+        "authored image/resource changes are visible; omitted defaults are not deletion proposals",
+        "explicit live refresh retains the original authored source and SHA256 after file changes",
+        "denied and replacement-UID refreshes retain prior evidence without claiming a current match",
+        "same-label foreign and non-controlling ReplicaSets and Pods are excluded by actual controlling-owner UIDs",
+        "synthetic workload credential values are redacted in retained source evidence and all captured text",
+        "historical RS chosen by retained UID; preview keeps original template and issues no additional resource reads",
+        "denied/recreated Deployment refreshes keep captured UID, time and selected retained recovery evidence",
+        "an older-generation Progressing=False condition does not become a current blocked verdict",
+        "explicit refresh reports converged Deployment counts separately from child evidence coverage"
+      ],
+      "captures": [
+        {
+          "text": "120x34-desired-resource-table.txt",
+          "columns": 120,
+          "rows": 34,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "file": "120x34-desired-resource-table.png"
+        },
+        {
+          "text": "120x34-desired-authored-detail.txt",
+          "columns": 120,
+          "rows": 34,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "120x34-desired-authored-detail.pages.txt",
+          "file": "120x34-desired-authored-detail.png"
+        },
+        {
+          "text": "120x34-desired-fixed-source.txt",
+          "columns": 120,
+          "rows": 34,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "120x34-desired-fixed-source.pages.txt"
+        },
+        {
+          "text": "120x34-desired-denied-retained.txt",
+          "columns": 120,
+          "rows": 34,
+          "source": "actual PTY terminal cells; disposable localhost fixture"
+        },
+        {
+          "text": "120x34-desired-denied-detail.txt",
+          "columns": 120,
+          "rows": 34,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "120x34-desired-denied-detail.pages.txt"
+        },
+        {
+          "text": "120x34-desired-stale-retained.txt",
+          "columns": 120,
+          "rows": 34,
+          "source": "actual PTY terminal cells; disposable localhost fixture"
+        },
+        {
+          "text": "120x34-desired-stale-detail.txt",
+          "columns": 120,
+          "rows": 34,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "120x34-desired-stale-detail.pages.txt"
+        },
+        {
+          "text": "120x34-rollout-progress-overview.txt",
+          "columns": 120,
+          "rows": 34,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "file": "120x34-rollout-progress-overview.png"
+        },
+        {
+          "text": "120x34-rollout-owned-revisions.txt",
+          "columns": 120,
+          "rows": 34,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "120x34-rollout-owned-revisions.pages.txt"
+        },
+        {
+          "text": "120x34-rollout-owned-pods.txt",
+          "columns": 120,
+          "rows": 34,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "120x34-rollout-owned-pods.pages.txt"
+        },
+        {
+          "text": "120x34-rollout-source-evidence.txt",
+          "columns": 120,
+          "rows": 34,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "120x34-rollout-source-evidence.pages.txt"
+        },
+        {
+          "text": "120x34-rollout-historical-preview.txt",
+          "columns": 120,
+          "rows": 34,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "120x34-rollout-historical-preview.pages.txt",
+          "file": "120x34-rollout-historical-preview.png"
+        },
+        {
+          "text": "120x34-rollout-denied-retained.txt",
+          "columns": 120,
+          "rows": 34,
+          "source": "actual PTY terminal cells; disposable localhost fixture"
+        },
+        {
+          "text": "120x34-rollout-stale-retained.txt",
+          "columns": 120,
+          "rows": 34,
+          "source": "actual PTY terminal cells; disposable localhost fixture"
+        },
+        {
+          "text": "120x34-rollout-awaiting-generation.txt",
+          "columns": 120,
+          "rows": 34,
+          "source": "actual PTY terminal cells; disposable localhost fixture",
+          "pages": "120x34-rollout-awaiting-generation.pages.txt"
+        },
+        {
+          "text": "120x34-rollout-complete-overview.txt",
+          "columns": 120,
+          "rows": 34,
+          "source": "actual PTY terminal cells; disposable localhost fixture"
+        }
+      ],
+      "request_journal": "120x34-request-journal.json",
+      "original_source_sha256": "be21e2713db84695ff05e80172691c6295c90bd9a07c3222b2afad10a3b9c646",
+      "resource_read_count": 15,
+      "request_count": 49
+    }
+  ]
+}

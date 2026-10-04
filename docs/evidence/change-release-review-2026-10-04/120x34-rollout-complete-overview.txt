@@ -1,0 +1,34 @@
+[RO] CONNECTED ctx:demo-dev ns:apps  CPU N/A (unavailable)  MEM N/A (unavailable)  F2:destination                       
+ <ctrl+o> Actions  <?> Help                                                                                             
+┌─────────────────────────────────────────── Rollout review(apps/checkout) ────────────────────────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                                                                  │
+│ UID fixture-…ployment · captured 12:28:21Z · age 0s                                                                  │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaSets: complete · Pods: complete · Templat… │
+│ [1 Overview]  2 Revisions  3 Pods  4 Recovery  5 Evidence                                                            │
+│ ROLLOUT OBSERVATION                                                                                                  │
+│ [+] COMPLETE · Deployment status reports its current generation available; child evidence has separate coverage      │
+│ Generation 3 · controller observed 3                                                                                 │
+│                                                                                                                      │
+│ REPLICA COUNTS · retained Deployment status                                                                          │
+│ DESIRED     UPDATED     READY       AVAILABLE     TOTAL                                                              │
+│ 2           2           2           2             2                                                                  │
+│                                                                                                                      │
+│ CONTROLLER CONDITIONS                                                                                                │
+│ Progressing=True · ReplicaSetUpdated                                                                                 │
+│                                                                                                                      │
+│ RETAINED WORKLOAD EVIDENCE                                                                                           │
+│ 2 UID-owned ReplicaSets · 2 UID-owned Pods                                                                           │
+│ 2 revisions: exact templates · 3 Pods: declared image / imageID                                                      │
+│ 4 recovery: selected template comparison; nothing executed                                                           │
+│                                                                                                                      │
+│ VISIBILITY                                                                                                           │
+│ Deployment: complete · Selected Deployment GET; counts and conditions are API observations                           │
+│ ReplicaSets: complete · 2 retained controlling-UID-owned objects; namespace selector scope                           │
+│ Pods: complete · 2 retained controlling-UID-owned objects; namespace selector scope                                  │
+│ Template matching: complete · 1 exact API template matches among 2 retained UID-owned ReplicaSets; matches           │
+│ describe…                                                                                                            │
+│ Current revision: unknown · Controller-selected current ReplicaSet is not established by template equality,          │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review                                                  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                                                                       
+                                                                                                                        

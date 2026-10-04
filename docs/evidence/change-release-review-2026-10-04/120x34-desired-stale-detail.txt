@@ -1,0 +1,34 @@
+[RO] CONNECTED ctx:demo-dev ns:apps  CPU N/A (unavailable)  MEM N/A (unavailable)  F2:destination                       
+ <esc> Back  <ctrl+o> Actions  <?> Help                                                                                 
+┌──────────────────────────────────────────────── Desired-state review ────────────────────────────────────────────────┐
+│demo-dev · apps                                                                                                       │
+│Source: release review.yaml · SHA256 be21e2713db8 · 3 documents                                                       │
+│3 resources · 0 changed · 0 reviewed matches · 3 unavailable · 1 retained                                             │
+│Loaded 2026-10-04T12:28:01Z · Read 2026-10-04T12:28:08Z                                                               │
+│Refresh unavailable (1 reads); retained evidence from 2026-10-04T12:28:04Z.                                           │
+│RETAINED EVIDENCE · latest read identity changed: Live UID differs from the captured resource; reopen the scope befor │
+│e reviewing its replacement                                                                                           │
+│Original observed time: 2026-10-04T12:28:04Z                                                                          │
+│                                                                                                                      │
+│RETAINED SOURCE                                                                                                       │
+│Path: /tmp/kr-gpfyvyzb/release review.yaml                                                                            │
+│SHA256: be21e2713db84695ff05e80172691c6295c90bd9a07c3222b2afad10a3b9c646                                              │
+│Loaded: 2026-10-04T12:28:01Z · 1255 bytes · 3 documents                                                               │
+│Latest read attempt: 2026-10-04T12:28:08Z                                                                             │
+│Accepted report: 2026-10-04T12:28:04Z                                                                                 │
+│                                                                                                                      │
+│demo-dev · Deployment apps/checkout                                                                                   │
+│State: changes · UID: fixture-checkout-deployment · observed: 2026-10-04T12:28:04Z                                    │
+│Declared intent differs in the reviewed fields; defaulted and omitted fields are not a prune plan                     │
+│                                                                                                                      │
+│DECLARED INTENT · 10 provided fields · 8 matched · 2 changes                                                          │
+│CHANGE /spec/template/spec/containers/0/image                                                                         │
+│  live: "example.test/api:v1"                                                                                         │
+│  authored: "example.test/api:v2"                                                                                     │
+│CHANGE /spec/template/spec/containers/0/resources/requests/memory                                                     │
+│  live: "128Mi"                                                                                                       │
+│  authored: "192Mi"                                                                                                   │
+│Enter detail · r refresh live · n select/reload source · / local search · i investigate live · Esc back               │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <desired-state review>                                                                                 
+                                                                                                                        

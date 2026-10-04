@@ -1,0 +1,34 @@
+[RO] CONNECTED ctx:demo-dev ns:apps  CPU N/A (unavailable)  MEM N/A (unavailable)  F2:destination                       
+ <ctrl+o> Actions  <?> Help                                                                                             
+┌─────────────────────────────────────────── Rollout review(apps/checkout) ────────────────────────────────────────────┐
+│ Deployment apps/checkout · demo-dev                                                                                  │
+│ UID fixture-…ployment · captured 12:28:10Z · age 7s                                                                  │
+│ Read coverage · Current revision: unknown · Deployment: complete · ReplicaSets: complete · Pods: complete · Templat… │
+│ 1 Overview  2 Revisions  3 Pods  4 Recovery  [5 Evidence]                                                            │
+│ ROLLOUT SOURCE EVIDENCE                                                                                              │
+│ Kubernetes API · retained typed facts and sanitized templates                                                        │
+│ Each template retains its context, UID, observation time and exclusions.                                             │
+│ Sensitive fields are redacted heuristically; excluded fields remain unreviewed.                                      │
+│                                                                                                                      │
+│ {                                                                                                                    │
+│   "Identity": {                                                                                                      │
+│     "context": "demo-dev",                                                                                           │
+│     "gvr": "apps/v1/deployments",                                                                                    │
+│     "namespace": "apps",                                                                                             │
+│     "name": "checkout",                                                                                              │
+│     "uid": "fixture-checkout-deployment"                                                                             │
+│   },                                                                                                                 │
+│   "CapturedAt": "2026-10-04T12:28:10.483085722Z",                                                                    │
+│   "DeploymentState": "complete",                                                                                     │
+│   "Generation": 3,                                                                                                   │
+│   "ObservedGeneration": 3,                                                                                           │
+│   "Desired": 2,                                                                                                      │
+│   "Updated": 1,                                                                                                      │
+│   "Ready": 1,                                                                                                        │
+│   "Available": 1,                                                                                                    │
+│   "Replicas": 3,                                                                                                     │
+│   "Paused": false,                                                                                                   │
+│ READ ONLY · r refresh · j/k choose revision · Enter template review                                                  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <rollout review>                                                                                       
+                                                                                                                        

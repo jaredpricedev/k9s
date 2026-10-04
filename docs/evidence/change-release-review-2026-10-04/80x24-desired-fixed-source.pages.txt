@@ -1,0 +1,72 @@
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <esc> Back  <ctrl+o> Actions  <?> Help                                         
+┌──────────────────────────── Desired-state review ────────────────────────────┐
+│demo-dev · apps                                                               │
+│Source: release review.yaml · SHA256 be21e2713db8 · 3 documents               │
+│3 resources · 1 changed · 0 reviewed matches · 2 unavailable                  │
+│Loaded 2026-10-04T12:27:33Z · Read 2026-10-04T12:27:37Z                       │
+│Local declared-field preview. No execution or pruning plan. r refreshes live o│
+│RETAINED SOURCE                                                               │
+│Path: /tmp/kr-qg197ljc/release review.yaml                                    │
+│SHA256: be21e2713db84695ff05e80172691c6295c90bd9a07c3222b2afad10a3b9c646      │
+│Loaded: 2026-10-04T12:27:33Z · 1255 bytes · 3 documents                       │
+│Latest read attempt: 2026-10-04T12:27:37Z                                     │
+│Accepted report: 2026-10-04T12:27:37Z                                         │
+│                                                                              │
+│demo-dev · Deployment apps/checkout                                           │
+│State: changes · UID: fixture-checkout-deployment · observed: 2026-10-04T12:  │
+│27:37Z                                                                        │
+│Declared intent differs in the reviewed fields; defaulted and omitted fields a│
+│re not a prune plan                                                           │
+│Enter detail · r refresh live · n select/reload source · / local search · i in│
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <desired-state review>                                         
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <esc> Back  <ctrl+o> Actions  <?> Help                                         
+┌──────────────────────────── Desired-state review ────────────────────────────┐
+│demo-dev · apps                                                               │
+│Source: release review.yaml · SHA256 be21e2713db8 · 3 documents               │
+│3 resources · 1 changed · 0 reviewed matches · 2 unavailable                  │
+│Loaded 2026-10-04T12:27:33Z · Read 2026-10-04T12:27:37Z                       │
+│Local declared-field preview. No execution or pruning plan. r refreshes live o│
+│                                                                              │
+│DECLARED INTENT · 10 provided fields · 8 matched · 2 changes                  │
+│CHANGE /spec/template/spec/containers/0/image                                 │
+│  live: "example.test/api:v1"                                                 │
+│  authored: "example.test/api:v2"                                             │
+│CHANGE /spec/template/spec/containers/0/resources/requests/memory             │
+│  live: "128Mi"                                                               │
+│  authored: "192Mi"                                                           │
+│                                                                              │
+│UNREVIEWED                                                                    │
+│• Live-only fields and omitted resources are not proposed for removal         │
+│• Server defaulting, admission and field ownership are not evaluated          │
+│Enter detail · r refresh live · n select/reload source · / local search · i in│
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <desired-state review>                                         
+                                                                                
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <esc> Back  <ctrl+o> Actions  <?> Help                                         
+┌──────────────────────────── Desired-state review ────────────────────────────┐
+│demo-dev · apps                                                               │
+│Source: release review.yaml · SHA256 be21e2713db8 · 3 documents               │
+│3 resources · 1 changed · 0 reviewed matches · 2 unavailable                  │
+│Loaded 2026-10-04T12:27:33Z · Read 2026-10-04T12:27:37Z                       │
+│Local declared-field preview. No execution or pruning plan. r refreshes live o│
+│• Live-only fields and omitted resources are not proposed for removal         │
+│• Server defaulting, admission and field ownership are not evaluated          │
+│• /spec/template/spec/containers/0/env/0/value: redacted or sanitized value   │
+│not compared                                                                  │
+│                                                                              │
+│OWNERSHIP EVIDENCE                                                            │
+│• Flux tracking marker: Kustomization flux-system/checkout (unverified metad  │
+│ata)                                                                          │
+│                                                                              │
+│No execution, server dry-run or exhaustive deletion plan. Secret values are ex│
+│cluded.                                                                       │
+│Esc returns to the same retained table.                                       │
+│Enter detail · r refresh live · n select/reload source · / local search · i in│
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>   <desired-state review>                                         
+                                                                                
