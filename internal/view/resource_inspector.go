@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// Modified for k9+; see NOTICE.
 package view
 
 import (
@@ -29,6 +30,7 @@ type inspectionDetails struct {
 	generation  uint64
 	contextName string
 	secretPath  string
+	target      SelectedResourceTarget
 	loader      func(context.Context) (string, error)
 	related     func(context.Context) ([]inspectionReference, error)
 }
@@ -48,34 +50,39 @@ func (c *Command) investigationCommand(name string) {
 		c.app.Flash().Err(fmt.Errorf("open a resource list first"))
 		return
 	}
-	path := v.GetTable().GetSelectedItem()
+	target := resolveSelectedResource(v, c.app.Config.ActiveContextName())
 	if name == actionsCommand {
-		p := &actionPalette{Picker: NewPicker(), owner: v, app: c.app, path: path}
+		p := &actionPalette{Picker: NewPicker(), owner: v, app: c.app, path: target.Path(), target: target}
 		if err := c.app.inject(p, false); err != nil {
 			c.app.Flash().Err(err)
 		}
 		return
 	}
-	c.app.openInspection(v, name, path)
+	c.app.openTargetInspection(target, name)
 }
-func (a *App) openInspection(v ResourceViewer, name, path string) {
-	if path == "" {
-		a.Flash().Err(fmt.Errorf("select a resource first"))
+
+//nolint:gocritic // Opening captures an immutable identity value for asynchronous inspection.
+func (a *App) openTargetInspection(target SelectedResourceTarget, name string) {
+	if err := target.Err(); err != nil {
+		a.Flash().Err(err)
 		return
 	}
-	d := &inspectionDetails{Details: NewDetails(a, name, path, contentInspection, true).Update("Loading read-only snapshot...")}
-	if name == tlsCommand && v.GVR().R() == "secrets" {
-		d.secretPath = path
+	if target.Context != a.Config.ActiveContextName() {
+		a.Flash().Warn("Context changed; reopen inspection")
+		return
+	}
+	d := &inspectionDetails{Details: NewDetails(a, name, target.Path(), contentInspection, true).Update("Loading read-only snapshot..."), target: target}
+	if name == tlsCommand && target.GVR.R() == "secrets" {
+		d.secretPath = target.Path()
 	}
 	connection, err := pinInspectionConnection(a.Conn())
 	if err != nil {
 		a.Flash().Err(err)
 		return
 	}
-	gvr := v.GVR()
-	d.loader = func(ctx context.Context) (string, error) { return loadInspection(ctx, connection, gvr, path, name) }
+	d.loader = func(ctx context.Context) (string, error) { return loadTargetInspection(ctx, connection, target, name) }
 	d.related = func(ctx context.Context) ([]inspectionReference, error) {
-		return loadInspectionReferences(ctx, connection, gvr, path, name)
+		return loadTargetInspectionReferences(ctx, connection, target, name)
 	}
 	if err := a.inject(d, false); err != nil {
 		a.Flash().Err(err)
@@ -132,20 +139,32 @@ func (d *inspectionDetails) refresh() {
 	}()
 }
 
-func loadInspection(ctx context.Context, conn client.Connection, gvr *client.GVR, path, name string) (string, error) {
-	ns, resource := client.Namespaced(path)
+//nolint:gocritic // Loading receives the captured immutable identity value.
+func loadTargetInspection(ctx context.Context, conn client.Connection, target SelectedResourceTarget, name string) (string, error) {
+	if err := target.Err(); err != nil {
+		return "", err
+	}
 	dyn, err := conn.DynDial()
 	if err != nil {
 		return "", err
 	}
-	obj, err := dyn.Resource(gvr.GVR()).Namespace(ns).Get(ctx, resource, metav1.GetOptions{})
+	obj, err := dyn.Resource(target.GVR.GVR()).Namespace(target.Namespace).Get(ctx, target.Name, metav1.GetOptions{})
 	if err != nil {
 		return "", err
 	}
-	if name == tlsCommand {
-		return tlsResourceReport(ctx, conn, obj)
+	identityErr := verifySelectedIdentity(target, obj)
+	if identityErr != nil {
+		return "", identityErr
 	}
-	text := resourceSummary(obj)
+	identity := ""
+	if target.UID == "" {
+		identity = "\nSelected UID: unknown; continuity with the selected row cannot be verified.\n"
+	}
+	if name == tlsCommand {
+		text, reportErr := tlsResourceReport(ctx, conn, obj)
+		return text + identity, reportErr
+	}
+	text := resourceSummary(obj) + identity
 	text += workloadDiagnostics(ctx, conn, obj)
 	if obj.GetUID() == "" {
 		return text + "\nEvents unavailable: object UID missing", nil
@@ -154,7 +173,7 @@ func loadInspection(ctx context.Context, conn client.Connection, gvr *client.GVR
 	if err != nil {
 		return text + "\nEvents unavailable: " + err.Error(), nil
 	}
-	events, err := k.CoreV1().Events(ns).List(ctx, metav1.ListOptions{
+	events, err := k.CoreV1().Events(target.Namespace).List(ctx, metav1.ListOptions{
 		FieldSelector: fields.OneTermEqualSelector("involvedObject.uid", string(obj.GetUID())).String(), Limit: 100,
 	})
 	if err != nil {
@@ -177,8 +196,12 @@ func loadInspection(ctx context.Context, conn client.Connection, gvr *client.GVR
 
 func resourceSummary(o *unstructured.Unstructured) string {
 	var b strings.Builder
+	uid := string(o.GetUID())
+	if uid == "" {
+		uid = "unknown"
+	}
 	fmt.Fprintf(&b, "READ-ONLY SNAPSHOT\n%s %s/%s\nUID: %s\nCaptured: %s\n\nOWNERS\n",
-		o.GetKind(), o.GetNamespace(), o.GetName(), o.GetUID(), time.Now().UTC().Format(time.RFC3339))
+		o.GetKind(), o.GetNamespace(), o.GetName(), uid, time.Now().UTC().Format(time.RFC3339))
 	for _, r := range o.GetOwnerReferences() {
 		fmt.Fprintf(&b, "%s %s (%s)\n", r.Kind, r.Name, r.APIVersion)
 	}

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// Modified for k9+; see NOTICE.
 package view
 
 import (
@@ -235,25 +236,17 @@ func (c *Command) tlsCheckCommand(line string) {
 	d := &inspectionDetails{Details: NewDetails(c.app, "TLS verification",
 		strings.Join(parts[1:minimum], " "), contentInspection, true).Update("Loading TLS verification...")}
 	var (
-		conn client.Connection
-		path string
+		conn   client.Connection
+		path   string
+		target SelectedResourceTarget
 	)
 	if !probe {
-		switch v := c.app.Content.Top().(type) {
-		case ResourceViewer:
-			if v.GVR().R() == inspectionSecretsResource {
-				path = v.GetTable().GetSelectedItem()
-			}
-		case *inspectionDetails:
-			if v.contextName == c.app.Config.ActiveContextName() {
-				path = v.secretPath
-			}
-		}
-		if path == "" {
-			c.app.Flash().Err(fmt.Errorf("select a Secret for offline verification"))
+		var err error
+		target, path, err = c.selectedTLSSecret()
+		if err != nil {
+			c.app.Flash().Err(err)
 			return
 		}
-		var err error
 		conn, err = pinInspectionConnection(c.app.Conn())
 		if err != nil {
 			c.app.Flash().Err(err)
@@ -282,6 +275,10 @@ func (c *Command) tlsCheckCommand(line string) {
 		if err != nil {
 			return "", err
 		}
+		identityErr := verifySelectedIdentity(target, obj)
+		if identityErr != nil {
+			return "", identityErr
+		}
 		data, err := secretCertificate(obj)
 		if err != nil {
 			return "", err
@@ -297,4 +294,24 @@ func (c *Command) tlsCheckCommand(line string) {
 		return
 	}
 	d.refresh()
+}
+
+func (c *Command) selectedTLSSecret() (SelectedResourceTarget, string, error) {
+	var target SelectedResourceTarget
+	path := ""
+	switch v := c.app.Content.Top().(type) {
+	case ResourceViewer:
+		target = resolveSelectedResource(v, c.app.Config.ActiveContextName())
+		if target.Err() == nil && target.GVR.R() == inspectionSecretsResource {
+			path = target.Path()
+		}
+	case *inspectionDetails:
+		if v.contextName == c.app.Config.ActiveContextName() {
+			path, target = v.secretPath, v.target
+		}
+	}
+	if path == "" {
+		return target, path, fmt.Errorf("select a Secret for offline verification")
+	}
+	return target, path, nil
 }

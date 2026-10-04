@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// Modified for k9+; see NOTICE.
 package view
 
 import (
@@ -102,14 +103,20 @@ func (d *inspectionDetails) openRelated() {
 	}()
 }
 
-func loadInspectionReferences(ctx context.Context, conn client.Connection, gvr *client.GVR, path, name string) ([]inspectionReference, error) {
+//nolint:gocritic // Resource identity is an immutable value captured before asynchronous reads.
+func loadTargetInspectionReferences(ctx context.Context, conn client.Connection, target SelectedResourceTarget, name string) ([]inspectionReference, error) {
+	if err := target.Err(); err != nil {
+		return nil, err
+	}
 	dyn, err := conn.DynDial()
 	if err != nil {
 		return nil, err
 	}
-	ns, n := client.Namespaced(path)
-	obj, err := dyn.Resource(gvr.GVR()).Namespace(ns).Get(ctx, n, metav1.GetOptions{})
+	obj, err := dyn.Resource(target.GVR.GVR()).Namespace(target.Namespace).Get(ctx, target.Name, metav1.GetOptions{})
 	if err != nil {
+		return nil, err
+	}
+	if err := verifySelectedIdentity(target, obj); err != nil {
 		return nil, err
 	}
 	refs := objectReferences(obj)
