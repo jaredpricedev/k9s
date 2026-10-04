@@ -200,6 +200,13 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		ID: "command.diagnostics", Label: "Capability diagnostics", Category: ui.ActionInspect,
 		Shortcut: ":diagnostics", Discoverable: true,
 		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).capabilityCommand("diagnostics"); return nil }}, ui.ActionDescriptor{
+		ID: "command.backup-review", Label: "Velero backup review (enter controller namespace)", Category: ui.ActionInspect,
+		Shortcut: ":backup-review <controller-namespace>", Discoverable: true,
+		Handler: func(*tcell.EventKey) *tcell.EventKey {
+			app.ResetPrompt(app.CmdBuff())
+			app.CmdBuff().SetText("backup-review ", "", true)
+			return nil
+		}}, ui.ActionDescriptor{
 		ID: "command.providers", Label: "Provider checks", Category: ui.ActionInspect,
 		Shortcut: ":providers", Discoverable: true,
 		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).providerCommand("providers"); return nil }}, ui.ActionDescriptor{
