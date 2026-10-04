@@ -267,10 +267,14 @@ func actionCatalogHints(owner actionOwner, app *App) model.MenuHints {
 			continue
 		}
 		label := item.Label
+		priority := item.Priority
 		if item.UnavailableReason != "" {
 			label += " · " + item.UnavailableReason
+			// Keep disabled actions in full discovery without spending compact
+			// header space that belongs to the next available actions.
+			priority = 0
 		}
-		hints = append(hints, model.MenuHint{Mnemonic: item.Shortcut, Description: label, Visible: item.Visible, Priority: item.Priority})
+		hints = append(hints, model.MenuHint{Mnemonic: item.Shortcut, Description: label, Visible: item.Visible, Priority: priority})
 	}
 	return hints
 }

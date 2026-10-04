@@ -83,26 +83,92 @@ fixture helper then had SHA-256
 This older binary demonstrates that the manual setup path works. It is not the
 final study candidate and does not establish usability or task success.
 
-### Final-candidate native walkthrough provenance
+### Facilitator record: earlier native walkthrough and separate ACK test (historical)
 
-The separate 14-chapter, 98-second native walkthrough was captured from source
-`826790070e3d9dab1deff6f4e6cde16a47262265`. Its playable MP4 is stored at
-`/workspace/artifacts/k9plus-toolkit-walkthrough-2026-10-04/final-candidate-82679007-navigation/toolkit-walkthrough.mp4`
-with SHA-256
-`414417ad86ee9e860c899ee62da5843cb8f3a026a10c82875b7a25ca8e109fb0`. The
-captured binary SHA-256 is
+The earlier 14-chapter, 98-second movie was captured from source
+`826790070e3d9dab1deff6f4e6cde16a47262265`. Its MP4 is
+`/workspace/artifacts/k9plus-toolkit-walkthrough-2026-10-04/final-candidate-82679007-navigation/toolkit-walkthrough.mp4`,
+SHA-256 `414417ad86ee9e860c899ee62da5843cb8f3a026a10c82875b7a25ca8e109fb0`;
+the captured binary SHA-256 is
 `a3d792d460103f6f8688bd6e263e547ee72ec07b8c8df1283388ad34965b3181`. The
-implementation source in this packet, PR #116 commit
-`e93ac663969e775c3e5dc0c6cfbbe6f1cd6b5a7a`, matches source `82679007` in
-production code; the later commit adds only the client test-fixture correction.
-The walkthrough uses a synthetic API fixture and includes seven successful API
-checks for the acknowledgment flow. This is captured setup/interaction evidence,
-not a participant study or evidence of broad operator acceptance. The human
-discoverability sentinel below remains unrun.
+primary movie's separate synthetic-fixture request journal recorded 147
+requests. This was guided fixture coverage, not an operator study or latency
+measurement. The seven-check acknowledgment envtest journey is a different
+artifact, also from source `82679007`; it made two explicit synthetic fixture
+resource writes. Do not combine that journey's checks/writes with the movie's
+147-request journal. Neither artifact records participant results, and this
+earlier candidate is superseded by the current acceptance source below.
+
+### Facilitator record: native UI acceptance coverage in the current source
+
+Candidate commit `c0e5ff82f5f965a2e630a5435795bc21d470da91` has tree
+`d9cff84708c0b845f3bd5fae9bde388dbad02156` and is based on master
+`d55c090487a72cf09a89a687bae6d0c3c70765ec`. PR #121 is merged; the PR #122
+candidate adds the wide-Coverage hint correction plus a native regression test.
+The PR #121 acceptance manifest is
+`/workspace/artifacts/k9plus-ui-acceptance-2026-10-04/manifest.json`; it records
+15 Help/action/investigation tests and local checks on the earlier `f7b503f3`
+tree. PR #122 adds the sixteenth acceptance test function,
+`TestActionCatalogHintsReservePrimarySpaceForAvailableActions`, and native
+80×24/120×34 Coverage assertions. Its proof packet is
+`/workspace/artifacts/k9plus-primary-hints-2026-10-04/manifest.json`; it records
+reproduction on `f7b503f3`, focused race (16.793 seconds), full view race
+(70.268 seconds) and pinned golangci-lint 2.6.2 (zero issues) on the `d9cff847`
+tree. This is source-tree evidence only.
+
+Coverage includes Help listener stop/restart and keyboard-reachable long labels
+and reasons; contextual workspace, desired-review, table, comparison, Pulse,
+Hubble and log action routing/hints; Details debounce ownership and stale-result
+rejection; and investigation first viewport, retained export after failed
+refresh, typed search/scroll and draft acceptance, related navigation and Esc return. The exact test
+names and limits are in the manifest. In particular, Pulse positive Enter to
+the browser was not newly tested; the cross-namespace return case models an
+already accepted target; and monochrome coverage does not include every missing
+condition/event presentation. These are regression checks, not measures of
+learnability or task success. Both #22 and #23 human studies remain unrun. The
+prior `f7b503f3` candidate had a wide-terminal Coverage hint defect: at 120
+columns it promoted disabled Pod logs as the primary action despite the
+availability reason. The PR #122 source corrects the candidate and adds
+`TestActionCatalogHintsReservePrimarySpaceForAvailableActions`, which checks
+hint priority; the full native 120/80-column test also verifies that the actual
+Coverage header omits disabled actions. Focused and full view race checks and
+pinned lint passed locally on this same tree. Thus current-source tests support
+the documented nonhuman #22/#23 criteria, but do not establish operator
+learnability or task success.
+
+| Acceptance area | Exact tests in the candidate tree |
+| --- | --- |
+| Help lifecycle and reachability | `TestHelpAcceptanceStoppedPageDoesNotReceiveSkinUpdatesAndRestarts`; `TestHelpAcceptanceLongLabelsReasonsAndSectionsAreKeyboardReachable` |
+| Action dispatch and visible hints | `TestActionDispatchAcceptanceLogsLocalHelpAndCommandEditing`; `TestActionDispatchAcceptanceHubbleLocalHelpAndCommandEditing`; `TestActionDispatchAcceptanceWorkspaceKeysAndPrompt`; `TestActionDispatchAcceptanceDesiredReviewKeys`; `TestActionDispatchAcceptancePulseTabs`; `TestActionDispatchAcceptanceTableSpaceAndFilter`; `TestActionDispatchAcceptanceComparisonWaitsForAAndPaletteCapturesB`; `TestActionCatalogHintsReservePrimarySpaceForAvailableActions` |
+| Debounced Details search ownership | `TestActionDispatchAcceptanceDetailsDebounceUsesCurrentDispatcherOwner`; `TestActionDispatchAcceptanceDetailsRejectsDelayedStaleText`; `TestActionDispatchAcceptanceDetailsRejectsDelayedPreviousOwner` |
+| Investigation presentation and return | `TestInvestigationAcceptanceFirstViewportAcrossColorModes`; `TestInvestigationAcceptanceRetainedExportSurvivesPresentationAndFailedRefresh`; `TestInvestigationAcceptanceTypedRelatedEscRetainsTabSearchAndViewport` |
+
+### Facilitator record: current native walkthrough provenance
+
+The 14-chapter guided walkthrough uses candidate source
+`c0e5ff82f5f965a2e630a5435795bc21d470da91` (tree
+`d9cff84708c0b845f3bd5fae9bde388dbad02156`) and binary SHA-256
+`2f9d0dba8ce863c38d5171ebdea25c8d0ef6d70b2df7b2f09e7cd4beb2143c64`. The MP4
+is `/workspace/artifacts/k9plus-toolkit-walkthrough-2026-10-04/final-candidate-c0e5ff82-native/toolkit-walkthrough.mp4`,
+SHA-256 `8d419a011ec5bacc39a455f5606c6a4b72b6bebe07361bd6b972e0932334e2af`
+(1,097,610 bytes; H.264/yuv420p, 1236×846, 12 fps, 98 seconds). Its journal in
+the same directory records 147 fixture API requests (141 GET, 6 authorization
+review POST), zero resource mutation requests, and successful cleanup. The
+strict Coverage-header assertion shows Retained evidence, Search, Refresh and
+navigation controls, with no unavailable Pod logs or Investigate hint. All 14
+native frames and the complete encoded video were reviewed. This is guided
+synthetic-fixture coverage, not an operator study or latency measurement. PR
+#122 is still open in this source snapshot.
 
 ### Acknowledgment discoverability sentinel
 
-Record this separately from #22/#23 task success. An earlier native capture for #53 showed an initially blank acknowledgment box. The visible-box plus Space correction is in shared UI PR #119, present in the walkthrough source `82679007` and this packet's source `e93ac663`. Before scheduling sessions, verify that the exact candidate build includes the correction and record its source revision. Until then mark the human sentinel “not run”; do not ask participants to compensate for it.
+Record this separately from #22/#23 task success. The earlier 826 capture showed
+an initially blank acknowledgment box. The visible-box plus Space correction is
+in shared UI PR #119 and current master `d55c0904`. The seven-check ACK envtest
+is a separate source-826 journey with two fixture resource writes; it is not part
+of the current 147-request movie journal. Neither automated artifact measures
+whether a participant notices the control. Until a participant study is run,
+mark the human sentinel “not run”; do not ask participants to compensate for it.
 
 When enabled, present the ordinary, safe confirmation flow at its natural point, with a harmless fixture-only destination. Do not point out the acknowledgment control. Record whether the participant notices it without prompting, how they identify it, whether keyboard focus and Space work, whether the current destination is understood, and whether they can safely cancel. Do not perform a real destructive operation. This is a discoverability observation, not evidence that #22 or #23 has passed.
 

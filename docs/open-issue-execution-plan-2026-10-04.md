@@ -1,6 +1,6 @@
 # Open-issue execution plan — k9+
 
-Source: [live GitHub tracker #8](https://github.com/jaredpricedev/k9s/issues/8). Implementation-source snapshot [`e93ac663969e775c3e5dc0c6cfbbe6f1cd6b5a7a`](https://github.com/jaredpricedev/k9s/tree/e93ac663969e775c3e5dc0c6cfbbe6f1cd6b5a7a) includes PR #116; it does not assert that PR #116 has merged to the default branch. See the [toolkit roadmap](toolkit-roadmap-2026-10-03.md) and [operator task study packet](operator-task-study-2026-10-04.md).
+Source: [live GitHub tracker #8](https://github.com/jaredpricedev/k9s/issues/8). Implementation-source candidate [`c0e5ff82f5f965a2e630a5435795bc21d470da91`](https://github.com/jaredpricedev/k9s/tree/c0e5ff82f5f965a2e630a5435795bc21d470da91), tree `d9cff84708c0b845f3bd5fae9bde388dbad02156`, is based on master `d55c090487a72cf09a89a687bae6d0c3c70765ec` and carries PR #122 source. PR #121 is merged. See the [toolkit roadmap](toolkit-roadmap-2026-10-03.md) and [operator task study packet](operator-task-study-2026-10-04.md).
 
 ## Current status — 4 October 2026
 
@@ -10,8 +10,10 @@ the human operator study, plus optional issues #65–#72. All 33 core implementa
 scopes exist in this source. Seven optional native foundations (#65–#68, #70–#72)
 are implemented here; PR #116 includes the #71 operator and #72 dependency
 foundations. Their demand, live compatibility and broader-provider validation
-gates remain open. This source snapshot does not say PR #116 has merged to the
-default branch. Issue #69 is deferred because the user has no current on-prem
+gates remain open. PR #121's native acceptance fixes are merged; the PR #122
+source fixes the wide-Coverage primary hint. Its regression test and existing native
+acceptance evidence support the nonhuman #22/#23 criteria within their documented
+scope; the separate human studies remain open. Issue #69 is deferred because the user has no current on-prem
 cost-review need. Tracking issue #8 is also open, for 11 open issues total. Core
 change-set delivery #53 shipped in PR #118.
 

@@ -86,6 +86,7 @@ func (v *comparisonView) Init(ctx context.Context) error {
 		return err
 	}
 	capture := ui.NewKeyAction("Capture B (keep A)", func(*tcell.EventKey) *tcell.EventKey { v.capture(false); return nil }, true)
+	capture.Opts.Priority = 1
 	capture.Availability = func() string {
 		if v.target.Context != v.app.Config.ActiveContextName() {
 			return "Context changed; choose baseline A again"
@@ -189,6 +190,9 @@ func (v *comparisonView) renderComparison() {
 		text = v.retainedText
 	}
 	v.Update(text)
+	if v.app.Content.Top() == v {
+		v.app.Menu().HydrateMenu(actionCatalogHints(v, v.app))
+	}
 }
 
 // comparisonOverview consumes typed changes. Full messages and values remain

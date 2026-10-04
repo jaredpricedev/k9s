@@ -66,7 +66,7 @@ review history; build and run the default branch with Go 1.25.8.
 | #19 | Bounded, paginated workload Hubble scope | Merged on master | [Hubble PR #34](https://github.com/jaredpricedev/k9s/pull/34) |
 | #20 | Maintenance, CI and reproducible validation evidence | Merged on master | [Validation PR #39](https://github.com/jaredpricedev/k9s/pull/39) |
 | #21 | Relationship UID checks, canceled navigation and retained source state | Merged on master | [PR #7](https://github.com/jaredpricedev/k9s/pull/7) |
-| #22 | Shared action discovery/help implementation | Implementation merged; representative-operator evaluation remains open | [PR #32](https://github.com/jaredpricedev/k9s/pull/32), [responsive refinements PR #90](https://github.com/jaredpricedev/k9s/pull/90) |
+| #22 | Shared action discovery/help implementation | Shared implementation merged; candidate PR #122 covers the wide-Coverage primary-hint criterion; representative-operator evaluation remains open | [PR #32](https://github.com/jaredpricedev/k9s/pull/32), [responsive refinements PR #90](https://github.com/jaredpricedev/k9s/pull/90), [PR #122](https://github.com/jaredpricedev/k9s/pull/122) |
 | #23 | Fault-first investigation, stream modes and responsive evidence | Implementation merged; performance journey measured; representative-operator evaluation remains open | [PR #32](https://github.com/jaredpricedev/k9s/pull/32), [responsive refinements PR #90](https://github.com/jaredpricedev/k9s/pull/90) |
 | #24 | Explicit selected-only capability checks and verified Relay readiness | Merged on master | [Diagnostics PR #36](https://github.com/jaredpricedev/k9s/pull/36) |
 | #25 | Immutable A/B observations with identity, noise controls and sensitive-content limits | Merged on master | [Comparison PR #35](https://github.com/jaredpricedev/k9s/pull/35) |
@@ -99,19 +99,25 @@ queries can still copy all rows; this is not a general latency bound. See the
 
 Implementation for the shared action/help and responsive presentation foundations
 is merged, but #22 and #23 remain open for representative-operator evaluation.
-Automated fixtures do not measure learnability or task success. Implementation
-snapshot `e93ac663969e775c3e5dc0c6cfbbe6f1cd6b5a7a` (PR #116) contains all 33
-core implementation scopes; 31 of the original 41 delivery issues are closed
+Automated fixtures do not measure learnability or task success. UI acceptance
+candidate `c0e5ff82f5f965a2e630a5435795bc21d470da91` has tree
+`d9cff84708c0b845f3bd5fae9bde388dbad02156` and is based on master
+`d55c090487a72cf09a89a687bae6d0c3c70765ec`; it contains all 33 core
+implementation scopes. PR #121 is merged; this tree is the PR #122 candidate.
+Thirty-one of the original 41 delivery issues are closed
 with merged work. The ten remaining delivery issues are #22/#23 human evaluation
 and optional #65–#72; #69 is deferred because the user has no current on-prem
 cost-review need. Tracker #8 remains open (11 open issues total). Core #53
 shipped through [PR #118](https://github.com/jaredpricedev/k9s/pull/118). Seven
 optional native foundations (#65–#68, #70–#72) are implemented in this source;
 their demand, live compatibility and broader-provider acceptance gates remain.
-PR #116 includes the #71 operator and #72 dependency foundations; this source
-snapshot does not assert that PR #116 has merged to the default branch. The
-visible-box/Space follow-up in shared UI PR #119 is merged, but the human study
-must still verify it in the exact candidate build. Live
+PR #116 includes the #71 operator and #72 dependency foundations. UI acceptance
+fixes and tests from PR #121 are merged in the current master snapshot. The PR #122
+candidate source fixes the wide-Coverage primary-hint gap. Automated native tests
+cover keyboard-reachable Help labels/reasons and listener lifecycle, contextual
+action dispatch and hints, debounced Details search ownership, and investigation
+viewport/export/search/scroll/draft/return behavior. They do not replace the
+#22/#23 human studies, which remain unrun. Live
 Relay/Gateway and other provider compatibility remain separate coverage gaps.
 Scoped desired-source/server-preview and guarded Deployment recovery are delivered;
 exhaustive prune fidelity and deeper protocol/topology features remain outside their

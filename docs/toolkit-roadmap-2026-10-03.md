@@ -2,7 +2,7 @@
 
 Proposed direction, 3 October 2026. Baseline: default-branch revision `1978cb74caab53f74403e9e776d18bb2975e01e4`. The Horizon 1 implementation note records the first delivered slice; the remaining proposals do not create delivery commitments.
 
-**Implementation status, 4 October:** 31 of 41 delivery issues are closed. All 33 core implementation scopes exist, and seven optional native review foundations are implemented in the recorded source. The remaining acceptance covers operator studies and live/broader-provider validation; cost is deferred for the user's on-prem environment. See the [delivery snapshot and workflow table](#delivery-status-snapshot--4-october-2026) for exact source and issue status.
+**Implementation status, 4 October:** 31 of 41 delivery issues are closed. All 33 core implementation scopes exist in candidate tree `d9cff84708c0b845f3bd5fae9bde388dbad02156` (PR #122) on master `d55c090487a72cf09a89a687bae6d0c3c70765ec`. PR #121 is merged; the PR #122 candidate adds a wide-Coverage hint correction and its native regression test. Seven optional native review foundations are implemented. The remaining gates include the #22/#23 operator studies and live/broader-provider validation; cost is deferred for the user's on-prem environment. See the [delivery snapshot and workflow table](#delivery-status-snapshot--4-october-2026) for exact source and issue status.
 
 Make k9plus a daily workspace for Kubernetes engineers: understand an application, review a change, follow a release, perform maintenance, and leave useful evidence. Keep the fast keyboard resource browser underneath those tasks. Start by making investigations readable at a glance, then connect existing tools into complete workflows.
 
@@ -199,9 +199,11 @@ demand, named-source evidence or live compatibility validation.
 
 ## Delivery status snapshot — 4 October 2026
 
-This is an implementation-source snapshot at
-`e93ac663969e775c3e5dc0c6cfbbe6f1cd6b5a7a` (PR #116), not a claim that every
-change in that PR is already on the default branch. The refreshed live tracker has
+This is an implementation-source snapshot at candidate commit
+`c0e5ff82f5f965a2e630a5435795bc21d470da91` (tree
+`d9cff84708c0b845f3bd5fae9bde388dbad02156`), based on master
+`d55c090487a72cf09a89a687bae6d0c3c70765ec` and carrying PR #122 source. PR #121
+is merged. The refreshed live tracker has
 31 of 41 delivery issues closed with merged implementations. Ten delivery issues
 remain open: #22/#23 human evaluation and eight optional acceptance items
 (#65–#72). Tracking issue #8 also remains open (11 open issues total). This is a
@@ -210,7 +212,9 @@ scopes exist in this source; #22 and #23 remain open for human operator evaluati
 and core delivery issue #53 shipped in PR #118. Seven optional native foundations
 (#65–#68, #70–#72) are implemented in this source. PR #116 contains the #71 operator
 and #72 dependency foundations; demand, live compatibility and broader-provider
-validation gates remain open. Cost review #69 is deferred after the user confirmed
+validation gates remain open. The PR #122 candidate reserves the wide-Coverage
+primary hint for available actions and adds `TestActionCatalogHintsReservePrimarySpaceForAvailableActions`;
+the human operator studies remain open. Cost review #69 is deferred after the user confirmed
 no current on-prem cost-review need.
 
 | TK | Workflow | Delivery/follow-up status at snapshot |
