@@ -203,3 +203,16 @@ func TestNetworkProjectionCapsRemainExplicit(t *testing.T) {
 	require.Len(t, item.Facts, 64)
 	require.Contains(t, item.Gaps, "Additional fact fields omitted; retained evidence is incomplete")
 }
+
+func TestNetworkReadStateRequiresMatchingAPIStatusForAbsence(t *testing.T) {
+	resource := schema.GroupResource{Resource: "services"}
+	typed := apierrors.NewNotFound(resource, "api")
+	require.Equal(t, StateAbsent, coverageError(typed, ServiceGVR, "api"))
+	require.Equal(t, inspect.ObservationUnknown, coverageError(typed, ServiceGVR, "another"))
+	require.Equal(t, inspect.ObservationUnknown, coverageError(typed, "apps/v1/services", "api"))
+	plain := apierrors.NewGenericServerResponse(404, "get", resource, "api", "proxy404", 0, true)
+	require.Equal(t, inspect.ObservationUnknown, coverageError(plain, ServiceGVR, "api"))
+	missingDetails := &apierrors.StatusError{ErrStatus: metav1.Status{Reason: metav1.StatusReasonNotFound, Code: 404}}
+	require.Equal(t, inspect.ObservationUnknown, coverageError(missingDetails, ServiceGVR, "api"))
+	require.Equal(t, inspect.ObservationUnknown, coverageError(apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, "api"), ServiceGVR, "api"))
+}

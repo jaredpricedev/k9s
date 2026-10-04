@@ -4,6 +4,7 @@ package networkpath
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -95,12 +96,18 @@ func gvr(value string) schema.GroupVersionResource {
 	return schema.GroupVersionResource{Group: p[0], Version: p[1], Resource: p[2]}
 }
 
-func coverageError(err error) string {
+func coverageError(err error, resource, name string) string {
 	if apierrors.IsForbidden(err) || apierrors.IsUnauthorized(err) {
 		return inspect.ObservationDenied
 	}
-	if apierrors.IsNotFound(err) {
-		return StateAbsent
+	var status apierrors.APIStatus
+	if apierrors.IsNotFound(err) && !apierrors.IsUnexpectedServerError(err) && errors.As(err, &status) {
+		value := status.Status()
+		expected := gvr(resource)
+		if value.Reason == metav1.StatusReasonNotFound && value.Code == 404 && value.Details != nil &&
+			value.Details.Group == expected.Group && value.Details.Kind == expected.Resource && value.Details.Name == name {
+			return StateAbsent
+		}
 	}
 	return inspect.ObservationUnknown
 }
@@ -139,7 +146,7 @@ func (c *collector) get(ctx context.Context, resource, namespace, name string) *
 		return nil
 	}
 	if err != nil {
-		coverage.State, coverage.Detail = coverageError(err), safe(err.Error())
+		coverage.State, coverage.Detail = coverageError(err, resource, name), safe(err.Error())
 		return nil
 	}
 	if !validObject(object, resource, namespace) || object.GetName() != name {
@@ -170,7 +177,7 @@ func (c *collector) list(ctx context.Context, resource, namespace, selector stri
 			return objects
 		}
 		if err != nil {
-			coverage.State, coverage.Detail = coverageError(err), safe(err.Error())
+			coverage.State, coverage.Detail = coverageError(err, resource, ""), safe(err.Error())
 			return objects
 		}
 		if page == nil {
