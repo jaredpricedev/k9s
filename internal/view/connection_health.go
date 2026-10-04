@@ -83,14 +83,17 @@ func (c *Command) connectionHealthCommand(line string) {
 
 type connectionHealthDetails struct {
 	*Details
-	request    connectionHealthRequest
-	probe      connectionHealthProbe // Test seam; production reacquires config for every explicit retry.
-	cancel     context.CancelFunc
-	generation uint64
-	snapshot   connectionHealthSnapshot
-	previous   connectionHealthSnapshot
-	started    bool
-	stale      bool
+	request        connectionHealthRequest
+	probe          connectionHealthProbe // Test seam; production reacquires config for every explicit retry.
+	cancel         context.CancelFunc
+	generation     uint64
+	snapshot       connectionHealthSnapshot
+	previous       connectionHealthSnapshot
+	started        bool
+	stale          bool
+	prepareSession sessionRefreshPrepare
+	sessionNotice  string
+	sessionState   sessionReconnectState
 }
 
 func (*connectionHealthDetails) CompactWorkspace() bool { return true }
@@ -101,6 +104,10 @@ func (d *connectionHealthDetails) Init(ctx context.Context) error {
 	}
 	d.actions.Add(ui.KeyR, ui.NewKeyAction("Retry connection checks", func(*tcell.EventKey) *tcell.EventKey {
 		d.refreshConnectionHealth()
+		return nil
+	}, true))
+	d.actions.Add(ui.KeyShiftR, ui.NewKeyAction("Reconnect running session", func(*tcell.EventKey) *tcell.EventKey {
+		d.refreshSession()
 		return nil
 	}, true))
 	return nil
@@ -115,7 +122,7 @@ func (d *connectionHealthDetails) Start() {
 		d.refreshConnectionHealth()
 	} else {
 		d.stale = true
-		d.Update(renderConnectionHealth(d.snapshot, d.previous, time.Now(), true))
+		d.Update(d.renderHealth(true))
 	}
 }
 
@@ -137,6 +144,7 @@ func (d *connectionHealthDetails) current(generation uint64) bool {
 }
 
 func (d *connectionHealthDetails) refreshConnectionHealth() {
+	d.sessionState, d.sessionNotice = "", ""
 	if d.request.Context != d.app.Config.ActiveContextName() || d.request.Namespace != d.app.Config.ActiveNamespace() ||
 		d.request.Revision != d.app.Config.DestinationRevision() {
 		d.Update(renderConnectionHealth(d.snapshot, d.previous, time.Now(), true) +
@@ -149,7 +157,7 @@ func (d *connectionHealthDetails) refreshConnectionHealth() {
 	d.generation++
 	d.stale = true
 	generation, request := d.generation, d.request
-	ctx, cancel := context.WithTimeout(context.Background(), connectionHealthDeadline)
+	ctx, cancel := context.WithTimeout(d.app.sessionContext(), connectionHealthDeadline)
 	d.cancel = cancel
 	probe := d.probe
 	if probe == nil {
@@ -375,9 +383,18 @@ func connectionHealthRecovery(state connectionHealthState) string {
 
 //nolint:gocritic // Rendering reads copied observations and must not mutate retained snapshot headers.
 func renderConnectionHealth(snapshot, previous connectionHealthSnapshot, now time.Time, stale bool) string {
+	return renderConnectionHealthHeadline(snapshot, previous, now, stale, "")
+}
+
+//nolint:gocritic // Rendering reads immutable observation copies.
+func renderConnectionHealthHeadline(snapshot, previous connectionHealthSnapshot, now time.Time, stale bool, headline string) string {
 	var out strings.Builder
 	out.WriteString("CONNECTION AND SESSION\n")
 	fmt.Fprintf(&out, "Context %s · namespace %s\n", connectionHealthSafeLabel(snapshot.Request.Context), connectionHealthSafeLabel(snapshot.Request.Namespace))
+	out.WriteString("r retry checks · R reconnect session · Esc back\n")
+	if headline != "" {
+		out.WriteString(headline + "\n")
+	}
 	if stale {
 		out.WriteString("RETAINED observation · press r to retry\n")
 	}
@@ -409,9 +426,10 @@ func renderConnectionHealth(snapshot, previous connectionHealthSnapshot, now tim
 	for _, check := range snapshot.Checks {
 		fmt.Fprintf(&out, "%s: %s\n", check.Name, check.Source)
 	}
-	out.WriteString("\nr retry · Esc back\nRetry reloads configuration for this named context and rebuilds only these diagnostic clients. " +
-		"Your workspace stays available on Back. To reconnect running watches, select the intended context with Enter in :ctx.\n" +
-		"Global kubeconfig current-context changes do not redirect these checks. Only API version and one selected-namespace pod-list read are checked. " +
+	out.WriteString("\nRetry reloads configuration for this named context without changing the running session. " +
+		"R checks fresh configuration, then reconnects this same named context. Workspace and navigation stay available on Back; failed setup keeps the existing session.\n" +
+		"Global kubeconfig current-context changes do not redirect these checks. " +
+		"Retry checks API version and one selected-namespace pod-list read; reconnect also checks API discovery. " +
 		"A readable version endpoint alone does not prove credentials or permissions are valid.")
 	return out.String()
 }

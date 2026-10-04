@@ -338,8 +338,8 @@ func (v *capacityView) renderChrome() {
 		item.SetTextColor(styles.Text.Color())
 	}
 	identity := capacityTitle + " / " + v.target.Path()
-	source := "Captured observation: pending"
-	state := "Read only | waiting for independent API reads"
+	source := retainedObservationPending
+	state := retainedWaitingForReads
 	if v.snapshot != nil {
 		source = "Captured " + v.snapshot.CapturedAt.UTC().Format("15:04:05Z") + " | " + v.target.Context
 		state = "Read only | complete visible page"
@@ -348,7 +348,7 @@ func (v *capacityView) renderChrome() {
 		}
 	}
 	if v.loading {
-		state = "Read only | refreshing; prior evidence retained"
+		state = retainedRefreshing
 	} else if v.refreshFailure != "" {
 		state = "Unavailable | r retry | " + v.refreshFailure
 		if v.snapshot != nil {
@@ -356,7 +356,7 @@ func (v *capacityView) renderChrome() {
 		}
 	}
 	if !v.destinationCurrent() {
-		state = "Retained | destination changed; reopen"
+		state = retainedDestinationChanged
 	}
 	lines := []string{identity, source, state}
 	for index, line := range lines {
