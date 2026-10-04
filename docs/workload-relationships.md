@@ -65,8 +65,11 @@ HTTPRoute CRDs are absent in that lab: missing-API visibility is smoke-tested;
 Gateway/HTTPRoute references are fixture-tested. Browser rendering and large
 cluster performance were not revalidated in this increment.
 
-The UID/lifecycle update passes `go test -p 2 ./internal/view ./cmd`, focused
-relationship and retained-inspection tests under `go test -race -p 2`, and
-`go build -buildvcs=false -p 2`. VCS stamping was disabled for the managed
-worktree build because automatic Git status collection failed; compilation and
-linking completed successfully. The existing PR remains unmerged pending review.
+The final integration passes the complete ordinary Go suite, all eight race
+suites, and full lint with zero issues. Additional regressions cover failed
+context switches, destination changes away and back, repeated cross-namespace
+jumps, expired pickers, and retained inspection search/scroll state through skin
+changes and Back. Raw output and source provenance are recorded in
+[the integration evidence](evidence/merge-2026-10-04/README.md). VCS stamping was
+disabled for managed worktree checks because automatic Git status collection
+cannot read the worktree metadata in the sandbox.
