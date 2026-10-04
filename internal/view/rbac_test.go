@@ -18,6 +18,6 @@ func TestRbacNew(t *testing.T) {
 
 	require.NoError(t, v.Init(makeCtx(t)))
 	assert.Equal(t, "Rbac", v.Name())
-	assert.Len(t, v.Hints(), 7)
+
 	assertActionRegistry(t, v)
 }

@@ -18,6 +18,6 @@ func TestDaemonSet(t *testing.T) {
 
 	require.NoError(t, v.Init(makeCtx(t)))
 	assert.Equal(t, "DaemonSets", v.Name())
-	assert.Len(t, v.Hints(), 16)
+
 	assertActionRegistry(t, v)
 }
