@@ -10,6 +10,7 @@ import (
 
 	"github.com/derailed/k9s/internal/inspect"
 	"github.com/derailed/k9s/internal/logstream"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -166,7 +167,7 @@ func (s *RolloutSnapshot) Progress() (state, reason string) {
 		return RolloutUnknown, "Controller observedGeneration exceeds the resource generation; retained status is inconsistent"
 	}
 	for _, c := range s.Conditions {
-		if c.Type == "Progressing" && c.Status == "False" || c.Type == "ReplicaFailure" && c.Status == "True" {
+		if c.Type == "Progressing" && c.Status == string(corev1.ConditionFalse) || c.Type == "ReplicaFailure" && c.Status == string(corev1.ConditionTrue) {
 			reason := c.Reason
 			if reason == "" {
 				reason = c.Type + "=" + c.Status
