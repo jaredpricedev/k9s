@@ -10,7 +10,6 @@ import (
 
 	"github.com/derailed/k9s/internal/model1"
 	"github.com/derailed/k9s/internal/render"
-	"github.com/derailed/tview"
 )
 
 // MaxyPad tracks uniform column padding.
@@ -34,7 +33,7 @@ func computeMaxColumns(pads MaxyPad, sortColName string, t *model1.TableData, li
 	t.RowsRange(func(_ int, re model1.RowEvent) bool {
 		for index, field := range re.Row.Fields {
 			if literalFields {
-				field = tview.Escape(field)
+				field = escapeTableField(field)
 			}
 			width := displayWidth(field) + colPadding
 			if index < len(pads) && width > pads[index] {
