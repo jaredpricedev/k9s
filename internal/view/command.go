@@ -314,6 +314,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.taskbookCommand(p.GetLine())
 	case fleetCommandToken:
 		c.fleetCommand(p.GetLine())
+	case backupCommandToken:
+		c.backupCommand(p.GetLine())
 	case "workspace", dailyCommand, inventoryCommand, activityCommand:
 		c.dailyWorkspaceCommand(p.GetLine())
 	case connectionCommand, "connection-health":
@@ -363,8 +365,6 @@ func (c *Command) specialCmd(p *cmd.Interpreter, pushCmd bool) bool {
 		c.comparisonCommand()
 	case p.Cmd() == "pressure":
 		c.pressureCommand()
-	case p.Cmd() == backupCommandToken:
-		c.backupCommand(p.GetLine())
 	case p.Cmd() == storageCommandToken:
 		c.storageCommand()
 	case p.Cmd() == capacityCommandToken:
