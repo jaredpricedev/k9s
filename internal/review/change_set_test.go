@@ -240,6 +240,7 @@ func TestChangeSetVerifiedAbsenceUsesCreateAndProxy404DoesNot(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ChangeSetPrepared, plan.Entries[0].State)
 	require.True(t, plan.Entries[0].ExpectedAbsent)
+	require.Contains(t, plan.Entries[0].Reason, "separate field-ownership review")
 	require.Empty(t, plan.Entries[0].Identity.UID)
 	result, err := ApplyChangeSetTarget(t.Context(), dyn, changeSetOwner, plan, 0, ChangeSetHooks{})
 	require.NoError(t, err)
@@ -262,6 +263,42 @@ func TestChangeSetVerifiedAbsenceUsesCreateAndProxy404DoesNot(t *testing.T) {
 	require.Equal(t, StateUnknown, unknown.Entries[0].State)
 	require.False(t, unknown.Entries[0].ExpectedAbsent)
 	require.Equal(t, 1, requests)
+}
+
+func TestChangeSetPriorCreateOwnershipConflictRemainsBlockedWithoutMigration(t *testing.T) {
+	gvr := schema.GroupVersionResource{Group: previewTestAppsGroup, Version: previewTestVersion, Resource: previewTestDeployments}
+	for _, manager := range []string{ChangeSetFieldManager, "another-native-client"} {
+		t.Run(manager, func(t *testing.T) {
+			source, scope, dyn, resolve := changeSetFixture(t)
+			current, err := dyn.Tracker().Get(gvr, "team", "checkout")
+			require.NoError(t, err)
+			live := current.(*unstructured.Unstructured).DeepCopy()
+			live.SetManagedFields([]metav1.ManagedFieldsEntry{{Manager: manager, Operation: metav1.ManagedFieldsOperationUpdate, APIVersion: "apps/v1"}})
+			require.NoError(t, dyn.Tracker().Update(gvr, live, "team"))
+			dyn.PrependReactor("patch", previewTestDeployments, func(action ktesting.Action) (bool, runtime.Object, error) {
+				options := action.(interface{ GetPatchOptions() metav1.PatchOptions }).GetPatchOptions()
+				require.Equal(t, []string{metav1.DryRunAll}, options.DryRun)
+				require.Nil(t, options.Force)
+				return true, nil, &apierrors.StatusError{ErrStatus: metav1.Status{Code: http.StatusConflict, Reason: metav1.StatusReasonConflict,
+					Message: "request contains confidential fixture content", Details: &metav1.StatusDetails{Causes: []metav1.StatusCause{{Type: metav1.CauseTypeFieldManagerConflict}}}}}
+			})
+			plan, err := PrepareChangeSet(t.Context(), dyn, resolve, changeSetOwner, source, scope)
+			require.NoError(t, err)
+			require.Equal(t, PreviewConflict, plan.Entries[0].State)
+			require.NotContains(t, plan.Entries[0].Reason, "confidential fixture content")
+			if manager == ChangeSetFieldManager {
+				require.Contains(t, plan.Entries[0].Reason, "prior native create")
+				require.Contains(t, plan.Entries[0].Reason, "no automatic migration, Force or retry")
+			} else {
+				require.NotContains(t, plan.Entries[0].Reason, "prior native create")
+			}
+			_, eligible := plan.Target(0)
+			require.False(t, eligible)
+			_, err = ApplyChangeSetTarget(t.Context(), dyn, changeSetOwner, plan, 0, ChangeSetHooks{})
+			require.Error(t, err)
+			require.Zero(t, changeSetPersistentCount(dyn), "blocked conflict cannot migrate ownership or persist a second request")
+		})
+	}
 }
 
 func TestChangeSetCreationRaceCancellationAndPostAcceptanceUncertainty(t *testing.T) {

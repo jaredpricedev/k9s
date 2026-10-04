@@ -200,7 +200,7 @@ func prepareChangeSetTarget(ctx context.Context, reader dynamic.Interface, owner
 	admitted, err := changeSetWrite(ctx, reader, target, true)
 	entry.PreviewReadAt = time.Now().UTC()
 	if err != nil {
-		entry.State, entry.Reason = changeSetFailure(err, "Strict dry-run admission failed; nothing persisted")
+		entry.State, entry.Reason = changeSetAdmissionFailure(err, live)
 		return
 	}
 	if !liveMatches(&manifest, admitted) || !create && admitted.GetUID() != entry.Identity.UID {
@@ -238,6 +238,24 @@ func finishChangeSetPreview(manifest *Manifest, live, admitted *unstructured.Uns
 		return
 	}
 	entry.State, entry.Reason = ChangeSetPrepared, "Dry-run accepted at this time only; explicit apply rechecks preconditions. Batch operations are not atomic"
+	if target.expectedAbsent {
+		entry.Reason += ". A later apply may require separate field-ownership review after this creation"
+	}
+}
+
+func changeSetAdmissionFailure(err error, live *unstructured.Unstructured) (state, reason string) {
+	state, reason = changeSetFailure(err, "Strict dry-run admission failed; nothing persisted")
+	if state != PreviewConflict || live == nil || !apierrors.HasStatusCause(err, metav1.CauseTypeFieldManagerConflict) {
+		return state, reason
+	}
+	for _, field := range live.GetManagedFields() {
+		if field.Manager == ChangeSetFieldManager && field.Operation == metav1.ManagedFieldsOperationUpdate {
+			reason = "Field ownership conflict. A prior native create uses Update ownership and can conflict with this apply. " +
+				"Review field ownership separately; no automatic migration, Force or retry"
+			break
+		}
+	}
+	return state, reason
 }
 
 func changeSetPayload(manifest *Manifest, live *unstructured.Unstructured) *unstructured.Unstructured {

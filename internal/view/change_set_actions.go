@@ -193,6 +193,7 @@ func (v *changeSetView) confirmApply() {
 	message := fmt.Sprintf("Apply %d selected target(s), %d currently eligible?\nSource SHA256 %s\n"+
 		"Each target is independent; this batch is not atomic. Earlier writes may succeed before a later denial, conflict or cancellation.\n"+
 		"Complete authored objects include sensitive or omitted fields excluded from review. Secret objects are never submitted. "+
+		"Created targets may need separate field-ownership review before a later apply. "+
 		"No pruning, Force or automatic retry. Rechecks local source, UID/RV/generation, ownership and permission before every write.",
 		count, eligible, v.source.Identity.SHA256)
 	v.confirmation("Apply reviewed change set", message, true, "Apply", func() {
