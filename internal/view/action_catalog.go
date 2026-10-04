@@ -105,6 +105,7 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 	}
 	result = append(result, investigationActions(owner, app)...)
 	result = append(result, changeReviewActions(owner, app)...)
+	result = append(result, jobReviewActions(owner, app)...)
 	result = append(result, maintenanceReviewActions(owner, app)...)
 	result = append(result, configurationActions(owner, app)...)
 	result = append(result, workspaceActions(app)...)
@@ -296,5 +297,18 @@ func configurationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		ID: "resource.configuration-review", Label: "Declared configuration references", Category: ui.ActionInspect,
 		Shortcut: ":" + configurationCommand, Discoverable: true, RequiresSelection: true, UnavailableReason: reason,
 		Handler: func(*tcell.EventKey) *tcell.EventKey { app.openConfigurationReview(target); return nil },
+	}}
+}
+
+func jobReviewActions(owner actionOwner, app *App) []ui.ActionDescriptor {
+	target := actionTarget(owner, app.Config.ActiveContextName())
+	reason := ""
+	if err := jobReviewTargetError(target); err != nil {
+		reason = err.Error()
+	}
+	return []ui.ActionDescriptor{{
+		ID: "resource.job-review", Label: "Scheduled / one-off Job review", Category: ui.ActionInspect, Shortcut: ":" + jobReviewCommandToken,
+		Discoverable: true, RequiresSelection: true, UnavailableReason: reason,
+		Handler: func(*tcell.EventKey) *tcell.EventKey { app.openJobReview(target); return nil },
 	}}
 }
