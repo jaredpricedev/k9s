@@ -22,6 +22,8 @@ import (
 const changeSetCommandToken = "changeset"
 const changeSetTitle = "Reviewed change set"
 const changeSetModalPage = "change-set-confirm"
+const changeSetPlanPage = "change-set-plan"
+const changeSetDetailPage = "change-set-detail"
 
 var changeSetTabs = []string{"Plan", "Changes", "Ownership", "Outcomes", "Evidence"}
 
@@ -143,7 +145,7 @@ func (v *changeSetView) Init(ctx context.Context) error {
 		}
 	})
 	v.table.SetInputCapture(v.tableKey)
-	v.pages = tview.NewPages().AddPage("plan", v.table, true, true).AddPage("detail", v.text, true, false)
+	v.pages = tview.NewPages().AddPage(changeSetPlanPage, v.table, true, true).AddPage(changeSetDetailPage, v.text, true, false)
 	v.Flex.Clear().SetDirection(tview.FlexRow).AddItem(v.identityBar, 3, 0, false).AddItem(v.tabsBar, 1, 0, false).
 		AddItem(v.pages, 0, 1, true).AddItem(v.footer, 1, 0, false)
 	v.bindChangeSetActions()

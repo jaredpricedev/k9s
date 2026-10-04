@@ -81,9 +81,9 @@ func (v *changeSetView) selectTab(tab int) {
 	row, col := v.text.GetScrollOffset()
 	v.tabStates[v.activeTab] = investigationTabState{query: v.inspectionQuery, region: v.currentRegion, row: row, col: col}
 	v.activeTab = tab
-	page := "detail"
+	page := changeSetDetailPage
 	if tab == 0 {
-		page = "plan"
+		page = changeSetPlanPage
 	}
 	v.pages.SwitchToPage(page)
 	state := v.tabStates[tab]
