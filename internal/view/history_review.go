@@ -17,7 +17,10 @@ import (
 	"github.com/derailed/tview"
 )
 
-const historyCommand = "history-review"
+const (
+	historyCommand        = "history-review"
+	historyCoverageDenied = "denied"
+)
 
 type historyView struct {
 	chrome *tview.TextView
@@ -206,7 +209,7 @@ func (v *historyView) accept(s *observability.Snapshot, err error) {
 		v.failure = ""
 		failed := false
 		for _, e := range s.Evidence {
-			if e.State == "denied" || e.State == "absent" || e.State == string(capabilityUnavailable) {
+			if e.State == historyCoverageDenied || e.State == "absent" || e.State == string(capabilityUnavailable) {
 				failed = true
 				v.failure = "Provider " + e.State
 			}
