@@ -27,12 +27,13 @@ import (
 )
 
 const (
-	podCmd            = "v1/pods"
-	ctxCmd            = "ctx"
-	dailyCommand      = "daily"
-	connectionCommand = "connection"
-	inventoryCommand  = "inventory"
-	workspaceUnknown  = "unknown"
+	podCmd              = "v1/pods"
+	ctxCmd              = "ctx"
+	dailyCommand        = "daily"
+	connectionCommand   = "connection"
+	taskbookCommandName = "taskbook"
+	inventoryCommand    = "inventory"
+	workspaceUnknown    = "unknown"
 )
 
 var (
@@ -108,7 +109,7 @@ func (c *Command) suggestionAliases() []string {
 }
 
 func (c *Command) updateSuggestionAliases() {
-	aliases := []string{providersCommand, capacityCommandToken, "operations", "ops", configurationCommand, jobReviewCommandToken}
+	aliases := []string{providersCommand, capacityCommandToken, "operations", "ops", configurationCommand, jobReviewCommandToken, maintenanceCommandToken, accessCommandName, taskbookCommandName}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
 		return
@@ -302,6 +303,10 @@ func (c *Command) defaultCmd(isRoot bool) error {
 
 func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 	switch p.Cmd() {
+	case accessCommandName:
+		c.accessCommand(p.GetLine())
+	case taskbookCommandName:
+		c.taskbookCommand(p.GetLine())
 	case "workspace", dailyCommand, inventoryCommand:
 		c.dailyWorkspaceCommand(p.GetLine())
 	case connectionCommand, "connection-health":
@@ -316,6 +321,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.jobReviewCommand()
 	case "operations", "ops":
 		c.operationsCommand()
+	case maintenanceCommandToken:
+		c.maintenanceCommand()
 	case providersCommand:
 		c.providerCommand(p.GetLine())
 	default:
