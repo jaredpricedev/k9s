@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// Modified for k9+; see NOTICE.
 package view
 
 import (
@@ -235,18 +236,21 @@ func (c *Command) tlsCheckCommand(line string) {
 	d := &inspectionDetails{Details: NewDetails(c.app, "TLS verification",
 		strings.Join(parts[1:minimum], " "), contentInspection, true).Update("Loading TLS verification...")}
 	var (
-		conn client.Connection
-		path string
+		conn   client.Connection
+		path   string
+		target SelectedResourceTarget
 	)
 	if !probe {
 		switch v := c.app.Content.Top().(type) {
 		case ResourceViewer:
-			if v.GVR().R() == inspectionSecretsResource {
-				path = v.GetTable().GetSelectedItem()
+			target = resolveSelectedResource(v, c.app.Config.ActiveContextName())
+			if target.Err() == nil && target.GVR.R() == inspectionSecretsResource {
+				path = target.Path()
 			}
 		case *inspectionDetails:
 			if v.contextName == c.app.Config.ActiveContextName() {
 				path = v.secretPath
+				target = v.target
 			}
 		}
 		if path == "" {
@@ -280,6 +284,9 @@ func (c *Command) tlsCheckCommand(line string) {
 		ns, n := client.Namespaced(path)
 		obj, err := dyn.Resource(schema.GroupVersionResource{Version: "v1", Resource: inspectionSecretsResource}).Namespace(ns).Get(ctx, n, metav1.GetOptions{})
 		if err != nil {
+			return "", err
+		}
+		if err := verifySelectedIdentity(target, obj); err != nil {
 			return "", err
 		}
 		data, err := secretCertificate(obj)

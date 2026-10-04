@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view
 
@@ -144,15 +145,22 @@ func (t *Table) EnvFn() EnvFunc {
 
 func (t *Table) defaultEnv() Env {
 	path := t.GetSelectedItem()
+	target := tableResourceForPath(t, t.app.Config.ActiveContextName(), path)
+	if target.Err() != nil {
+		env := k8sEnv(t.app.Conn().Config())
+		env["FILTER"] = t.CmdBuff().GetText()
+		return env
+	}
 	row := t.GetSelectedRow(path)
-	env := defaultEnv(t.app.Conn().Config(), path, t.GetModel().Peek().Header(), row)
+	env := defaultEnv(t.app.Conn().Config(), target.Path(), t.GetModel().Peek().Header(), row)
 	env["FILTER"] = t.CmdBuff().GetText()
 	if env["FILTER"] == "" {
-		env["NAMESPACE"], env["FILTER"] = client.Namespaced(path)
+		env["NAMESPACE"], env["FILTER"] = target.Namespace, target.Name
 	}
-	env["RESOURCE_GROUP"] = t.GVR().G()
-	env["RESOURCE_VERSION"] = t.GVR().V()
-	env["RESOURCE_NAME"] = t.GVR().R()
+	env["RESOURCE_GROUP"] = target.GVR.G()
+	env["RESOURCE_VERSION"] = target.GVR.V()
+	env["RESOURCE_NAME"] = target.GVR.R()
+	env["RESOURCE_UID"] = string(target.UID)
 
 	return env
 }
@@ -262,8 +270,12 @@ func (t *Table) cpCmd(evt *tcell.EventKey) *tcell.EventKey {
 
 	names := make([]string, 0, len(paths))
 	for _, path := range paths {
-		_, n := client.Namespaced(path)
-		names = append(names, n)
+		target := resourceTargetForPath(t.GVR(), t.app.Config.ActiveContextName(), path)
+		if err := target.Err(); err != nil {
+			t.app.Flash().Err(err)
+			return nil
+		}
+		names = append(names, target.Name)
 	}
 
 	text := strings.Join(names, "\n")
@@ -289,8 +301,12 @@ func (t *Table) cpNsCmd(evt *tcell.EventKey) *tcell.EventKey {
 
 	namespaces := make([]string, 0, len(paths))
 	for _, path := range paths {
-		ns, _ := client.Namespaced(path)
-		namespaces = append(namespaces, ns)
+		target := resourceTargetForPath(t.GVR(), t.app.Config.ActiveContextName(), path)
+		if err := target.Err(); err != nil {
+			t.app.Flash().Err(err)
+			return nil
+		}
+		namespaces = append(namespaces, target.Namespace)
 	}
 
 	text := strings.Join(namespaces, "\n")
