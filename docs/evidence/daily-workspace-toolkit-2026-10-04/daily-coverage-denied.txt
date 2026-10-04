@@ -1,0 +1,34 @@
+[RO] CONNECTED ctx:demo-dev ns:apps  CPU N/A (unavailable)  MEM N/A (unavailable)  F2:destination                       
+ <ctrl+o> Actions  <?> Help                                                                                             
+┌────────────────────────────────────────────────── Daily workspace ───────────────────────────────────────────────────┐
+│daily · demo-dev · apps, ops                                                                                          │
+│Selector: app=daily · Kinds: pods, deployments, jobs, cronjobs, resourcequotas, certificates, ingresses               │
+│7 resources · 8 findings · 12 covered reads · 2 coverage gaps · Observed 05:08:14 (4s ago)                            │
+│Partial observation: 2 coverage gaps. Successful reads updated; see Coverage for reasons.                             │
+│STATE    KIND / API                      NAMESPACE DETAIL                                                             │
+│complete v1/pods                         apps      Current resource state observed                                    │
+│complete v1/pods                         ops       Current resource state observed                                    │
+│complete apps/v1/deployments             apps      Current resource state observed                                    │
+│complete apps/v1/deployments             ops       Current resource state observed                                    │
+│complete batch/v1/jobs                   apps      Current resource state observed                                    │
+│complete batch/v1/jobs                   ops       Current resource state observed                                    │
+│complete batch/v1/cronjobs               apps      Current resource state observed                                    │
+│complete batch/v1/cronjobs               ops       Current resource state observed                                    │
+│complete v1/resourcequotas               apps      Current resource state observed                                    │
+│complete v1/resourcequotas               ops       Current resource state observed                                    │
+│complete cert-manager.io/v1/certificates apps      Current resource state observed                                    │
+│complete cert-manager.io/v1/certificates ops       Current resource state observed                                    │
+│denied   networking.k8s.io/v1/ingresses  apps      Fixture ingress LIST denied                                        │
+│denied   networking.k8s.io/v1/ingresses  ops       Fixture ingress LIST denied                                        │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│Current resource state observed                                                                                       │
+│                                                                                                                      │
+│                                                                                                                      │
+│1 Daily  2 Inventory  3 Coverage  4 Pins  5 Scopes   / search  r refresh  Enter investigate                           │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+  <pod>   <daily workspace>   <daily workspace>                                                                         
+                                                                                                                        

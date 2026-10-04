@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/derailed/k9s/internal/client"
+	"github.com/derailed/k9s/internal/inspect"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -26,20 +27,29 @@ const (
 	maxPressurePods   = 20
 	maxPressureEvents = 20
 	pressureNA        = "N/A"
-	pressureUnknown   = "unknown"
+	pressureUnknown   = workspaceUnknown
+	pressureUnset     = "N/A (unset)"
 )
 
 // pressureCommand uses the inspection lifetime, cancellation and destination
 // guard. Read-only mode remains fully supported; this view never submits writes.
 func (c *Command) pressureCommand() {
-	v, ok := c.app.Content.Top().(ResourceViewer)
-	if !ok {
+	var target SelectedResourceTarget
+	switch view := c.app.Content.Top().(type) {
+	case SelectedResource:
+		target = view.SelectedResource()
+	case ResourceViewer:
+		target = resolveSelectedResource(view, c.app.Config.ActiveContextName())
+	default:
 		c.app.Flash().Err(fmt.Errorf("open a Pod or workload resource list first"))
 		return
 	}
-	target := resolveSelectedResource(v, c.app.Config.ActiveContextName())
 	if err := target.Err(); err != nil {
 		c.app.Flash().Err(err)
+		return
+	}
+	if target.Context != c.app.Config.ActiveContextName() {
+		c.app.Flash().Warn("Context changed; reopen resource pressure")
 		return
 	}
 	connection, err := pinInspectionConnection(c.app.Conn())
@@ -51,9 +61,7 @@ func (c *Command) pressureCommand() {
 		Update("Loading read-only resource pressure snapshot..."), target: target}
 	d.connection = connection
 	d.snapshotLoader = func(ctx context.Context, target SelectedResourceTarget) (inspectionSnapshot, error) {
-		now := time.Now()
-		text, uid, err := loadResourcePressureEvidence(ctx, connection, target, now)
-		return inspectionSnapshot{Text: text, UID: uid, CapturedAt: now}, err
+		return loadResourcePressureSnapshot(ctx, connection, target, time.Now())
 	}
 	d.related = func(ctx context.Context, target SelectedResourceTarget) ([]inspectionReference, error) {
 		return loadTargetInspectionReferences(ctx, connection, target, troubleshootCommand)
@@ -73,28 +81,43 @@ func loadResourcePressure(ctx context.Context, conn client.Connection, target Se
 
 //nolint:gocritic // Match the shared inspection loader's immutable captured identity interface.
 func loadResourcePressureEvidence(ctx context.Context, conn client.Connection, target SelectedResourceTarget, now time.Time) (string, types.UID, error) {
+	snapshot, err := loadResourcePressureSnapshot(ctx, conn, target, now)
+	return snapshot.Text, snapshot.UID, err
+}
+
+// loadResourcePressureSnapshot retains both the full source report and typed
+// budgets from the same reads. Presentation never extracts facts from prose.
+//
+//nolint:gocritic // The captured target is immutable throughout the observation.
+func loadResourcePressureSnapshot(ctx context.Context, conn client.Connection, target SelectedResourceTarget, now time.Time) (inspectionSnapshot, error) {
 	if err := ctx.Err(); err != nil {
-		return "", "", err
+		return inspectionSnapshot{}, err
 	}
 	if err := target.Err(); err != nil {
-		return "", "", err
+		return inspectionSnapshot{}, err
 	}
 	dyn, err := conn.DynDial()
 	if err != nil {
-		return "", "", err
+		return inspectionSnapshot{}, err
 	}
 	obj, err := dyn.Resource(target.GVR.GVR()).Namespace(target.Namespace).Get(ctx, target.Name, metav1.GetOptions{})
 	if err != nil {
-		return "", "", err
+		return inspectionSnapshot{}, err
 	}
 	if err := verifySelectedIdentity(target, obj); err != nil {
-		return "", "", err
+		return inspectionSnapshot{}, err
 	}
+	investigation := newPressureInvestigation(obj, target.Context, target.GVR.String(), now)
+	snapshot := inspectionSnapshot{UID: obj.GetUID(), CapturedAt: now, Investigation: investigation}
 	var b strings.Builder
 	fmt.Fprintf(&b, "RESOURCE PRESSURE · READ-ONLY SNAPSHOT\nContext: %s\n%s %s\nUID: %s\nCaptured: %s\n",
 		target.Context, obj.GetKind(), target.Path(), obj.GetUID(), now.UTC().Format(time.RFC3339))
 	if target.UID == "" {
 		b.WriteString("Selected UID: unknown; continuity with the selected row cannot be verified.\n")
+		investigation.Coverage = append(investigation.Coverage, inspect.InvestigationCoverage{
+			Source: "selection", State: inspect.ObservationUnknown,
+			Detail: "Selected UID unknown; continuity with the selected row cannot be verified",
+		})
 	}
 	b.WriteString("\n" +
 		"CPU uses millicores: 1000m = one CPU. Memory uses binary MiB.\n" +
@@ -105,7 +128,7 @@ func loadResourcePressureEvidence(ctx context.Context, conn client.Connection, t
 		"CPU throttling: unknown — metrics-server supplies no throttling counters.\n")
 	var pods []*unstructured.Unstructured
 	notice := ""
-	if obj.GetKind() == "Pod" {
+	if obj.GetKind() == inspectionPodKind {
 		pods = []*unstructured.Unstructured{obj}
 	} else {
 		switch obj.GetKind() {
@@ -113,7 +136,12 @@ func loadResourcePressureEvidence(ctx context.Context, conn client.Connection, t
 			pods, notice = workloadPods(ctx, conn, obj)
 		default:
 			fmt.Fprintf(&b, "\nPod inspection unavailable for %s; select a Pod, Deployment, DaemonSet, StatefulSet, ReplicaSet or Job.\n", obj.GetKind())
-			return b.String(), obj.GetUID(), nil
+			investigation.Coverage = append(investigation.Coverage, inspect.InvestigationCoverage{
+				Source: "Pod budgets", State: "unsupported",
+				Detail: "Select a Pod, Deployment, DaemonSet, StatefulSet, ReplicaSet or Job",
+			})
+			snapshot.Text = b.String()
+			return snapshot, nil
 		}
 	}
 	if len(pods) > maxPressurePods {
@@ -122,27 +150,75 @@ func loadResourcePressureEvidence(ctx context.Context, conn client.Connection, t
 	}
 	if notice != "" {
 		fmt.Fprintf(&b, "\nPod visibility: %s\n", strings.TrimSpace(notice))
+		investigation.Coverage = append(investigation.Coverage, inspect.InvestigationCoverage{
+			Source: "Pods", State: inspect.ObservationIncomplete, Detail: strings.TrimSpace(notice),
+		})
 	}
 	sort.Slice(pods, func(i, j int) bool { return pods[i].GetName() < pods[j].GetName() })
 	for _, obj := range pods {
 		var pod corev1.Pod
 		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, &pod); err != nil {
 			fmt.Fprintf(&b, "\nPod %s: configuration unavailable: %s\n", obj.GetName(), err)
+			investigation.Coverage = append(investigation.Coverage, inspect.InvestigationCoverage{
+				Source: "Pod " + obj.GetName(), State: inspect.ObservationUnknown, Detail: "Configuration unavailable: " + err.Error(),
+			})
 			continue
 		}
+		podInvestigation := inspect.NewInvestigation(obj, target.Context, client.PodGVR.String(), now)
+		if investigation.Kind != inspectionPodKind {
+			investigation.Containers = append(investigation.Containers, podInvestigation.Containers...)
+			for _, condition := range podInvestigation.Conditions {
+				condition.Type = pod.Name + " / " + condition.Type
+				investigation.Conditions = append(investigation.Conditions, condition)
+			}
+		}
 		metrics := loadPressureMetrics(ctx, conn, &pod, now)
+		investigation.Resources = append(investigation.Resources, pressureBudgets(&pod, &metrics)...)
+		investigation.Coverage = append(investigation.Coverage, inspect.InvestigationCoverage{
+			Source: "metrics " + pod.Name, State: string(metrics.sample.State), Detail: metrics.sample.Reason,
+		})
 		b.WriteString(renderPodPressure(&pod, &metrics))
-		b.WriteString(pressureEvents(ctx, conn, &pod))
+		eventText, events, eventCoverage := loadPressureEvents(ctx, conn, &pod)
+		b.WriteString(eventText)
+		podInvestigation.AddEvents(events)
+		investigation.Events = append(investigation.Events, podInvestigation.Events...)
+		investigation.Coverage = append(investigation.Coverage, eventCoverage)
 	}
+	sort.SliceStable(investigation.Events, func(i, j int) bool {
+		return investigation.Events[i].LastObserved.After(investigation.Events[j].LastObserved)
+	})
 	if len(pods) == 0 && notice == "" {
 		b.WriteString("\nNo current Pods match the workload selector. This does not establish health.\n")
+		investigation.Coverage = append(investigation.Coverage, inspect.InvestigationCoverage{
+			Source: "Pods", State: "empty", Detail: "No current selector-matching Pods; this does not establish health",
+		})
 	}
+	investigation.Coverage = append(investigation.Coverage,
+		inspect.InvestigationCoverage{Source: "CPU throttling", State: workspaceUnknown, Detail: "metrics-server supplies no throttling counters"},
+		inspect.InvestigationCoverage{Source: "usage", State: "sample only", Detail: "Current sample over its reported window; no usage history or causal diagnosis"},
+	)
 	b.WriteString("\n" +
 		"Evidence comes from the Kubernetes Pod API, retained Events and optional metrics.k8s.io.\n" +
 		"OOM and scheduling evidence do not by themselves establish a cause.\n" +
 		"No aggregate allocation is invented for missing values or overlapping init/sidecar phases.\n" +
 		"Refresh with r; g opens related resources; Esc returns and cancels waiting reads.\n")
-	return b.String(), obj.GetUID(), nil
+	snapshot.Text = b.String()
+	return snapshot, nil
+}
+
+func newPressureInvestigation(obj *unstructured.Unstructured, contextName, gvr string, now time.Time) *inspect.Investigation {
+	investigation := inspect.NewInvestigation(obj, contextName, gvr, now)
+	investigation.Resources = nil
+	// Metrics coverage is reported per Pod, including denied and stale samples;
+	// replace the generic placeholder before collecting from that same snapshot.
+	coverage := investigation.Coverage[:0]
+	for _, source := range investigation.Coverage {
+		if source.Source != capabilityTaskMetrics {
+			coverage = append(coverage, source)
+		}
+	}
+	investigation.Coverage = coverage
+	return investigation
 }
 
 type pressureMetrics struct {
@@ -251,27 +327,85 @@ func renderPodPressure(pod *corev1.Pod, metrics *pressureMetrics) string {
 	return b.String()
 }
 
+func pressureBudgets(pod *corev1.Pod, metrics *pressureMetrics) []inspect.ResourceBudget {
+	statuses := make(map[string]*corev1.ContainerStatus)
+	for _, group := range [][]corev1.ContainerStatus{pod.Status.ContainerStatuses, pod.Status.InitContainerStatuses, pod.Status.EphemeralContainerStatuses} {
+		for index := range group {
+			statuses[group[index].Name] = &group[index]
+		}
+	}
+	var budgets []inspect.ResourceBudget
+	add := func(name, role string, resources corev1.ResourceRequirements) {
+		budget := inspect.ResourceBudget{Pod: pod.Name, UID: string(pod.UID), Container: name, Role: role,
+			MetricsState: string(metrics.sample.State), MetricsReason: metrics.sample.Reason,
+			ObservedAt: metrics.sample.ObservedAt, Window: metrics.window, CurrentState: workspaceUnknown}
+		budget.CPURequest, budget.CPULimit, budget.CPUUsage, budget.CPURequestRatio, budget.CPULimitRatio = pressureResourceValues(
+			resources, metrics.containers[name], corev1.ResourceCPU, metrics.sample.Fresh(), pressureBudgetQuantity,
+		)
+		budget.MemoryRequest, budget.MemoryLimit, budget.MemoryUsage, budget.MemoryRequestRatio, budget.MemoryLimitRatio = pressureResourceValues(
+			resources, metrics.containers[name], corev1.ResourceMemory, metrics.sample.Fresh(), pressureBudgetQuantity,
+		)
+		if status := statuses[name]; status != nil {
+			switch {
+			case status.State.Waiting != nil:
+				budget.CurrentState = "waiting " + status.State.Waiting.Reason
+			case status.State.Terminated != nil:
+				budget.CurrentState = fmt.Sprintf("%s · exit %d", status.State.Terminated.Reason, status.State.Terminated.ExitCode)
+			case status.State.Running != nil:
+				budget.CurrentState = "running"
+				if role == investigationAppRole && !status.Ready {
+					budget.CurrentState += " / not ready"
+				}
+			}
+		}
+		budgets = append(budgets, budget)
+	}
+	for index := range pod.Spec.InitContainers {
+		container := &pod.Spec.InitContainers[index]
+		role := "init"
+		if container.RestartPolicy != nil && *container.RestartPolicy == corev1.ContainerRestartPolicyAlways {
+			role = "sidecar"
+		}
+		add(container.Name, role, container.Resources)
+	}
+	for index := range pod.Spec.Containers {
+		container := &pod.Spec.Containers[index]
+		add(container.Name, investigationAppRole, container.Resources)
+	}
+	for index := range pod.Spec.EphemeralContainers {
+		container := &pod.Spec.EphemeralContainers[index]
+		add(container.Name, "ephemeral", container.Resources)
+	}
+	return budgets
+}
+
+func pressureResourceValues(
+	resources corev1.ResourceRequirements, usage corev1.ResourceList, resource corev1.ResourceName,
+	fresh bool, quantityLabel func(corev1.ResourceList, corev1.ResourceName) string,
+) (request, limit, used, requestRatio, limitRatio string) {
+	request, limit = quantityLabel(resources.Requests, resource), quantityLabel(resources.Limits, resource)
+	used, requestRatio, limitRatio = pressureNA, pressureNA, pressureNA
+	quantity, found := usage[resource]
+	if !found || quantity.Sign() < 0 || !fresh {
+		return
+	}
+	used = quantityLabel(usage, resource)
+	if allocation, found := resources.Requests[resource]; found && allocation.Sign() > 0 {
+		requestRatio = fmt.Sprintf("%.1f%%", 100*quantity.AsApproximateFloat64()/allocation.AsApproximateFloat64())
+	}
+	if allocation, found := resources.Limits[resource]; found && allocation.Sign() > 0 {
+		limitRatio = fmt.Sprintf("%.1f%%", 100*quantity.AsApproximateFloat64()/allocation.AsApproximateFloat64())
+	}
+	return
+}
+
 func renderContainerPressure(b *strings.Builder, name, phase string, resources corev1.ResourceRequirements, status *corev1.ContainerStatus, metrics *pressureMetrics) {
 	fmt.Fprintf(b, "\n  CONTAINER %s (%s)\n", name, phase)
 	usage := metrics.containers[name]
 	for _, resource := range []corev1.ResourceName{corev1.ResourceCPU, corev1.ResourceMemory} {
-		request, hasRequest := resources.Requests[resource]
-		limit, hasLimit := resources.Limits[resource]
-		used, hasUsage := usage[resource]
-		hasUsage = hasUsage && used.Sign() >= 0 && metrics.sample.Fresh()
-		use := pressureNA
-		if hasUsage {
-			use = pressureQuantity(usage, resource)
-		}
-		requestRatio, limitRatio := pressureNA, pressureNA
-		if hasUsage && hasRequest && request.Sign() > 0 {
-			requestRatio = fmt.Sprintf("%.1f%%", 100*used.AsApproximateFloat64()/request.AsApproximateFloat64())
-		}
-		if hasUsage && hasLimit && limit.Sign() > 0 {
-			limitRatio = fmt.Sprintf("%.1f%%", 100*used.AsApproximateFloat64()/limit.AsApproximateFloat64())
-		}
+		request, limit, use, requestRatio, limitRatio := pressureResourceValues(resources, usage, resource, metrics.sample.Fresh(), pressureQuantity)
 		fmt.Fprintf(b, "    %s request=%s  limit=%s  usage=%s  usage/request=%s  usage/limit=%s\n",
-			resource, pressureQuantity(resources.Requests, resource), pressureQuantity(resources.Limits, resource), use, requestRatio, limitRatio)
+			resource, request, limit, use, requestRatio, limitRatio)
 	}
 	if status == nil {
 		b.WriteString("    Pod API /status: N/A (container status not reported)\n")
@@ -304,12 +438,25 @@ func renderContainerPressure(b *strings.Builder, name, phase string, resources c
 func pressureQuantity(values corev1.ResourceList, resource corev1.ResourceName) string {
 	q, ok := values[resource]
 	if !ok {
-		return "N/A (unset)"
+		return pressureUnset
 	}
 	if resource == corev1.ResourceCPU {
 		return fmt.Sprintf("%gm", 1000*q.AsApproximateFloat64())
 	}
 	return fmt.Sprintf("%.2fMiB (%s)", float64(q.Value())/(1024*1024), q.String())
+}
+
+// pressureBudgetQuantity fits the typed budget table while retaining the same
+// units. The evidence report preserves Kubernetes' original quantity as well.
+func pressureBudgetQuantity(values corev1.ResourceList, resource corev1.ResourceName) string {
+	q, ok := values[resource]
+	if !ok {
+		return pressureUnset
+	}
+	if resource == corev1.ResourceCPU {
+		return fmt.Sprintf("%gm", 1000*q.AsApproximateFloat64())
+	}
+	return fmt.Sprintf("%.2fMiB", float64(q.Value())/(1024*1024))
 }
 
 func renderPressureConfiguration(b *strings.Builder, source string, resources corev1.ResourceRequirements) {
@@ -320,40 +467,60 @@ func renderPressureConfiguration(b *strings.Builder, source string, resources co
 }
 
 func pressureEvents(ctx context.Context, conn client.Connection, pod *corev1.Pod) string {
+	text, _, _ := loadPressureEvents(ctx, conn, pod)
+	return text
+}
+
+// loadPressureEvents gives the compact view source records from the same
+// bounded UID lookup as the full report, including source visibility.
+func loadPressureEvents(ctx context.Context, conn client.Connection, pod *corev1.Pod) (string, []corev1.Event, inspect.InvestigationCoverage) {
+	coverage := inspect.InvestigationCoverage{Source: "events " + pod.Name, State: inspect.ObservationUnknown}
 	if err := ctx.Err(); err != nil {
-		return "\nEVENTS: N/A (" + err.Error() + ")\n"
+		coverage.Detail = err.Error()
+		return "\nEVENTS: N/A (" + err.Error() + ")\n", nil, coverage
 	}
 	if pod.UID == "" {
-		return "\nEVENTS: N/A (Pod UID missing; no name-only event lookup)\n"
+		coverage.Detail = "Pod UID missing; no name-only event lookup"
+		return "\nEVENTS: N/A (Pod UID missing; no name-only event lookup)\n", nil, coverage
 	}
 	k, err := conn.Dial()
 	if err != nil {
-		return "\nEVENTS: N/A (" + err.Error() + ")\n"
+		coverage.Detail = err.Error()
+		return "\nEVENTS: N/A (" + err.Error() + ")\n", nil, coverage
 	}
 	events, err := k.CoreV1().Events(pod.Namespace).List(ctx, metav1.ListOptions{
 		FieldSelector: fields.OneTermEqualSelector("involvedObject.uid", string(pod.UID)).String(), Limit: maxPressureEvents,
 	})
 	if err != nil {
-		return "\nEVENTS: N/A (" + err.Error() + ")\n"
+		coverage.State, coverage.Detail = string(client.MetricErrorState(err)), err.Error()
+		return "\nEVENTS: N/A (" + err.Error() + ")\n", nil, coverage
 	}
+	coverage.State, coverage.Detail = inspect.ObservationComplete, "Retained Events snapshot; matching Pod UID"
 	sort.SliceStable(events.Items, func(i, j int) bool { return eventTime(&events.Items[i]).After(eventTime(&events.Items[j])) })
 	var b strings.Builder
 	b.WriteString("\nEVENTS (Kubernetes Events API, matching Pod UID; retained snapshot)\n")
 	if len(events.Items) == 0 {
 		b.WriteString("No retained events reported; this does not establish health.\n")
+		coverage.State, coverage.Detail = "empty", "No retained events; this does not establish health"
 	}
+	var relevant []corev1.Event
 	for i := range events.Items {
 		event := &events.Items[i]
+		if event.InvolvedObject.UID != pod.UID {
+			continue
+		}
 		if event.Reason != "FailedScheduling" && event.Reason != "OOMKilling" && event.Reason != "BackOff" && event.Type != corev1.EventTypeWarning {
 			continue
 		}
+		relevant = append(relevant, *event)
 		fmt.Fprintf(&b, "%s %s %s count=%d source=%s/%s\n  %s\n",
 			pressureTimestamp(eventTime(event)), event.Type, event.Reason, event.Count, event.Source.Component, event.ReportingController, event.Message)
 	}
 	if events.Continue != "" {
 		fmt.Fprintf(&b, "Events truncated at %d; open Events for more.\n", maxPressureEvents)
+		coverage.State, coverage.Detail = inspect.ObservationIncomplete, fmt.Sprintf("Events truncated at %d; open Events for more", maxPressureEvents)
 	}
-	return b.String()
+	return b.String(), relevant, coverage
 }
 
 func pressureTimestamp(t time.Time) string {

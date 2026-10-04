@@ -4,8 +4,6 @@ package view
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"time"
 
 	"github.com/derailed/k9s/internal/certmanager"
@@ -395,40 +393,6 @@ func inspectionKind(o *unstructured.Unstructured) string {
 		return ""
 	}
 	return o.GetKind()
-}
-func workloadDiagnostics(ctx context.Context, conn client.Connection, o *unstructured.Unstructured) string {
-	pods, notice := workloadPods(ctx, conn, o)
-	if len(pods) == 0 && notice == "" {
-		return ""
-	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "\nWORKLOAD PODS (selector matches; %d observed in this snapshot)\n", len(pods))
-	for _, pod := range pods {
-		fmt.Fprintf(&b, "\nPod %s | node %s\n", pod.GetName(), nestedText(pod.Object, "spec", "nodeName"))
-		phase := nestedText(pod.Object, "status", "phase")
-		fmt.Fprintf(&b, "Phase: %s\n", phase)
-		for _, field := range []string{"initContainerStatuses", "containerStatuses"} {
-			rows, _, _ := unstructured.NestedSlice(pod.Object, "status", field)
-			for _, row := range rows {
-				if m, ok := row.(map[string]any); ok {
-					fmt.Fprintf(&b, "  %v ready=%v restarts=%v\n", m["name"], m["ready"], m["restartCount"])
-					for _, s := range []string{"state", "lastState"} {
-						for _, p := range []string{"waiting", "terminated"} {
-							v, found, _ := unstructured.NestedMap(m, s, p)
-							if found {
-								fmt.Fprintf(&b, "    %s %s reason=%v exitCode=%v\n", s, p, v["reason"], v["exitCode"])
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-	if notice != "" {
-		b.WriteString(notice + "\n")
-	}
-	b.WriteString("Use g to jump to a pod for its events and logs.\n")
-	return b.String()
 }
 func nestedText(o map[string]any, fields ...string) string {
 	s, _, _ := unstructured.NestedString(o, fields...)

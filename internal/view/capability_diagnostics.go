@@ -31,6 +31,7 @@ const (
 	capabilityTaskCertManager = "cert-manager"
 	capabilityTaskResource    = "resource"
 	capabilityTaskHubble      = "hubble"
+	capabilityTaskMetrics     = "metrics"
 )
 
 type capabilityState string
@@ -94,12 +95,12 @@ func (c *Command) capabilityCommand(line string) {
 	}
 	request := capabilityRequest{Task: task, Context: c.app.Config.ActiveContextName(), Namespace: c.app.Config.ActiveNamespace()}
 	if task == capabilityTaskResource {
-		viewer, ok := c.app.Content.Top().(ResourceViewer)
+		viewer, ok := c.app.Content.Top().(actionOwner)
 		if !ok {
 			c.app.Flash().Err(fmt.Errorf("open a resource list and select an API object first"))
 			return
 		}
-		request.Target = resolveSelectedResource(viewer, request.Context)
+		request.Target = actionTarget(viewer, request.Context)
 		if err := request.Target.Err(); err != nil {
 			c.app.Flash().Err(err)
 			return
@@ -141,7 +142,7 @@ func (c *Command) capabilityCommand(line string) {
 
 func validCapabilityTask(task string) bool {
 	switch task {
-	case "metrics", "flux", capabilityTaskCertManager, capabilityTaskHubble, capabilityTaskResource:
+	case capabilityTaskMetrics, "flux", capabilityTaskCertManager, capabilityTaskHubble, capabilityTaskResource:
 		return true
 	}
 	return false
@@ -268,7 +269,7 @@ func collectCapabilities(ctx context.Context, reader dynamic.Interface, request 
 		namespace = ""
 	}
 	switch request.Task {
-	case "metrics":
+	case capabilityTaskMetrics:
 		snapshot.Checks = append(snapshot.Checks, checkMetricsPrerequisite(ctx, reader))
 	case "flux":
 		for _, gvr := range []schema.GroupVersionResource{

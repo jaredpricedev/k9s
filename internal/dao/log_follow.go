@@ -77,6 +77,9 @@ func followPodLogs(parentCtx context.Context, k kubernetes.Interface, ns string,
 	if err != nil {
 		return nil, err
 	}
+	if opts.InitialPodUID != "" && (len(initial.Items) != 1 || string(initial.Items[0].UID) != opts.InitialPodUID) {
+		return nil, fmt.Errorf("selected Pod identity changed or is unavailable; reopen it from the workspace before opening logs")
+	}
 	size := opts.LogBufferSize
 	if size <= 0 {
 		size = logChannelBuffer

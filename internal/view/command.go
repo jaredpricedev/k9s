@@ -26,8 +26,12 @@ import (
 )
 
 const (
-	podCmd = "v1/pods"
-	ctxCmd = "ctx"
+	podCmd            = "v1/pods"
+	ctxCmd            = "ctx"
+	dailyCommand      = "daily"
+	connectionCommand = "connection"
+	inventoryCommand  = "inventory"
+	workspaceUnknown  = "unknown"
 )
 
 var (
@@ -271,7 +275,22 @@ func (c *Command) defaultCmd(isRoot bool) error {
 	return nil
 }
 
+func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
+	switch p.Cmd() {
+	case "workspace", dailyCommand, inventoryCommand:
+		c.dailyWorkspaceCommand(p.GetLine())
+	case connectionCommand, "connection-health":
+		c.connectionHealthCommand(p.GetLine())
+	default:
+		return false
+	}
+	return true
+}
+
 func (c *Command) specialCmd(p *cmd.Interpreter, pushCmd bool) bool {
+	if c.toolkitCmd(p) {
+		return true
+	}
 	switch {
 	case p.Cmd() == "ts":
 		c.investigationCommand(troubleshootCommand)

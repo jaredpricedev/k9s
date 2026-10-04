@@ -22,7 +22,11 @@ type actionOwner interface {
 func actionTarget(owner actionOwner, contextName string) SelectedResourceTarget {
 	if selected, ok := owner.(SelectedResource); ok {
 		target := selected.SelectedResource()
-		target.Context = contextName
+		if target.Context == "" {
+			target.Context = contextName
+		} else if target.Context != contextName {
+			target.UnavailableReason = "Context changed; reopen the selected resource in its saved workspace context"
+		}
 		return target
 	}
 	if resources, ok := owner.(ResourceViewer); ok {
@@ -95,6 +99,7 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 		})
 	}
 	result = append(result, investigationActions(owner, app)...)
+	result = append(result, workspaceActions(app)...)
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Category != result[j].Category {
 			return ui.ActionCategoryOrder(result[i].Category) < ui.ActionCategoryOrder(result[j].Category)
@@ -115,7 +120,9 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		{"resource.evidence", "Capture evidence preview", ":evidence", ui.ActionExport, func() { NewCommand(app).evidenceCommand("evidence") }},
 	} {
 		reason := target.UnavailableReason
-		if _, ok := owner.(ResourceViewer); !ok {
+		_, resourceView := owner.(ResourceViewer)
+		_, selectedView := owner.(SelectedResource)
+		if !resourceView && !selectedView {
 			reason = "Open a resource list and select an API object first"
 		}
 		if item.id == "resource.evidence" {
@@ -144,6 +151,30 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		ID: "command.diagnostics", Label: "Capability diagnostics", Category: ui.ActionInspect,
 		Shortcut: ":diagnostics", Discoverable: true,
 		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).capabilityCommand("diagnostics"); return nil }})
+	return result
+}
+
+func workspaceActions(app *App) []ui.ActionDescriptor {
+	var result []ui.ActionDescriptor
+	for _, item := range []struct{ id, label, command string }{
+		{"command.workspace", "Saved workspaces", "workspace"},
+		{"command.daily", "Daily findings queue", dailyCommand},
+		{"command.inventory", "Scoped inventory", inventoryCommand},
+		{"command.connection", "Connection health", connectionCommand},
+	} {
+		command := item.command
+		result = append(result, ui.ActionDescriptor{
+			ID: item.id, Label: item.label, Category: ui.ActionNavigate, Shortcut: ":" + command,
+			Discoverable: true, Handler: func(*tcell.EventKey) *tcell.EventKey {
+				c := NewCommand(app)
+				if command == connectionCommand {
+					c.connectionHealthCommand(command)
+				} else {
+					c.dailyWorkspaceCommand(command)
+				}
+				return nil
+			}})
+	}
 	return result
 }
 

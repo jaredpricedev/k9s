@@ -21,14 +21,17 @@ import (
 	ktesting "k8s.io/client-go/testing"
 )
 
-const evidenceTestNamespace = "team"
+const (
+	evidenceTestNamespace = "team"
+	evidenceTestPodUID    = "pod-uid"
+)
 
 func TestCrashLoopEvidencePrecedesOwnersAndRetainsFullMessages(t *testing.T) {
 	metas := dao.MetaAccess
 	dao.MetaAccess = dao.NewMeta()
 	t.Cleanup(func() { dao.MetaAccess = metas })
 	obj := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"namespace": evidenceTestNamespace, "name": "app", "uid": "pod-uid"},
+		"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"namespace": evidenceTestNamespace, "name": "app", "uid": evidenceTestPodUID},
 		"status": map[string]any{
 			"phase":             "Running",
 			"conditions":        []any{map[string]any{"type": "PodScheduled", "status": "True"}, map[string]any{"type": "Ready", "status": "False", "reason": "ContainersNotReady", "message": "full readiness evidence [red] stays literal"}},
@@ -37,18 +40,18 @@ func TestCrashLoopEvidencePrecedesOwnersAndRetainsFullMessages(t *testing.T) {
 	}}
 	typed := kubefake.NewSimpleClientset()
 	typed.PrependReactor("list", "events", func(a ktesting.Action) (bool, runtime.Object, error) {
-		if a.GetNamespace() != evidenceTestNamespace || a.(ktesting.ListAction).GetListRestrictions().Fields.String() != "involvedObject.uid=pod-uid" {
+		if a.GetNamespace() != evidenceTestNamespace || a.(ktesting.ListAction).GetListRestrictions().Fields.String() != "involvedObject.uid="+evidenceTestPodUID {
 			t.Fatal("event evidence changed scope", a)
 		}
 		return true, &corev1.EventList{Items: []corev1.Event{
-			{ObjectMeta: metav1.ObjectMeta{Name: "failure"}, InvolvedObject: corev1.ObjectReference{UID: "pod-uid"},
+			{ObjectMeta: metav1.ObjectMeta{Name: "failure"}, InvolvedObject: corev1.ObjectReference{UID: evidenceTestPodUID},
 				Reason: "BackOff", Message: "full retained event message", Type: "Warning"},
 			{InvolvedObject: corev1.ObjectReference{UID: "other"}, Message: "wrong-object-must-not-appear"},
 		}}, nil
 	})
 	target := resourceTargetForPath(client.PodGVR, "cluster", "team/app")
 	snapshot, err := loadTargetInspectionSnapshot(t.Context(), inspectionConnection{dynamic: fake.NewSimpleDynamicClient(runtime.NewScheme(), obj), typed: typed}, target, troubleshootCommand)
-	if err != nil || snapshot.UID != "pod-uid" || snapshot.CapturedAt.IsZero() {
+	if err != nil || snapshot.UID != evidenceTestPodUID || snapshot.CapturedAt.IsZero() {
 		t.Fatal(snapshot, err)
 	}
 	text := snapshot.Text

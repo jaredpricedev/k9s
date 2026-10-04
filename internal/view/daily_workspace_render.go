@@ -1,0 +1,360 @@
+// SPDX-License-Identifier: Apache-2.0
+// Modified for k9+; see NOTICE.
+package view
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/derailed/k9s/internal/config"
+	"github.com/derailed/k9s/internal/workspace"
+	"github.com/derailed/tcell/v2"
+	"github.com/derailed/tview"
+)
+
+type dailyWorkspaceTerm struct{ field, value string }
+
+// Search is deliberately local, literal and small: all whitespace-separated
+// tokens must match, optionally qualified with a known identity/status field.
+// A mistyped structured term is rejected instead of widening the observation.
+func parseDailyWorkspaceQuery(query string) ([]dailyWorkspaceTerm, error) {
+	var terms []dailyWorkspaceTerm
+	for _, token := range strings.Fields(query) {
+		term := dailyWorkspaceTerm{value: strings.ToLower(token)}
+		if field, value, found := strings.Cut(token, ":"); found {
+			field = strings.ToLower(field)
+			switch field {
+			case "kind", "ns", "name", "status":
+			default:
+				return nil, fmt.Errorf("unknown search field %q; use kind:, ns:, name: or status:", field)
+			}
+			if value == "" {
+				return nil, fmt.Errorf("%s: needs a value", field)
+			}
+			term.field, term.value = field, strings.ToLower(value)
+		}
+		terms = append(terms, term)
+	}
+	return terms, nil
+}
+func dailyWorkspaceMatch(terms []dailyWorkspaceTerm, kind, namespace, name, status string) bool {
+	fields := map[string]string{"kind": kind, "ns": namespace, "name": name, "status": status}
+	all := strings.Join([]string{kind, namespace, name, status}, " ")
+	for _, term := range terms {
+		value := all
+		if term.field != "" {
+			value = fields[term.field]
+		}
+		if !strings.Contains(strings.ToLower(value), term.value) {
+			return false
+		}
+	}
+	return true
+}
+func (w *dailyWorkspace) applyQuery(query string) bool {
+	if _, err := parseDailyWorkspaceQuery(query); err != nil {
+		w.notice = err.Error() + "; prior search retained"
+		w.render()
+		return false
+	}
+	w.query = strings.TrimSpace(query)
+	if w.tabQueries == nil {
+		w.tabQueries = make(map[string]string)
+	}
+	w.tabQueries[w.mode] = w.query
+	w.render()
+	return true
+}
+func dailyWorkspaceRefKey(ref *workspace.ResourceRef) string {
+	if ref == nil {
+		return ""
+	}
+	return ref.GVR + "/" + ref.Namespace + "/" + ref.Name + "/" + ref.UID
+}
+func dailyWorkspaceRowKey(row dailyWorkspaceRow) string {
+	if row.scopeName != "" {
+		return "scope/" + row.scopeName
+	}
+	if row.ref != nil {
+		return dailyWorkspaceRefKey(row.ref)
+	}
+	return strings.Join(row.cells, "\x00")
+}
+func (w *dailyWorkspace) selectedKey() string {
+	row, _ := w.table.GetSelection()
+	if row > 0 && row <= len(w.rows) {
+		return dailyWorkspaceRowKey(w.rows[row-1])
+	}
+	return ""
+}
+func (w *dailyWorkspace) makeRows(terms []dailyWorkspaceTerm) ([]string, []dailyWorkspaceRow) {
+	rows := make([]dailyWorkspaceRow, 0)
+	headers := []string{"PRIORITY", dailyWorkspaceKindCol, "NAMESPACE", "NAME", "FINDING"}
+	add := func(row dailyWorkspaceRow) { rows = append(rows, row) }
+	switch w.mode {
+	case dailyWorkspaceScopesMode:
+		headers = []string{"", "SCOPE", "CONTEXT", "NAMESPACES", "SELECTOR"}
+		for i := range w.store.Scopes {
+			scope := &w.store.Scopes[i]
+			if !dailyWorkspaceMatch(terms, "scope", strings.Join(scope.Namespaces, ","), scope.Name, scope.Context+" "+scope.LabelSelector) {
+				continue
+			}
+			marker := " "
+			if scope.Name == w.store.Active {
+				marker = "*"
+			}
+			if scope.Context != w.contextName {
+				marker = "↗"
+			}
+			add(dailyWorkspaceRow{
+				cells:     []string{marker, scope.Name, scope.Context, strings.Join(scope.Namespaces, ", "), scope.LabelSelector},
+				scopeName: scope.Name,
+				detail: "Enter opens this saved scope. Context changes are explicit with :ctx. " +
+					"n creates; e edits the selected scope; d removes local metadata.",
+			})
+		}
+	case inventoryCommand:
+		headers = []string{dailyWorkspaceKindCol, "NAMESPACE", "NAME", statusCol, "AGE"}
+		for _, resource := range w.snapshot.Resources {
+			if !dailyWorkspaceMatch(terms, resource.Kind, resource.Ref.Namespace, resource.Ref.Name, resource.Summary) {
+				continue
+			}
+			age := "unknown"
+			if resource.Object != nil {
+				created := resource.Object.GetCreationTimestamp()
+				if !created.IsZero() {
+					age = dailyWorkspaceAge(created.Time, w.snapshot.ObservedAt)
+				}
+			}
+			ref := resource.Ref
+			add(dailyWorkspaceRow{
+				cells: []string{resource.Kind, ref.Namespace, ref.Name, resource.Summary, age}, ref: &ref,
+				detail: "Enter investigates this captured identity. p pins it. Search is local to this scope's retained inventory.",
+			})
+		}
+	case dailyWorkspaceCoverageMode:
+		headers = []string{"STATE", "KIND / API", "NAMESPACE", "DETAIL"}
+		for _, coverage := range w.coverage {
+			if !dailyWorkspaceMatch(terms, coverage.GVR, coverage.Namespace, "", coverage.State+" "+coverage.Detail) {
+				continue
+			}
+			add(dailyWorkspaceRow{cells: []string{coverage.State, coverage.GVR, coverage.Namespace, coverage.Detail}, detail: coverage.Detail})
+		}
+	case dailyWorkspacePinsMode:
+		headers = []string{"KIND / API", "NAMESPACE", "NAME", statusCol}
+		for _, pin := range w.scope.Pins {
+			status := "Not observed in snapshot"
+			for _, resource := range w.snapshot.Resources {
+				if resource.Ref.GVR == pin.GVR && resource.Ref.Namespace == pin.Namespace && resource.Ref.Name == pin.Name {
+					status = resource.Summary
+					if pin.UID != "" && pin.UID != resource.Ref.UID {
+						status = "Identity changed — pin captures prior UID"
+					}
+					break
+				}
+			}
+			if !dailyWorkspaceMatch(terms, pin.GVR, pin.Namespace, pin.Name, status) {
+				continue
+			}
+			ref := pin
+			add(dailyWorkspaceRow{
+				cells: []string{pin.GVR, pin.Namespace, pin.Name, status}, ref: &ref,
+				detail: "Pinned identity is retained even if absent. Enter verifies the pinned UID before inspection. p removes this pin.",
+			})
+		}
+	default:
+		for i := range w.snapshot.Findings {
+			finding := &w.snapshot.Findings[i]
+			if !dailyWorkspaceMatch(terms, finding.Kind, finding.Ref.Namespace, finding.Ref.Name, finding.Reason+" "+finding.Detail+" "+finding.Category) {
+				continue
+			}
+			ref := finding.Ref
+			severity := strings.ToUpper(finding.Severity)
+			if severity == "" {
+				severity = "ATTENTION"
+			}
+			add(dailyWorkspaceRow{cells: []string{severity, finding.Kind, ref.Namespace, ref.Name, finding.Reason}, ref: &ref, detail: finding.Detail})
+		}
+	}
+	return headers, rows
+}
+
+func (w *dailyWorkspace) render() {
+	selected := w.selectedKey()
+	terms, _ := parseDailyWorkspaceQuery(w.query)
+	headers, rows := w.makeRows(terms)
+	w.rows = rows
+	w.table.Clear()
+	palette := w.app.Styles.Semantic()
+	canvas := palette.Canvas.Color()
+	text := config.ReadableForeground(palette.Text.Color(), canvas)
+	for col, header := range headers {
+		w.table.SetCell(0, col, tview.NewTableCell(header).SetSelectable(false).SetTextColor(palette.Focus.Color()).SetBackgroundColor(canvas).SetAttributes(tcell.AttrBold))
+	}
+	selectRow := 1
+	for i, row := range rows {
+		for col, value := range row.cells {
+			cell := tview.NewTableCell(tview.Escape(value)).SetTextColor(text).SetBackgroundColor(canvas)
+			if col == 0 && w.mode == dailyWorkspaceQueueMode {
+				switch value {
+				case "CRITICAL":
+					cell.SetTextColor(palette.Failure.Color())
+				case "WARNING":
+					cell.SetTextColor(palette.Warning.Color())
+				default:
+					cell.SetTextColor(palette.Unknown.Color())
+				}
+			}
+			if col == 0 && w.mode == dailyWorkspaceCoverageMode {
+				if value == dailyWorkspaceCoverageComplete {
+					cell.SetTextColor(palette.Healthy.Color())
+				} else {
+					cell.SetTextColor(palette.Warning.Color())
+				}
+			}
+			if col == len(row.cells)-1 {
+				cell.SetMaxWidth(70).SetExpansion(1)
+			}
+			w.table.SetCell(i+1, col, cell)
+		}
+		if selected != "" && dailyWorkspaceRowKey(row) == selected {
+			selectRow = i + 1
+		}
+	}
+	if len(rows) == 0 {
+		message := "No rows match this search. / changes or clears it."
+		if w.query == "" {
+			switch w.mode {
+			case dailyWorkspaceScopesMode:
+				message = "No saved scopes. Press n to create your daily workspace."
+			case dailyWorkspaceQueueMode:
+				message = "No findings observed. Coverage shows checks and unknowns."
+				if w.snapshot.ObservedAt.IsZero() {
+					message = "No observation yet. Press r to read this scope."
+				}
+			case inventoryCommand:
+				message = "No resources observed. r refreshes; Coverage shows gaps."
+			case dailyWorkspacePinsMode:
+				message = "No pins. Select a resource in Daily or Inventory and press p."
+			case dailyWorkspaceCoverageMode:
+				message = "No observation yet. r reads the saved namespaces."
+			}
+		}
+		// An empty-state message occupies one full-width row, rather than the
+		// resource table's narrow identity column.
+		w.table.Clear()
+		w.table.SetCell(0, 0, tview.NewTableCell(tview.Escape(message)).SetSelectable(false).SetTextColor(palette.Unknown.Color()).SetExpansion(1))
+		selectRow = 0
+	}
+	w.table.Select(selectRow, 0)
+	w.renderHeader()
+	w.renderDetail()
+	w.footer.SetText("[::b]1[::] Daily  [::b]2[::] Inventory  [::b]3[::] Coverage  [::b]4[::] Pins  [::b]5[::] Scopes   / search  r refresh  Enter investigate")
+}
+func (w *dailyWorkspace) renderHeader() {
+	title := "Choose or create a scope"
+	scopeLine := "Context: " + w.contextName + " · Namespace access stays explicit"
+	if w.scope.Name != "" {
+		title = w.scope.Name + " · " + w.scope.Context + " · " + strings.Join(w.scope.Namespaces, ", ")
+		selector := w.scope.LabelSelector
+		if selector == "" {
+			selector = "all labels within saved namespaces"
+		}
+		kinds := w.scope.Kinds
+		if len(kinds) == 0 {
+			kinds = workspace.DefaultKinds()
+		}
+		scopeLine = "Selector: " + selector + " · Kinds: " + strings.Join(kinds, ", ")
+	}
+	age := "No observation"
+	if !w.snapshot.ObservedAt.IsZero() {
+		age = "Observed " + w.snapshot.ObservedAt.Local().Format("15:04:05") + " (" + dailyWorkspaceAge(w.snapshot.ObservedAt, time.Now()) + " ago)"
+	}
+	complete, gaps := 0, 0
+	for _, coverage := range w.coverage {
+		if coverage.State == dailyWorkspaceCoverageComplete || coverage.State == "absent" {
+			complete++
+		} else {
+			gaps++
+		}
+	}
+	counts := fmt.Sprintf("%d resources · %d findings · %d covered reads · %d coverage gaps · %s", len(w.snapshot.Resources), len(w.snapshot.Findings), complete, gaps, age)
+	notice := w.notice
+	if w.query != "" {
+		notice = "Search: " + w.query + " · " + notice
+	}
+	w.header.SetText("[::b]" + tview.Escape(title) + "[::]\n" + tview.Escape(scopeLine) + "\n" + tview.Escape(counts) + "\n" + tview.Escape(notice))
+}
+func (w *dailyWorkspace) renderDetail() {
+	row, _ := w.table.GetSelection()
+	if row > 0 && row <= len(w.rows) {
+		selected := w.rows[row-1]
+		identity := ""
+		if selected.ref != nil {
+			identity = selected.ref.GVR + " · " + selected.ref.Namespace + "/" + selected.ref.Name + "\n"
+		}
+		w.detail.SetText(tview.Escape(identity + selected.detail))
+		return
+	}
+	w.detail.SetText("Scope observations include workload health, jobs, quotas, PVCs and certificate metadata when enabled. " +
+		"Unknown coverage is visible; a quiet queue does not imply full cluster health.")
+}
+func dailyWorkspaceAge(from, to time.Time) string {
+	age := max(time.Duration(0), to.Sub(from))
+	switch {
+	case age < time.Minute:
+		return fmt.Sprintf("%ds", int(age.Seconds()))
+	case age < time.Hour:
+		return fmt.Sprintf("%dm", int(age.Minutes()))
+	case age < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(age.Hours()))
+	default:
+		return fmt.Sprintf("%dd", int(age.Hours()/24))
+	}
+}
+
+// Adapt column widths at paint time so both a laptop terminal and a wide desk
+// keep the status/finding column visible. Full identity stays in the detail bar.
+func (w *dailyWorkspace) Draw(screen tcell.Screen) {
+	_, _, width, _ := w.GetInnerRect()
+	w.constrainColumns(width)
+	w.Flex.Draw(screen)
+}
+func (w *dailyWorkspace) constrainColumns(width int) {
+	if width <= 0 {
+		return
+	}
+	if len(w.rows) == 0 {
+		w.table.GetCell(0, 0).SetMaxWidth(width).SetExpansion(1)
+		return
+	}
+	var caps []int
+	switch w.mode {
+	case inventoryCommand:
+		caps = []int{max(8, min(16, width/9)), max(10, min(22, width/7)), max(14, min(32, width/5)), 0, 6}
+	case dailyWorkspaceCoverageMode:
+		caps = []int{12, max(16, min(40, width/3)), max(10, min(22, width/6)), 0}
+	case dailyWorkspacePinsMode:
+		caps = []int{max(16, min(36, width/4)), max(10, min(22, width/6)), max(14, min(32, width/5)), 0}
+	case dailyWorkspaceScopesMode:
+		caps = []int{1, max(14, min(24, width/5)), max(14, min(32, width/5)), max(14, min(28, width/5)), 0}
+	default:
+		caps = []int{8, max(8, min(16, width/9)), max(10, min(22, width/7)), max(14, min(32, width/5)), 0}
+	}
+	available := width - (len(caps)-1)*2
+	for _, cap := range caps {
+		available -= cap
+	}
+	for col, cap := range caps {
+		if cap == 0 {
+			cap = max(8, available)
+		}
+		for row := range w.table.GetRowCount() {
+			cell := w.table.GetCell(row, col)
+			if cell != nil {
+				cell.SetMaxWidth(cap)
+			}
+		}
+	}
+}

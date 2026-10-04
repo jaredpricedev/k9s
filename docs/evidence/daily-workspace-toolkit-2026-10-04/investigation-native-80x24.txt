@@ -1,0 +1,24 @@
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <ctrl+o> Actions  <?> Help                                                     
+┌──────────────────── troubleshoot(apps/investigation-api) ────────────────────┐
+│ Pod apps/investigation-api · demo-dev · node fixture-node                    │
+│ UID fixture-…tion-pod · captured 04:52:51Z · age 0s                          │
+│ READ ONLY · r refresh · l Pod logs · g related · 6 changes                   │
+│ [1 Overview]  2 Containers  3 Events  4 Resources  5 Evidence                │
+│ CURRENT FINDINGS                                                             │
+│ [!] CrashLoopBackOff · api · Pod investigation-api                           │
+│ [~] Previous termination: OOMKilled · exit 137 · 5s before capture           │
+│                                                                              │
+│ CONTAINER STATUS · current / previous remain separate                        │
+│ CONTAINER     CURRENT                READY   RESTART PREVIOUS                │
+│ api           CrashLoopBackOff       no      7       OOMKilled               │
+│ sidecar       running                yes     0       none reported           │
+│                                                                              │
+│ VISIBILITY                                                                   │
+│ object: collected · logs: not collected · metrics: not collected             │
+│ events: retained / bounded                                                   │
+│ NEXT CHECKS                                                                  │
+│ 2 containers: current vs previous · 3 events: retained history               │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <pod>   <troubleshoot>                                                        
+            😎 INFO: Snapshot retained · r refreshes the observation            

@@ -50,6 +50,13 @@ and Hubble workbenches, retained fault evidence and workload relationships.
 Explicit A/B comparison, resource pressure, capability diagnostics and portable
 offline evidence open on demand.
 
+Use `:workspace` to create and save an explicit context, namespace subset, label
+selector and resource kinds. `:daily` opens its current findings queue;
+`:inventory` searches the same scoped observation. Tabs retain pins, saved
+searches and permission coverage. The investigation overview separates current
+faults from previous terminations and retained events. See the
+[daily workspace guide](docs/daily-workspace.md) for setup and limits.
+
 Start in read-only mode and choose your destination:
 
 ```sh
@@ -72,13 +79,15 @@ and [Hubble measurements](docs/hubble-performance-2026-10-04.md).
 | Task | Command or key |
 | --- | --- |
 | Browse pods / deployments / logs | `:pods`, `:deployments`, `l` |
+| Saved scopes / daily queue / scoped search | `:workspace` / `:daily` / `:inventory` |
+| Connection and selected-namespace checks | `:connection`, then `r` to retry |
 | Combined Flux dashboard | `:flux all` |
 | HelmReleases and Kustomizations | `:helmreleases`, `:kustomizations` |
 | Reconcile without leaving the UI | `Shift-R`, then confirm |
 | Suspend / resume Flux resource | `Shift-T`, then confirm |
 | Certificate health and expiry | `:certificates all` |
 | Destination / action discovery | `F2` / `Ctrl-O` |
-| Troubleshoot / related resources | `:troubleshoot`, then `g` |
+| Investigation tabs / related resources | `:troubleshoot`, then `1`–`5` / `g` |
 | Compare observations / resource pressure | `:compare` / `:pressure` |
 | Capability diagnostics | `:diagnostics` |
 | Capture / open offline evidence | `:evidence` / `:evidence-open /absolute/path.json` |

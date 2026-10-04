@@ -290,7 +290,7 @@ def investigation_journey(binary, output):
 
                 terminal.command("compare")
                 baseline = inspect_pages(terminal, output, "comparison-baseline", [
-                    "A · chosen baseline", "B · comparison observation", "UID: fixture-investigation-pod",
+                    "RESOURCE COMPARISON · CHANGES FIRST", "A · chosen baseline", "B · comparison observation", "UID fixture-investigation-pod",
                     "Source: Kubernetes API observation", "Observed:", "Press r to capture B",
                     "State: complete", "State: unknown"])
                 reads_at_a = api.selected_reads()
@@ -302,17 +302,17 @@ def investigation_journey(binary, output):
                 terminal.keys("r", .5)
                 normalized = inspect_pages(terminal, output, "comparison-differences", [
                     "ADDED /metadata/labels/fixture-after", "REMOVED /metadata/labels/fixture-before",
-                    "CHANGED /spec/containers", "128Mi", "192Mi", "API noise omitted (n reveals it)",
-                    "A stays fixed", "No desired configuration source was selected."],
+                    "CHANGED /spec/containers", "128Mi", "192Mi", "API bookkeeping hidden",
+                    "A stays fixed", "no desired configuration source selected."],
                     ["CHANGED /metadata/resourceVersion", "State: unknown"])
                 if api.selected_reads() != reads_at_a + 1:
                     raise AssertionError("Explicit r must capture exactly one B resource observation")
                 terminal.keys("n", .2)
                 unnormalized = inspect_pages(terminal, output, "comparison-api-noise", [
-                    "CHANGED /metadata/resourceVersion", 'A: "100"', 'B: "101"'], ["API noise omitted (n reveals it)"])
+                    "CHANGED /metadata/resourceVersion", '"100" → "101"', "API bookkeeping included"], ["API bookkeeping hidden"])
                 terminal.keys("n", .2)
                 restored = inspect_pages(terminal, output, "comparison-normalized-again", [
-                    "API noise omitted (n reveals it)"], ["CHANGED /metadata/resourceVersion"])
+                    "API bookkeeping hidden"], ["CHANGED /metadata/resourceVersion"])
                 if api.selected_reads() != reads_at_a + 1:
                     raise AssertionError("Noise toggles must reuse A/B, without fetching or replacing either observation")
                 # Source/time labels are part of the retained observations.
@@ -324,6 +324,16 @@ def investigation_journey(binary, output):
                         raise AssertionError("Noise toggles changed a retained observation timestamp")
                 if observed_line(baseline, "A · chosen baseline") != observed_line(normalized, "A · chosen baseline"):
                     raise AssertionError("Explicit B capture replaced chosen baseline A")
+                terminal.keys("o", .2)
+                inspect_pages(terminal, output, "comparison-all-evidence", [
+                    "RESOURCE OBSERVATION COMPARISON", "Source: Kubernetes API observation",
+                    "128Mi", "192Mi", "UID: fixture-investigation-pod",
+                    "API noise omitted (n reveals it)"], ["CHANGED /metadata/resourceVersion"])
+                terminal.keys("o", .2)
+                inspect_pages(terminal, output, "comparison-overview-again", [
+                    "RESOURCE COMPARISON · CHANGES FIRST", "128Mi", "192Mi", "API bookkeeping hidden"])
+                if api.selected_reads() != reads_at_a + 1:
+                    raise AssertionError("Overview/evidence toggles captured new observations")
                 comparison_path = Path(directory) / "comparison-evidence.json"
                 terminal.command("evidence")
                 inspect_pages(terminal, output, "evidence-retained-comparison", [
@@ -343,6 +353,19 @@ def investigation_journey(binary, output):
                 terminal.keys("\x1b", .2)
 
                 terminal.command("pressure")
+                inspect_pages(terminal, output, "pressure-budget-overview", [
+                    "RESOURCE BUDGETS", "REQUEST", "LIMIT", "USAGE", "USE / LIMIT", "250m",
+                    "192.00MiB", "256.00MiB", "sidecar", "Metrics: unavailable", "N/A",
+                    "Fixture metrics unavailable", "CPU throttling: unknown"], ["usage=0m", "usage=0Mi"])
+                reads_at_pressure = api.selected_reads()
+                terminal.keys("2", .2)
+                inspect_pages(terminal, output, "pressure-container-history", [
+                    "CURRENT CONTAINERS", "CrashLoopBackOff", "Previous termination: OOMKilled",
+                    "Previous termination does not establish the current cause."])
+                terminal.keys("3", .2)
+                inspect_pages(terminal, output, "pressure-retained-events", [
+                    "RETAINED EVENTS", "FailedScheduling", "core/v1 events", "Fixture scheduler observed insufficient memory"])
+                terminal.keys("5", .2)
                 inspect_pages(terminal, output, "pressure-metrics-unavailable", [
                     "RESOURCE PRESSURE", "UID: fixture-investigation-pod", "Metrics: unavailable",
                     "Fixture metrics unavailable", "cpu request=250m", "memory request=192.00MiB (192Mi)",
@@ -350,7 +373,8 @@ def investigation_journey(binary, output):
                     "last termination state: reason=OOMKilled", "FailedScheduling", "default-scheduler",
                     "not a causal diagnosis", "CPU throttling: unknown", "source: metrics.k8s.io"],
                     ["usage=0m", "usage=0Mi", "usage/request=0.0%"])
-                reads_at_pressure = api.selected_reads()
+                if api.selected_reads() != reads_at_pressure:
+                    raise AssertionError("Pressure tabs fetched a new resource observation")
                 pressure_path = Path(directory) / "pressure-evidence.json"
                 terminal.command("evidence")
                 inspect_pages(terminal, output, "evidence-retained-pressure", [

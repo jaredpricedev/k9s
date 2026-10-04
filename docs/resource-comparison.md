@@ -16,6 +16,12 @@ labelled **RECREATED IDENTITY**. Unknown UIDs remain labelled unknown. If the ob
 was already replaced before A could be captured, A is stale and comparison is
 unavailable. B deliberately records the current UID so replacements remain visible.
 
+The initial viewport shows the change count, compact A/B identities and times,
+and a table of changed paths and values. Press **o** to switch between this
+overview and all retained comparison evidence. Long values remain available in
+the full report; the overview does not replace the source used for copy or save.
+Search and scroll positions are retained separately for each presentation.
+
 API bookkeeping is hidden initially. Press **n** to reveal it, then press **n**
 again to normalize it. The only omitted paths are:
 
