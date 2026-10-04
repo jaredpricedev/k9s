@@ -110,8 +110,8 @@ func (c *Command) suggestionAliases() []string {
 
 func (c *Command) updateSuggestionAliases() {
 	aliases := []string{
-		upgradeReadinessCommand, fleetCommandToken, backupCommandToken, providersCommand, capacityCommandToken, "operations", "ops", configurationCommand,
-		localSessionsCommand, "local-sessions", storageCommandToken, gitopsCommandToken,
+		upgradeReadinessCommand, fleetCommandToken, backupCommandToken, historyCommand, providersCommand, capacityCommandToken,
+		"operations", "ops", configurationCommand, localSessionsCommand, "local-sessions", storageCommandToken, gitopsCommandToken,
 		jobReviewCommandToken, maintenanceCommandToken, accessCommandName, taskbookCommandName,
 		activityCommand, networkReviewCommandToken, changeSetCommandToken, "security-review",
 	}
@@ -336,6 +336,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.localSessionsCommand()
 	case maintenanceCommandToken:
 		c.maintenanceCommand()
+	case historyCommand:
+		c.historyReviewCommand()
 	case "security-review":
 		c.securityReviewCommand()
 	case upgradeReadinessCommand:
