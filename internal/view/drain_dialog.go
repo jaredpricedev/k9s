@@ -74,6 +74,10 @@ func ShowDrain(view ResourceViewer, sels []string, opts dao.DrainOptions, okFn D
 	modal.SetContext(path + "\nContext: " + contextName)
 	message := "Grace: seconds; -1 = Pod default, 0 = immediate." +
 		"\nTimeout: duration (5s, 2m); 0 = native no-timeout." +
+		"\nIgnore DaemonSets skips their Pods; it does not delete them." +
+		"\nDelete EmptyDir Data discards local data. Force permits unmanaged Pods." +
+		"\nDisable Eviction uses direct delete and bypasses PDB admission." +
+		"\nNative kubectl also falls back to delete if the eviction API is unsupported." +
 		"\nThe operation wait remains bounded (at most 10m); :operations cancels remaining work."
 	modal.SetText(message)
 	f.AddButton("Cancel", dismiss)
