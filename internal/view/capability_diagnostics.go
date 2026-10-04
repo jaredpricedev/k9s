@@ -94,12 +94,12 @@ func (c *Command) capabilityCommand(line string) {
 	}
 	request := capabilityRequest{Task: task, Context: c.app.Config.ActiveContextName(), Namespace: c.app.Config.ActiveNamespace()}
 	if task == capabilityTaskResource {
-		viewer, ok := c.app.Content.Top().(ResourceViewer)
+		viewer, ok := c.app.Content.Top().(actionOwner)
 		if !ok {
 			c.app.Flash().Err(fmt.Errorf("open a resource list and select an API object first"))
 			return
 		}
-		request.Target = resolveSelectedResource(viewer, request.Context)
+		request.Target = actionTarget(viewer, request.Context)
 		if err := request.Target.Err(); err != nil {
 			c.app.Flash().Err(err)
 			return

@@ -16,8 +16,23 @@ owner/reference navigation. No resource-list shortcuts were reassigned.
 
 ## Troubleshooting
 
-`:troubleshoot` (alias `:ts`) shows a read-only snapshot of the selected object's owners,
-conditions and container states/restarts. Deployment, DaemonSet, StatefulSet,
+`:troubleshoot` (alias `:ts`) opens a compact overview of the selected object's
+current findings and affected containers. Current waiting states and previous
+terminations are separate: a retained `OOMKilled` does not establish the cause of
+a current `CrashLoopBackOff`. Identity, original capture time and snapshot age
+remain visible while scrolling. The overview projects typed source records;
+it does not infer findings from rendered report text or treat every False
+condition as a fault.
+
+Use **1–5** or **Tab / Shift-Tab** for Overview, Containers, Events, Resources and
+Evidence. **6** explicitly chooses comparison baseline A. Each tab preserves its
+own search and scroll position. **5** retains the full original report, messages,
+owners and source limits; **m** opens that evidence and toggles message length.
+Changing tabs, opening F2 destination details or returning from a related resource
+does not make a new observation. Failed refreshes keep the previous observation
+and its original identity and capture time, with an explicit error.
+
+Deployment, DaemonSet, StatefulSet,
 ReplicaSet and Job selectors also load up to 100 matching pods with current and
 previous failure states. Empty selectors never expand to the namespace.
 Selector matches are labeled as such; they are not asserted to be owned pods.
@@ -31,6 +46,8 @@ per-pod event scan.
 - **r** refreshes the snapshot (not an automatic watch).
 - **g** lists owners, matching workload pods and reported references. Enter jumps
   to a resource; Esc returns to the preserved snapshot.
+- **l** opens live logs for a selected Pod after checking its captured UID and
+  context. For a workload, use **g** to choose its Pod first.
 - Use existing actions for logs, describe and owner navigation after a jump.
 
 Reads have a ten-second deadline and cancel on exit. Each inspector pins its
@@ -110,6 +127,11 @@ against a disposable loopback server. Final form controls and cancellation were
 checked in a dedicated test session. Certificate and Gateway CRDs were absent:
 visibility errors were verified in the lab; their reference parsing is covered
 by fake-client tests. Broader version/scale matrices remain unverified.
+
+The compact daily-workspace overview has separate actual-PTY fixture checks at
+80×24 and 120×34 for visible current/previous state, keyboard tabs, retained search,
+F2 return and failed refresh. These use a disposable local API, not a live cluster.
+The planned operator comprehension and usability study remains pending.
 
 The functional smoke test used an isolated tmux session for capture and did not
 repeat browser-rendering validation. The recommended direct launch remains the

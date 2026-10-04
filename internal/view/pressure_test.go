@@ -11,6 +11,7 @@ import (
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config/mock"
+	"github.com/derailed/k9s/internal/inspect"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -23,7 +24,12 @@ import (
 	ktesting "k8s.io/client-go/testing"
 )
 
-const pressureTestNamespace = "team"
+const (
+	pressureTestNamespace        = "team"
+	pressureTestFailedScheduling = "FailedScheduling"
+	pressureTestBackOff          = "BackOff"
+	testInspectionTimestamp      = "2026-10-03T12:00:00Z"
+)
 
 func pressurePod() *corev1.Pod {
 	restart := corev1.ContainerRestartPolicyAlways
@@ -52,7 +58,7 @@ func TestPressurePreservesContainerPhasesZeroAndMissingConfiguration(t *testing.
 	pod.Spec.Resources = &corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("1500m")}}
 	pod.Spec.Overhead = corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("16Mi")}
 	text := renderPodPressure(pod, &metrics)
-	for _, expected := range []string{"usage=0m", "usage/request=0.0%", "usage/request=150.0%", "usage/limit=75.0%", "request=N/A (unset)", "limit=N/A (unset)", "init — runs before", "sidecar — restartable init", "application", "reason=OOMKilled exitCode=137", "2026-10-03T12:00:00Z", "not a causal diagnosis", "container status not reported", "shared Pod budget", "request=1500m", "Pod API /spec.overhead", "16.00MiB (16Mi)"} {
+	for _, expected := range []string{"usage=0m", "usage/request=0.0%", "usage/request=150.0%", "usage/limit=75.0%", "request=N/A (unset)", "limit=N/A (unset)", "init — runs before", "sidecar — restartable init", "application", "reason=OOMKilled exitCode=137", testInspectionTimestamp, "not a causal diagnosis", "container status not reported", "shared Pod budget", "request=1500m", "Pod API /spec.overhead", "16.00MiB (16Mi)"} {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("missing %q:\n%s", expected, text)
 		}
@@ -89,7 +95,7 @@ func TestPressureMetricsFreshnessIdentityAndDenial(t *testing.T) {
 				if a.GetNamespace() != pressureTestNamespace || a.GetResource().Group != "metrics.k8s.io" {
 					t.Fatal("metrics scope changed", a)
 				}
-				return true, &unstructured.Unstructured{Object: map[string]any{"apiVersion": "metrics.k8s.io/v1beta1", "kind": "PodMetrics", "metadata": map[string]any{"name": "pod", "namespace": pressureTestNamespace, "uid": tc.uid}, "timestamp": tc.observed, "window": "30s", "containers": []any{map[string]any{"name": "app", "usage": map[string]any{"cpu": "0", "memory": "0"}}}}}, nil
+				return true, &unstructured.Unstructured{Object: map[string]any{"apiVersion": "metrics.k8s.io/v1beta1", "kind": "PodMetrics", "metadata": map[string]any{"name": "pod", "namespace": pressureTestNamespace, "uid": tc.uid}, "timestamp": tc.observed, "window": "30s", "containers": []any{map[string]any{"name": "app", "usage": map[string]any{string(corev1.ResourceCPU): "0", "memory": "0"}}}}}, nil
 			})
 			result := loadPressureMetrics(t.Context(), inspectionConnection{dynamic: dyn}, pod, now)
 			if result.sample.State != tc.state || result.sample.Source != client.PodMetricsSource {
@@ -131,10 +137,10 @@ func TestPressureEventsUseUIDNamespaceAndBound(t *testing.T) {
 		if options.Limit != maxPressureEvents {
 			t.Fatal("events unbounded", options)
 		}
-		return true, &corev1.EventList{ListMeta: metav1.ListMeta{Continue: "more"}, Items: []corev1.Event{{ObjectMeta: metav1.ObjectMeta{Name: "event"}, Reason: "FailedScheduling", Type: corev1.EventTypeWarning, Message: "Insufficient memory", LastTimestamp: metav1.NewTime(time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)), Source: corev1.EventSource{Component: "default-scheduler"}}}}, nil
+		return true, &corev1.EventList{ListMeta: metav1.ListMeta{Continue: "more"}, Items: []corev1.Event{{ObjectMeta: metav1.ObjectMeta{Name: "event"}, InvolvedObject: corev1.ObjectReference{UID: "pod-uid"}, Reason: pressureTestFailedScheduling, Type: corev1.EventTypeWarning, Message: "Insufficient memory", LastTimestamp: metav1.NewTime(time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)), Source: corev1.EventSource{Component: "default-scheduler"}}}}, nil
 	})
 	text := pressureEvents(t.Context(), inspectionConnection{typed: typed}, pressurePod())
-	for _, expected := range []string{"FailedScheduling", "Insufficient memory", "source=default-scheduler", "2026-10-03T12:00:00Z", "truncated at 20"} {
+	for _, expected := range []string{pressureTestFailedScheduling, "Insufficient memory", "source=default-scheduler", testInspectionTimestamp, "truncated at 20"} {
 		if !strings.Contains(text, expected) {
 			t.Fatal(expected, text)
 		}
@@ -188,5 +194,100 @@ func TestPressureUnsupportedViewsRetainNavigation(t *testing.T) {
 				t.Fatal("unsupported pressure replaced navigation view")
 			}
 		})
+	}
+}
+
+func TestPressureSelectedResourceRejectsChangedContextBeforeRead(t *testing.T) {
+	app := NewApp(mock.NewMockConfig(t))
+	view := &workspaceDiscoveryOwner{Details: NewDetails(app, "workspace", "", contentInspection, true), target: SelectedResourceTarget{
+		Context: "different-context", GVR: client.PodGVR, Namespace: pressureTestNamespace, Name: "pod", UID: "pod-uid",
+	}}
+	app.Content.Push(view)
+	NewCommand(app).pressureCommand()
+	if app.Content.Top() != view || app.Config.ActiveContextName() == "different-context" {
+		t.Fatal("captured daily-workspace target redirected the active destination")
+	}
+}
+
+func TestPressureTypedBudgetsPreserveFreshnessUnknownsAndPhases(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	pod := pressurePod()
+	pod.Status.ContainerStatuses[0].State.Running = &corev1.ContainerStateRunning{StartedAt: metav1.NewTime(now)}
+	metrics := pressureMetrics{sample: client.MetricSample{State: client.MetricsAvailable, Source: client.PodMetricsSource, ObservedAt: now}, window: 30 * time.Second, containers: map[string]corev1.ResourceList{
+		"app":          {corev1.ResourceCPU: resource.MustParse("0"), corev1.ResourceMemory: resource.MustParse("96Mi")},
+		"zero-request": {corev1.ResourceCPU: resource.MustParse("100m")},
+	}}
+	budgets := pressureBudgets(pod, &metrics)
+	if len(budgets) != 5 || budgets[0].Role != "init" || budgets[1].Role != "sidecar" {
+		t.Fatal("container phases were combined", budgets)
+	}
+	app := budgets[2]
+	if app.CPUUsage != "0m" || app.CPURequestRatio != "0.0%" || app.MemoryUsage != "96.00MiB" || app.MemoryLimitRatio != "75.0%" || app.MetricsState != "available" || app.ObservedAt != now || app.Window != 30*time.Second || app.CurrentState != "running / not ready" {
+		t.Fatal("available sample facts changed", app)
+	}
+	if budgets[3].CPURequest != "N/A (unset)" || budgets[3].CurrentState != "unknown" || budgets[4].CPURequest != "0m" || budgets[4].CPURequestRatio != "N/A" {
+		t.Fatal("unset and zero allocations became equivalent", budgets)
+	}
+	for _, state := range []client.MetricState{client.MetricsStale, client.MetricsDenied, client.MetricsUnavailable} {
+		metrics.sample.State, metrics.sample.Reason = state, "sample unavailable"
+		app = pressureBudgets(pod, &metrics)[2]
+		if app.CPUUsage != pressureNA || app.MemoryUsage != pressureNA || app.CPURequestRatio != pressureNA || app.CPULimitRatio != pressureNA || app.MemoryRequestRatio != pressureNA || app.MemoryLimitRatio != pressureNA || app.CPURequest != "250m" || app.ObservedAt != now || app.MetricsReason != "sample unavailable" {
+			t.Fatal("unavailable sample fabricated usage or removed configuration", app)
+		}
+	}
+}
+
+func TestPressureSnapshotKeepsTypedSourcesAndFullEvidence(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	pod := pressurePod()
+	pod.TypeMeta = metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"}
+	pod.Status.ContainerStatuses[0].State.Running = &corev1.ContainerStateRunning{StartedAt: metav1.NewTime(now)}
+	object, err := runtime.DefaultUnstructuredConverter.ToUnstructured(pod)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dyn := fake.NewSimpleDynamicClient(runtime.NewScheme(), &unstructured.Unstructured{Object: object})
+	dyn.PrependReactor("get", "pods", func(action ktesting.Action) (bool, runtime.Object, error) {
+		if action.GetResource().Group != "metrics.k8s.io" {
+			return false, nil, nil
+		}
+		return true, &unstructured.Unstructured{Object: map[string]any{"apiVersion": "metrics.k8s.io/v1beta1", "kind": "PodMetrics", "metadata": map[string]any{"name": "pod", "namespace": pressureTestNamespace, "uid": "pod-uid"}, "timestamp": now.Format(time.RFC3339), "window": "30s", "containers": []any{map[string]any{"name": "app", "usage": map[string]any{string(corev1.ResourceCPU): "0", "memory": "96Mi"}}}}}, nil
+	})
+	typed := kubefake.NewSimpleClientset()
+	typed.PrependReactor("list", "events", func(ktesting.Action) (bool, runtime.Object, error) {
+		return true, &corev1.EventList{Items: []corev1.Event{
+			{ObjectMeta: metav1.ObjectMeta{Name: "matching"}, InvolvedObject: corev1.ObjectReference{UID: "pod-uid"}, Type: corev1.EventTypeWarning, Reason: pressureTestBackOff, Message: "Retained warning", LastTimestamp: metav1.NewTime(now)},
+			{ObjectMeta: metav1.ObjectMeta{Name: "replacement"}, InvolvedObject: corev1.ObjectReference{UID: "different-uid"}, Type: corev1.EventTypeWarning, Reason: pressureTestFailedScheduling, Message: "Wrong object", LastTimestamp: metav1.NewTime(now)},
+		}}, nil
+	})
+	target := SelectedResourceTarget{Context: "captured", GVR: client.PodGVR, Namespace: pressureTestNamespace, Name: "pod", UID: "pod-uid"}
+	snapshot, err := loadResourcePressureSnapshot(t.Context(), inspectionConnection{dynamic: dyn, typed: typed}, target, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	investigation := snapshot.Investigation
+	if investigation == nil || snapshot.UID != "pod-uid" || snapshot.CapturedAt != now || investigation.Identity.Context != "captured" || investigation.Identity.UID != "pod-uid" || len(investigation.Resources) != 5 || len(investigation.Containers) != 1 || len(investigation.Events) != 1 || investigation.Events[0].Reason != pressureTestBackOff {
+		t.Fatal("snapshot omitted or changed typed evidence", snapshot)
+	}
+	if !strings.Contains(snapshot.Text, "reason=OOMKilled") || !strings.Contains(snapshot.Text, "Retained warning") || strings.Contains(snapshot.Text, "Wrong object") || investigation.Containers[0].State != "running" || investigation.Containers[0].LastTermination == nil || investigation.Containers[0].LastTermination.Reason != "OOMKilled" {
+		t.Fatal("historical termination became current or UID-mismatched evidence leaked", investigation)
+	}
+	if len(dyn.Actions()) != 2 || len(typed.Actions()) != 1 {
+		t.Fatal("typed overview fetched a second observation", dyn.Actions(), typed.Actions())
+	}
+	metricsCoverage := false
+	for _, coverage := range investigation.Coverage {
+		if coverage.Source == "metrics pod" && coverage.State == string(client.MetricsAvailable) {
+			metricsCoverage = true
+		}
+		if coverage.Source == "metrics" && coverage.State == "not collected" {
+			t.Fatal("metrics placeholder survived successful collection")
+		}
+	}
+	if !metricsCoverage {
+		t.Fatal("sample coverage absent", investigation.Coverage)
+	}
+	if got := investigation.Coverage[0].State; got != inspect.ObservationComplete {
+		t.Fatal("object observation not marked complete", got)
 	}
 }

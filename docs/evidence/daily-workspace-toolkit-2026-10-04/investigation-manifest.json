@@ -1,0 +1,30 @@
+{
+  "binary_sha256": "13fc62a7137598f8e3d34590d49e2abbf7a8d57970d1d061f96270610ae86c6c",
+  "method": "Actual PTY emitted terminal cells against disposable localhost read-only API fixture; no live cluster; no human usability study",
+  "journeys": [
+    {
+      "columns": 80,
+      "rows": 24,
+      "assertions": [
+        "fault and previous termination immediately visible",
+        "keyboard tabs retain full source messages",
+        "tabs/F2 reuse observation",
+        "per-tab search returns",
+        "failed refresh retains source UID and original capture"
+      ],
+      "result": "passed"
+    },
+    {
+      "columns": 120,
+      "rows": 34,
+      "assertions": [
+        "fault and previous termination immediately visible",
+        "keyboard tabs retain full source messages",
+        "tabs/F2 reuse observation",
+        "per-tab search returns",
+        "failed refresh retains source UID and original capture"
+      ],
+      "result": "passed"
+    }
+  ]
+}

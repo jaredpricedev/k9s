@@ -22,21 +22,24 @@ type LogOptions struct {
 	Context, Cluster, WorkloadKind, WorkloadName string
 	Labels, Annotations                          map[string]string
 	Source                                       logstream.Source
-	Events                                       bool
-	CreateDuration                               time.Duration
-	Path                                         string
-	Container                                    string
-	DefaultContainer                             string
-	SinceTime                                    string
-	Lines                                        int64
-	SinceSeconds                                 int64
-	Head                                         bool
-	Previous                                     bool
-	SingleContainer                              bool
-	MultiPods                                    bool
-	ShowTimestamp                                bool
-	AllContainers                                bool
-	LogBufferSize                                int
+	// InitialPodUID verifies the first discovered Pod when opening captured workspace identity.
+	// Later replacements remain separate sources in the live log workbench.
+	InitialPodUID    string
+	Events           bool
+	CreateDuration   time.Duration
+	Path             string
+	Container        string
+	DefaultContainer string
+	SinceTime        string
+	Lines            int64
+	SinceSeconds     int64
+	Head             bool
+	Previous         bool
+	SingleContainer  bool
+	MultiPods        bool
+	ShowTimestamp    bool
+	AllContainers    bool
+	LogBufferSize    int
 }
 
 // Info returns the option pod and container info.

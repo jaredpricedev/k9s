@@ -26,8 +26,10 @@ import (
 )
 
 const (
-	podCmd = "v1/pods"
-	ctxCmd = "ctx"
+	podCmd            = "v1/pods"
+	ctxCmd            = "ctx"
+	dailyCommand      = "daily"
+	connectionCommand = "connection"
 )
 
 var (
@@ -285,6 +287,10 @@ func (c *Command) specialCmd(p *cmd.Interpreter, pushCmd bool) bool {
 		c.evidenceCommand(p.GetLine())
 	case p.Cmd() == "diagnostics":
 		c.capabilityCommand(p.GetLine())
+	case p.Cmd() == "workspace" || p.Cmd() == dailyCommand || p.Cmd() == "inventory":
+		c.dailyWorkspaceCommand(p.GetLine())
+	case p.Cmd() == connectionCommand || p.Cmd() == "connection-health":
+		c.connectionHealthCommand(p.GetLine())
 	case p.Cmd() == actionsCommand || p.Cmd() == troubleshootCommand || p.Cmd() == tlsCommand:
 		c.investigationCommand(p.Cmd())
 	case p.Cmd() == "cilium" || p.Cmd() == "hubble":

@@ -6,6 +6,14 @@ read-only snapshot. `r` refreshes it, `g` opens related resources, and Esc retur
 and cancels waiting reads. The original context and object identity stay pinned.
 An object recreated with the same name requires reopening the investigation.
 
+The default overview puts per-container CPU and memory requests, limits, sampled
+usage and usage/limit ratios first. **1–5** (or **Tab / Shift-Tab**) select Overview,
+Containers, Events, Resources and Evidence. **2** keeps current and previous
+termination records separate; **3** shows UID-scoped event records and gaps;
+**5** retains the complete report, original quantities and explanations. Tab
+switches reuse the retained observation. **6** explicitly chooses comparison A.
+**l** opens logs when the selected resource is a Pod, after rechecking its UID.
+
 The report preserves configuration and evidence for each application, init,
 restartable init sidecar and ephemeral container. Init containers run in a
 different phase; restartable init sidecars overlap application containers. The

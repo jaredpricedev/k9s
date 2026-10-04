@@ -296,6 +296,11 @@ func (a *App) fullHeader(width, height int) bool {
 	case "compact":
 		return false
 	default:
+		if a.Content != nil {
+			if workspace, ok := a.Content.Top().(interface{ CompactWorkspace() bool }); ok && workspace.CompactWorkspace() {
+				return false
+			}
+		}
 		return width >= 120 && height >= 34
 	}
 }
@@ -484,6 +489,12 @@ func (a *App) refreshCluster(context.Context) error {
 	}
 
 	count, maxConnRetry := atomic.LoadInt32(&a.conRetry), a.Config.K9s.MaxConnRetry
+	if count > 0 && retainedDisconnectedWorkspace(c) {
+		// Explicit snapshots and connection recovery remain usable without the
+		// browsing session. Do not exhaust the background retry budget here.
+		a.Status(model.FlashWarn, "K8s connection unavailable; retained workspace · :connection checks · :ctx reconnect")
+		return nil
+	}
 	if count >= maxConnRetry {
 		slog.Error("Conn check failed. Bailing out!",
 			slogs.Retry, count,
@@ -870,8 +881,11 @@ func (a *App) statusIndicator() *ui.StatusIndicator {
 // Investigation presentation state is owned by the draw goroutine. The connectivity
 // poller is not; ignore queued work if navigation has changed the top component.
 func (a *App) connectivityComponent(c model.Component, connected bool) {
+	if retainedDisconnectedWorkspace(c) {
+		return
+	}
 	switch c.(type) {
-	case *HubbleView, *Pulse, *inspectionDetails, *comparisonView, *evidenceView, *capabilityDetails:
+	case *HubbleView, *Pulse, *inspectionDetails, *comparisonView, *evidenceView, *capabilityDetails, *workspaceLogEntry:
 		a.QueueUpdateDraw(func() {
 			if a.Content.Top() != c {
 				return
@@ -888,5 +902,14 @@ func (a *App) connectivityComponent(c model.Component, connected bool) {
 		c.Start()
 	} else {
 		c.Stop()
+	}
+}
+
+func retainedDisconnectedWorkspace(c model.Component) bool {
+	switch c.(type) {
+	case *connectionHealthDetails, *dailyWorkspace:
+		return true
+	default:
+		return false
 	}
 }

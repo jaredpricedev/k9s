@@ -1,0 +1,53 @@
+{
+  "result": "passed",
+  "source": "actual PTY terminal cells; disposable local API fixture",
+  "binary": "/tmp/k9plus-daily-workspace-final",
+  "columns": 120,
+  "rows": 34,
+  "binary_sha256": "13fc62a7137598f8e3d34590d49e2abbf7a8d57970d1d061f96270610ae86c6c",
+  "captured_at_utc": "2026-10-04T04:53:26.014261+00:00",
+  "elapsed_seconds": 46.327,
+  "checks": [
+    "empty workspace and keyboard form cancellation",
+    "retained workspace does not poll its configured inventory in the background",
+    "kind-aware daily queue and explicit ingress RBAC coverage",
+    "native Pod logs preserve workspace query and refuse replaced UID before any log request",
+    "UID-bearing pins, native investigation, retained query and evidence target",
+    "persistent RBAC gaps allow good reads to refresh; total failure retains rows and original time",
+    "0600 local scope, UID pin, saved query and inventory layout survive app restart",
+    "connection retry uses bounded explicit reads and preserves prior success as historical",
+    "real 80x24 terminal resize preserves scope identity, selector and selected resource",
+    "journal confirms namespace-specific exact-selector bounded LISTs, no Secrets or resource mutations"
+  ],
+  "workspace_list_count": 84,
+  "captures": [
+    "workspace-empty.png",
+    "workspace-create-form.png",
+    "daily-queue.png",
+    "daily-coverage-denied.png",
+    "daily-inventory.png",
+    "daily-pinned-identity.png",
+    "daily-compact-investigation.png",
+    "daily-logs-replacement-rejected.png",
+    "daily-native-pod-logs.png",
+    "daily-evidence-preview-1.png",
+    "daily-evidence-preview-2.png",
+    "daily-evidence-preview-3.png",
+    "daily-evidence-preview-4.png",
+    "daily-evidence-preview-5.png",
+    "daily-partial-refresh.png",
+    "daily-unavailable-retained.png",
+    "daily-connection-readable-1.png",
+    "daily-connection-failed-retry-1.png",
+    "daily-saved-search-picker.png",
+    "daily-saved-search-restored.png",
+    "daily-scope-header-80x24.png"
+  ],
+  "responsive_capture": {
+    "file": "daily-scope-header-80x24.png",
+    "columns": 80,
+    "rows": 24
+  },
+  "request_journal": "request-journal.json",
+  "store_mode": "0600"
+}

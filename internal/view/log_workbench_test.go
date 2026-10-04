@@ -34,7 +34,7 @@ func testWorkbench(t *testing.T) *logWorkbench {
 	return w
 }
 
-func drawnText(t *testing.T, view *tview.TextView, width, height int) string {
+func drawnText(t *testing.T, view tview.Primitive, width, height int) string {
 	t.Helper()
 	screen := tcell.NewSimulationScreen("")
 	if err := screen.Init(); err != nil {

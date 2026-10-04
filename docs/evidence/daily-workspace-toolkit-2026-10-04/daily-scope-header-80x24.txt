@@ -1,0 +1,24 @@
+[RO] CONNECTED ctx:demo-dev ns:default  metrics:unavailable  F2:destination     
+ <ctrl+o> Actions  <?> Help                                                     
+┌────────────────────────────── Daily workspace ───────────────────────────────┐
+│daily · demo-dev · apps, ops                                                  │
+│Selector: app=daily · Kinds: pods, deployments, jobs, cronjobs, resourcequotas│
+│7 resources · 8 findings · 12 covered reads · 2 coverage gaps · Observed 04:53│
+│Search: kind:pod status:crashloopbackoff · Partial observation: 2 coverage gap│
+│KIND NAMESPACE NAME            STATUS           AGE                           │
+│Pod  apps      investigation-a CrashLoopBackOff 1d                            │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│v1/pods · apps/investigation-api                                              │
+│Enter investigates this captured identity. p pins it. Search is local to this │
+│scope's retained inventory.                                                   │
+│1 Daily  2 Inventory  3 Coverage  4 Pins  5 Scopes   / search  r refresh  Ente│
+└──────────────────────────────────────────────────────────────────────────────┘
+  <daily workspace>                                                             
+                                                                                

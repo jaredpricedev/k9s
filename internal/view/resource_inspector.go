@@ -11,9 +11,12 @@ import (
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
+	"github.com/derailed/k9s/internal/inspect"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
+	"github.com/derailed/tview"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
@@ -26,9 +29,10 @@ const (
 )
 
 type inspectionSnapshot struct {
-	Text       string
-	UID        types.UID
-	CapturedAt time.Time
+	Text          string
+	UID           types.UID
+	CapturedAt    time.Time
+	Investigation *inspect.Investigation
 }
 
 type inspectionReturnDestination struct {
@@ -46,19 +50,24 @@ type inspectionReturnOwnership struct {
 // inspectionDetails cancels on exit and never updates a replaced screen.
 type inspectionDetails struct {
 	*Details
-	cancel            context.CancelFunc
-	generation        uint64
-	contextName       string
-	returnDestination *inspectionReturnDestination
-	secretPath        string
-	target            SelectedResourceTarget
-	connection        client.Connection
-	snapshot          inspectionSnapshot
-	displayEvidence   string
-	messagesCompact   bool
-	loader            func(context.Context) (string, error)
-	snapshotLoader    func(context.Context, SelectedResourceTarget) (inspectionSnapshot, error)
-	related           func(context.Context, SelectedResourceTarget) ([]inspectionReference, error)
+	cancel               context.CancelFunc
+	generation           uint64
+	contextName          string
+	returnDestination    *inspectionReturnDestination
+	secretPath           string
+	target               SelectedResourceTarget
+	connection           client.Connection
+	snapshot             inspectionSnapshot
+	displayEvidence      string
+	messagesCompact      bool
+	loader               func(context.Context) (string, error)
+	snapshotLoader       func(context.Context, SelectedResourceTarget) (inspectionSnapshot, error)
+	related              func(context.Context, SelectedResourceTarget) ([]inspectionReference, error)
+	identityBar, tabsBar *tview.TextView
+	activeTab            int
+	tabStates            [5]investigationTabState
+	overviewWidth        int
+	refreshFailure       string
 }
 
 func (d *inspectionDetails) SelectedResource() SelectedResourceTarget { return d.target }
@@ -78,12 +87,12 @@ func (c *Command) investigationCommand(name string) {
 		c.app.actionsCmd(nil)
 		return
 	}
-	v, ok := c.app.Content.Top().(ResourceViewer)
+	v, ok := c.app.Content.Top().(actionOwner)
 	if !ok {
 		c.app.Flash().Err(fmt.Errorf("open a resource list first"))
 		return
 	}
-	target := resolveSelectedResource(v, c.app.Config.ActiveContextName())
+	target := actionTarget(v, c.app.Config.ActiveContextName())
 	c.app.openTargetInspection(target, name)
 }
 
@@ -127,8 +136,15 @@ func (d *inspectionDetails) Init(ctx context.Context) error {
 	}
 	d.app.Styles.RemoveListener(d.Details)
 	d.app.Styles.AddListener(d)
+	if d.CompactWorkspace() {
+		d.initInvestigationTabs()
+	}
 	d.actions.Add(ui.KeyR, ui.NewKeyAction("Refresh snapshot", func(*tcell.EventKey) *tcell.EventKey { d.refresh(); return nil }, true))
 	d.actions.Add(ui.KeyM, ui.NewKeyAction("Toggle full messages", func(*tcell.EventKey) *tcell.EventKey {
+		if d.snapshot.Investigation != nil && d.activeTab != investigationEvidenceTab {
+			d.selectInvestigationTab(investigationEvidenceTab)
+			return nil
+		}
 		d.messagesCompact = !d.messagesCompact
 		d.renderSnapshotText(d.displayEvidence)
 		return nil
@@ -232,11 +248,13 @@ func (d *inspectionDetails) refresh() {
 func (d *inspectionDetails) acceptSnapshot(snapshot inspectionSnapshot, err error) {
 	text := snapshot.Text
 	if err != nil {
+		d.refreshFailure = err.Error()
 		text = "Inspection unavailable: " + err.Error()
 		if d.snapshot.Text != "" {
 			text += "\n\nRETAINED SNAPSHOT (refresh failed; evidence below was not replaced)\n" + d.snapshot.Text
 		}
 	} else {
+		d.refreshFailure = ""
 		d.snapshot = snapshot
 		if snapshot.UID != "" {
 			d.target.UID = snapshot.UID
@@ -244,9 +262,26 @@ func (d *inspectionDetails) acceptSnapshot(snapshot inspectionSnapshot, err erro
 	}
 	d.displayEvidence = text
 	d.renderSnapshotText(text)
+	if d.app != nil && d.app.IsRunning() {
+		if err != nil {
+			if d.snapshot.Text != "" {
+				d.app.Flash().Warn("Refresh failed; retained evidence stays available")
+			} else {
+				d.app.Flash().Warn("Inspection unavailable; no snapshot retained")
+			}
+		} else {
+			d.app.Flash().Info("Snapshot retained · r refreshes the observation")
+		}
+	}
 }
 
 func (d *inspectionDetails) renderSnapshotText(text string) {
+	if d.snapshot.Investigation != nil && d.CompactWorkspace() {
+		d.renderInvestigationChrome()
+		if d.activeTab != investigationEvidenceTab {
+			text = d.investigationTabText()
+		}
+	}
 	if d.messagesCompact {
 		text = compactInspectionMessages(text)
 	}
@@ -297,25 +332,62 @@ func loadTargetInspectionSnapshot(ctx context.Context, conn client.Connection, t
 		return snapshot, err
 	}
 	snapshot.Text = resourceSummaryAt(obj, snapshot.CapturedAt) + identity
-	snapshot.Text += workloadDiagnostics(ctx, conn, obj)
-	snapshot.Text += resourceEvents(ctx, conn, obj)
+	snapshot.Investigation = inspect.NewInvestigation(obj, target.Context, target.GVR.String(), snapshot.CapturedAt)
+	if target.UID == "" {
+		snapshot.Investigation.Coverage = append(snapshot.Investigation.Coverage, inspect.InvestigationCoverage{
+			Source: "selection identity", State: inspect.ObservationUnknown,
+			Detail: "Selected row UID unavailable; continuity cannot be verified",
+		})
+	}
+	pods, notice := workloadPods(ctx, conn, obj)
+	if len(pods) > 100 {
+		pods = pods[:100]
+		notice = "Pod results truncated at 100; narrow the workload scope"
+	}
+	snapshot.Text += investigationWorkloadText(pods, notice)
+	for _, pod := range pods {
+		snapshot.Investigation.AddPod(pod)
+	}
+	if len(pods) > 0 || notice != "" {
+		state := inspect.ObservationComplete
+		if notice != "" {
+			state = inspect.ObservationIncomplete
+		}
+		snapshot.Investigation.Coverage = append(snapshot.Investigation.Coverage, inspect.InvestigationCoverage{
+			Source: "selector-matching Pods", State: state, Detail: notice + "; matching is not an ownership assertion",
+		})
+	}
+	eventText, eventRecords, eventCoverage := resourceEventSnapshot(ctx, conn, obj)
+	snapshot.Text += eventText
+	snapshot.Investigation.AddEvents(eventRecords)
+	snapshot.Investigation.Coverage = append(snapshot.Investigation.Coverage, eventCoverage)
 	snapshot.Text += resourceOwners(obj)
 	return snapshot, nil
 }
 
-func resourceEvents(ctx context.Context, conn client.Connection, obj *unstructured.Unstructured) string {
+func resourceEventSnapshot(ctx context.Context, conn client.Connection, obj *unstructured.Unstructured) (string, []corev1.Event, inspect.InvestigationCoverage) {
+	coverage := inspect.InvestigationCoverage{Source: "events", State: inspect.ObservationUnknown, Detail: "UID-scoped retained events; not a complete history"}
 	if obj.GetUID() == "" {
-		return "\nEvents unavailable: object UID missing\n"
+		coverage.Detail = "Object UID missing"
+		return "\nEvents unavailable: object UID missing\n", nil, coverage
 	}
 	k, err := conn.Dial()
 	if err != nil {
-		return "\nEvents unavailable: " + err.Error() + "\n"
+		coverage.Detail = err.Error()
+		if apierrors.IsForbidden(err) || apierrors.IsUnauthorized(err) {
+			coverage.State = inspect.ObservationDenied
+		}
+		return "\nEvents unavailable: " + err.Error() + "\n", nil, coverage
 	}
 	events, err := k.CoreV1().Events(obj.GetNamespace()).List(ctx, metav1.ListOptions{
 		FieldSelector: fields.OneTermEqualSelector("involvedObject.uid", string(obj.GetUID())).String(), Limit: 100,
 	})
 	if err != nil {
-		return "\nEvents unavailable: " + err.Error() + "\n"
+		coverage.Detail = err.Error()
+		if apierrors.IsForbidden(err) || apierrors.IsUnauthorized(err) {
+			coverage.State = inspect.ObservationDenied
+		}
+		return "\nEvents unavailable: " + err.Error() + "\n", nil, coverage
 	}
 	sort.SliceStable(events.Items, func(i, j int) bool { return eventTime(&events.Items[i]).After(eventTime(&events.Items[j])) })
 	text := "\nEVENTS (UID-scoped API snapshot; latest first, not a complete history)\n"
@@ -334,8 +406,12 @@ func resourceEvents(ctx context.Context, conn client.Connection, obj *unstructur
 	}
 	if events.Continue != "" || len(events.Items) > 100 {
 		text += "Event results truncated at 100; use the Events view for more.\n"
+		coverage.State = inspect.ObservationIncomplete
+		coverage.Detail = "Results truncated at 100; retained events are not a complete history"
+	} else {
+		coverage.State = inspect.ObservationComplete
 	}
-	return text
+	return text, events.Items, coverage
 }
 
 func resourceSummary(o *unstructured.Unstructured) string {
@@ -500,6 +576,16 @@ func inspectionMarkup(a *App, text string) string {
 	lines := strings.Split(text, "\n")
 	for i, line := range lines {
 		switch {
+		case strings.HasPrefix(line, "[!] "):
+			lines[i] = detailStyled(a.Styles.Semantic().Failure.String(), "b", line)
+		case strings.HasPrefix(line, "[~] "):
+			lines[i] = detailStyled(a.Styles.Semantic().Warning.String(), "", line)
+		case strings.HasPrefix(line, "[?] "):
+			lines[i] = detailStyled(a.Styles.Semantic().Unknown.String(), "", line)
+		case line == "CURRENT FINDINGS" || strings.HasPrefix(line, "CONTAINER STATUS") || line == "VISIBILITY" || line == "NEXT CHECKS" ||
+			line == "RETAINED EVENTS" || strings.HasPrefix(line, "RESOURCE BUDGETS") || strings.HasPrefix(line, "CURRENT CONTAINERS") ||
+			strings.HasPrefix(line, "RESOURCE COMPARISON") || strings.HasPrefix(line, "OBSERVATIONS ·") || line == "LIMITATIONS":
+			lines[i] = detailStyled(a.Styles.Semantic().Focus.String(), "b", line)
 		case line == "TRUST SOURCE" || line == "VERIFIED TLS HANDSHAKE" || line == "TLS CONFIGURATION REFERENCES" || strings.HasPrefix(line, "WORKLOAD PODS (") ||
 			line == "OWNERS" || line == "CONDITIONS" || line == "STATUS / REASON" || line == "READ-ONLY SNAPSHOT" ||
 			strings.HasPrefix(line, "CONTAINERS (") || strings.HasPrefix(line, "EVENTS (") || strings.HasPrefix(line, "CERTIFICATE "):

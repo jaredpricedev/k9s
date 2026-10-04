@@ -124,12 +124,12 @@ func (c *Command) evidenceCommand(line string) {
 		v.renderBundle()
 		return
 	}
-	owner, ok := c.app.Content.Top().(ResourceViewer)
+	owner, ok := c.app.Content.Top().(actionOwner)
 	if !ok {
 		c.app.Flash().Err(fmt.Errorf("select a resource to capture evidence; use :evidence-open for offline bundles"))
 		return
 	}
-	target := resolveSelectedResource(owner, c.app.Config.ActiveContextName())
+	target := actionTarget(owner, c.app.Config.ActiveContextName())
 	if err := target.Err(); err != nil {
 		c.app.Flash().Err(err)
 		return

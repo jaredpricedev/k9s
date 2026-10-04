@@ -46,6 +46,18 @@ from k9s for interoperability and provenance, without implying upstream endorsem
 
 ## Daily-workspace increments
 
+The toolkit's saved daily desk adds private, versioned scopes with explicit
+context, namespaces, kinds and selectors; scoped inventory, a current-state
+findings queue, pins, saved searches and coverage. Its readers use bounded
+namespace requests and retain captured UIDs. Compact investigations use typed
+facts and separate overview, containers, events, resources and full evidence;
+comparison and pressure place useful changes and budgets first. Connection
+checks explicitly rebuild diagnostic clients without changing the viewing
+destination. See [usage and limits](docs/daily-workspace.md) and the
+[broader toolkit roadmap](docs/toolkit-roadmap-2026-10-03.md). Native fixture
+captures and test provenance are retained in the
+[toolkit validation record](docs/daily-workspace-validation-2026-10-04.md).
+
 | Boundary | Modification and resulting behavior |
 | --- | --- |
 | Selected resource identity | Capture context, native GVR, namespace, name and available UID once. Combined Flux rows resolve to their native resource; synthetic and unavailable selections explain their limitation. Known-UID replacements are rejected, and recovered fatal exits return nonzero. |

@@ -50,7 +50,7 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
       - name: Run focused concurrency regressions
-        run: go test -race -p 4 ./internal/client ./internal/model ./internal/dao ./internal/ui ./internal/view ./internal/inspect ./internal/logstream ./internal/hubble
+        run: go test -race -p 4 ./internal/client ./internal/model ./internal/dao ./internal/ui ./internal/view ./internal/inspect ./internal/logstream ./internal/hubble ./internal/workspace
 
   terminal:
     runs-on: ubuntu-latest
@@ -77,6 +77,8 @@ jobs:
           go test -c -o /tmp/k9plus-view-tests ./internal/view
       - name: Exercise resource journeys and delayed API responsiveness
         run: python3 scripts/regression-journeys.py --binary /tmp/k9plus --output /tmp/terminal-evidence/resource --slow-api --performance --investigations
+      - name: Exercise saved daily scopes, coverage and captured identity
+        run: python3 scripts/daily-workspace-journeys.py --binary /tmp/k9plus --output /tmp/terminal-evidence/daily-workspace
       - name: Exercise Hubble freeze, navigation and retained evidence
         run: python3 scripts/hubble-latency.py --binary /tmp/k9plus-view-tests --output /tmp/terminal-evidence/hubble
       - name: Exercise narrow layouts across skins and color capabilities
