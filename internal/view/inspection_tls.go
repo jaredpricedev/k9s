@@ -241,23 +241,12 @@ func (c *Command) tlsCheckCommand(line string) {
 		target SelectedResourceTarget
 	)
 	if !probe {
-		switch v := c.app.Content.Top().(type) {
-		case ResourceViewer:
-			target = resolveSelectedResource(v, c.app.Config.ActiveContextName())
-			if target.Err() == nil && target.GVR.R() == inspectionSecretsResource {
-				path = target.Path()
-			}
-		case *inspectionDetails:
-			if v.contextName == c.app.Config.ActiveContextName() {
-				path = v.secretPath
-				target = v.target
-			}
-		}
-		if path == "" {
-			c.app.Flash().Err(fmt.Errorf("select a Secret for offline verification"))
+		var err error
+		target, path, err = c.selectedTLSSecret()
+		if err != nil {
+			c.app.Flash().Err(err)
 			return
 		}
-		var err error
 		conn, err = pinInspectionConnection(c.app.Conn())
 		if err != nil {
 			c.app.Flash().Err(err)
@@ -286,8 +275,9 @@ func (c *Command) tlsCheckCommand(line string) {
 		if err != nil {
 			return "", err
 		}
-		if err := verifySelectedIdentity(target, obj); err != nil {
-			return "", err
+		identityErr := verifySelectedIdentity(target, obj)
+		if identityErr != nil {
+			return "", identityErr
 		}
 		data, err := secretCertificate(obj)
 		if err != nil {
@@ -304,4 +294,24 @@ func (c *Command) tlsCheckCommand(line string) {
 		return
 	}
 	d.refresh()
+}
+
+func (c *Command) selectedTLSSecret() (SelectedResourceTarget, string, error) {
+	var target SelectedResourceTarget
+	path := ""
+	switch v := c.app.Content.Top().(type) {
+	case ResourceViewer:
+		target = resolveSelectedResource(v, c.app.Config.ActiveContextName())
+		if target.Err() == nil && target.GVR.R() == inspectionSecretsResource {
+			path = target.Path()
+		}
+	case *inspectionDetails:
+		if v.contextName == c.app.Config.ActiveContextName() {
+			path, target = v.secretPath, v.target
+		}
+	}
+	if path == "" {
+		return target, path, fmt.Errorf("select a Secret for offline verification")
+	}
+	return target, path, nil
 }

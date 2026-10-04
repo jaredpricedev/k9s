@@ -103,10 +103,7 @@ func (d *inspectionDetails) openRelated() {
 	}()
 }
 
-func loadInspectionReferences(ctx context.Context, conn client.Connection, gvr *client.GVR, path, name string) ([]inspectionReference, error) {
-	return loadTargetInspectionReferences(ctx, conn, resourceTargetForPath(gvr, "", path), name)
-}
-
+//nolint:gocritic // Resource identity is an immutable value captured before asynchronous reads.
 func loadTargetInspectionReferences(ctx context.Context, conn client.Connection, target SelectedResourceTarget, name string) ([]inspectionReference, error) {
 	if err := target.Err(); err != nil {
 		return nil, err

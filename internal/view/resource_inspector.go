@@ -60,10 +60,8 @@ func (c *Command) investigationCommand(name string) {
 	}
 	c.app.openTargetInspection(target, name)
 }
-func (a *App) openInspection(v ResourceViewer, name, path string) {
-	a.openTargetInspection(selectedResourceForPath(v, a.Config.ActiveContextName(), path), name)
-}
 
+//nolint:gocritic // Opening captures an immutable identity value for asynchronous inspection.
 func (a *App) openTargetInspection(target SelectedResourceTarget, name string) {
 	if err := target.Err(); err != nil {
 		a.Flash().Err(err)
@@ -141,10 +139,7 @@ func (d *inspectionDetails) refresh() {
 	}()
 }
 
-func loadInspection(ctx context.Context, conn client.Connection, gvr *client.GVR, path, name string) (string, error) {
-	return loadTargetInspection(ctx, conn, resourceTargetForPath(gvr, "", path), name)
-}
-
+//nolint:gocritic // Loading receives the captured immutable identity value.
 func loadTargetInspection(ctx context.Context, conn client.Connection, target SelectedResourceTarget, name string) (string, error) {
 	if err := target.Err(); err != nil {
 		return "", err
@@ -157,16 +152,17 @@ func loadTargetInspection(ctx context.Context, conn client.Connection, target Se
 	if err != nil {
 		return "", err
 	}
-	if err := verifySelectedIdentity(target, obj); err != nil {
-		return "", err
+	identityErr := verifySelectedIdentity(target, obj)
+	if identityErr != nil {
+		return "", identityErr
 	}
 	identity := ""
 	if target.UID == "" {
 		identity = "\nSelected UID: unknown; continuity with the selected row cannot be verified.\n"
 	}
 	if name == tlsCommand {
-		text, err := tlsResourceReport(ctx, conn, obj)
-		return text + identity, err
+		text, reportErr := tlsResourceReport(ctx, conn, obj)
+		return text + identity, reportErr
 	}
 	text := resourceSummary(obj) + identity
 	text += workloadDiagnostics(ctx, conn, obj)

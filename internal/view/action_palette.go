@@ -118,7 +118,8 @@ func (p *actionPalette) invoke(i int) {
 	key := p.entries[i].key
 	p.app.PrevCmd(nil)
 	current := resolveSelectedResource(p.owner, p.app.Config.ActiveContextName())
-	if p.app.Config.ActiveContextName() != p.contextName || current.GVR != p.target.GVR || current.Path() != p.target.Path() || (p.target.UID != "" && current.UID != p.target.UID) || current.UnavailableReason != p.target.UnavailableReason {
+	if p.app.Config.ActiveContextName() != p.contextName || current.GVR != p.target.GVR || current.Path() != p.target.Path() ||
+		(p.target.UID != "" && current.UID != p.target.UID) || current.UnavailableReason != p.target.UnavailableReason {
 		p.app.Flash().Err(fmt.Errorf("context or selection changed; reopen actions"))
 		return
 	}

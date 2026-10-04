@@ -31,8 +31,10 @@ type SelectedResource interface {
 	SelectedResource() SelectedResourceTarget
 }
 
+//nolint:gocritic // Value receiver supports immutable targets returned directly by selection resolvers.
 func (t SelectedResourceTarget) Path() string { return client.FQN(t.Namespace, t.Name) }
 
+//nolint:gocritic // Value receiver supports checking temporary immutable selection results.
 func (t SelectedResourceTarget) Err() error {
 	if t.UnavailableReason != "" {
 		return fmt.Errorf("%s", t.UnavailableReason)
@@ -140,6 +142,7 @@ func (*Xray) SelectedResource() SelectedResourceTarget {
 	return SelectedResourceTarget{UnavailableReason: "Xray is a navigation tree; use Goto to open a resource list before inspecting an object"}
 }
 
+//nolint:gocritic // Verification receives the captured immutable identity value.
 func verifySelectedIdentity(target SelectedResourceTarget, obj metav1.Object) error {
 	if target.UID == "" {
 		return nil
