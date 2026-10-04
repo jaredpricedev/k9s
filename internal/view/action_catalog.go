@@ -105,6 +105,7 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 	}
 	result = append(result, investigationActions(owner, app)...)
 	result = append(result, changeReviewActions(owner, app)...)
+	result = append(result, jobReviewActions(owner, app)...)
 	result = append(result, maintenanceReviewActions(owner, app)...)
 	result = append(result, configurationActions(owner, app)...)
 	result = append(result, workspaceActions(app)...)
@@ -143,6 +144,7 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		run                           func()
 	}{
 		{"resource.pressure", "Resource pressure", ":pressure", ui.ActionInspect, func() { NewCommand(app).pressureCommand() }},
+		{"resource.storage", "Storage diagnosis and expansion preview", ":storage", ui.ActionInspect, func() { NewCommand(app).storageCommand() }},
 		{"resource.capacity", "Capacity and autoscaling review", ":capacity", ui.ActionInspect, func() { NewCommand(app).capacityCommand() }},
 		{"resource.evidence", "Capture evidence preview", ":evidence", ui.ActionExport, func() { NewCommand(app).evidenceCommand("evidence") }},
 	} {
@@ -151,6 +153,11 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		_, selectedView := owner.(SelectedResource)
 		if !resourceView && !selectedView {
 			reason = "Open a resource list and select an API object first"
+		}
+		if item.id == "resource.storage" && reason == "" {
+			if err := storageTargetError(&target); err != nil {
+				reason = err.Error()
+			}
 		}
 		if item.id == "resource.capacity" && reason == "" {
 			if err := capacityTargetError(&target); err != nil {
@@ -307,5 +314,18 @@ func configurationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		ID: "resource.configuration-review", Label: "Declared configuration references", Category: ui.ActionInspect,
 		Shortcut: ":" + configurationCommand, Discoverable: true, RequiresSelection: true, UnavailableReason: reason,
 		Handler: func(*tcell.EventKey) *tcell.EventKey { app.openConfigurationReview(target); return nil },
+	}}
+}
+
+func jobReviewActions(owner actionOwner, app *App) []ui.ActionDescriptor {
+	target := actionTarget(owner, app.Config.ActiveContextName())
+	reason := ""
+	if err := jobReviewTargetError(target); err != nil {
+		reason = err.Error()
+	}
+	return []ui.ActionDescriptor{{
+		ID: "resource.job-review", Label: "Scheduled / one-off Job review", Category: ui.ActionInspect, Shortcut: ":" + jobReviewCommandToken,
+		Discoverable: true, RequiresSelection: true, UnavailableReason: reason,
+		Handler: func(*tcell.EventKey) *tcell.EventKey { app.openJobReview(target); return nil },
 	}}
 }

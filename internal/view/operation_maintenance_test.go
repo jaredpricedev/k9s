@@ -47,7 +47,7 @@ func maintenanceFixture(t *testing.T) (*operationSession, SelectedResourceTarget
 func TestGuardedCordonUsesUIDAndVersionAndNeverWritesReplacement(t *testing.T) {
 	s, target, dyn, _ := maintenanceFixture(t)
 	writes := 0
-	dyn.PrependReactor("patch", guardedTestNodes, func(action ktesting.Action) (bool, runtime.Object, error) {
+	dyn.PrependReactor(client.PatchVerb, guardedTestNodes, func(action ktesting.Action) (bool, runtime.Object, error) {
 		writes++
 		var patch map[string]any
 		if err := json.Unmarshal(action.(ktesting.PatchAction).GetPatch(), &patch); err != nil {
@@ -76,7 +76,7 @@ func TestGuardedDrainUsesOriginalPodUIDOnNativeEvictionRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 	cordons, evictions := 0, 0
-	dyn.PrependReactor("patch", guardedTestNodes, func(ktesting.Action) (bool, runtime.Object, error) {
+	dyn.PrependReactor(client.PatchVerb, guardedTestNodes, func(ktesting.Action) (bool, runtime.Object, error) {
 		cordons++
 		return true, &unstructured.Unstructured{}, nil
 	})
@@ -125,7 +125,7 @@ func TestGuardedDrainNativeFiltersAndDeniedRBACPrecedeCordon(t *testing.T) {
 			t.Fatal("native ownership filter or denied guard bypassed", denied, err)
 		}
 		for _, action := range dyn.Actions() {
-			if action.GetVerb() == "patch" {
+			if action.GetVerb() == client.PatchVerb {
 				t.Fatal("invalid drain cordoned node", denied)
 			}
 		}
