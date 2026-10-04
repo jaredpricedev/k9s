@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/derailed/k9s/internal/logstream"
+	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
 )
 
@@ -20,7 +21,11 @@ func (w *logWorkbench) render() {
 	w.consumeIO()
 	w.refreshProfile()
 	snapshot := w.liveSnapshot()
-	historyScope := w.mode == modeHistory || w.mode == modeDetail && w.selectionScope != "" && w.selectionScope != scopeLive
+	scopeMode := w.mode
+	if scopeMode == modeStatus {
+		scopeMode = w.statusReturnMode
+	}
+	historyScope := scopeMode == modeHistory || scopeMode == modeDetail && w.selectionScope != "" && w.selectionScope != scopeLive
 	if historyScope {
 		w.preserveFrozenPosition()
 	} else if w.entryMode() {
@@ -141,16 +146,77 @@ func (w *logWorkbench) render() {
 	if w.recordStart == nil && (state.info.EvictedSegments > 0 || state.dropped > 0 || state.err != "") {
 		notice = fmt.Sprintf("disk-evict:%d admission-drop:%d · ", state.info.EvictedSegments, state.dropped) + notice
 	}
-	w.status.SetText(
+	w.statusFull =
 		wbText(logstream.SafeText(status)) + "\n" + w.coloredSparkline() +
-			wbText(logstream.SafeText(" 60s ≈ · "+recording)) + "\n" + wbText(logstream.SafeText(w.collectorLabel()+" · "+notice)),
-	)
+			wbText(logstream.SafeText(" 60s ≈ · "+recording)) + "\n" + wbText(logstream.SafeText(w.collectorLabel()+" · "+notice))
+	privacyShort := "safe"
+	if !w.redact {
+		privacyShort = "RAW"
+	}
+	rec := "REC off"
+	if w.recordStart != nil {
+		rec = "REC starting"
+	}
+	if state.path != "" {
+		rec = "REC on"
+		if state.info.Raw {
+			rec = "REC RAW"
+		}
+		if state.closed {
+			rec += " closed"
+		}
+	}
+	if state.err != "" {
+		rec = "RECORD ERROR: durability unknown"
+	}
+	if state.info.ConservativeRedaction {
+		rec += " conservative"
+	}
+	third := "Enter detail · s freeze · S status"
+	if w.ioRunning {
+		third = "Disk running · Esc cancel · S status"
+	}
+	if state.dropped > 0 || state.info.EvictedSegments > 0 {
+		third = fmt.Sprintf("Disk-loss evict:%d drop:%d · S status", state.info.EvictedSegments, state.dropped)
+	} else if w.notice != "" && state.err == "" {
+		third = "S status · " + w.notice
+	}
+	if state.err != "" {
+		third = "RECORD ERROR: durability unknown · S status"
+		rec = "REC failed"
+	}
+	w.statusCompact = wbText(fmt.Sprintf("%s %s visible:%d/%d · %s\nLoss e:%d t:%d o:%d h:%d · %s\n%s",
+		viewState, privacyShort, shown, observed, strings.TrimPrefix(w.collectorLabel(), "Collector "),
+		stats.Evicted, stats.Truncated, stats.ForcedOrder, stats.HistogramDropped, rec, third))
+	w.paintStreamStatus()
 	if w.entryMode() {
 		if w.mode == modeHistory {
 			visible = w.visible(w.history)
 		}
 		w.renderEntries(visible)
 	}
+}
+
+func (w *logWorkbench) paintStreamStatus() {
+	_, _, width, _ := w.GetInnerRect()
+	text := w.statusFull
+	if width >= 40 && width < 110 {
+		text = w.statusCompact
+	}
+	w.status.SetText(text)
+}
+
+func (w *logWorkbench) Draw(screen tcell.Screen) {
+	_, _, width, _ := w.GetInnerRect()
+	if ui.DrawTaskSizeNotice(screen, w.Box) {
+		return
+	}
+	w.paintStreamStatus()
+	if w.mode == modeLanes && w.statusWidth != width {
+		w.paintLanes()
+	}
+	w.statusWidth = width
+	w.Flex.Draw(screen)
 }
 
 //nolint:gocritic // Source formatting consumes an immutable identity value.
@@ -265,5 +331,5 @@ func (w *logWorkbench) renderEntries(entries []logstream.Entry) {
 	} else {
 		w.selected = 0
 	}
-	w.pages.SwitchToPage("table")
+	switchStreamPage(w.pages, "table")
 }

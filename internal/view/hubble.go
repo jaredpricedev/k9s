@@ -28,6 +28,7 @@ const (
 	hubblePeersMode        = "peers"
 	hubbleConversationMode = "conversation"
 	hubbleHelpMode         = "help"
+	hubbleStatusDetailMode = "status-detail"
 	hubbleUnknown          = "unknown"
 	hubbleForwarded        = "FORWARDED"
 )
@@ -40,13 +41,15 @@ type hubblePeerRow struct {
 type hubbleTableState struct {
 	mode, expression, peer string
 	revision, style        uint64
+	width                  int
 }
 
 // All view fields belong to the draw goroutine. Only Session ingests concurrently.
 type HubbleView struct {
-	statusOnly bool
-	started    bool
-	helpReturn string
+	statusOnly               bool
+	started                  bool
+	helpReturn               string
+	statusReturn, statusFull string
 	*tview.Flex
 	app                      *App
 	table                    *hubbleTable
@@ -308,6 +311,14 @@ func (w *HubbleView) key(e *tcell.EventKey) *tcell.EventKey {
 		return w.inspect()
 	}
 	switch e.Rune() {
+	case 'S':
+		if w.mode != hubbleStatusDetailMode {
+			w.statusReturn = w.mode
+		}
+		w.mode = hubbleStatusDetailMode
+		w.render()
+		w.focus(w.detail)
+		return nil
 	case 's':
 		if w.app != nil && w.cancel == nil {
 			w.restart()
@@ -416,17 +427,27 @@ func (w *HubbleView) render() {
 		coverage = fmt.Sprintf("%d connected / %d unavailable", st.Connected, st.Unavailable)
 	}
 	loss := fmt.Sprint(st.Lost)
+	if st.Phase != "live observation" && st.Phase != "status only" {
+		loss = "unknown (not observing)"
+	}
 	if w.statusOnly {
 		loss = "not observed (status only)"
 	}
 	w.renderHubbleStatus(&st, state, coverage, loss, evicted)
+	if w.mode == hubbleStatusDetailMode {
+		switchStreamPage(w.pages, modeDetail)
+		w.setDetail(w.statusFull + "\n\nCaptured scope: " + detailStyled(w.hubblePalette().foreground, "", w.scope.Title) +
+			"\nReported coverage and loss describe this Relay observation. Missing events do not prove traffic was allowed or denied.\n" +
+			"Esc returns to the prior view; r explicitly reconnects.")
+		return
+	}
 	if w.mode == modeDetail {
-		w.pages.SwitchToPage(modeDetail)
+		switchStreamPage(w.pages, modeDetail)
 		w.setDetail(w.hubbleDetail(&w.selected))
 		return
 	}
 	if w.mode == hubbleHelpMode {
-		w.pages.SwitchToPage(modeDetail)
+		switchStreamPage(w.pages, modeDetail)
 		w.setDetail(sharedActionHelp(w.Actions(), ui.ActionContext{}) + "\nHubble network inspection\n" +
 			"\n" +
 			":diagnostics hubble checks configured Relay readiness before observation.\n" +
@@ -451,8 +472,10 @@ func (w *HubbleView) render() {
 
 //nolint:funlen // These layouts share selection and viewport preservation.
 func (w *HubbleView) renderTable(st *hubble.Status) {
-	w.pages.SwitchToPage("table")
-	state := hubbleTableState{mode: w.mode, expression: w.expression, peer: w.peer.Key(), revision: w.displayedRevision, style: w.styleGeneration}
+	switchStreamPage(w.pages, "table")
+	_, _, width, _ := w.GetInnerRect()
+	state := hubbleTableState{mode: w.mode, expression: w.expression, peer: w.peer.Key(), revision: w.displayedRevision, style: w.styleGeneration, width: width}
+	narrow := width >= 40 && width < 80
 	nodesChanged := w.mode == hubbleStatusMode && (w.nodeVersion != st.Version || w.nodeError != st.CoverageError || !slices.Equal(w.nodeRows, st.Nodes))
 	if w.renderedTable && state == w.tableState && !nodesChanged {
 		return
@@ -514,7 +537,11 @@ func (w *HubbleView) renderTable(st *hubble.Status) {
 			}
 		}
 	case hubbleConversationMode:
-		put(0, "TIME", "SOURCE", "DESTINATION", "PROTOCOL", "VERDICT", "ORIGIN")
+		if narrow {
+			put(0, "VERDICT", "OBSERVED FLOW · Enter detail")
+		} else {
+			put(0, "TIME", "SOURCE", "DESTINATION", "PROTOCOL", "VERDICT", "ORIGIN")
+		}
 		oldRows := w.rows
 		w.rows = w.rows[:0]
 		for i := range w.displayed {
@@ -528,8 +555,12 @@ func (w *HubbleView) renderTable(st *hubble.Status) {
 		}
 		for i := range w.rows {
 			e := &w.rows[i]
-			put(i+1, e.Time.Format("15:04:05.000"), e.Source.String(), e.Destination.String(),
-				fmt.Sprintf("%s %d → %d", e.Protocol, e.SourcePort, e.DestinationPort), e.Verdict, e.Origin)
+			if narrow {
+				put(i+1, e.Verdict, ui.Truncate(e.Time.Format("15:04:05")+" "+e.Source.String()+" → "+e.Destination.String(), max(1, width-13)))
+			} else {
+				put(i+1, e.Time.Format("15:04:05.000"), e.Source.String(), e.Destination.String(),
+					fmt.Sprintf("%s %d → %d", e.Protocol, e.SourcePort, e.DestinationPort), e.Verdict, e.Origin)
+			}
 			if e.ID == selectedID {
 				row = i + 1
 			}
@@ -556,7 +587,7 @@ func (w *HubbleView) setDetail(text string) {
 }
 
 func (w *HubbleView) focusContent() {
-	if w.mode == modeDetail || w.mode == hubbleHelpMode {
+	if w.mode == modeDetail || w.mode == hubbleHelpMode || w.mode == hubbleStatusDetailMode {
 		w.focus(w.detail)
 	} else {
 		w.focus(w.table)
@@ -581,6 +612,8 @@ func (w *HubbleView) back(e *tcell.EventKey) *tcell.EventKey {
 		w.table.Select(w.peerRow, 0)
 	case hubbleHelpMode:
 		w.mode = w.helpReturn
+	case hubbleStatusDetailMode:
+		w.mode = w.statusReturn
 	default:
 		if w.app != nil {
 			return w.app.PrevCmd(e)
@@ -628,8 +661,8 @@ func (w *HubbleView) putRow(r int, values ...string) {
 		if r == 0 {
 			cell.SetSelectable(false).SetAttributes(tcell.AttrBold)
 			color = p.category
-		} else if w.mode == hubbleConversationMode && c == 4 {
-			switch v {
+		} else if w.mode == hubbleConversationMode && (c == 4 || c == 0 && w.table.GetColumnCount() <= 2) {
+			switch strings.TrimSpace(v) {
 			case "DROPPED", "ERROR":
 				color = p.failure
 			case hubbleForwarded:
