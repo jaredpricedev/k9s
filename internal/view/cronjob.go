@@ -12,7 +12,6 @@ import (
 
 	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/client"
-	"github.com/derailed/k9s/internal/dao"
 	"github.com/derailed/k9s/internal/slogs"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/k9s/internal/ui/dialog"
@@ -109,30 +108,21 @@ func (c *CronJob) triggerCmd(evt *tcell.EventKey) *tcell.EventKey {
 	if len(fqns) == 0 {
 		return evt
 	}
-	msg := fmt.Sprintf("Trigger CronJob: %s?", fqns[0])
-	if len(fqns) > 1 {
-		msg = fmt.Sprintf("Trigger %d CronJobs?", len(fqns))
+	session, err := captureOperation(c)
+	if err != nil {
+		c.App().Flash().Err(err)
+		return nil
 	}
+	targets, err := captureOperationTargets(c, session.context, fqns)
+	if err != nil {
+		c.App().Flash().Err(err)
+		return nil
+	}
+	msg := fmt.Sprintf("Create a manual Job from %d CronJob(s)?\nContext: %s\n%s\nThe created Job retains the selected "+
+		"CronJob owner UID. Acceptance does not mean the Job succeeded.", len(targets), session.context, operationDestination(targets))
 	d := c.App().Styles.Dialog()
 	dialog.ShowConfirm(&d, c.App().Content.Pages, "Confirm Job Trigger", msg, func() {
-		res, err := dao.AccessorFor(c.App().factory, c.GVR())
-		if err != nil {
-			c.App().Flash().Err(fmt.Errorf("no accessor for %q", c.GVR()))
-			return
-		}
-		runner, ok := res.(dao.Runnable)
-		if !ok {
-			c.App().Flash().Err(fmt.Errorf("expecting a job runner resource for %q", c.GVR()))
-			return
-		}
-
-		for _, fqn := range fqns {
-			if err := runner.Run(fqn); err != nil {
-				c.App().Flash().Errf("CronJob trigger failed for %s: %v", fqn, err)
-			} else {
-				c.App().Flash().Infof("Triggered Job %s %s", c.GVR(), fqn)
-			}
-		}
+		session.submit("Trigger manual Job", targets, session.triggerCronJob, nil)
 	}, func() {})
 
 	return nil
@@ -157,9 +147,6 @@ func (c *CronJob) toggleSuspendCmd(evt *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 
-	c.Stop()
-	defer c.Start()
-
 	c.showSuspendDialog(cell, sel)
 
 	return nil
@@ -172,26 +159,23 @@ func (c *CronJob) showSuspendDialog(cell *tview.TableCell, sel string) {
 		title = "Resume"
 	}
 
+	session, err := captureOperation(c)
+	if err != nil {
+		c.App().Flash().Err(err)
+		return
+	}
+	targets, err := captureOperationTargets(c, session.context, []string{sel})
+	if err != nil {
+		c.App().Flash().Err(err)
+		return
+	}
+	expected := strings.TrimSpace(cell.Text) == defaultSuspendStatus
+	msg := fmt.Sprintf("%s scheduling?\nContext: %s\n%s\nExisting Jobs continue. Missed-run behavior remains owned by the "+
+		"CronJob controller.", title, session.context, operationDestination(targets))
 	d := c.App().Styles.Dialog()
-	dialog.ShowConfirm(&d, c.App().Content.Pages, title, sel, func() {
-		ctx, cancel := context.WithTimeout(context.Background(), c.App().Conn().Config().CallTimeout())
-		defer cancel()
-
-		res, err := dao.AccessorFor(c.App().factory, c.GVR())
-		if err != nil {
-			c.App().Flash().Err(fmt.Errorf("no accessor for %q", c.GVR()))
-			return
-		}
-
-		cronJob, ok := res.(*dao.CronJob)
-		if !ok {
-			c.App().Flash().Errf("expecting a cron job for %q", c.GVR())
-			return
-		}
-
-		if err := cronJob.ToggleSuspend(ctx, sel); err != nil {
-			c.App().Flash().Errf("Cronjob %s failed for %v", strings.ToLower(title), err)
-			return
-		}
+	dialog.ShowConfirm(&d, c.App().Content.Pages, title, msg, func() {
+		session.submit(title+" CronJob", targets, func(ctx context.Context, target SelectedResourceTarget) error {
+			return session.suspendCronJob(ctx, target, expected, !expected)
+		}, nil)
 	}, func() {})
 }
