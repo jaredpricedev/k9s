@@ -8,47 +8,47 @@ import (
 	"github.com/derailed/k9s/internal/slogs"
 )
 
-var accessors = Accessors{
-	client.FluxGVR: new(FluxDashboard),
-	client.WkGVR:   new(Workload),
-	client.CtGVR:   new(Context),
-	client.CoGVR:   new(Container),
-	client.ScnGVR:  new(ImageScan),
-	client.SdGVR:   new(ScreenDump),
-	client.BeGVR:   new(Benchmark),
-	client.PfGVR:   new(PortForward),
-	client.DirGVR:  new(Dir),
+var accessors = map[*client.GVR]func() Accessor{
+	client.FluxGVR: func() Accessor { return new(FluxDashboard) },
+	client.WkGVR:   func() Accessor { return new(Workload) },
+	client.CtGVR:   func() Accessor { return new(Context) },
+	client.CoGVR:   func() Accessor { return new(Container) },
+	client.ScnGVR:  func() Accessor { return new(ImageScan) },
+	client.SdGVR:   func() Accessor { return new(ScreenDump) },
+	client.BeGVR:   func() Accessor { return new(Benchmark) },
+	client.PfGVR:   func() Accessor { return new(PortForward) },
+	client.DirGVR:  func() Accessor { return new(Dir) },
 
-	client.SvcGVR:  new(Service),
-	client.PodGVR:  new(Pod),
-	client.NodeGVR: new(Node),
-	client.NsGVR:   new(Namespace),
-	client.CmGVR:   new(ConfigMap),
-	client.SecGVR:  new(Secret),
+	client.SvcGVR:  func() Accessor { return new(Service) },
+	client.PodGVR:  func() Accessor { return new(Pod) },
+	client.NodeGVR: func() Accessor { return new(Node) },
+	client.NsGVR:   func() Accessor { return new(Namespace) },
+	client.CmGVR:   func() Accessor { return new(ConfigMap) },
+	client.SecGVR:  func() Accessor { return new(Secret) },
 
-	client.DpGVR:  new(Deployment),
-	client.DsGVR:  new(DaemonSet),
-	client.StsGVR: new(StatefulSet),
-	client.RsGVR:  new(ReplicaSet),
+	client.DpGVR:  func() Accessor { return new(Deployment) },
+	client.DsGVR:  func() Accessor { return new(DaemonSet) },
+	client.StsGVR: func() Accessor { return new(StatefulSet) },
+	client.RsGVR:  func() Accessor { return new(ReplicaSet) },
 
-	client.CjGVR:  new(CronJob),
-	client.JobGVR: new(Job),
+	client.CjGVR:  func() Accessor { return new(CronJob) },
+	client.JobGVR: func() Accessor { return new(Job) },
 
-	client.HmGVR:  new(HelmChart),
-	client.HmhGVR: new(HelmHistory),
+	client.HmGVR:  func() Accessor { return new(HelmChart) },
+	client.HmhGVR: func() Accessor { return new(HelmHistory) },
 
-	client.CrdGVR: new(CustomResourceDefinition),
+	client.CrdGVR: func() Accessor { return new(CustomResourceDefinition) },
 }
-
-// Accessors represents a collection of dao accessors.
-type Accessors map[*client.GVR]Accessor
 
 // AccessorFor returns a client accessor for a resource if registered.
 // Otherwise it returns a generic accessor.
 // Customize here for non resource types or types with metrics or logs.
 func AccessorFor(f Factory, gvr *client.GVR) (Accessor, error) {
-	r, ok := accessors[gvr]
-	if !ok {
+	makeAccessor, ok := accessors[gvr]
+	var r Accessor
+	if ok {
+		r = makeAccessor()
+	} else {
 		r = new(Scaler)
 		slog.Debug("No DAO registry entry. Using generics!", slogs.GVR, gvr)
 	}

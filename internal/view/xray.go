@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"regexp"
 	"strings"
+	"sync/atomic"
 
 	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/client"
@@ -39,12 +40,14 @@ var _ ResourceViewer = (*Xray)(nil)
 type Xray struct {
 	*ui.Tree
 
-	app      *App
-	gvr      *client.GVR
-	meta     *metav1.APIResource
-	model    *model.Tree
-	cancelFn context.CancelFunc
-	envFn    EnvFunc
+	app        *App
+	gvr        *client.GVR
+	meta       *metav1.APIResource
+	model      *model.Tree
+	cancelFn   context.CancelFunc
+	envFn      EnvFunc
+	generation atomic.Uint64
+	listener   *xraySessionListener
 }
 
 // NewXray returns a new view.
@@ -88,7 +91,6 @@ func (x *Xray) Init(ctx context.Context) error {
 
 	x.model.SetRefreshRate(x.app.Config.K9s.RefreshDuration())
 	x.model.SetNamespace(client.CleanseNamespace(x.app.Config.ActiveNamespace()))
-	x.model.AddListener(x)
 
 	x.SetChangedFunc(func(n *tview.TreeNode) {
 		spec, ok := n.GetReference().(xray.NodeSpec)
@@ -547,7 +549,11 @@ func (x *Xray) filter(root *xray.TreeNode) *xray.TreeNode {
 
 // TreeNodeSelected callback for node selection.
 func (x *Xray) TreeNodeSelected() {
+	generation := x.generation.Load()
 	x.app.QueueUpdateDraw(func() {
+		if x.generation.Load() != generation {
+			return
+		}
 		n := x.GetCurrentNode()
 		if n != nil {
 			n.SetColor(x.app.Styles.Xray().CursorColor.Color())
@@ -557,15 +563,23 @@ func (x *Xray) TreeNodeSelected() {
 
 // TreeLoadFailed notifies the load failed.
 func (x *Xray) TreeLoadFailed(err error) {
-	x.app.Flash().Err(err)
+	x.treeLoadFailed(err, x.generation.Load(), x.model)
 }
 
 func (x *Xray) update(node *xray.TreeNode) {
+	generation := x.generation.Load()
+	go x.app.QueueUpdateDraw(func() {
+		if x.generation.Load() == generation {
+			x.applyTree(node)
+		}
+	})
+}
+
+// applyTree runs on the terminal dispatcher.
+func (x *Xray) applyTree(node *xray.TreeNode) {
 	root := makeTreeNode(node, x.ExpandNodes(), x.app.Config.K9s.UI.NoIcons, x.app.Styles)
 	if node == nil {
-		x.app.QueueUpdateDraw(func() {
-			x.SetRoot(root)
-		})
+		x.SetRoot(root)
 		return
 	}
 
@@ -576,38 +590,34 @@ func (x *Xray) update(node *xray.TreeNode) {
 		x.SetSelectedItem(node.Spec().Path())
 	}
 
-	x.app.QueueUpdateDraw(func() {
-		x.SetRoot(root)
-		root.Walk(func(node, parent *tview.TreeNode) bool {
-			spec, ok := node.GetReference().(xray.NodeSpec)
-			if !ok {
-				slog.Error("Expecting a NodeSpec",
-					slogs.FQN, node.GetText(),
-					slogs.RefType, fmt.Sprintf("%T", node.GetReference()),
-				)
-				return false
-			}
-			// BOZO!! Figure this out expand/collapse but the root
-			if parent != nil {
-				node.SetExpanded(x.ExpandNodes())
-			} else {
-				node.SetExpanded(true)
-			}
+	x.SetRoot(root)
+	root.Walk(func(node, parent *tview.TreeNode) bool {
+		spec, ok := node.GetReference().(xray.NodeSpec)
+		if !ok {
+			slog.Error("Expecting a NodeSpec",
+				slogs.FQN, node.GetText(),
+				slogs.RefType, fmt.Sprintf("%T", node.GetReference()),
+			)
+			return false
+		}
+		// BOZO!! Figure this out expand/collapse but the root
+		if parent != nil {
+			node.SetExpanded(x.ExpandNodes())
+		} else {
+			node.SetExpanded(true)
+		}
 
-			if spec.AsPath() == x.GetSelectedItem() {
-				node.SetExpanded(true).SetSelectable(true)
-				x.SetCurrentNode(node)
-			}
-			return true
-		})
+		if spec.AsPath() == x.GetSelectedItem() {
+			node.SetExpanded(true).SetSelectable(true)
+			x.SetCurrentNode(node)
+		}
+		return true
 	})
 }
 
 // TreeChanged notifies the model data changed.
 func (x *Xray) TreeChanged(node *xray.TreeNode) {
-	x.Count = node.Count(x.gvr)
-	x.update(x.filter(node))
-	x.UpdateTitle()
+	x.treeChanged(node, x.generation.Load(), x.model)
 }
 
 func (x *Xray) hydrate(parent *tview.TreeNode, n *xray.TreeNode) {
@@ -654,6 +664,8 @@ func (x *Xray) defaultContext() context.Context {
 // Start initializes resource watch loop.
 func (x *Xray) Start() {
 	x.Stop()
+	x.listener = &xraySessionListener{view: x, model: x.model, generation: x.generation.Load()}
+	x.model.AddListener(x.listener)
 	x.CmdBuff().AddListener(x)
 
 	ctx := x.defaultContext()
@@ -664,6 +676,11 @@ func (x *Xray) Start() {
 
 // Stop terminates watch loop.
 func (x *Xray) Stop() {
+	x.generation.Add(1)
+	if x.listener != nil {
+		x.listener.model.RemoveListener(x.listener)
+		x.listener = nil
+	}
 	if x.cancelFn == nil {
 		return
 	}
@@ -694,9 +711,11 @@ func (x *Xray) App() *App {
 
 // UpdateTitle updates the view title.
 func (x *Xray) UpdateTitle() {
-	t := x.styleTitle()
-	x.app.QueueUpdateDraw(func() {
-		x.SetTitle(t)
+	generation := x.generation.Load()
+	go x.app.QueueUpdateDraw(func() {
+		if x.generation.Load() == generation {
+			x.SetTitle(x.styleTitle())
+		}
 	})
 }
 

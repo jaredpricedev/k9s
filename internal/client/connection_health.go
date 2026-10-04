@@ -44,6 +44,7 @@ func (c *Config) PinnedDiagnosticConfig(contextName string) (*Config, error) {
 	}
 	flags.Timeout = diagnosticFlagCopy(f.Timeout)
 	flags.DisableCompression = diagnosticFlagCopy(f.DisableCompression)
+	flags.WrapConfigFn = f.WrapConfigFn
 	return &Config{flags: flags, proxy: c.proxy}, nil
 }
 
