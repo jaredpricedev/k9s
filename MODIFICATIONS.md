@@ -72,12 +72,13 @@ captures and test provenance are retained in the
 | Capability diagnostics | Run only an explicitly selected API, metrics, Flux, cert-manager or Hubble readiness check. Present missing, denied, stale and unavailable prerequisites with useful next steps; no port-forward starts automatically. |
 | Observation comparison | Keep baseline A immutable; capture B explicitly with separate source, time and UID labels. Mark recreated identities and unavailable inputs. API bookkeeping normalization is reversible without another read; Secret bodies and credential-shaped fields are excluded from the shared safe projection. |
 | Resource pressure | Inspect configured requests/limits, optional metrics usage, OOM/last termination and UID-scoped scheduling events. Keep init phases, restartable sidecars, Pod-level budgets and overhead distinct. Missing or stale usage remains N/A; throttling remains unknown without its counters. |
+| Capacity and autoscaling review | Add a captured read-only capacity workspace with effective Pod requests, scheduling reservation, reported limits, fresh usage coverage, quota/LimitRange, HPA inputs, optional VPA recommendations and per-node allocatable evidence. Bounded independent reads preserve partial/denied sources; history remains not configured and aggregate CPU never becomes a scheduling verdict. |
 | Portable evidence | Preview explicitly selected live evidence or retained comparison/inspection observations before saving. JSON and Markdown retain identity, source, time and completeness. Offline import never refreshes a resource or contacts the recorded context; exports create a new 0600 file without overwriting. Bundle, field and preview limits are explicit, and stopped or replaced forms cannot act on abandoned evidence. |
 | Validation and maintenance | Add targeted regressions, race checks, protected disposable-cluster integration tests, actual PTY journeys, reproducible frozen-data benchmarks and capture provenance. Document first-run tasks, capability limits, domain vocabulary and fork maintenance responsibilities. |
 
 See [inspection](docs/inspection.md), [operations](docs/operations.md),
 [capabilities](docs/capabilities.md), [comparison](docs/resource-comparison.md),
-[pressure](docs/pressure.md), [evidence bundles](docs/evidence-bundles.md) and
+[pressure](docs/pressure.md), [capacity review](docs/capacity-review.md), [evidence bundles](docs/evidence-bundles.md) and
 [dated validation](docs/validation-2026-10-04.md) for behavior, safeguards and
 verification scope. Heuristic redaction is not a confidentiality guarantee.
 Fixtures, historical live checks and current measurements are identified separately;
@@ -114,6 +115,8 @@ assembled separately for distributions and are not source inventory entries.
 - `Dockerfile`
 - `Makefile`
 - `NOTICE`
+- `docs/capacity-review-validation-2026-10-04.md`
+- `docs/capacity-review.md`
 - `go.mod`
 - `go.sum`
 
@@ -170,6 +173,14 @@ assembled separately for distributions and are not source inventory entries.
 
 ### Resource access, observations and models
 
+- `internal/capacity/autoscaling.go`
+- `internal/capacity/collect.go`
+- `internal/capacity/collect_test.go`
+- `internal/capacity/deadline_test.go`
+- `internal/capacity/render.go`
+- `internal/capacity/resources.go`
+- `internal/capacity/resources_test.go`
+- `internal/capacity/types.go`
 - `internal/certmanager/resource.go`
 - `internal/certmanager/resource_test.go`
 - `internal/client/client.go`
@@ -218,6 +229,8 @@ assembled separately for distributions and are not source inventory entries.
 - `internal/inspect/bundle_test.go`
 - `internal/inspect/certificate.go`
 - `internal/inspect/certificate_test.go`
+- `internal/inspect/resource_budgets.go`
+- `internal/inspect/resource_budgets_test.go`
 - `internal/inspect/snapshot.go`
 - `internal/inspect/snapshot_test.go`
 - `internal/inspect/verify.go`
@@ -277,6 +290,8 @@ assembled separately for distributions and are not source inventory entries.
 - `internal/render/node.go`
 - `internal/render/pod.go`
 - `internal/render/pod_test.go`
+- `internal/view/capacity_review.go`
+- `internal/view/capacity_review_test.go`
 - `internal/watch/factory.go`
 - `internal/watch/factory_test.go`
 
@@ -317,6 +332,7 @@ assembled separately for distributions and are not source inventory entries.
 - `plugins/cert-manager.yaml`
 - `plugins/cloudnative-pg.yaml`
 - `plugins/flux.yaml`
+- `scripts/probe-capacity.py`
 - `skins/high-contrast.yaml`
 - `skins/monochrome.yaml`
 
