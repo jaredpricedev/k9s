@@ -8,11 +8,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"maps"
 	"os"
 	"os/signal"
-	"sort"
-	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -45,21 +42,22 @@ const (
 type App struct {
 	version string
 	*ui.App
-	Content        *PageStack
-	command        *Command
-	factory        *watch.Factory
-	cancelFn       context.CancelFunc
-	clusterModel   *model.ClusterInfo
-	cmdHistory     *model.History
-	filterHistory  *model.History
-	fluxActions    map[fluxActionKey]struct{}
-	logRecordings  logRecordingRegistry
-	conRetry       int32
-	showHeader     bool
-	showLogo       bool
-	showCrumbs     bool
-	headerOverride *bool
-	headerFlex     *tview.Flex
+	Content            *PageStack
+	command            *Command
+	commandSuggestions *commandSuggestions
+	factory            *watch.Factory
+	cancelFn           context.CancelFunc
+	clusterModel       *model.ClusterInfo
+	cmdHistory         *model.History
+	filterHistory      *model.History
+	fluxActions        map[fluxActionKey]struct{}
+	logRecordings      logRecordingRegistry
+	conRetry           int32
+	showHeader         bool
+	showLogo           bool
+	showCrumbs         bool
+	headerOverride     *bool
+	headerFlex         *tview.Flex
 }
 
 // NewApp returns a K9s app instance.
@@ -200,57 +198,6 @@ func (*App) initSignals() {
 		<-sig
 		os.Exit(0)
 	}(sig)
-}
-
-func (a *App) suggestCommand() model.SuggestionFunc {
-	contextNames, err := a.contextNames()
-	if err != nil {
-		slog.Error("Failed to list contexts", slogs.Error, err)
-	}
-
-	return func(s string) (entries sort.StringSlice) {
-		if s == "" {
-			if a.cmdHistory.Empty() {
-				return
-			}
-			return a.cmdHistory.List()
-		}
-
-		ls := strings.ToLower(s)
-		for alias := range maps.Keys(a.command.alias.Alias) {
-			if suggest, ok := cmd.ShouldAddSuggest(ls, alias); ok {
-				entries = append(entries, suggest)
-			}
-		}
-
-		namespaceNames, err := a.factory.Client().ValidNamespaceNames()
-		if err != nil {
-			slog.Error("Failed to obtain list of namespaces", slogs.Error, err)
-		}
-		entries = append(entries, cmd.SuggestSubCommand(s, namespaceNames, contextNames)...)
-		if len(entries) == 0 {
-			return nil
-		}
-		entries.Sort()
-		return
-	}
-}
-
-func (a *App) contextNames() ([]string, error) {
-	// Return empty list if no factory
-	if a.factory == nil {
-		return []string{}, nil
-	}
-	contexts, err := a.factory.Client().Config().Contexts()
-	if err != nil {
-		return nil, err
-	}
-	contextNames := make([]string, 0, len(contexts))
-	for ctxName := range contexts {
-		contextNames = append(contextNames, ctxName)
-	}
-
-	return contextNames, nil
 }
 
 func (a *App) keyboard(evt *tcell.EventKey) *tcell.EventKey {
@@ -404,6 +351,7 @@ func (a *App) buildHeader() tview.Primitive {
 
 // Halt stop the application event loop.
 func (a *App) Halt() {
+	a.stopCommandSuggestions()
 	if a.cancelFn != nil {
 		a.cancelFn()
 		a.cancelFn = nil
@@ -414,6 +362,7 @@ func (a *App) Halt() {
 func (a *App) Resume() {
 	var ctx context.Context
 	ctx, a.cancelFn = context.WithCancel(context.Background())
+	a.resetCommandSuggestions(ctx)
 
 	go a.clusterUpdater(ctx)
 
@@ -631,6 +580,7 @@ func (a *App) BailOut(exitCode int) {
 // Run starts the application loop.
 func (a *App) Run() error {
 	defer a.Content.ClearPageResources()
+	defer a.stopCommandSuggestions()
 	a.Resume()
 
 	go func() {

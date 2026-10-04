@@ -36,3 +36,16 @@ func TestSnapshotConfigFlagsRetainsOriginalDestinationAndAuthentication(t *testi
 		t.Fatal("captured transport customization was lost")
 	}
 }
+
+func TestConfigSnapshotPinsContextWithoutLoadingKubeconfig(t *testing.T) {
+	flags := genericclioptions.NewConfigFlags(false)
+	*flags.KubeConfig = "/missing/kubeconfig"
+	*flags.Context = "original"
+	*flags.ImpersonateGroup = []string{"operators"}
+	snapshot := NewConfig(flags).Snapshot("captured")
+	*flags.Context = "replacement"
+	(*flags.ImpersonateGroup)[0] = "replacement"
+	if *snapshot.Flags().Context != "captured" || (*snapshot.Flags().ImpersonateGroup)[0] != "operators" {
+		t.Fatal("snapshot followed mutable session flags")
+	}
+}

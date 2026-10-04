@@ -203,6 +203,17 @@ func (c *Config) ActiveNamespace() string {
 	return ns
 }
 
+// CachedNamespace reads the already-loaded destination without activating a
+// context or reading files. Event handlers must use this instead of triggering
+// lazy context initialization while the operator types.
+func (c *Config) CachedNamespace() string {
+	active := c.K9s.getActiveConfig()
+	if active == nil || active.Context == nil || active.Context.Namespace == nil {
+		return client.DefaultNamespace
+	}
+	return active.Context.Namespace.Active
+}
+
 // FavNamespaces returns fav namespaces in the current context.
 func (c *Config) FavNamespaces() []string {
 	ct, err := c.K9s.ActiveContext()
