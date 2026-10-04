@@ -163,7 +163,7 @@ func (w *dailyWorkspace) Start() {
 	w.StylesChanged(w.app.Styles)
 	w.originalCapture = w.app.GetInputCapture()
 	w.app.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
-		if w.prompting || w.formOpen {
+		if w.prompting || w.formOpen || w.app.Content.IsTopDialog() {
 			return e
 		}
 		if !w.app.Prompt().InCmdMode() && (e.Rune() == '/' || e.Key() == tcell.KeyEscape) {
@@ -380,7 +380,7 @@ func (w *dailyWorkspace) setMode(mode string) {
 	w.render()
 	if selected := w.tabSelections[mode]; selected != "" {
 		for i, row := range w.rows {
-			if dailyWorkspaceRowKey(row) == selected {
+			if dailyWorkspaceRowKey(&row) == selected {
 				w.table.Select(i+1, 0)
 				w.renderDetail()
 				break
