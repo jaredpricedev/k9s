@@ -140,8 +140,8 @@ func (d *commandSuggestions) discover() {
 	}()
 }
 
-func (d *commandSuggestions) BufferChanged(_, _ string)   {}
-func (d *commandSuggestions) BufferCompleted(_, _ string) {}
+func (*commandSuggestions) BufferChanged(_, _ string)   {}
+func (*commandSuggestions) BufferCompleted(_, _ string) {}
 func (d *commandSuggestions) BufferActive(active bool, _ model.BufferKind) {
 	if active {
 		d.discover()
@@ -228,8 +228,8 @@ func commandCatalogLoader(cfg *client.Config) commandSuggestionLoader {
 		for name := range contexts {
 			data.contexts = append(data.contexts, name)
 		}
-		if err := ctx.Err(); err != nil {
-			return data, err
+		if contextErr := ctx.Err(); contextErr != nil {
+			return data, contextErr
 		}
 		config, err := cfg.RESTConfig()
 		if err != nil {
@@ -249,8 +249,8 @@ func commandCatalogLoader(cfg *client.Config) commandSuggestionLoader {
 			return data, err
 		}
 		data.namespaces = make(client.NamespaceNames, len(namespaces.Items))
-		for _, namespace := range namespaces.Items {
-			data.namespaces[namespace.Name] = struct{}{}
+		for i := range namespaces.Items {
+			data.namespaces[namespaces.Items[i].Name] = struct{}{}
 		}
 		return data, nil
 	}

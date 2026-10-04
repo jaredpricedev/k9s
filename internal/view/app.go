@@ -9,9 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/signal"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -40,7 +38,8 @@ const (
 
 // App represents an application view.
 type App struct {
-	version string
+	version   string
+	lifecycle appLifecycle
 	*ui.App
 	Content            *PageStack
 	command            *Command
@@ -97,7 +96,7 @@ func (a *App) ConOK() bool {
 func (a *App) Init(version string, _ int) error {
 	a.version = model.NormalizeVersion(version)
 
-	ctx := context.WithValue(context.Background(), internal.KeyApp, a)
+	ctx := context.WithValue(a.sessionContext(), internal.KeyApp, a)
 	if err := a.Content.Init(ctx); err != nil {
 		return err
 	}
@@ -135,7 +134,6 @@ func (a *App) Init(version string, _ int) error {
 	a.CmdBuff().SetSuggestionFn(a.suggestCommand())
 
 	a.layout(ctx)
-	a.initSignals()
 
 	if a.Config.K9s.ImageScans.Enable {
 		a.initImgScanner(version)
@@ -190,17 +188,11 @@ func (a *App) layout(ctx context.Context) {
 	}
 }
 
-func (*App) initSignals() {
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGHUP)
-
-	go func(sig chan os.Signal) {
-		<-sig
-		os.Exit(0)
-	}(sig)
-}
-
 func (a *App) keyboard(evt *tcell.EventKey) *tcell.EventKey {
+	if a.lifecycle.requested.Load() {
+		a.Application.Stop()
+		return nil
+	}
 	if k, ok := a.HasAction(ui.AsKey(evt)); ok && !a.Content.IsTopDialog() {
 		return k.Action(evt)
 	}
@@ -292,7 +284,8 @@ func (a *App) toggleCrumbs(flag bool) {
 	flex, ok := a.Main.GetPrimitive("main").(*tview.Flex)
 	if !ok {
 		slog.Error("Expecting valid flex view main panel. Exiting!")
-		os.Exit(1)
+		a.BailOut(1)
+		return
 	}
 	if a.showCrumbs {
 		if _, ok := flex.ItemAt(2).(*ui.Crumbs); !ok {
@@ -352,16 +345,28 @@ func (a *App) buildHeader() tview.Primitive {
 // Halt stop the application event loop.
 func (a *App) Halt() {
 	a.stopCommandSuggestions()
+	a.lifecycle.mu.Lock()
+	defer a.lifecycle.mu.Unlock()
 	if a.cancelFn != nil {
 		a.cancelFn()
 		a.cancelFn = nil
 	}
 }
 
-// Resume restarts the app event loop.
+// Resume restarts periodic work after a temporary terminal handoff.
 func (a *App) Resume() {
-	var ctx context.Context
-	ctx, a.cancelFn = context.WithCancel(context.Background())
+	parent := a.sessionContext()
+	a.lifecycle.mu.Lock()
+	if a.lifecycle.requested.Load() {
+		a.lifecycle.mu.Unlock()
+		return
+	}
+	if a.cancelFn != nil {
+		a.cancelFn()
+	}
+	ctx, cancel := context.WithCancel(parent)
+	a.cancelFn = cancel
+	a.lifecycle.mu.Unlock()
 	a.resetCommandSuggestions(ctx)
 
 	go a.clusterUpdater(ctx)
@@ -558,38 +563,31 @@ func (a *App) initFactory(ns string) {
 	a.factory.Start(ns)
 }
 
-// BailOut exists the application.
+// BailOut requests final shutdown. Resource cleanup belongs to Run's defer,
+// so keyboard callbacks never wait for recording flushes or network deletion.
 func (a *App) BailOut(exitCode int) {
-	defer func() {
-		if err := recover(); err != nil {
-			slog.Error("Bailout failed", slogs.Error, err)
-		}
-	}()
-
-	a.shutdownLogRecordings()
-
-	if err := nukeK9sShell(a); err != nil {
-		slog.Error("Unable to nuke k9+ shell pod", slogs.Error, err)
-	}
-
-	a.stopImgScanner()
-	a.factory.Terminate()
-	a.App.BailOut(exitCode)
+	a.requestExit(exitCode)
+	a.Application.Stop()
 }
 
-// Run starts the application loop.
+// Run starts the application loop and owns final cleanup on every return path.
 func (a *App) Run() error {
-	defer a.Content.ClearPageResources()
+	defer a.Shutdown()
 	defer a.stopCommandSuggestions()
+	stopSignals := a.initSignals()
+	defer stopSignals()
 	a.Resume()
 
 	go func() {
 		if !a.Config.K9s.IsSplashless() {
-			<-time.After(splashDelay)
+			select {
+			case <-a.sessionContext().Done():
+				return
+			case <-time.After(splashDelay):
+			}
 		}
 		a.QueueUpdateDraw(func() {
 			a.Main.SwitchToPage("main")
-			// if command bar is already active, focus it
 			if a.CmdBuff().IsActive() {
 				a.SetFocus(a.Prompt())
 			}
@@ -599,12 +597,10 @@ func (a *App) Run() error {
 	if err := a.command.defaultCmd(true); err != nil {
 		return err
 	}
-	a.SetRunning(true)
-	if err := a.Application.Run(); err != nil {
-		return err
+	if a.lifecycle.requested.Load() {
+		return a.exitError()
 	}
-
-	return nil
+	return a.runApplication()
 }
 
 // Status reports a new app status for display.
@@ -804,7 +800,7 @@ func (a *App) gotoResource(c, path string, clearStack, pushCmd bool) {
 }
 
 func (a *App) inject(c model.Component, clearStack bool) error {
-	ctx := context.WithValue(context.Background(), internal.KeyApp, a)
+	ctx := context.WithValue(a.sessionContext(), internal.KeyApp, a)
 	if err := c.Init(ctx); err != nil {
 		slog.Error("Component init failed",
 			slogs.Error, err,

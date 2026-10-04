@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,6 +25,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 )
+
+const commandOriginalContext = "original"
 
 func suggestionHarness(t *testing.T) (*commandSuggestions, *model.FishBuff, chan func()) {
 	t.Helper()
@@ -121,9 +124,9 @@ func TestCommandSuggestionsQueuedOldSessionReplyIsDiscarded(t *testing.T) {
 	})
 	d.discover()
 	queuedSuggestion(t, queue)()
-	assert.Equal(t, "estination", buff.GetSuggestion())
+	assert.Equal(t, strings.TrimPrefix("destination", "d"), buff.GetSuggestion())
 	oldReply()
-	assert.Equal(t, "estination", buff.GetSuggestion())
+	assert.Equal(t, strings.TrimPrefix("destination", "d"), buff.GetSuggestion())
 	assert.Contains(t, d.catalog().namespaces, "destination")
 	assert.NotContains(t, d.catalog().namespaces, "development")
 }
@@ -274,8 +277,8 @@ func TestCommandCatalogLoaderUsesCapturedDestinationAndCancelsHTTP(t *testing.T)
 			replacement := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { wrongDestination.Add(1) }))
 			defer replacement.Close()
 			flags := catalogConfigFlags(t, original.URL, replacement.URL)
-			captured := client.NewConfig(flags).Snapshot("original")
-			*flags.Context = "replacement"
+			captured := client.NewConfig(flags).Snapshot(commandOriginalContext)
+			*flags.Context = nativeReplacement
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			result := make(chan commandSuggestionData, 1)
@@ -295,7 +298,7 @@ func TestCommandCatalogLoaderUsesCapturedDestinationAndCancelsHTTP(t *testing.T)
 				}
 			}
 			data, err := <-result, <-errResult
-			assert.ElementsMatch(t, []string{"original", "replacement"}, data.contexts)
+			assert.ElementsMatch(t, []string{commandOriginalContext, nativeReplacement}, data.contexts)
 			if cancelRequest {
 				require.Error(t, err)
 			} else {
@@ -310,17 +313,17 @@ func TestCommandCatalogLoaderUsesCapturedDestinationAndCancelsHTTP(t *testing.T)
 func catalogConfigFlags(t *testing.T, original, replacement string) *genericclioptions.ConfigFlags {
 	t.Helper()
 	cfg := api.NewConfig()
-	cfg.CurrentContext = "original"
-	cfg.Clusters["original"] = &api.Cluster{Server: original}
-	cfg.Clusters["replacement"] = &api.Cluster{Server: replacement}
+	cfg.CurrentContext = commandOriginalContext
+	cfg.Clusters[commandOriginalContext] = &api.Cluster{Server: original}
+	cfg.Clusters[nativeReplacement] = &api.Cluster{Server: replacement}
 	cfg.AuthInfos["user"] = &api.AuthInfo{}
-	cfg.Contexts["original"] = &api.Context{Cluster: "original", AuthInfo: "user"}
-	cfg.Contexts["replacement"] = &api.Context{Cluster: "replacement", AuthInfo: "user"}
+	cfg.Contexts[commandOriginalContext] = &api.Context{Cluster: commandOriginalContext, AuthInfo: "user"}
+	cfg.Contexts[nativeReplacement] = &api.Context{Cluster: nativeReplacement, AuthInfo: "user"}
 	path := filepath.Join(t.TempDir(), "config")
 	require.NoError(t, clientcmd.WriteToFile(*cfg, path))
 	flags := genericclioptions.NewConfigFlags(false)
 	flags.KubeConfig = &path
-	*flags.Context = "original"
+	*flags.Context = commandOriginalContext
 	return flags
 }
 
