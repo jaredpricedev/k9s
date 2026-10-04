@@ -23,6 +23,7 @@ import (
 )
 
 func TestBoundedProjectionRejectsIdentityAndExcludesSensitiveFields(t *testing.T) {
+	sourceTime := time.Date(2026, 10, 4, 12, 34, 56, 0, time.FixedZone("source", 2*60*60))
 	kinds := map[schema.GroupVersionResource]string{}
 	for _, x := range []string{"schedules", "backups", "restores"} {
 		kinds[schema.GroupVersionResource{Group: "velero.io", Version: "v1", Resource: x}] = strings.TrimSuffix(strings.Title(x), "s") + "List"
@@ -35,6 +36,8 @@ func TestBoundedProjectionRejectsIdentityAndExcludesSensitiveFields(t *testing.T
 			for i := range 101 {
 				list.Items = append(list.Items, unstructured.Unstructured{Object: map[string]any{"apiVersion": "velero.io/v1", "kind": "Backup", "metadata": map[string]any{"name": fmt.Sprint(i), "namespace": "velero", "uid": fmt.Sprint(i), "annotations": map[string]any{"credential": "sentinel-secret"}}, "status": map[string]any{"phase": "Completed", "message": "sentinel-secret", "errors": int64(0)}}})
 			}
+			metadata := list.Items[4].Object["metadata"].(map[string]any)
+			metadata["creationTimestamp"] = sourceTime.Format(time.RFC3339)
 			list.Items[0].SetKind("Secret")
 			list.Items[1].SetUID("")
 			list.Items[2].SetNamespace("wrong")
@@ -43,6 +46,11 @@ func TestBoundedProjectionRejectsIdentityAndExcludesSensitiveFields(t *testing.T
 	})
 	s := Collect(t.Context(), reader, &Scope{Context: "chosen", Namespace: "apps", ControllerNamespace: "velero"}, time.Now())
 	require.Len(t, s.Records, 97)
+	require.Nil(t, s.Records[0].CreatedAt)
+	require.Contains(t, s.Render(2), "Created Unreported")
+	require.NotContains(t, s.Render(2), "0001-01-01")
+	require.Equal(t, sourceTime.UTC(), *s.Records[1].CreatedAt)
+	require.Contains(t, s.Render(2), "Created "+sourceTime.UTC().Format(time.RFC3339))
 	require.True(t, s.Partial())
 	require.NotContains(t, fmt.Sprintf("%+v", s), "sentinel-secret")
 	require.Contains(t, s.Render(0), "Application restore-test evidence: Unreported")

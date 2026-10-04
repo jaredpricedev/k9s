@@ -35,7 +35,7 @@ type Coverage struct {
 }
 type Record struct {
 	Identity                                                                     Identity
-	CreatedAt                                                                    time.Time
+	CreatedAt                                                                    *time.Time
 	Kind, Phase, Schedule, Backup, Retention                                     string
 	IncludesNamespaces, ExcludesNamespaces, IncludesResources, ExcludesResources []string
 	Warnings, Errors, SnapshotsAttempted, SnapshotsCompleted                     *int64
@@ -195,10 +195,16 @@ func Collect(parent context.Context, reader dynamic.Interface, scope *Scope, now
 					c.State = projectionPartial
 				}
 			}
+			createdAt := obj.GetCreationTimestamp().Time
+			var createdAtValue *time.Time
+			if !createdAt.IsZero() {
+				createdAt = createdAt.UTC()
+				createdAtValue = &createdAt
+			}
 			r := Record{
 				Identity: Identity{Context: scope.Context, GVR: gvr.String(), Namespace: obj.GetNamespace(),
 					Name: bounded(obj.GetName()), UID: bounded(string(obj.GetUID())), ResourceVersion: bounded(obj.GetResourceVersion())},
-				CreatedAt: obj.GetCreationTimestamp().Time, Kind: source.kind, Phase: scalar(obj, "status", "phase"),
+				CreatedAt: createdAtValue, Kind: source.kind, Phase: scalar(obj, "status", "phase"),
 				Schedule: bounded(obj.GetLabels()["velero.io/schedule-name"]), Backup: scalar(obj, "spec", "backupName"),
 				Retention: scalar(obj, path("ttl")...), IncludesNamespaces: list(obj, path("includedNamespaces")...),
 				ExcludesNamespaces: list(obj, path("excludedNamespaces")...), IncludesResources: list(obj, path("includedResources")...),
@@ -252,8 +258,11 @@ func (s *Snapshot) Render(tab int) string {
 		if r.Kind != kind {
 			continue
 		}
-		fmt.Fprintf(&out, "%s  phase=%s\nUID %s | RV %s\nCreated %s\n", r.Identity.Name, reported(r.Phase), r.Identity.UID, r.Identity.ResourceVersion,
-			r.CreatedAt.UTC().Format(time.RFC3339))
+		createdAt := unreported
+		if r.CreatedAt != nil {
+			createdAt = r.CreatedAt.UTC().Format(time.RFC3339)
+		}
+		fmt.Fprintf(&out, "%s  phase=%s\nUID %s | RV %s\nCreated %s\n", r.Identity.Name, reported(r.Phase), r.Identity.UID, r.Identity.ResourceVersion, createdAt)
 		fmt.Fprintf(&out, "Warnings %s | errors %s | snapshots %s/%s attempted/completed\n",
 			value(r.Warnings), value(r.Errors), value(r.SnapshotsAttempted), value(r.SnapshotsCompleted))
 		fmt.Fprintf(&out, "Namespace includes %s; excludes %s\nResource includes %s; excludes %s\nTTL %s\n",
