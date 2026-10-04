@@ -174,7 +174,7 @@ func (w *desiredReviewView) renderDetail() {
 }
 func (w *desiredReviewView) renderHeader() {
 	source := w.source.Identity
-	sourceLine := desiredSourceHeader(source)
+	sourceLine := desiredSourceHeader(&source)
 	destination := w.contextName + " · " + strings.Join(w.scope.Namespaces, ", ")
 	if w.scope.LabelSelector != "" {
 		destination += " · selector " + w.scope.LabelSelector
@@ -245,7 +245,7 @@ func (w *desiredReviewView) renderHeader() {
 	w.header.SetText("[::b]" + strings.Join(lines, "\n") + "[::]")
 	w.ResizeItem(w.header, len(lines), 0)
 }
-func desiredSourceHeader(source review.SourceIdentity) string {
+func desiredSourceHeader(source *review.SourceIdentity) string {
 	sourceLine := "Source: not selected"
 	if source.SHA256 != "" {
 		fingerprint := source.SHA256[:min(12, len(source.SHA256))]
