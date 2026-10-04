@@ -62,7 +62,7 @@ func (c *Config) RESTConfig() (*restclient.Config, error) {
 	prepared := c.preparedREST
 	c.mx.RUnlock()
 	if prepared != nil {
-		return restclient.CopyConfig(prepared), nil
+		return nativeWritePolicy(prepared), nil
 	}
 	cfg, err := c.clientConfig().ClientConfig()
 	if err != nil {
@@ -76,7 +76,7 @@ func (c *Config) RESTConfig() (*restclient.Config, error) {
 		cfg.Burst = defaultBurst
 	}
 
-	return cfg, nil
+	return nativeWritePolicy(cfg), nil
 }
 
 // Flags returns configuration flags.

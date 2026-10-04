@@ -259,11 +259,11 @@ func operationResultState(err error, notSubmitted, attempted bool) operationStat
 	var networkError net.Error
 	var commandError *exec.ExitError
 	var serverStatus apierrors.APIStatus
-	serverError := errors.As(err, &serverStatus) && serverStatus.Status().Code >= 500 && serverStatus.Status().Code < 600
+	serverError := errors.As(err, &serverStatus) && serverStatus.Status().Code >= 500
 	uncertain := errors.Is(err, errExternalOperationOutcome) || errors.Is(err, errOperationWorkerFailure) ||
 		errors.As(err, &commandError) || errors.As(err, &networkError) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
 		apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err) ||
-		apierrors.IsInternalError(err) || apierrors.IsServiceUnavailable(err) || serverError
+		apierrors.IsInternalError(err) || apierrors.IsServiceUnavailable(err) || apierrors.IsUnexpectedServerError(err) || serverError
 	if attempted && uncertain {
 		return operationUnknown
 	}
