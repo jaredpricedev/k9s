@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 
 	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/client"
@@ -26,11 +27,13 @@ import (
 type Table struct {
 	*ui.Table
 
-	app        *App
-	enterFn    EnterFunc
-	envFn      EnvFunc
-	bindKeysFn []BindKeysFunc
-	command    *cmd.Interpreter
+	app                 *App
+	enterFn             EnterFunc
+	envFn               EnvFunc
+	bindKeysFn          []BindKeysFunc
+	command             *cmd.Interpreter
+	operationGeneration atomic.Uint64
+	filterRequests      resourceFilterRequests
 }
 
 // NewTable returns a new viewer.
@@ -66,6 +69,7 @@ func (t *Table) Init(ctx context.Context) (err error) {
 	t.SetInputCapture(t.keyboard)
 	t.bindKeys()
 	t.GetModel().SetRefreshRate(t.app.Config.K9s.RefreshDuration())
+	t.filterRequests.start()
 	t.CmdBuff().AddListener(t)
 
 	return nil
@@ -174,6 +178,7 @@ func (t *Table) App() *App {
 // Start runs the component.
 func (t *Table) Start() {
 	t.Stop()
+	t.filterRequests.start()
 	t.CmdBuff().AddListener(t)
 	t.Styles().AddListener(t.Table)
 	cmds := []string{t.Table.GVR().String()}
@@ -190,6 +195,8 @@ func (t *Table) Start() {
 
 // Stop terminates the component.
 func (t *Table) Stop() {
+	t.operationGeneration.Add(1)
+	t.filterRequests.stop()
 	t.CmdBuff().RemoveListener(t)
 	t.Styles().RemoveListener(t.Table)
 	t.App().CustomView().RemoveListener(t.Table)
@@ -205,18 +212,43 @@ func (*Table) SetExtraActionsFn(BoostActionsFunc) {}
 
 // BufferCompleted indicates input was accepted.
 func (t *Table) BufferCompleted(text, _ string) {
-	t.app.QueueUpdateDraw(func() {
-		t.Filter(t.CmdBuff().GetText())
-	})
+	if text != t.CmdBuff().GetText() {
+		return
+	}
+	active := t.CmdBuff().IsActive()
+	if !active && text == t.CommittedFilter() && t.FilterError() == nil {
+		return
+	}
+	t.DeferFilterDraft(text)
+	if active && internal.IsLabelSelector(text) {
+		// Selector queries change the model's resource set on submission.
+		// Keep the retained result truthful while the selector is still a draft.
+		t.filterRequests.cancel()
+		return
+	}
+	delay := resourceFilterDelay
+	if !active || text == "" {
+		delay = 0
+	}
+	t.filterRequests.submit(text, delay, t.app.QueueUpdateDraw, t.Filter)
 }
 
 // BufferChanged indicates the buffer was changed.
-func (t *Table) BufferChanged(_, _ string) { t.TouchFilterDraft() }
+func (t *Table) BufferChanged(text, _ string) {
+	t.TouchFilterDraft()
+	t.DeferFilterDraft(text)
+	// Invalidate a pending valid prefix as soon as the next rune arrives.
+	t.filterRequests.cancel()
+}
 
 // BufferActive indicates the buff activity changed.
 func (t *Table) BufferActive(state bool, k model.BufferKind) {
 	if !state {
+		t.filterRequests.cancel()
 		t.EndFilter()
+		// Deactivation is emitted synchronously by the prompt's input handler.
+		// Apply accepted input before another action can inspect the selection.
+		t.Filter(t.CmdBuff().GetText())
 	}
 	t.app.BufferActive(state, k)
 	if !state {
@@ -235,6 +267,7 @@ func (t *Table) saveCmd(*tcell.EventKey) *tcell.EventKey {
 }
 
 func (t *Table) bindKeys() {
+	t.Actions().Add(tcell.KeyCtrlO, ui.NewKeyAction("Actions", t.app.actionsCmd, true))
 	t.Actions().Bulk(ui.KeyMap{
 		ui.KeyHelp:             ui.NewKeyAction("Help", t.App().helpCmd, true),
 		ui.KeySpace:            ui.NewSharedKeyAction("Mark", t.markCmd, false),
@@ -353,6 +386,7 @@ func (t *Table) activateCmd(evt *tcell.EventKey) *tcell.EventKey {
 	if t.app.InCmdMode() {
 		return evt
 	}
+	t.filterRequests.cancel()
 	t.BeginFilter()
 	t.CmdBuff().ClearText(false)
 	prompt := t.App().Prompt()

@@ -35,10 +35,12 @@
           "properties": {
             "enableMouse": {"type": "boolean"},
             "headless": {"type": "boolean"},
+            "headerMode": {"type": "string", "enum": ["auto", "compact", "full"]},
             "logoless": {"type": "boolean"},
             "crumbsless": {"type": "boolean"},
             "splashless": {"type": "boolean"},
             "noIcons": {"type": "boolean"},
+            "productionContexts": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
             "reactive": {"type": "boolean"},
             "skin": {"type": "string"},
             "defaultsToFullScreen": {"type": "boolean"},

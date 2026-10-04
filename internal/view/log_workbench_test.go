@@ -1,3 +1,4 @@
+// Modified for k9+; see NOTICE.
 package view
 
 import (
@@ -620,12 +621,12 @@ func TestWorkbenchHistogramUsesSourceFilterAndHistoryScope(t *testing.T) {
 	}
 }
 
-func TestWorkbenchStatusShowsToggleHotkeys(t *testing.T) {
+func TestWorkbenchStatusUsesOperatorLanguage(t *testing.T) {
 	w := testWorkbench(t)
 	w.follow = true
 	w.render()
 	status := w.status.GetText(true)
-	for _, want := range []string{"follow:true(s)", "safe:true(d)", "collapse:true(b)", "group:true(u)"} {
+	for _, want := range []string{"LIVE", "Redacted", "Repeats collapsed", "Multiline grouped", "Collector unknown"} {
 		if !strings.Contains(status, want) {
 			t.Fatalf("status does not expose toggle hotkey %q: %s", want, status)
 		}
@@ -633,7 +634,7 @@ func TestWorkbenchStatusShowsToggleHotkeys(t *testing.T) {
 	w.follow, w.redact, w.collapse, w.multiline = false, false, false, false
 	w.render()
 	status = w.status.GetText(true)
-	for _, want := range []string{"follow:false(s)", "safe:false(d)", "collapse:false(b)", "group:false(u)"} {
+	for _, want := range []string{"FROZEN", "Raw display", "Repeats expanded", "Lines separate", "Collector unknown"} {
 		if !strings.Contains(status, want) {
 			t.Fatalf("status lost toggle hotkey %q after toggle: %s", want, status)
 		}

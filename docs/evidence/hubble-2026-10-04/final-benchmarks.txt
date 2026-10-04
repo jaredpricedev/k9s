@@ -1,0 +1,11 @@
+goos: linux
+goarch: amd64
+pkg: github.com/derailed/k9s/internal/view
+cpu: AMD EPYC 9V74 80-Core Processor                
+BenchmarkHubbleConversationRender/frozen=true/retained=10000-4         	   13708	     18835 ns/op	    8751 B/op	      84 allocs/op
+BenchmarkHubbleConversationRender/frozen=true/retained=10000-4         	   12568	     17916 ns/op	    8755 B/op	      84 allocs/op
+BenchmarkHubbleConversationRender/frozen=true/retained=10000-4         	   10000	     26208 ns/op	    8737 B/op	      84 allocs/op
+BenchmarkHubbleConversationRender/frozen=false/retained=10000-4        	       6	  43989482 ns/op	18059997 B/op	  400151 allocs/op
+BenchmarkHubbleConversationRender/frozen=false/retained=10000-4        	       5	  51118649 ns/op	18066158 B/op	  400152 allocs/op
+BenchmarkHubbleConversationRender/frozen=false/retained=10000-4        	       4	  59433718 ns/op	18075760 B/op	  400154 allocs/op
+PASS

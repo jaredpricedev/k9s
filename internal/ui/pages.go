@@ -92,7 +92,7 @@ func NewPages() *Pages {
 func (p *Pages) IsTopDialog() bool {
 	_, pa := p.GetFrontPage()
 	switch pa.(type) {
-	case *tview.ModalForm, *ModalList:
+	case *tview.ModalForm, *ModalList, *MessageModal:
 		return true
 	default:
 		return false

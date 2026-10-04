@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package render
 
@@ -170,6 +171,7 @@ func (p *Pod) defaultRow(pwm *PodWithMetrics, row *model1.Row) error {
 		ccmx = pwm.MX.Containers
 	}
 	c, r := gatherPodMX(spec, ccmx)
+	cpuAvailable, memoryAvailable := podUsageAvailability(spec, ccmx)
 	phase := p.Phase(dt, spec, &st)
 
 	ns, n := pwm.Raw.GetNamespace(), pwm.Raw.GetName()
@@ -184,14 +186,14 @@ func (p *Pod) defaultRow(pwm *PodWithMetrics, row *model1.Row) error {
 		phase,
 		strconv.Itoa(cRestarts + iRestarts),
 		ToAge(lastRestart),
-		toMc(c.cpu),
+		metricUsage(c.cpu, cpuAvailable, false),
 		toMc(r.cpu) + ":" + toMc(r.lcpu),
-		client.ToPercentageStr(c.cpu, r.cpu),
-		client.ToPercentageStr(c.cpu, r.lcpu),
-		toMi(c.mem),
+		metricPercentage(c.cpu, r.cpu, cpuAvailable),
+		metricPercentage(c.cpu, r.lcpu, cpuAvailable),
+		metricUsage(c.mem, memoryAvailable, true),
 		toMi(r.mem) + ":" + toMi(r.lmem),
-		client.ToPercentageStr(c.mem, r.mem),
-		client.ToPercentageStr(c.mem, r.lmem),
+		metricPercentage(c.mem, r.mem, memoryAvailable),
+		metricPercentage(c.mem, r.lmem, memoryAvailable),
 		toMc(r.gpu) + ":" + toMc(r.lgpu),
 		na(st.PodIP),
 		na(spec.NodeName),

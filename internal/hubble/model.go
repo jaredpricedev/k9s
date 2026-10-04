@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// Modified for k9+; see NOTICE.
 package hubble
 
 import (
@@ -148,6 +149,13 @@ type Store struct {
 	full              bool
 }
 
+// StoreStats can be read without copying retained events. Revision identifies
+// the dataset, including changes caused by ring-buffer eviction.
+type StoreStats struct {
+	Revision, Evicted uint64
+	Count             int
+}
+
 func NewStore(capacity int) *Store {
 	if capacity < 1 {
 		capacity = 1
@@ -173,10 +181,41 @@ func (s *Store) Add(e Event) {
 func (s *Store) Snapshot() (events []Event, evicted uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.full {
-		return append([]Event{}, s.events[:s.next]...), s.evicted
+	return s.snapshotLocked(), s.evicted
+}
+
+func (s *Store) Stats() StoreStats {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.statsLocked()
+}
+
+// SnapshotIfChanged returns an immutable snapshot and its matching revision.
+// Checking and copying under one lock avoids missing a concurrent ingestion.
+func (s *Store) SnapshotIfChanged(revision uint64) ([]Event, StoreStats, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	stats := s.statsLocked()
+	if stats.Revision == revision {
+		return nil, stats, false
 	}
-	r := append([]Event{}, s.events[s.next:]...)
-	r = append(r, s.events[:s.next]...)
-	return r, s.evicted
+	return s.snapshotLocked(), stats, true
+}
+
+func (s *Store) statsLocked() StoreStats {
+	count := s.next
+	if s.full {
+		count = len(s.events)
+	}
+	return StoreStats{Revision: s.sequence, Evicted: s.evicted, Count: count}
+}
+
+func (s *Store) snapshotLocked() []Event {
+	if !s.full {
+		return append([]Event(nil), s.events[:s.next]...)
+	}
+	r := make([]Event, len(s.events))
+	n := copy(r, s.events[s.next:])
+	copy(r[n:], s.events[:s.next])
+	return r
 }

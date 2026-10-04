@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package render
 
@@ -9,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/model1"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
@@ -112,6 +112,11 @@ func (c Container) Render(o any, _ string, row *model1.Row) error {
 
 func (c Container) defaultRow(cr ContainerRes, r *model1.Row) error {
 	cur, res := gatherContainerMX(cr.Container, cr.MX)
+	cpuAvailable, memoryAvailable := false, false
+	if cr.MX != nil {
+		_, cpuAvailable = cr.MX.Usage[v1.ResourceCPU]
+		_, memoryAvailable = cr.MX.Usage[v1.ResourceMemory]
+	}
 	ready, state, restarts := falseStr, MissingValue, "0"
 	if cr.Status != nil {
 		ready, state, restarts = boolToStr(cr.Status.Ready), ToContainerState(cr.Status.State), strconv.Itoa(int(cr.Status.RestartCount))
@@ -127,14 +132,14 @@ func (c Container) defaultRow(cr ContainerRes, r *model1.Row) error {
 		state,
 		restarts,
 		probe(cr.Container.LivenessProbe) + ":" + probe(cr.Container.ReadinessProbe) + ":" + probe(cr.Container.StartupProbe),
-		toMc(cur.cpu),
+		metricUsage(cur.cpu, cpuAvailable, false),
 		toMc(res.cpu) + ":" + toMc(res.lcpu),
-		client.ToPercentageStr(cur.cpu, res.cpu),
-		client.ToPercentageStr(cur.cpu, res.lcpu),
-		toMi(cur.mem),
+		metricPercentage(cur.cpu, res.cpu, cpuAvailable),
+		metricPercentage(cur.cpu, res.lcpu, cpuAvailable),
+		metricUsage(cur.mem, memoryAvailable, true),
 		toMi(res.mem) + ":" + toMi(res.lmem),
-		client.ToPercentageStr(cur.mem, res.mem),
-		client.ToPercentageStr(cur.mem, res.lmem),
+		metricPercentage(cur.mem, res.mem, memoryAvailable),
+		metricPercentage(cur.mem, res.lmem, memoryAvailable),
 		toMc(res.gpu) + ":" + toMc(res.lgpu),
 		ToContainerPorts(cr.Container.Ports),
 		AsStatus(c.diagnose(state, ready)),

@@ -39,9 +39,13 @@ func (d *inspectionDetails) openRelated() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	d.cancel = cancel
 	d.app.Flash().Info("Loading related resources...")
+	target := d.target
 	go func() {
 		defer cancel()
-		refs, err := d.related(ctx)
+		refs, err := d.related(ctx, target)
+		if ctx.Err() != nil {
+			err = ctx.Err()
+		}
 		d.app.QueueUpdateDraw(func() {
 			if d.app.Content.Top() != d || generation != d.generation || d.contextName != d.app.Config.ActiveContextName() {
 				return

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view_test
 
@@ -17,5 +18,6 @@ func TestRbacNew(t *testing.T) {
 
 	require.NoError(t, v.Init(makeCtx(t)))
 	assert.Equal(t, "Rbac", v.Name())
-	assert.Len(t, v.Hints(), 6)
+	assert.Len(t, v.Hints(), 7)
+	assertActionRegistry(t, v)
 }

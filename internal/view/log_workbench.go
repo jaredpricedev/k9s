@@ -1,3 +1,4 @@
+// Modified for k9+; see NOTICE.
 package view
 
 import (
@@ -5,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"hash/fnv"
 	"os"
 	"path/filepath"
 	"sort"
@@ -57,6 +57,7 @@ type logWorkbench struct {
 	captureMu                                   sync.Mutex
 	writer                                      *logWriter
 	stopped                                     atomic.Bool
+	collectorState                              atomic.Int32
 	unsubscribe                                 func()
 	cancel                                      context.CancelFunc
 	ioCancel                                    context.CancelFunc
@@ -123,52 +124,6 @@ func newLogWorkbench(owner *Log, capacity int) *logWorkbench {
 func (w *logWorkbench) entryMode() bool {
 	return w.mode == modeEntries || w.mode == modeRaw || w.mode == modeHistory || w.mode == modePattern
 }
-func (w *logWorkbench) freeze() {
-	if w.frozenSet || w.mode == modeHistory {
-		return
-	}
-	if w.renderedEntries != nil {
-		w.frozenEntries = w.renderedEntries
-	} else {
-		w.frozenEntries = w.engine.Snapshot()
-	}
-	w.frozenSet = true
-	w.follow = false
-}
-func (w *logWorkbench) resume() {
-	w.follow = true
-	w.frozenEntries = nil
-	w.frozenSet = false
-	w.frozenPosition = logViewPosition{}
-}
-func (w *logWorkbench) liveSnapshot() []logstream.Entry {
-	if !w.follow {
-		w.freeze()
-		return w.frozenEntries
-	}
-	snapshot := w.engine.Snapshot()
-	w.renderedEntries = snapshot
-	return snapshot
-}
-func (w *logWorkbench) preserveFrozenPosition() {
-	if !w.frozenSet || w.frozenPosition.valid {
-		return
-	}
-	w.frozenPosition.selected = w.selected
-	w.frozenPosition.mark = w.mark
-	w.frozenPosition.row, w.frozenPosition.column = w.table.GetOffset()
-	w.frozenPosition.valid = true
-}
-func (w *logWorkbench) restoreFrozenPosition() {
-	if !w.frozenPosition.valid {
-		return
-	}
-	w.selected = w.frozenPosition.selected
-	w.mark = w.frozenPosition.mark
-	w.table.SetOffset(w.frozenPosition.row, w.frozenPosition.column)
-	w.selectionScope = scopeLive
-	w.frozenPosition = logViewPosition{}
-}
 func wbText(s string) string { return tview.Escape(logstream.Sanitize(s)) }
 
 //nolint:gocritic // Presentation transforms an isolated entry value without mutating retained state.
@@ -185,6 +140,9 @@ func (w *logWorkbench) ingest(entries []logstream.Entry) {
 		return
 	}
 	for i := range entries {
+		if entries[i].Marker == nil {
+			w.collectorState.Store(logCollectorActive)
+		}
 		w.record(w.engine.AddEntry(entries[i], time.Now()))
 	}
 }
@@ -216,6 +174,7 @@ func (w *logWorkbench) writerState() logWriterState {
 }
 func (w *logWorkbench) start() {
 	w.stopped.Store(false)
+	w.collectorState.Store(logCollectorConnecting)
 	w.owner.app.registerLogWorkbench(w)
 	w.unsubscribe = w.owner.model.SubscribeEntries(w.ingest)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -242,6 +201,7 @@ func (w *logWorkbench) start() {
 }
 func (w *logWorkbench) stop() {
 	w.stopped.Store(true)
+	w.collectorState.Store(logCollectorStopped)
 	w.renderedEntries = nil
 	w.frozenEntries = nil
 	w.frozenSet = false
@@ -269,352 +229,6 @@ func (w *logWorkbench) stop() {
 		w.owner.app.unregisterLogWorkbench(w)
 	}
 	// Never join a worker waiting on synchronous QueueUpdateDraw from the UI.
-}
-func (w *logWorkbench) filter(text string) error {
-	text = strings.TrimSpace(text)
-	rules := append([]string(nil), w.localRules...)
-	expr := text
-	if strings.HasPrefix(text, "-") && len(text) > 1 {
-		rules = append(rules, strings.TrimSpace(text[1:]))
-		expr = w.expression
-	}
-	merged, err := logstream.MergeRules(w.teamRules, rules)
-	if err != nil {
-		return err
-	}
-	q, err := logstream.CompileQuery(expr, merged)
-	if err != nil {
-		return err
-	}
-	w.query = q
-	w.expression = expr
-	w.localRules = rules
-	return nil
-}
-func (w *logWorkbench) refreshProfile() {
-	if w.owner == nil {
-		return
-	}
-	opts := w.owner.model.LogOptionsSnapshot()
-	scope := logstream.ProfileScope(opts.Context, namespaceOf(opts.Path), opts.Labels, w.owner.app.Config.K9s.Logger.NoiseAppLabels, opts.WorkloadKind, opts.WorkloadName)
-	token := fmt.Sprintf("%v/%s", scope, opts.Annotations["k9plus.io/log-noise"])
-	if token == w.profileLoaded {
-		return
-	}
-	team, err := logstream.TeamRules(opts.Annotations["k9plus.io/log-noise"])
-	if err != nil {
-		w.notice = "Team noise profile: " + err.Error()
-		w.profileLoaded = token
-		return
-	}
-	local, err := logstream.LoadProfile(w.profilePath(), scope)
-	if err != nil {
-		w.notice = "Local noise profile: " + err.Error()
-		return
-	}
-	w.teamRules = team
-	w.localRules = local
-	w.scope = scope
-	w.profileLoaded = token
-	if err = w.filter(w.expression); err != nil {
-		w.notice = err.Error()
-	}
-}
-func namespaceOf(path string) string {
-	parts := strings.SplitN(path, "/", 2)
-	if len(parts) > 1 {
-		return parts[0]
-	}
-	return ""
-}
-func (*logWorkbench) profilePath() string {
-	return filepath.Join(config.AppConfigDir, "log-noise.json")
-}
-func (w *logWorkbench) activeRules() []string {
-	rules := []string{}
-	if w.expression != "" {
-		rules = append(rules, w.expression)
-	}
-	for _, r := range append(append([]string{}, w.teamRules...), w.localRules...) {
-		rules = append(rules, "-"+r)
-	}
-	if w.isolated != "" {
-		rules = append(rules, "source="+w.isolated)
-	}
-	for k := range w.excluded {
-		rules = append(rules, "exclude source="+k)
-	}
-	return rules
-}
-func (w *logWorkbench) visible(entries []logstream.Entry) []logstream.Entry {
-	out := make([]logstream.Entry, 0, len(entries))
-	for i := range entries {
-		e := &entries[i]
-		key := e.Source.Key()
-		if w.isolated != "" && key != w.isolated || w.excluded[key] {
-			continue
-		}
-		// Informational provenance survives content/severity filters, but explicit
-		// source isolation/exclusion applies to markers as well.
-		if e.Marker == nil && !w.query.Match(*e) {
-			continue
-		}
-		if w.mode == modePattern && e.Marker == nil {
-			candidate := *e
-			if w.patternSafe {
-				candidate = logstream.SafeEntry(*e)
-			}
-			if logstream.EntryPattern(candidate).Key != w.patternKey {
-				continue
-			}
-		}
-		out = append(out, *e)
-	}
-	return out
-}
-
-//nolint:gocyclo,funlen // Rendering deliberately assembles all mutually exclusive workbench modes in one draw pass.
-func (w *logWorkbench) render() {
-	w.consumeRecordingStart()
-	w.consumeIO()
-	w.refreshProfile()
-	snapshot := w.liveSnapshot()
-	historyScope := w.mode == modeHistory || w.mode == modeDetail && w.selectionScope != "" && w.selectionScope != scopeLive
-	if historyScope {
-		w.preserveFrozenPosition()
-	} else if w.entryMode() {
-		w.restoreFrozenPosition()
-	}
-	if historyScope {
-		snapshot = w.history
-	}
-	if w.mode == modeTimeline {
-		snapshot = w.timelineEntries
-		historyScope = w.timelineScope != scopeLive
-	}
-	stats := w.engine.Stats()
-	visible := w.visible(snapshot)
-	if w.mode == modeTimeline {
-		visible = w.timelineVisible
-	}
-	var observed, shown uint64
-	for i := range snapshot {
-		if snapshot[i].Marker == nil {
-			observed += snapshot[i].Occurrences
-		}
-	}
-	for i := range visible {
-		if visible[i].Marker == nil {
-			shown += visible[i].Occurrences
-		}
-	}
-	anchor := time.Now()
-	if (historyScope || !w.follow) && len(snapshot) > 0 {
-		anchor = snapshot[len(snapshot)-1].RuntimeTime
-	}
-	if w.mode == modeTimeline {
-		w.buckets = append([]logstream.Bucket(nil), w.timelineBuckets...)
-	} else {
-		w.buckets = workbenchHistogram(snapshot, visible, anchor)
-	}
-	formats := map[string]int{}
-	for i := range snapshot {
-		if snapshot[i].Marker == nil {
-			formats[snapshot[i].Format]++
-		}
-	}
-	var formatText []string
-	for k, n := range formats {
-		formatText = append(formatText, fmt.Sprintf("%s:%d", k, n))
-	}
-	sort.Strings(formatText)
-	state := w.writerState()
-	recording := "record off (R)"
-	if w.recordStart != nil {
-		recording = "record starting (R cancels)"
-		if w.recordStart.ctx.Err() != nil {
-			recording = "record start canceling"
-		}
-	}
-	if state.path != "" && w.recordStart == nil {
-		id := fmt.Sprint(state.info.LastID)
-		if state.err != "" {
-			id = "uncertain"
-		}
-		recording = fmt.Sprintf(
-			"record %s id:%s %dKiB admission-drop:%d disk-evict:%d",
-			map[bool]string{true: "RAW", false: "safe"}[state.info.Raw], id,
-			state.info.Bytes/1024, state.dropped, state.info.EvictedSegments,
-		)
-		if state.closed {
-			recording += " closed"
-		}
-		if state.info.ConservativeRedaction {
-			recording += " conservative redaction"
-		}
-		if state.err != "" {
-			recording += " ERROR: " + state.err
-		}
-	}
-	scope := "retained live"
-	if historyScope {
-		scope = "retained disk"
-	}
-	viewState := "live"
-	if !w.follow {
-		viewState = "frozen"
-	}
-	if historyScope {
-		viewState = "history"
-	}
-	status := fmt.Sprintf(
-		"%s · %s · view:%s · visible:%d/%d hidden:%d rules:%d · %s · follow:%t(s) safe:%t(d)",
-		w.mode, scope, viewState, shown, observed, observed-shown, len(w.teamRules)+len(w.localRules),
-		strings.Join(formatText, "/"), w.follow, w.redact,
-	)
-	recording += fmt.Sprintf(" · collapse:%t(b) group:%t(u)", w.collapse, w.multiline)
-	if state.path != "" {
-		recording += " · " + filepath.Base(state.path)
-	}
-	notice := w.notice
-	if stats.Evicted > 0 || stats.Truncated > 0 || stats.ForcedOrder > 0 || stats.HistogramDropped > 0 {
-		notice = fmt.Sprintf("loss evicted:%d truncated:%d reorder:%d hist:%d · ", stats.Evicted, stats.Truncated, stats.ForcedOrder, stats.HistogramDropped) + notice
-	}
-	if w.ioRunning {
-		notice = "Disk operation running (Esc cancels) · " + notice
-	}
-	if state.err != "" && w.recordStart == nil {
-		notice = "RECORD ERROR: accepted batch/queue durability uncertain; " + state.err
-	}
-	if state.info.ConservativeRedaction && w.recordStart == nil {
-		notice = "Conservative recovery redaction · " + notice
-	}
-	if w.recordStart == nil && (state.info.EvictedSegments > 0 || state.dropped > 0 || state.err != "") {
-		notice = fmt.Sprintf("disk-evict:%d admission-drop:%d · ", state.info.EvictedSegments, state.dropped) + notice
-	}
-	w.status.SetText(
-		wbText(logstream.SafeText(status)) + "\n" + w.coloredSparkline() +
-			wbText(logstream.SafeText(" 60s ≈ · "+recording)) + "\n" + wbText(logstream.SafeText(notice)),
-	)
-	if w.entryMode() {
-		if w.mode == modeHistory {
-			visible = w.visible(w.history)
-		}
-		w.renderEntries(visible)
-	}
-}
-
-//nolint:gocritic // Source formatting consumes an immutable identity value.
-func sourceName(s logstream.Source) string {
-	pod := s.Pod
-	if i := strings.LastIndexByte(pod, '-'); i >= 0 {
-		pod = pod[i+1:]
-	}
-	return fmt.Sprintf("%s/%s#%d", pod, s.Container, s.Generation)
-}
-
-//nolint:gocritic // Source hashing consumes an immutable identity value.
-func sourceColor(s logstream.Source) tcell.Color {
-	h := fnv.New32a()
-	h.Write([]byte(s.Key()))
-	return []tcell.Color{tcell.ColorAqua, tcell.ColorYellow, tcell.ColorGreen, tcell.ColorFuchsia, tcell.ColorBlue, tcell.ColorOrange}[h.Sum32()%6]
-}
-func levelColor(level string) tcell.Color {
-	switch {
-	case logstream.Severity(level) >= logstream.Severity("error"):
-		return tcell.ColorRed
-	case logstream.Severity(level) >= logstream.Severity("warn"):
-		return tcell.ColorYellow
-	default:
-		return tcell.ColorWhite
-	}
-}
-func (w *logWorkbench) headers(headers ...string) {
-	w.table.Clear()
-	for col, h := range headers {
-		w.table.SetCell(0, col, tview.NewTableCell(h).SetSelectable(false).SetTextColor(tcell.ColorAqua).SetAttributes(tcell.AttrBold))
-	}
-}
-func (w *logWorkbench) renderEntries(entries []logstream.Entry) {
-	rowOff, colOff := w.table.GetOffset()
-	scope := scopeLive
-	if w.mode == modeHistory {
-		scope = w.historyPath
-	}
-	if w.selectionScope != scope {
-		w.selected = 0
-		w.mark = 0
-		rowOff = 0
-		colOff = 0
-		w.selectionScope = scope
-	}
-	oldID := w.selected
-	w.rows = entries
-	w.headers("Time ≈", "Source", "Level", "Message (Enter expands)")
-	_, _, width, _ := w.GetInnerRect()
-	if width <= 0 {
-		width = 100
-	}
-	sourceWidth := width / 4
-	if sourceWidth > 36 {
-		sourceWidth = 36
-	}
-	if sourceWidth < 8 {
-		sourceWidth = 8
-	}
-	selectedRow := 1
-	for i := range entries {
-		e := w.shown(entries[i])
-		row := i + 1
-		tm := e.RuntimeTime.Format("15:04:05.000")
-		if !w.showTime {
-			tm = ""
-		}
-		msg := e.Message
-		level := e.Level
-		if w.mode == modeRaw {
-			msg = e.Raw
-		}
-		if e.Marker != nil {
-			level = "◆ " + e.Marker.Kind
-			msg = fmt.Sprintf("[%s approx=%t] %s", e.Marker.Origin, e.Marker.Approximate, e.Marker.Message)
-		}
-		if e.Repeats > 1 {
-			msg = fmt.Sprintf("×%d %s", e.Repeats, msg)
-		}
-		if len(e.OriginalLines) > 1 {
-			msg = fmt.Sprintf("↳%d lines %s", len(e.OriginalLines), msg)
-		}
-		if e.Truncated {
-			msg = "[TRUNCATED] " + msg
-		}
-		w.table.SetCell(row, 0, tview.NewTableCell(tm).SetMaxWidth(12))
-		w.table.SetCell(row, 1, tview.NewTableCell(wbText(sourceName(e.Source))).SetMaxWidth(sourceWidth).SetTextColor(sourceColor(e.Source)))
-		w.table.SetCell(row, 2, tview.NewTableCell(wbText(level)).SetMaxWidth(12).SetTextColor(levelColor(e.Level)))
-		w.table.SetCell(row, 3, tview.NewTableCell(wbText(strings.ReplaceAll(msg, "\n", " ⏎ "))).SetExpansion(1).SetMaxWidth(max(8, width-sourceWidth-28)))
-		if e.ID == oldID {
-			selectedRow = row
-		} else if e.ID < oldID {
-			selectedRow = row
-		}
-	}
-	if len(entries) > 0 {
-		if w.follow && w.mode != modeHistory {
-			selectedRow = len(entries)
-		}
-		selectedRow = min(selectedRow, len(entries))
-		w.selected = entries[selectedRow-1].ID
-		w.table.Select(selectedRow, 0)
-		if w.follow && !w.columnLock {
-			w.table.SetOffset(rowOff, 0)
-		}
-		if !w.follow {
-			w.table.SetOffset(rowOff, colOff)
-		}
-	} else {
-		w.selected = 0
-	}
-	w.pages.SwitchToPage("table")
 }
 func (w *logWorkbench) selectedEntry() (logstream.Entry, bool) {
 	if !w.entryActionsAvailable() {
@@ -680,13 +294,10 @@ func (w *logWorkbench) logDetailPalette() logDetailPalette {
 	if w.owner != nil && w.owner.app != nil && w.owner.app.Styles != nil {
 		styles = w.owner.app.Styles
 	}
+	palette := styles.Semantic()
 	return logDetailPalette{
-		foreground: styles.Views().Log.FgColor.String(),
-		key:        styles.Views().Yaml.KeyColor.String(),
-		value:      styles.Views().Yaml.ValueColor.String(),
-		muted:      styles.Views().Log.Indicator.ToggleOffColor.String(),
-		warning:    styles.K9s.Frame.Status.PendingColor.String(),
-		failure:    styles.K9s.Frame.Status.ErrorColor.String(),
+		foreground: styles.Views().Log.FgColor.String(), key: palette.Category.String(), value: palette.Text.String(),
+		muted: palette.Muted.String(), warning: palette.Warning.String(), failure: palette.Failure.String(),
 	}
 }
 
@@ -890,9 +501,9 @@ func (w *logWorkbench) showPatterns() {
 	w.mode = modePatterns
 	w.headers("Count", "Level", "Pattern (Enter drills down)")
 	for i, p := range w.patterns {
-		w.table.SetCell(i+1, 0, tview.NewTableCell(fmt.Sprint(p.Count)))
-		w.table.SetCell(i+1, 1, tview.NewTableCell(wbText(p.Level)))
-		w.table.SetCell(i+1, 2, tview.NewTableCell(wbText(p.Template)).SetExpansion(1))
+		w.table.SetCell(i+1, 0, w.newCell(fmt.Sprint(p.Count)))
+		w.table.SetCell(i+1, 1, w.newCell(wbText(p.Level)))
+		w.table.SetCell(i+1, 2, w.newCell(wbText(p.Template)).SetExpansion(1))
 	}
 	w.table.Select(1, 0)
 	w.pages.SwitchToPage("table")
@@ -925,8 +536,8 @@ func (w *logWorkbench) showSources() {
 		if s.Key() == w.laneB {
 			lane = "B"
 		}
-		w.table.SetCell(i+1, 0, tview.NewTableCell(wbText(logstream.SafeText(sourceName(s)))).SetTextColor(sourceColor(s)).SetExpansion(1))
-		w.table.SetCell(i+1, 1, tview.NewTableCell(lane))
+		w.table.SetCell(i+1, 0, w.newCell(wbText(logstream.SafeText(sourceName(s)))).SetTextColor(w.sourceColor(s)).SetExpansion(1))
+		w.table.SetCell(i+1, 1, w.newCell(lane))
 	}
 	w.table.Select(1, 0)
 	w.pages.SwitchToPage("table")
@@ -975,7 +586,7 @@ func (w *logWorkbench) showLanes() {
 				continue
 			}
 			e := w.shown(entries[i])
-			cell := tview.NewTableCell(wbText(e.RuntimeTime.Format("15:04:05") + " " + sourceName(e.Source) + " " + e.Message))
+			cell := w.newCell(wbText(e.RuntimeTime.Format("15:04:05") + " " + sourceName(e.Source) + " " + e.Message))
 			w.table.SetCell(i+1, col, cell.SetMaxWidth(max(10, width/2-2)).SetExpansion(1))
 		}
 	}
@@ -1007,10 +618,10 @@ func (w *logWorkbench) showTimeline() {
 	w.mode = modeTimeline
 	w.headers("Second ≈", "Observed", "Visible", "Severity (Enter jumps)")
 	for i, b := range w.buckets {
-		w.table.SetCell(i+1, 0, tview.NewTableCell(b.Start.Format("15:04:05")))
-		w.table.SetCell(i+1, 1, tview.NewTableCell(fmt.Sprint(b.Observed)))
-		w.table.SetCell(i+1, 2, tview.NewTableCell(fmt.Sprint(b.Visible)))
-		w.table.SetCell(i+1, 3, tview.NewTableCell(fmt.Sprint(b.Severity)))
+		w.table.SetCell(i+1, 0, w.newCell(b.Start.Format("15:04:05")))
+		w.table.SetCell(i+1, 1, w.newCell(fmt.Sprint(b.Observed)))
+		w.table.SetCell(i+1, 2, w.newCell(fmt.Sprint(b.Visible)))
+		w.table.SetCell(i+1, 3, w.newCell(fmt.Sprint(b.Severity)))
 	}
 	w.table.Select(60, 0)
 	w.pages.SwitchToPage("table")
@@ -1162,7 +773,11 @@ func (w *logWorkbench) key(evt *tcell.EventKey) *tcell.EventKey {
 	switch key {
 	case '?':
 		w.freeze()
-		w.showText("help", logWorkbenchHelp)
+		text := logWorkbenchHelp
+		if w.owner != nil {
+			text = "Log workbench actions\n" + sharedActionHelp(w.owner.Actions(), ui.ActionContext{}) + "\nDetails and source limits\n" + text
+		}
+		w.showText("help", text)
 	case 'o':
 		if w.mode == modeRaw {
 			w.mode = modeEntries
@@ -1387,100 +1002,6 @@ func (w *logWorkbench) startRecording(raw bool) {
 	}
 	w.notice = "Recording starting in background; R cancels"
 }
-func (w *logWorkbench) historyDir() string {
-	if w.historyPath != "" {
-		return w.historyPath
-	}
-	return w.writerState().path
-}
-func (w *logWorkbench) beginIO(work func(context.Context) logIOResult) {
-	if w.ioCancel != nil {
-		w.ioCancel()
-	}
-	w.ioGeneration++
-	gen := w.ioGeneration
-	ctx, cancel := context.WithCancel(context.Background())
-	w.ioCancel = cancel
-	w.ioRunning = true
-	go func() {
-		result := work(ctx)
-		result.generation = gen
-		select {
-		case w.ioResults <- result:
-		case <-ctx.Done():
-		}
-	}()
-}
-func (w *logWorkbench) readHistory(search bool) {
-	dir := w.historyDir()
-	if dir == "" {
-		w.notice = "No recording selected; R starts safe recording, O opens a session"
-		return
-	}
-	before := w.historyBefore
-	var q *logstream.Query
-	if search {
-		q = w.query
-	}
-	w.freeze()
-	w.beginIO(func(ctx context.Context) logIOResult {
-		entries, err := scanLogHistory(ctx, dir, before, q, nil)
-		notice := "Recorded history (200/page); [ older, ] latest; Esc live"
-		if errors.Is(err, errLogHistoryTornTail) {
-			notice += "; torn final record ignored; durability uncertain"
-			err = nil
-		}
-		return logIOResult{entries: entries, path: dir, notice: notice, err: err}
-	})
-}
-func (w *logWorkbench) openSessions() {
-	root := w.recordingRoot()
-	w.beginIO(func(ctx context.Context) logIOResult {
-		paths, err := listLogSessionsContext(ctx, root)
-		if paths == nil {
-			paths = []string{}
-		}
-		return logIOResult{sessions: paths, notice: "Read-only session picker; Enter opens; live capture continues", err: err}
-	})
-}
-func (w *logWorkbench) consumeIO() {
-	for {
-		select {
-		case result := <-w.ioResults:
-			if result.generation != w.ioGeneration {
-				continue
-			}
-			w.ioRunning = false
-			if result.err != nil {
-				w.notice = "Disk ERROR: " + result.err.Error()
-				continue
-			}
-			w.notice = result.notice
-			if result.sessions != nil {
-				w.sessions = result.sessions
-				w.mode = modeSessions
-				w.headers("Recorded session (read-only)")
-				for i, path := range w.sessions {
-					w.table.SetCell(i+1, 0, tview.NewTableCell(wbText(path)).SetExpansion(1))
-				}
-				w.table.Select(1, 0)
-				w.pages.SwitchToPage("table")
-				w.focus(w.table)
-			} else if result.path != "" {
-				w.historyPath = result.path
-				w.history = result.entries
-				w.mode = modeHistory
-
-				if len(result.entries) > 0 {
-					w.historyBefore = result.entries[0].ID
-				}
-				w.focus(w.table)
-			}
-		default:
-			return
-		}
-	}
-}
 func (w *logWorkbench) exportVisible() {
 	if !w.entryActionsAvailable() {
 		w.unavailableEntryAction()
@@ -1561,11 +1082,29 @@ func (w *logWorkbench) exportDisk() {
 // register adds discoverable hints while a single capture function guards the
 // active filter prompt. Existing time/container/fullscreen actions stay shared.
 func (w *logWorkbench) register() {
+	w.owner.logs.Actions().Add(tcell.KeyCtrlO, ui.NewKeyAction("Actions", w.owner.app.actionsCmd, true))
+	w.owner.logs.Actions().Add(ui.KeySlash, ui.NewKeyAction("Filter", w.activateFilter, true))
+	for _, item := range []struct {
+		key   tcell.Key
+		label string
+	}{
+		{tcell.KeyEnter, "Inspect entry"}, {ui.KeyC, "Copy entry safely"}, {ui.KeyM, "Mark entry range"},
+		{tcell.KeyCtrlS, "Export visible entries safely"}, {ui.KeyS, "Freeze/Resume"},
+		{tcell.KeyCtrlR, "Start raw recording"},
+	} {
+		key := item.key
+		action := ui.NewKeyAction(item.label, func(e *tcell.EventKey) *tcell.EventKey { return w.key(e) }, key == ui.KeyS || key == ui.KeyC || key == tcell.KeyEnter)
+		action.ID = "logs." + action.ID
+		if key == ui.KeyC || key == ui.KeyM || key == tcell.KeyCtrlS {
+			action.Availability = w.entryAvailability
+		}
+		w.owner.logs.Actions().Add(key, action)
+	}
 	actions := []struct {
 		r     rune
 		label string
 	}{
-		{'?', "Workbench Help"}, {'o', "Raw/Structured"}, {'d', "Display Redaction"}, {'b', "Collapse"},
+		{'?', "Help"}, {'o', "Raw/Structured"}, {'d', "Display Redaction"}, {'b', "Collapse"},
 		{'u', "Multiline"}, {'p', "Patterns"}, {'v', "Source Lanes"}, {'h', "Timeline"}, {'J', "Jump Spike"},
 		{'i', "Isolate Source"}, {'x', "Exclude Source"}, {'z', "Reset Sources"}, {'n', "Inspect Rules/Record"},
 		{'N', "Save Noise Profile"}, {'X', "Reset Noise Profile"}, {'R', "Safe Recording"}, {'O', "Resume Recording"},
@@ -1576,6 +1115,10 @@ func (w *logWorkbench) register() {
 		r := item.r
 		key := ui.AsKey(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
 		action := ui.NewKeyAction(item.label, func(evt *tcell.EventKey) *tcell.EventKey { return w.key(evt) }, false)
+		action.ID = "logs." + action.ID
+		if r == 'i' || r == 'x' {
+			action.Availability = w.entryAvailability
+		}
 		w.owner.logs.Actions().Add(key, action)
 	}
 }
@@ -1606,15 +1149,16 @@ func (w *logWorkbench) coloredSparkline() string {
 		if maxCount > 0 {
 			i = b.Observed * 7 / maxCount
 		}
-		color := "gray"
+		palette := w.semanticPalette()
+		color := palette.Muted.String()
 		if b.Observed > 0 {
-			color = "green"
+			color = palette.Progress.String()
 		}
 		if b.Severity >= logstream.Severity("warn") {
-			color = "yellow"
+			color = palette.Warning.String()
 		}
 		if b.Severity >= logstream.Severity("error") {
-			color = "red"
+			color = palette.Failure.String()
 		}
 		fmt.Fprintf(&out, "[%s::]%c[-::]", color, symbols[i])
 	}

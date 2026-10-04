@@ -1,0 +1,3 @@
+ok  	github.com/derailed/k9s/internal/client	0.008s
+ok  	github.com/derailed/k9s/internal/dao	0.156s
+ok  	github.com/derailed/k9s/internal/view	5.136s

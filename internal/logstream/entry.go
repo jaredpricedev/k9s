@@ -1,4 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
 // Package logstream processes raw log entries without Kubernetes or presentation dependencies.
+// Modified for k9+; see NOTICE.
 package logstream
 
 import (

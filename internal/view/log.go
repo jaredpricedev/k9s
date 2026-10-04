@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view
 
@@ -139,6 +140,7 @@ func (l *Log) InCmdMode() bool {
 // LogCanceled indicates no more logs are coming.
 func (l *Log) LogCanceled() {
 	if l.workbench != nil {
+		l.workbench.collectorState.Store(logCollectorEnded)
 		l.workbench.flush()
 		return
 	}
@@ -182,6 +184,7 @@ func (l *Log) LogCleared() {
 // LogFailed notifies an error occurred.
 func (l *Log) LogFailed(err error) {
 	if l.workbench != nil {
+		l.workbench.collectorState.Store(logCollectorFailed)
 		now := time.Now()
 		l.workbench.ingest([]logstream.Entry{{
 			RuntimeTime: now, Raw: err.Error(), Message: err.Error(),
@@ -260,10 +263,16 @@ func (l *Log) StylesChanged(s *config.Styles) {
 	l.logs.SetTextColor(s.Views().Log.FgColor.Color())
 	l.logs.SetBackgroundColor(s.Views().Log.BgColor.Color())
 	if l.workbench != nil {
-		l.workbench.table.SetBackgroundColor(s.Views().Log.BgColor.Color())
-		l.workbench.detail.SetBackgroundColor(s.Views().Log.BgColor.Color())
-		l.workbench.status.SetBackgroundColor(s.Views().Log.BgColor.Color())
+		l.workbench.applyStyles(s)
 	}
+}
+
+// Actions shares the same owned registry with help and the action palette.
+func (l *Log) Actions() *ui.KeyActions {
+	if l.logs == nil {
+		return ui.NewKeyActions()
+	}
+	return l.logs.Actions()
 }
 
 // GetModel returns the log model.
@@ -274,7 +283,7 @@ func (l *Log) GetModel() *model.Log {
 // Hints returns a collection of menu hints.
 func (l *Log) Hints() model.MenuHints {
 	hints := l.logs.Actions().Hints()
-	primary := map[string]bool{"?": true, "s": true, "c": true, "Shift-R": true, "p": true}
+	primary := map[string]bool{"?": true, "s": true, "c": true, "Shift-R": true, "Ctrl-O": true}
 	for i := range hints {
 		hints[i].Visible = primary[hints[i].Mnemonic]
 	}

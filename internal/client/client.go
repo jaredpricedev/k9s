@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package client
 
@@ -351,6 +352,15 @@ func (a *APIClient) HasMetrics() bool {
 	return a.supportsMetricsResources() == nil
 }
 
+// MetricsDiscovery preserves the reason discovery failed for metric consumers.
+func (a *APIClient) MetricsDiscovery() error {
+	err := a.supportsMetricsResources()
+	if errors.Is(err, noMetricServerErr) || errors.Is(err, metricsUnsupportedErr) {
+		return ErrMetricsNotConfigured
+	}
+	return err
+}
+
 func (a *APIClient) getMxsClient() *versioned.Clientset {
 	a.mx.RLock()
 	defer a.mx.RUnlock()
@@ -616,10 +626,6 @@ func (a *APIClient) supportsMetricsResources() error {
 		return noMetricServerErr
 	}
 
-	defer func() {
-		a.cache.Add(cacheMXAPIKey, supported, cacheExpiry)
-	}()
-
 	dial, err := a.Dial()
 	if err != nil {
 		if a.HasActiveContext() {
@@ -636,11 +642,12 @@ func (a *APIClient) supportsMetricsResources() error {
 			continue
 		}
 		if checkMetricsVersion(&(apiGroups.Groups[i])) {
-			supported = true
+			a.cache.Add(cacheMXAPIKey, true, cacheExpiry)
 			return nil
 		}
 	}
 
+	a.cache.Add(cacheMXAPIKey, false, cacheExpiry)
 	return metricsUnsupportedErr
 }
 

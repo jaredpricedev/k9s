@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view
 
@@ -293,7 +294,7 @@ func (v *LiveView) toggleFullScreenCmd(evt *tcell.EventKey) *tcell.EventKey {
 
 func (v *LiveView) setFullScreen(isFullScreen bool) {
 	v.fullScreen = isFullScreen
-	v.SetFullScreen(isFullScreen)
+	v.SetFullScreen(false) // Expand within the content region; destination chrome stays visible.
 	v.SetBorder(!isFullScreen)
 	if isFullScreen {
 		v.SetBorderPadding(0, 0, 0, 0)

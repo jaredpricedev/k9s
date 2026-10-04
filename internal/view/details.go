@@ -8,8 +8,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
+	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/model"
 	"github.com/derailed/k9s/internal/ui"
@@ -41,6 +43,7 @@ type Details struct {
 	searchable                bool
 	fullScreen                bool
 	contentType               string
+	inspectionQuery           string
 }
 
 // NewDetails returns a details viewer.
@@ -72,6 +75,7 @@ func (d *Details) Init(_ context.Context) error {
 		d.SetBorder(true)
 	}
 	d.text.SetScrollable(true).SetWrap(true).SetRegions(true)
+	d.text.SetWordWrap(d.contentType == contentInspection)
 	d.text.SetDynamicColors(true)
 	d.text.SetHighlightColor(tcell.ColorOrange)
 	d.SetTitleColor(tcell.ColorAqua)
@@ -116,7 +120,11 @@ func (d *Details) TextFiltered(lines []string, matches fuzzy.Matches) {
 	d.currentRegion, d.maxRegions = 0, len(matches)
 	ll := linesWithRegions(lines, matches)
 
-	d.text.SetText(colorizeYAML(d.app.Styles.Views().Yaml, strings.Join(ll, "\n")))
+	if d.contentType == contentInspection {
+		d.text.SetText(enableRegion(inspectionMarkup(d.app, strings.Join(ll, "\n"))))
+	} else {
+		d.text.SetText(colorizeYAML(d.app.Styles.Views().Yaml, strings.Join(ll, "\n")))
+	}
 	d.text.Highlight()
 	if len(matches) > 0 {
 		d.text.Highlight("search_0")
@@ -129,6 +137,12 @@ func (*Details) BufferChanged(_, _ string) {}
 
 // BufferCompleted indicates input was accepted.
 func (d *Details) BufferCompleted(text, _ string) {
+	if !d.validSearch(text) {
+		return
+	}
+	if d.contentType == contentInspection {
+		d.inspectionQuery = text
+	}
 	d.model.Filter(text)
 	d.updateTitle()
 }
@@ -139,6 +153,7 @@ func (d *Details) BufferActive(state bool, k model.BufferKind) {
 }
 
 func (d *Details) bindKeys() {
+	d.actions.Add(tcell.KeyCtrlO, ui.NewKeyAction("Actions", d.app.actionsCmd, true))
 	d.actions.Bulk(ui.KeyMap{
 		tcell.KeyEnter:  ui.NewSharedKeyAction("Filter", d.filterCmd, false),
 		tcell.KeyEscape: ui.NewKeyAction("Back", d.resetCmd, false),
@@ -218,7 +233,10 @@ func (d *Details) Hints() model.MenuHints {
 }
 
 // ExtraHints returns additional hints.
-func (*Details) ExtraHints() map[string]string {
+func (d *Details) ExtraHints() map[string]string {
+	if d.contentType == contentInspection {
+		return map[string]string{"Search": "case-insensitive regex; -f text for fuzzy search. Delete clears; Esc goes back."}
+	}
 	return nil
 }
 
@@ -250,7 +268,7 @@ func (d *Details) toggleFullScreenCmd(evt *tcell.EventKey) *tcell.EventKey {
 
 func (d *Details) setFullScreen(isFullScreen bool) {
 	d.fullScreen = isFullScreen
-	d.SetFullScreen(isFullScreen)
+	d.SetFullScreen(false) // Expand within the content region; destination chrome stays visible.
 	d.SetBorder(!isFullScreen)
 	if isFullScreen {
 		d.SetBorderPadding(0, 0, 0, 0)
@@ -276,11 +294,31 @@ func (d *Details) prevCmd(evt *tcell.EventKey) *tcell.EventKey {
 }
 
 func (d *Details) filterCmd(*tcell.EventKey) *tcell.EventKey {
+	if !d.validSearch(d.cmdBuff.GetText()) {
+		return nil
+	}
+	if d.contentType == contentInspection {
+		d.inspectionQuery = d.cmdBuff.GetText()
+	}
 	d.model.Filter(d.cmdBuff.GetText())
 	d.cmdBuff.SetActive(false)
 	d.updateTitle()
 
 	return nil
+}
+
+func (d *Details) validSearch(query string) bool {
+	if d.contentType != contentInspection {
+		return true
+	}
+	if _, isFuzzy := internal.IsFuzzySelector(query); isFuzzy {
+		return true
+	}
+	if _, err := regexp.Compile(query); err != nil {
+		d.app.Flash().Errf("Invalid inspection regex: %v", err)
+		return false
+	}
+	return true
 }
 
 func (d *Details) activateCmd(evt *tcell.EventKey) *tcell.EventKey {
@@ -310,6 +348,7 @@ func (d *Details) resetCmd(evt *tcell.EventKey) *tcell.EventKey {
 	if d.cmdBuff.GetText() != "" {
 		d.model.ClearFilter()
 	}
+	d.inspectionQuery = ""
 	d.cmdBuff.SetActive(false)
 	d.cmdBuff.Reset()
 	d.updateTitle()

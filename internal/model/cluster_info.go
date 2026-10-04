@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/derailed/k9s/internal/client"
@@ -41,10 +42,21 @@ type ClusterInfoListener interface {
 // ClusterMeta represents cluster meta data.
 type ClusterMeta struct {
 	Context, Cluster    string
+	Namespace           string
+	Connected           bool
 	User                string
 	K9sVer, K9sLatest   string
 	K8sVer              string
 	Cpu, Mem, Ephemeral int
+	Metrics             client.MetricSample
+	publication         *atomic.Uint64
+	revision            uint64
+}
+
+// IsCurrent prevents a queued callback from publishing superseded metadata,
+// including an A -> B -> A context switch where the context name matches again.
+func (c *ClusterMeta) IsCurrent() bool {
+	return c != nil && (c.publication == nil || c.publication.Load() == c.revision)
 }
 
 // NewClusterMeta returns a new instance.
@@ -58,6 +70,7 @@ func NewClusterMeta() *ClusterMeta {
 		Cpu:       0,
 		Mem:       0,
 		Ephemeral: 0,
+		Metrics:   client.MetricSample{State: client.MetricsUnavailable, Source: client.NodeMetricsSource, Reason: "waiting for a sample"},
 	}
 }
 
@@ -68,6 +81,9 @@ func (c *ClusterMeta) Deltas(n *ClusterMeta) bool {
 	}
 
 	return c.Context != n.Context ||
+		c.Namespace != n.Namespace ||
+		c.Connected != n.Connected ||
+		c.Metrics != n.Metrics ||
 		c.Cluster != n.Cluster ||
 		c.User != n.User ||
 		c.K8sVer != n.K8sVer ||
@@ -77,14 +93,16 @@ func (c *ClusterMeta) Deltas(n *ClusterMeta) bool {
 
 // ClusterInfo models cluster metadata.
 type ClusterInfo struct {
-	cluster   *Cluster
-	factory   dao.Factory
-	data      *ClusterMeta
-	version   string
-	cfg       *config.K9s
-	listeners []ClusterInfoListener
-	cache     *cache.LRUExpireCache
-	mx        sync.RWMutex
+	cluster     *Cluster
+	factory     dao.Factory
+	data        *ClusterMeta
+	version     string
+	cfg         *config.K9s
+	listeners   []ClusterInfoListener
+	cache       *cache.LRUExpireCache
+	mx          sync.RWMutex
+	request     uint64
+	publication atomic.Uint64
 }
 
 // NewClusterInfo returns a new instance.
@@ -124,7 +142,9 @@ func (c *ClusterInfo) Reset(f dao.Factory) {
 	}
 
 	c.mx.Lock()
-	c.cluster, c.data = NewCluster(f), NewClusterMeta()
+	c.request++
+	c.publication.Store(c.request)
+	c.factory, c.cluster, c.data = f, NewCluster(f), NewClusterMeta()
 	c.mx.Unlock()
 
 	c.Refresh()
@@ -132,19 +152,26 @@ func (c *ClusterInfo) Reset(f dao.Factory) {
 
 // Refresh fetches the latest cluster meta.
 func (c *ClusterInfo) Refresh() {
+	c.mx.Lock()
+	cluster, previous := c.cluster, c.data
+	c.request++
+	request := c.request
+	c.mx.Unlock()
 	data := NewClusterMeta()
-	if c.factory.Client().ConnectionOK() {
-		data.Context = c.cluster.ContextName()
-		data.Cluster = c.cluster.ClusterName()
-		data.User = c.cluster.UserName()
-		data.K8sVer = c.cluster.Version()
-		ctx, cancel := context.WithTimeout(context.Background(), c.cluster.factory.Client().Config().CallTimeout())
+	data.Context = cluster.ContextName()
+	data.Cluster = cluster.ClusterName()
+	data.User = cluster.UserName()
+	data.Namespace = cluster.factory.Client().ActiveNamespace()
+	if cluster.factory.Client().ConnectionOK() {
+		data.Connected = true
+		data.K8sVer = cluster.Version()
+		ctx, cancel := context.WithTimeout(context.Background(), cluster.factory.Client().Config().CallTimeout())
 		defer cancel()
-		var mx client.ClusterMetrics
-		if err := c.cluster.Metrics(ctx, &mx); err == nil {
-			data.Cpu, data.Mem, data.Ephemeral = mx.PercCPU, mx.PercMEM, mx.PercEphemeral
-		}
+		data.Metrics = cluster.MetricsSample(ctx, previous.Metrics)
+	} else {
+		data.Metrics = client.MetricFailure(previous.Metrics, client.MetricsUnavailable, client.NodeMetricsSource, "cluster disconnected")
 	}
+	data.Cpu, data.Mem, data.Ephemeral = data.Metrics.Values.PercCPU, data.Metrics.Values.PercMEM, data.Metrics.Values.PercEphemeral
 	data.K9sVer = c.version
 	v1 := NewSemVer(data.K9sVer)
 
@@ -159,23 +186,33 @@ func (c *ClusterInfo) Refresh() {
 		data.K9sLatest = ""
 	}
 
-	if c.data.Deltas(data) {
-		c.fireMetaChanged(c.data, data)
+	c.mx.Lock()
+	if c.cluster != cluster || c.request != request {
+		c.mx.Unlock()
+		return // A context switch superseded this collection.
+	}
+	data.publication, data.revision = &c.publication, request
+	c.publication.Store(request)
+	c.data = data
+	c.mx.Unlock()
+	if previous.Deltas(data) {
+		c.fireMetaChanged(previous, data)
 	} else {
 		c.fireNoMetaChanged(data)
 	}
-	c.mx.Lock()
-	c.data = data
-	c.mx.Unlock()
 }
 
 // AddListener adds a new model listener.
 func (c *ClusterInfo) AddListener(l ClusterInfoListener) {
+	c.mx.Lock()
+	defer c.mx.Unlock()
 	c.listeners = append(c.listeners, l)
 }
 
 // RemoveListener delete a listener from the list.
 func (c *ClusterInfo) RemoveListener(l ClusterInfoListener) {
+	c.mx.Lock()
+	defer c.mx.Unlock()
 	victim := -1
 	for i, lis := range c.listeners {
 		if lis == l {
@@ -190,15 +227,21 @@ func (c *ClusterInfo) RemoveListener(l ClusterInfoListener) {
 }
 
 func (c *ClusterInfo) fireMetaChanged(prev, cur *ClusterMeta) {
-	for _, l := range c.listeners {
+	for _, l := range c.listenerSnapshot() {
 		l.ClusterInfoChanged(prev, cur)
 	}
 }
 
 func (c *ClusterInfo) fireNoMetaChanged(data *ClusterMeta) {
-	for _, l := range c.listeners {
+	for _, l := range c.listenerSnapshot() {
 		l.ClusterInfoUpdated(data)
 	}
+}
+
+func (c *ClusterInfo) listenerSnapshot() []ClusterInfoListener {
+	c.mx.RLock()
+	defer c.mx.RUnlock()
+	return append([]ClusterInfoListener(nil), c.listeners...)
 }
 
 // Helpers...

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view_test
 
@@ -17,5 +18,6 @@ func TestDaemonSet(t *testing.T) {
 
 	require.NoError(t, v.Init(makeCtx(t)))
 	assert.Equal(t, "DaemonSets", v.Name())
-	assert.Len(t, v.Hints(), 15)
+	assert.Len(t, v.Hints(), 16)
+	assertActionRegistry(t, v)
 }

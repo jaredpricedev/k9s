@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package client
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"strconv"
+	"sync"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -26,8 +27,12 @@ const (
 // MetricsDial tracks global metric server handle.
 var MetricsDial *MetricsServer
 
+var metricsDialMu sync.Mutex
+
 // DialMetrics dials the metrics server.
 func DialMetrics(c Connection) *MetricsServer {
+	metricsDialMu.Lock()
+	defer metricsDialMu.Unlock()
 	if MetricsDial == nil {
 		MetricsDial = NewMetricsServer(c)
 	}
@@ -37,6 +42,8 @@ func DialMetrics(c Connection) *MetricsServer {
 
 // ResetMetrics resets the metric server handle.
 func ResetMetrics() {
+	metricsDialMu.Lock()
+	defer metricsDialMu.Unlock()
 	MetricsDial = nil
 }
 
@@ -60,6 +67,9 @@ func (*MetricsServer) ClusterLoad(nos *v1.NodeList, nmx *mv1beta1.NodeMetricsLis
 	if nos == nil || nmx == nil {
 		return fmt.Errorf("invalid node or node metrics lists")
 	}
+	if len(nos.Items) == 0 || len(nmx.Items) == 0 {
+		return ErrMetricsEmpty
+	}
 	nodeMetrics := make(NodesMetrics, len(nos.Items))
 	for i := range nos.Items {
 		nodeMetrics[nos.Items[i].Name] = NodeMetrics{
@@ -67,12 +77,25 @@ func (*MetricsServer) ClusterLoad(nos *v1.NodeList, nmx *mv1beta1.NodeMetricsLis
 			AllocatableMEM: nos.Items[i].Status.Allocatable.Memory().Value(),
 		}
 	}
+	seen := make(map[string]bool, len(nmx.Items))
 	for i := range nmx.Items {
-		if node, ok := nodeMetrics[nmx.Items[i].Name]; ok {
-			node.CurrentCPU = nmx.Items[i].Usage.Cpu().MilliValue()
-			node.CurrentMEM = nmx.Items[i].Usage.Memory().Value()
-			nodeMetrics[nmx.Items[i].Name] = node
+		node, ok := nodeMetrics[nmx.Items[i].Name]
+		if !ok {
+			continue
 		}
+		if _, cpu := nmx.Items[i].Usage[v1.ResourceCPU]; !cpu {
+			return ErrMetricsEmpty
+		}
+		if _, mem := nmx.Items[i].Usage[v1.ResourceMemory]; !mem {
+			return ErrMetricsEmpty
+		}
+		seen[nmx.Items[i].Name] = true
+		node.CurrentCPU = nmx.Items[i].Usage.Cpu().MilliValue()
+		node.CurrentMEM = nmx.Items[i].Usage.Memory().Value()
+		nodeMetrics[nmx.Items[i].Name] = node
+	}
+	if len(seen) != len(nodeMetrics) {
+		return fmt.Errorf("%w: metrics do not cover all nodes", ErrMetricsEmpty)
 	}
 
 	var ccpu, cmem, tcpu, tmem int64
@@ -82,22 +105,20 @@ func (*MetricsServer) ClusterLoad(nos *v1.NodeList, nmx *mv1beta1.NodeMetricsLis
 		tcpu += mx.AllocatableCPU
 		tmem += mx.AllocatableMEM
 	}
+	if tcpu == 0 || tmem == 0 {
+		return fmt.Errorf("%w: no allocatable capacity", ErrMetricsEmpty)
+	}
 	mx.PercCPU, mx.PercMEM = ToPercentage(ccpu, tcpu), ToPercentage(cmem, tmem)
 
 	return nil
 }
 
 func (m *MetricsServer) checkAccess(ns string, gvr *GVR, msg string) error {
-	if !m.HasMetrics() {
-		return errors.New("no metrics-server detected on cluster")
-	}
-
-	auth, err := m.CanI(ns, gvr, "", ListAccess)
-	if err != nil {
+	if err := MetricsAccess(m.Connection, ns, gvr); err != nil {
+		if MetricErrorState(err) == MetricsDenied {
+			return fmt.Errorf("%s: %w", msg, err)
+		}
 		return err
-	}
-	if !auth {
-		return errors.New(msg)
 	}
 	return nil
 }

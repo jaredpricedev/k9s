@@ -1,0 +1,81 @@
+{
+  "captured_at_utc": "2026-10-04T01:00:03.614644+00:00",
+  "measurement_date_utc": "2026-10-04",
+  "source_base_at_measurement": "4be90d992e080c8e7775b028afae9d78423e50bb",
+  "source_worktree_dirty": true,
+  "source_description": "Full #8 future feature worktree based on this commit; benchmark binary compiled 2026-10-04 00:54 UTC. Subsequent resolver string constant cleanup changes no runtime behavior. The saved binary hash is the authoritative measurement identity.",
+  "before_description": "Saved 00:27 UTC same-session binary already containing frozen row/revision invalidation, before cached readable row colors and projection capacity reuse. This is not the original #18 audit baseline.",
+  "binary_sha256": {
+    "before": "55ead4573d6036b0e110c270209c5a245bb5a82cf1e8ae3abfa116a56fe0730d",
+    "final": "fbf00a9e4774e6b7d40bad4d2bc3a246736e20a0f291d541d852f05e018d26c6"
+  },
+  "go": "go1.25.8",
+  "build": {
+    "compiler": "gc",
+    "buildmode": "exe",
+    "race": false,
+    "CGO_ENABLED": "1",
+    "GOOS": "linux",
+    "GOARCH": "amd64",
+    "GOAMD64": "v1",
+    "custom_build_flags": null
+  },
+  "hardware": {
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "visible_online_vcpus": 5,
+    "virtualization": "KVM",
+    "cpu_affinity": "not pinned",
+    "GOMAXPROCS": 4,
+    "shared_host": true
+  },
+  "os": "Linux 6.18.44 x86_64, glibc 2.41",
+  "benchmark": {
+    "retained_events": 10000,
+    "incoming_events_per_operation": 1,
+    "rounds": 3,
+    "benchtime": "200ms",
+    "separate_cpu_alloc_profile_benchtime": "400ms",
+    "terminal_or_relay": false,
+    "meaning": "View assembly plus event ingestion/status update; allocated bytes, not RSS or paint latency."
+  },
+  "pty": {
+    "geometry": "120x40",
+    "TERM": "xterm-256color",
+    "COLORTERM": "truecolor",
+    "samples_per_action": 20,
+    "paint": "native tcell/tview output parsed by pyte",
+    "refresh": "input-driven, collector not running; production status refresh 250ms/4Hz",
+    "quantile": "p95 is 19th sorted observation of 20, not an inferred tail confidence bound",
+    "includes": "Python parser overhead, scheduling, Escape decoder delay",
+    "excludes": "physical display/compositor latency, human study, API/Relay load"
+  },
+  "run_order": "before benchmark, final benchmark, before PTY, final PTY, before profiles, final profiles; same environment with other Go/build/benchmark processes held",
+  "source_files_sha256": {
+    "go.mod": "e5c2267042147bc79f57d42b073574fae723416e205e054d6fc90164ad4737bb",
+    "go.sum": "a8ef7690798a279f1458609fc8635356eadf07cda2c107b4998e53f8d892d6e9",
+    "internal/config/semantic.go": "70dd5bd142cc9a3e75a2c5c1c97fa55cc7586b9b688a7d44f576404909d92ec5",
+    "internal/config/styles.go": "ebe1e2c1a4e8435b596496963568df39359e8dc6574eb13b197fb6d406c9c37e",
+    "internal/hubble/client.go": "84b5bf405c649761ddb6afbce32eed512f7ac897531b54f979a3e8f802901353",
+    "internal/hubble/client_test.go": "b0b89883adb4ca8595c27ca0112c2e2f17d97e6e6c677667adb0d3893d3ff8f4",
+    "internal/hubble/filter.go": "54c53dda0b7778ba6f7a0fab7e055625703361fef935c79f313e5b7cd741df47",
+    "internal/hubble/model.go": "a91198040d27fc8cb56a756399323f4c17e35f38ad8d5305ac9eb6233df56a76",
+    "internal/hubble/model_test.go": "0b8732f2b10044d134865d33f1786bece44abbb803efadf2702e899004bff688",
+    "internal/hubble/readiness.go": "781ab0e67c1b7f13513e85b69df38542797602d3e335c22a8236678805f4abd4",
+    "internal/hubble/relay_integration_test.go": "7103eae59eae4ab935016ef900c3bde188d6a3787bad0873c1a8ca3709246f03",
+    "internal/hubble/tls_test.go": "4c159309200ebcfb42d00e4c7be44714ff27cf36dc9292038657e9f74eeac6d3",
+    "internal/inspect/snapshot.go": "0b78a2f050c062555be4d3d6ea322d759a524d8c8cb5512dd9d6af0530ac4aff",
+    "internal/inspect/snapshot_test.go": "ec9686ea6817c820cbf175527356a31773d730efd8afe93ce2825ecdf81b9593",
+    "internal/view/hubble.go": "4e4e4970fe5df2842551dc6e413b8d8edc4077a1778f6ed94634ba9f28b3c17f",
+    "internal/view/hubble_actions.go": "0dca45735e059a9679fcaee503bd1ff4562daf33a329eb319deccd883f65b0c8",
+    "internal/view/hubble_detail.go": "d62b5043657d885c5ebbe5064437a5992e656b881dde2c67629307e95d2b5272",
+    "internal/view/hubble_resource.go": "560743ab8973d6302835f9030a534672d76d552e858d7624b5d58cc86d5a7a60",
+    "internal/view/hubble_resource_test.go": "1bd467121573ba4a1317ac06a5f7b4f284bff5025a69100e493772b6866f0e37",
+    "internal/view/hubble_table.go": "0e44e445aaf83da7e8abff27bd91d150501308bafd12d06545c2bd7eb2622f1a",
+    "internal/view/hubble_terminal_test.go": "b68e23dc4d6ca1029bab1df51ee3c3466fa2a18daac47e298d505f15febca254",
+    "internal/view/hubble_test.go": "4596fbd4ffdc87f9ffd51390a18c96eabf4a435be715ece9f21f21e6d944a2e7",
+    "internal/view/resource_comparison.go": "011935819eb2e740df19e9f1c15189085345b7a2e7c7515cae4b3a075c67eae3",
+    "internal/view/resource_comparison_test.go": "a00f9f45e3d110dba1db60eed5434d23e0c5bbff68c9004d4addb02a5150f573",
+    "scripts/hubble-latency.py": "57208d60356a91f09eaa7d04c2fff47a4bf7170ae4e0b5057fa492471cd91731"
+  },
+  "source_worktree_patch_sha256": "71a94b1abf5e59c0041f514c70f3a13dc1487e2cc2a91de590eb9a11b7672c5f"
+}

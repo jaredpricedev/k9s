@@ -45,19 +45,21 @@ const (
 type App struct {
 	version string
 	*ui.App
-	Content       *PageStack
-	command       *Command
-	factory       *watch.Factory
-	cancelFn      context.CancelFunc
-	clusterModel  *model.ClusterInfo
-	cmdHistory    *model.History
-	filterHistory *model.History
-	fluxActions   map[fluxActionKey]struct{}
-	logRecordings logRecordingRegistry
-	conRetry      int32
-	showHeader    bool
-	showLogo      bool
-	showCrumbs    bool
+	Content        *PageStack
+	command        *Command
+	factory        *watch.Factory
+	cancelFn       context.CancelFunc
+	clusterModel   *model.ClusterInfo
+	cmdHistory     *model.History
+	filterHistory  *model.History
+	fluxActions    map[fluxActionKey]struct{}
+	logRecordings  logRecordingRegistry
+	conRetry       int32
+	showHeader     bool
+	showLogo       bool
+	showCrumbs     bool
+	headerOverride *bool
+	headerFlex     *tview.Flex
 }
 
 // NewApp returns a K9s app instance.
@@ -170,7 +172,8 @@ func (a *App) layout(ctx context.Context) {
 	go flash.Watch(ctx, a.Flash().Channel())
 
 	main := tview.NewFlex().SetDirection(tview.FlexRow)
-	main.AddItem(a.statusIndicator(), 1, 1, false)
+	a.headerFlex = tview.NewFlex().SetDirection(tview.FlexRow)
+	main.AddItem(a.headerFlex, 2, 1, false)
 	main.AddItem(a.Content, 0, 10, true)
 	if !a.Config.K9s.IsCrumbsless() {
 		main.AddItem(a.Crumbs(), 1, 1, false)
@@ -178,7 +181,12 @@ func (a *App) layout(ctx context.Context) {
 	main.AddItem(flash, 1, 1, false)
 
 	a.Main.AddPage("main", main, true, false)
-	a.toggleHeader(!a.Config.K9s.IsHeadless(), !a.Config.K9s.IsLogoless())
+	a.showLogo = !a.Config.K9s.IsLogoless()
+	a.updateChrome(0, 0)
+	main.SetDrawFunc(func(_ tcell.Screen, x, y, width, height int) (int, int, int, int) {
+		a.updateChrome(width, height)
+		return x, y, width, height
+	})
 	if !a.Config.K9s.IsSplashless() {
 		a.Main.AddPage("splash", ui.NewSplash(a.Styles, a.version), true, true)
 	}
@@ -255,6 +263,8 @@ func (a *App) keyboard(evt *tcell.EventKey) *tcell.EventKey {
 
 func (a *App) bindKeys() {
 	a.AddActions(ui.NewKeyActionsFromMap(ui.KeyMap{
+		tcell.KeyCtrlO:     ui.NewSharedKeyAction("Actions", a.actionsCmd, true),
+		tcell.KeyF2:        ui.NewSharedKeyAction("Destination", a.destinationCmd, true),
 		tcell.KeyCtrlE:     ui.NewSharedKeyAction("ToggleHeader", a.toggleHeaderCmd, false),
 		tcell.KeyCtrlG:     ui.NewSharedKeyAction("ToggleCrumbs", a.toggleCrumbsCmd, false),
 		ui.KeyHelp:         ui.NewSharedKeyAction("Help", a.helpCmd, false),
@@ -272,20 +282,57 @@ func (a *App) ActiveView() model.Component {
 	return a.Content.GetPrimitive("main").(model.Component)
 }
 
-func (a *App) toggleHeader(header, logo bool) {
-	a.showHeader, a.showLogo = header, logo
-	flex, ok := a.Main.GetPrimitive("main").(*tview.Flex)
-	if !ok {
-		slog.Error("Expecting flex view main panel. Exiting!")
-		os.Exit(1)
+// fullHeader respects an explicit preference; auto protects short terminals.
+func (a *App) fullHeader(width, height int) bool {
+	if a.headerOverride != nil {
+		return *a.headerOverride
 	}
-	if a.showHeader {
-		flex.RemoveItemAtIndex(0)
-		flex.AddItemAtIndex(0, a.buildHeader(), 7, 1, false)
+	if a.Config.K9s.IsHeadless() {
+		return false
+	}
+	switch a.Config.K9s.UI.HeaderMode {
+	case "full":
+		return true
+	case "compact":
+		return false
+	default:
+		return width >= 120 && height >= 34
+	}
+}
+
+func (a *App) updateChrome(width, height int) {
+	full := a.fullHeader(width, height)
+	if a.headerFlex == nil {
+		return
+	}
+	if a.headerFlex.ItemAt(0) != nil && full == a.showHeader {
+		return
+	}
+	a.showHeader = full
+	a.headerFlex.Clear()
+	a.headerFlex.SetBackgroundColor(a.Styles.Semantic().Canvas.Color())
+	a.headerFlex.AddItem(a.statusIndicator(), 1, 1, false)
+	a.Menu().SetCompact(!full)
+	size := 2
+	if full {
+		a.headerFlex.AddItem(a.buildHeader(), 7, 1, false)
+		size = 8
 	} else {
-		flex.RemoveItemAtIndex(0)
-		flex.AddItemAtIndex(0, a.statusIndicator(), 1, 1, false)
+		a.headerFlex.AddItem(a.Menu(), 1, 1, false)
 	}
+	if main, ok := a.Main.GetPrimitive("main").(*tview.Flex); ok {
+		main.ResizeItem(a.headerFlex, size, 1)
+	}
+}
+
+func (a *App) toggleHeader(header, logo bool) {
+	a.showLogo = logo
+	a.headerOverride = &header
+	// Force reconstruction when only the logo preference changes.
+	if a.headerFlex != nil {
+		a.headerFlex.Clear()
+	}
+	a.updateChrome(0, 0)
 }
 
 func (a *App) toggleCrumbs(flag bool) {
@@ -305,6 +352,7 @@ func (a *App) toggleCrumbs(flag bool) {
 }
 
 func (a *App) buildHeader() tview.Primitive {
+	a.Menu().SetCompact(false)
 	header := tview.NewFlex()
 	header.SetBackgroundColor(a.Styles.BgColor())
 	header.SetDirection(tview.FlexColumn)
@@ -472,6 +520,7 @@ func (a *App) switchNS(ns string) error {
 	if err := a.Config.SetActiveNamespace(ns); err != nil {
 		return err
 	}
+	a.statusIndicator().RefreshIdentity()
 
 	return a.factory.SetActiveNS(ns)
 }
@@ -530,6 +579,7 @@ func (a *App) switchContext(ci *cmd.Interpreter, force bool) error {
 			slogs.Namespace, ns,
 			slogs.View, a.Config.ActiveView(),
 		)
+		a.statusIndicator().RefreshIdentity()
 		a.Flash().Infof("Switching context to %q::%q", contextName, ns)
 		a.ReloadStyles()
 		a.gotoResource(a.Config.ActiveView(), "", true, true)
@@ -596,13 +646,7 @@ func (a *App) Run() error {
 
 // Status reports a new app status for display.
 func (a *App) Status(l model.FlashLevel, msg string) {
-	a.QueueUpdateDraw(func() {
-		if a.showHeader {
-			a.setLogo(l, msg)
-		} else {
-			a.setIndicator(l, msg)
-		}
-	})
+	a.Flash().SetMessage(l, msg)
 }
 
 // IsBenchmarking check if benchmarks are active.
@@ -620,38 +664,18 @@ func (a *App) ClearStatus(flash bool) {
 	})
 }
 
-func (a *App) setLogo(l model.FlashLevel, msg string) {
-	switch l {
-	case model.FlashErr:
-		a.Logo().Err(msg)
-	case model.FlashWarn:
-		a.Logo().Warn(msg)
-	case model.FlashInfo:
-		a.Logo().Info(msg)
-	default:
-		a.Logo().Reset()
-	}
-}
-
-func (a *App) setIndicator(l model.FlashLevel, msg string) {
-	switch l {
-	case model.FlashErr:
-		a.statusIndicator().Err(msg)
-	case model.FlashWarn:
-		a.statusIndicator().Warn(msg)
-	case model.FlashInfo:
-		a.statusIndicator().Info(msg)
-	default:
-		a.statusIndicator().Reset()
-	}
-}
-
 // PrevCmd pops the command stack.
 func (a *App) PrevCmd(*tcell.EventKey) *tcell.EventKey {
 	if !a.Content.IsLast() {
 		a.Content.Pop()
 	}
 
+	return nil
+}
+
+// destinationCmd reveals unabridged context and namespace in every layout.
+func (a *App) destinationCmd(*tcell.EventKey) *tcell.EventKey {
+	dialog.ShowMessage(a.Styles, a.Content.Pages, "Destination", a.statusIndicator().FullDestination())
 	return nil
 }
 
@@ -845,7 +869,7 @@ func (a *App) statusIndicator() *ui.StatusIndicator {
 // poller is not; ignore queued work if navigation has changed the top component.
 func (a *App) connectivityComponent(c model.Component, connected bool) {
 	switch c.(type) {
-	case *HubbleView, *inspectionDetails:
+	case *HubbleView, *Pulse, *inspectionDetails, *comparisonView, *evidenceView, *capabilityDetails:
 		a.QueueUpdateDraw(func() {
 			if a.Content.Top() != c {
 				return

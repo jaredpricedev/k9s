@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package config
 
@@ -22,6 +23,9 @@ type UI struct {
 	// Headless toggles top header display.
 	Headless bool `json:"headless" yaml:"headless"`
 
+	// HeaderMode selects auto (the default), compact, or full terminal chrome.
+	HeaderMode string `json:"headerMode,omitempty" yaml:"headerMode,omitempty"`
+
 	// LogoLess toggles k9s logo.
 	Logoless bool `json:"logoless" yaml:"logoless"`
 
@@ -36,6 +40,9 @@ type UI struct {
 
 	// NoIcons toggles icons display.
 	NoIcons bool `json:"noIcons" yaml:"noIcons"`
+
+	// ProductionContexts highlights these exact context names in persistent chrome.
+	ProductionContexts []string `json:"productionContexts,omitempty" yaml:"productionContexts,omitempty"`
 
 	// Invert inverts all skin colors using Oklch lightness inversion.
 	Invert bool `json:"invert" yaml:"invert"`

@@ -1,0 +1,23 @@
+[RO] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination
+ <d> Describe  <l> Logs  <ctrl+o> Actions  <?> Help
+┌───┌────────────────────Destination · PgUp/PgDn scroll────────────────────┐───┐
+│ NA│                                                                      │   │
+│ > │  Context: demo-dev                                                   │   │
+│   │  Namespace: apps                                                     │   │
+│   │  Mode: read-only                                                     │   │
+│   │  Connection: CONNECTED                                               │   │
+│   │  Cluster: demo-cluster                                               │   │
+│   │  User: demo-user                                                     │   │
+│   │  Metrics: unavailable · metrics.k8s.io/v1beta1/nodes · Fixture       │   │
+│   │  metrics unavailable                                                 │   │
+│   │                                                                      │   │
+│   │                                                                      │   │
+│   │                                                                      │   │
+│   │                                                                      │   │
+│   │                                                                      │   │
+│   │                                                                      │   │
+│   │                                                                      │   │
+│   │                               Dismiss                                │   │
+│   │                                                                      │   │
+└───└──────────────────────────────────────────────────────────────────────┘───┘
+  <pod>

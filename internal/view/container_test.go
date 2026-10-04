@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view_test
 
@@ -17,5 +18,6 @@ func TestContainerNew(t *testing.T) {
 
 	require.NoError(t, c.Init(makeCtx(t)))
 	assert.Equal(t, "Containers", c.Name())
-	assert.Len(t, c.Hints(), 13)
+	assert.Len(t, c.Hints(), 14)
+	assertActionRegistry(t, c)
 }
