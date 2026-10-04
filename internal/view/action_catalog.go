@@ -183,6 +183,9 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		ID: "command.diagnostics", Label: "Capability diagnostics", Category: ui.ActionInspect,
 		Shortcut: ":diagnostics", Discoverable: true,
 		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).capabilityCommand("diagnostics"); return nil }}, ui.ActionDescriptor{
+		ID: "command.operator-review", Label: "Semantic operator review", Category: ui.ActionInspect,
+		Shortcut: ":operator-review", Discoverable: true, RequiresSelection: true, UnavailableReason: target.UnavailableReason,
+		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).operatorCommand(); return nil }}, ui.ActionDescriptor{
 		ID: "command.providers", Label: "Provider checks", Category: ui.ActionInspect,
 		Shortcut: ":providers", Discoverable: true,
 		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).providerCommand("providers"); return nil }}, ui.ActionDescriptor{

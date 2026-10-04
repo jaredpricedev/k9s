@@ -109,7 +109,8 @@ func (c *Command) suggestionAliases() []string {
 }
 
 func (c *Command) updateSuggestionAliases() {
-	aliases := []string{providersCommand, capacityCommandToken, "operations", "ops", configurationCommand, maintenanceCommandToken, accessCommandName, taskbookCommandName}
+	aliases := []string{operatorCommandToken, upgradeReadinessCommand, providersCommand, capacityCommandToken,
+		"operations", "ops", configurationCommand, maintenanceCommandToken, accessCommandName, taskbookCommandName}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
 		return
@@ -344,6 +345,8 @@ func (c *Command) specialCmd(p *cmd.Interpreter, pushCmd bool) bool {
 		c.comparisonCommand()
 	case p.Cmd() == "pressure":
 		c.pressureCommand()
+	case p.Cmd() == operatorCommandToken:
+		c.operatorCommand()
 	case p.Cmd() == capacityCommandToken:
 		c.capacityCommand()
 	case p.Cmd() == "evidence" || p.Cmd() == "evidence-open":
