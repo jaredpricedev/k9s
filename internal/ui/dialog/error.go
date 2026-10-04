@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package dialog
 
@@ -9,7 +10,6 @@ import (
 
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/ui"
-	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
 )
 
@@ -17,26 +17,21 @@ import (
 func ShowError(styles *config.Dialog, pages *ui.Pages, msg string) {
 	f := tview.NewForm()
 	f.SetItemPadding(0)
-	f.SetButtonsAlign(tview.AlignCenter).
-		SetButtonBackgroundColor(styles.ButtonBgColor.Color()).
-		SetButtonTextColor(styles.ButtonFgColor.Color()).
-		SetLabelColor(styles.LabelFgColor.Color()).
-		SetFieldTextColor(tcell.ColorIndianRed)
+	f.SetButtonsAlign(tview.AlignCenter)
 	f.AddButton("Dismiss", func() {
 		dismiss(pages)
 	})
-	if b := f.GetButton(0); b != nil {
-		b.SetBackgroundColorActivated(styles.ButtonFocusBgColor.Color())
-		b.SetLabelColorActivated(styles.ButtonFocusFgColor.Color())
-	}
 	f.SetFocus(0)
 	modal := tview.NewModalForm("<error>", f)
-	modal.SetText(cowTalk(msg))
-	modal.SetTextColor(tcell.ColorOrangeRed)
+	StyleForm(styles, f)
+	modal.SetBackgroundColor(styles.BgColor.Color())
+	modal.SetText(cowTalk(tview.Escape(msg)))
+	modal.SetTextColor(styles.FgColor.Color())
 	modal.SetDoneFunc(func(int, string) {
 		dismiss(pages)
 	})
 	pages.AddPage(dialogKey, modal, false, false)
+	bindPageForm(styles, pages, dialogKey, f, modal)
 	pages.ShowPage(dialogKey)
 }
 

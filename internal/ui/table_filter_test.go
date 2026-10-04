@@ -5,6 +5,7 @@
 package ui_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/derailed/k9s/internal/client"
@@ -18,6 +19,13 @@ import (
 )
 
 type resourceFilterWatcher struct{ table *ui.Table }
+
+type mutableResourceFilterModel struct {
+	*mockModel
+	data *model1.TableData
+}
+
+func (m *mutableResourceFilterModel) Peek() *model1.TableData { return m.data.Clone() }
 
 func (w resourceFilterWatcher) BufferCompleted(_, _ string) {
 	w.table.Filter(w.table.CmdBuff().GetText())
@@ -141,6 +149,33 @@ func TestTableFilterRestoresSelectionAfterEmptyDraw(t *testing.T) {
 	require.Equal(t, "r2", v.GetSelectedItem())
 }
 
+func TestTableFilterReusesUnchangedRowsAndRedrawsChangedFields(t *testing.T) {
+	v := ui.NewTable(client.NewGVR("test"))
+	v.Init(makeContext())
+	m := &mutableResourceFilterModel{mockModel: new(mockModel), data: makeTableData()}
+	v.SetModel(m)
+	query := func(text string) {
+		v.CmdBuff().SetText(text, "", true)
+		v.Filter(text)
+	}
+	query("ble")
+	cell := v.GetCell(1, 0)
+	selected := v.GetSelectedItem()
+	query("blee")
+	assert.Same(t, cell, v.GetCell(1, 0), "a new query matching identical rows must reuse the rendered cells")
+	assert.Equal(t, "blee", v.CommittedFilter())
+	assert.Equal(t, selected, v.GetSelectedItem())
+	assert.Contains(t, v.FilterStatusText(), "2/2")
+
+	row, ok := m.data.RowAt(0)
+	require.True(t, ok)
+	row.Row.Fields[1] = "changed evidence"
+	m.data.SetRow(0, row)
+	query("blee")
+	assert.NotSame(t, cell, v.GetCell(1, 0), "changed source fields must rebuild even when the matching IDs stay the same")
+	assert.Equal(t, "changed evidence", strings.TrimSpace(v.GetCell(1, 1).Text))
+}
+
 func TestResourcePromptShowsModeAndKeepsInvalidInputEditable(t *testing.T) {
 	buffer := model.NewFishBuff('/', model.FilterBuffer)
 	prompt := ui.NewPrompt(nil, true, config.NewStyles())
@@ -160,4 +195,41 @@ func TestResourcePromptShowsModeAndKeepsInvalidInputEditable(t *testing.T) {
 	buffer.SetActive(true)
 	prompt.SendKey(tcell.NewEventKey(tcell.KeyCtrlU, 0, tcell.ModNone))
 	assert.Empty(t, buffer.GetText())
+}
+
+func TestResourceFilterRefreshUsesCommittedProjectionWhileDraftWaits(t *testing.T) {
+	v := ui.NewTable(client.NewGVR("test"))
+	v.Init(makeContext())
+	m := &mutableResourceFilterModel{mockModel: new(mockModel), data: makeTableData()}
+	v.SetModel(m)
+	v.CmdBuff().SetText("zorg", "", true)
+	v.Filter("zorg")
+	require.Equal(t, "r2", v.GetSelectedItem())
+	v.BeginFilter()
+	v.TouchFilterDraft()
+	v.CmdBuff().SetText("b", "", true)
+	v.DeferFilterDraft("b")
+	v.Refresh()
+	assert.Equal(t, "zorg", v.CommittedFilter())
+	assert.Equal(t, 2, v.GetRowCount(), "a watched refresh must not project an intermediate broad prefix")
+	assert.Equal(t, "r2", v.GetSelectedItem())
+
+	v.CmdBuff().SetText("[", "", true)
+	v.DeferFilterDraft("[")
+	v.Refresh()
+	require.Error(t, v.FilterError())
+	assert.Equal(t, "zorg", v.CommittedFilter())
+	assert.Equal(t, "r2", v.GetSelectedItem())
+	assert.Equal(t, 2, v.GetRowCount())
+
+	v.CmdBuff().SetText("never matches", "", true)
+	v.DeferFilterDraft("never matches")
+	v.Filter("never matches")
+	assert.Equal(t, 1, v.GetRowCount())
+	assert.Empty(t, v.GetSelectedItem())
+	v.CmdBuff().ClearText(false)
+	v.DeferFilterDraft("")
+	v.Filter("")
+	assert.Equal(t, 3, v.GetRowCount())
+	assert.NotEmpty(t, v.GetSelectedItem())
 }

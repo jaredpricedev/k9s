@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view
 
@@ -136,7 +137,7 @@ func (l *LogIndicator) Refresh() {
 	var (
 		toggleFmt    = "[::b]%s:["
 		toggleOnFmt  = toggleFmt + string(l.styles.K9s.Views.Log.Indicator.ToggleOnColor) + "::b]On[-::] %s"
-		toggleOffFmt = toggleFmt + string(l.styles.K9s.Views.Log.Indicator.ToggleOffColor) + "::d]Off[-::]%s"
+		toggleOffFmt = toggleFmt + string(l.styles.K9s.Views.Log.Indicator.ToggleOffColor) + "::-]Off[-::]%s"
 	)
 
 	if l.shouldDisplayAllContainers {

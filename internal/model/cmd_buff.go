@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package model
 
@@ -85,7 +86,7 @@ func (c *CmdBuff) SetActive(b bool) {
 	c.active = b
 	c.mx.Unlock()
 
-	c.fireActive(c.active)
+	c.fireActive(b)
 }
 
 // GetText returns the current text.
@@ -227,19 +228,31 @@ func (c *CmdBuff) RemoveListener(l BuffWatcher) {
 }
 
 func (c *CmdBuff) fireBufferCompleted(t, s string) {
-	for l := range c.listeners {
+	for _, l := range c.listenerSnapshot() {
 		l.BufferCompleted(t, s)
 	}
 }
 
 func (c *CmdBuff) fireBufferChanged(t, s string) {
-	for l := range c.listeners {
+	for _, l := range c.listenerSnapshot() {
 		l.BufferChanged(t, s)
 	}
 }
 
 func (c *CmdBuff) fireActive(b bool) {
-	for l := range c.listeners {
+	for _, l := range c.listenerSnapshot() {
 		l.BufferActive(b, c.GetKind())
 	}
+}
+
+// Completion can arrive from the key-entry timer while navigation removes a
+// watcher. Snapshot ownership under the lock, then invoke callbacks outside it.
+func (c *CmdBuff) listenerSnapshot() []BuffWatcher {
+	c.mx.RLock()
+	defer c.mx.RUnlock()
+	listeners := make([]BuffWatcher, 0, len(c.listeners))
+	for listener := range c.listeners {
+		listeners = append(listeners, listener)
+	}
+	return listeners
 }

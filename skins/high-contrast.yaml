@@ -1,0 +1,15 @@
+# Colors supplement explicit status labels and a visible selection marker.
+k9s:
+  semantic:
+    canvas: "#000000"
+    panel: "#080808"
+    text: "#ffffff"
+    muted: "#c4c4c4"
+    focus: "#87ffff"
+    healthy: "#afff87"
+    warning: "#ffdf87"
+    failure: "#ffafaf"
+    progress: "#afd7ff"
+    unknown: "#c4c4c4"
+    category: "#dfafff"
+    selected: "#202020"

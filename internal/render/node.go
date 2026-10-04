@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package render
 
@@ -121,6 +122,11 @@ func (n Node) defaultRow(nwm *NodeWithMetrics, r *model1.Row) error {
 	iIP, eIP = missing(iIP), missing(eIP)
 
 	c, a := gatherNodeMX(&no, nwm.MX)
+	cpuAvailable, memoryAvailable := false, false
+	if nwm.MX != nil {
+		_, cpuAvailable = nwm.MX.Usage[v1.ResourceCPU]
+		_, memoryAvailable = nwm.MX.Usage[v1.ResourceMemory]
+	}
 
 	statuses := make(sort.StringSlice, 10)
 	status(no.Status.Conditions, no.Spec.Unschedulable, statuses)
@@ -146,12 +152,12 @@ func (n Node) defaultRow(nwm *NodeWithMetrics, r *model1.Row) error {
 		iIP,
 		eIP,
 		podCount,
-		toMc(c.cpu),
+		metricUsage(c.cpu, cpuAvailable, false),
 		toMc(a.cpu),
-		client.ToPercentageStr(c.cpu, a.cpu),
-		toMi(c.mem),
+		metricPercentage(c.cpu, a.cpu, cpuAvailable),
+		metricUsage(c.mem, memoryAvailable, true),
 		toMi(a.mem),
-		client.ToPercentageStr(c.mem, a.mem),
+		metricPercentage(c.mem, a.mem, memoryAvailable),
 		toMu(a.gpu),
 		toMu(c.gpu),
 		toMu(a.gpuShared),

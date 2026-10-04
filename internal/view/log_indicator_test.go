@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view_test
 
@@ -18,10 +19,10 @@ func TestLogIndicatorRefresh(t *testing.T) {
 		e  string
 	}{
 		"all-containers": {
-			view.NewLogIndicator(config.NewConfig(nil), defaults, true), "[::b]AllContainers:[gray::d]Off[-::]     [::b]Autoscroll:[limegreen::b]On[-::]      [::b]ColumnLock:[gray::d]Off[-::]     [::b]FullScreen:[gray::d]Off[-::]     [::b]Timestamps:[gray::d]Off[-::]     [::b]Wrap:[gray::d]Off[-::]\n",
+			view.NewLogIndicator(config.NewConfig(nil), defaults, true), "[::b]AllContainers:[#a5b0aa::-]Off[-::]     [::b]Autoscroll:[#79c7d4::b]On[-::]      [::b]ColumnLock:[#a5b0aa::-]Off[-::]     [::b]FullScreen:[#a5b0aa::-]Off[-::]     [::b]Timestamps:[#a5b0aa::-]Off[-::]     [::b]Wrap:[#a5b0aa::-]Off[-::]\n",
 		},
 		"plain": {
-			view.NewLogIndicator(config.NewConfig(nil), defaults, false), "[::b]Autoscroll:[limegreen::b]On[-::]      [::b]ColumnLock:[gray::d]Off[-::]     [::b]FullScreen:[gray::d]Off[-::]     [::b]Timestamps:[gray::d]Off[-::]     [::b]Wrap:[gray::d]Off[-::]\n",
+			view.NewLogIndicator(config.NewConfig(nil), defaults, false), "[::b]Autoscroll:[#79c7d4::b]On[-::]      [::b]ColumnLock:[#a5b0aa::-]Off[-::]     [::b]FullScreen:[#a5b0aa::-]Off[-::]     [::b]Timestamps:[#a5b0aa::-]Off[-::]     [::b]Wrap:[#a5b0aa::-]Off[-::]\n",
 		},
 	}
 

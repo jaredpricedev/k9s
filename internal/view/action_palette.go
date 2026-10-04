@@ -5,7 +5,6 @@ package view
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/derailed/k9s/internal/model"
@@ -17,17 +16,18 @@ import (
 const actionsCommand = "actions"
 
 type paletteAction struct {
-	key   tcell.Key
-	label string
+	action ui.ActionDescriptor
+	label  string
 }
 type actionPalette struct {
 	*Picker
-	owner       ResourceViewer
-	app         *App
-	path, query string
-	contextName string
-	target      SelectedResourceTarget
-	entries     []paletteAction
+	owner           actionOwner
+	app             *App
+	path, query     string
+	contextName     string
+	target          SelectedResourceTarget
+	entries         []paletteAction
+	originalCapture func(*tcell.EventKey) *tcell.EventKey
 }
 
 func (p *actionPalette) Init(ctx context.Context) error {
@@ -51,39 +51,27 @@ func (*actionPalette) Hints() model.MenuHints {
 func (p *actionPalette) refresh() {
 	p.Clear()
 	p.entries = nil
-	p.owner.Actions().Range(func(k tcell.Key, a ui.KeyAction) {
-		if !a.Opts.Visible || a.Action == nil || (p.app.Config.IsReadOnly() && a.Opts.Dangerous) || (p.target.Err() != nil && (a.Opts.Dangerous || a.Opts.Plugin)) {
-			return
-		}
-		category := "Action"
-		if a.Opts.Plugin {
-			category = "Plugin"
-		} else if a.Opts.HotKey {
-			category = "Shortcut"
-		}
-		if a.Opts.Dangerous {
-			category += " / changes resource"
-		}
-		label := category + " | " + a.Description + "  (" + tcell.KeyNames[k] + ")"
-		if actionMatches(label, p.query) {
-			p.entries = append(p.entries, paletteAction{k, label})
-		}
-	})
-	for _, entry := range []paletteAction{{9001, "Troubleshoot snapshot (:troubleshoot)"}, {9002, "TLS certificate inspection (:tls)"}} {
-		if p.target.Err() != nil || (entry.key == 9002 && !tlsEntryResource(p.target.GVR.R())) {
+	for _, action := range actionCatalog(p.owner, p.app) {
+		if !action.Discoverable {
 			continue
 		}
-		if actionMatches(entry.label, p.query) {
-			p.entries = append(p.entries, entry)
+		label := action.Category + " | " + action.Label + "  (" + action.Shortcut + ")"
+		if action.UnavailableReason != "" {
+			label += " · " + action.UnavailableReason
+		}
+		if actionMatches(label, p.query) {
+			p.entries = append(p.entries, paletteAction{action: action, label: label})
 		}
 	}
-	sort.Slice(p.entries, func(i, j int) bool { return p.entries[i].label < p.entries[j].label })
 	for _, a := range p.entries {
 		p.AddItem(tview.Escape(a.label), "", 0, nil)
 	}
 	identity := p.path
 	if p.target.Err() != nil {
-		identity = p.owner.Name() + " | " + p.target.UnavailableReason
+		identity = p.owner.Name()
+		if _, resources := p.owner.(ResourceViewer); resources {
+			identity += " | " + p.target.UnavailableReason
+		}
 	}
 	p.SetTitle(" Actions | " + tview.Escape(identity) + " | search: " + tview.Escape(p.query) + " ")
 	if len(p.entries) == 0 {
@@ -92,8 +80,11 @@ func (p *actionPalette) refresh() {
 }
 func (p *actionPalette) keyboard(e *tcell.EventKey) *tcell.EventKey {
 	switch e.Key() {
-	case tcell.KeyEscape:
-		p.app.PrevCmd(e)
+	case tcell.KeyEscape, tcell.KeyCtrlO:
+		p.close()
+		return nil
+	case tcell.KeyEnter:
+		p.invoke(p.GetCurrentItem())
 		return nil
 	case tcell.KeyBackspace, tcell.KeyBackspace2:
 		r := []rune(p.query)
@@ -115,35 +106,41 @@ func (p *actionPalette) invoke(i int) {
 	if i < 0 || i >= len(p.entries) {
 		return
 	}
-	key := p.entries[i].key
-	p.app.PrevCmd(nil)
-	current := resolveSelectedResource(p.owner, p.app.Config.ActiveContextName())
-	if p.app.Config.ActiveContextName() != p.contextName || current.GVR != p.target.GVR || current.Path() != p.target.Path() ||
-		(p.target.UID != "" && current.UID != p.target.UID) || current.UnavailableReason != p.target.UnavailableReason {
-		p.app.Flash().Err(fmt.Errorf("context or selection changed; reopen actions"))
+	if p.app.Content.Top() != p.owner || p.app.Config.ActiveContextName() != p.contextName {
+		p.close()
+		p.app.Flash().Warn("View or context changed; reopen actions")
 		return
 	}
-	if key == 9001 {
-		p.app.openTargetInspection(p.target, troubleshootCommand)
+	action := p.entries[i].action
+	// Recompute availability by stable ID before executing. A disabled entry is
+	// explanatory and keeps the palette open; it can never run its handler.
+	found := false
+	for _, current := range actionCatalog(p.owner, p.app) {
+		if current.ID == action.ID && current.Shortcut == action.Shortcut {
+			action, found = current, true
+			break
+		}
+	}
+	if !found {
+		p.app.Flash().Warn("Action no longer available; reopen actions")
 		return
 	}
-	if key == 9002 {
-		p.app.openTargetInspection(p.target, tlsCommand)
+	if !action.Available() {
+		p.app.Flash().Warn(action.UnavailableReason)
 		return
 	}
-	a, ok := p.owner.Actions().Get(key)
-	if !ok || a.Action == nil || (p.app.Config.IsReadOnly() && a.Opts.Dangerous) {
-		return
+	if action.RequiresSelection {
+		current := actionTarget(p.owner, p.app.Config.ActiveContextName())
+		if p.app.Config.ActiveContextName() != p.contextName || current.GVR != p.target.GVR ||
+			current.Path() != p.target.Path() || (p.target.UID != "" && current.UID != p.target.UID) ||
+			current.UnavailableReason != p.target.UnavailableReason {
+			p.app.Flash().Err(fmt.Errorf("context or selection changed; reopen actions"))
+			return
+		}
 	}
-	event := tcell.NewEventKey(key, 0, tcell.ModNone)
-	if key >= ui.KeyShiftA && key <= ui.KeyShiftZ || key >= ui.KeyA && key <= ui.KeyZ {
-		event = tcell.NewEventKey(tcell.KeyRune, rune(key), tcell.ModNone)
-	}
-	if a.Description == "Help" {
-		p.app.helpCmd(event)
-		return
-	}
-	a.Action(event)
+	p.close()
+	event := actionEvent(action.Key)
+	action.Handler(event)
 }
 
 func actionMatches(label, query string) bool {
@@ -154,4 +151,11 @@ func actionMatches(label, query string) bool {
 		}
 	}
 	return true
+}
+
+func actionEvent(key tcell.Key) *tcell.EventKey {
+	if key >= 32 && key <= 126 {
+		return tcell.NewEventKey(tcell.KeyRune, rune(key), tcell.ModNone)
+	}
+	return tcell.NewEventKey(key, 0, tcell.ModNone)
 }

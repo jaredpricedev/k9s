@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package render_test
 
@@ -204,6 +205,7 @@ func TestPodSidecarRender(t *testing.T) {
 		Raw: load(t, "po_sidecar"),
 		MX:  makePodMX("sleep", "100m", "40Mi"),
 	}
+	pom.MX.Containers = append(pom.MX.Containers, mv1beta1.ContainerMetrics{Name: "sidecar", Usage: makeRes("0", "0")})
 
 	po := render.NewPod()
 	r := model1.NewRow(14)
@@ -798,7 +800,7 @@ func makePodMX(name, cpu, mem string) *mv1beta1.PodMetrics {
 			Namespace: "default",
 		},
 		Containers: []mv1beta1.ContainerMetrics{
-			{Usage: makeRes(cpu, mem)},
+			{Name: name, Usage: makeRes(cpu, mem)},
 		},
 	}
 }

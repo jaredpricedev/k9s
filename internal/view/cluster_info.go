@@ -6,13 +6,10 @@ package view
 
 import (
 	"fmt"
-	"log/slog"
 
-	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/model"
 	"github.com/derailed/k9s/internal/render"
-	"github.com/derailed/k9s/internal/slogs"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
@@ -52,19 +49,6 @@ func (c *ClusterInfo) StylesChanged(s *config.Styles) {
 	c.updateStyle()
 }
 
-func (c *ClusterInfo) hasMetrics() bool {
-	mx := c.app.Conn().HasMetrics()
-	if mx {
-		auth, err := c.app.Conn().CanI("", client.NmxGVR, "", client.ListAccess)
-		if err != nil {
-			slog.Warn("No nodes metrics access", slogs.Error, err)
-		}
-		mx = auth
-	}
-
-	return mx
-}
-
 func (c *ClusterInfo) layout() {
 	for row, section := range []string{"Context", "Cluster", "User", "k9+ Rev", "K8s Rev", "CPU", "MEM"} {
 		c.SetCell(row, 0, c.sectionCell(section))
@@ -102,40 +86,35 @@ func (c *ClusterInfo) ClusterInfoUpdated(data *model.ClusterMeta) {
 	c.ClusterInfoChanged(data, data)
 }
 
-func (*ClusterInfo) warnCell(s string, w bool) string {
-	if w {
-		return fmt.Sprintf("[orangered::b]%s", s)
-	}
-
-	return s
-}
-
 // ClusterInfoChanged notifies the cluster meta was changed.
 func (c *ClusterInfo) ClusterInfoChanged(prev, curr *model.ClusterMeta) {
 	c.app.QueueUpdateDraw(func() {
+		if !curr.IsCurrent() {
+			return
+		}
+		if context := c.app.Config.ActiveContextName(); context != "" && curr.Context != context {
+			return
+		}
 		c.Clear()
 		c.layout()
 
-		context := curr.Context
+		context := tview.Escape(curr.Context)
 		if ic := ui.ROIndicator(c.app.Config.IsReadOnly(), c.app.Config.K9s.UI.NoIcons); ic != "" {
 			context += " " + ic
 		}
 		row := c.setCell(0, context)
-		row = c.setCell(row, curr.Cluster)
-		row = c.setCell(row, curr.User)
+		row = c.setCell(row, tview.Escape(curr.Cluster))
+		row = c.setCell(row, tview.Escape(curr.User))
 		if curr.K9sLatest != "" {
 			row = c.setCell(row, fmt.Sprintf("%s ⚡️[cadetblue::b]%s", curr.K9sVer, curr.K9sLatest))
 		} else {
 			row = c.setCell(row, curr.K9sVer)
 		}
 		row = c.setCell(row, curr.K8sVer)
-		if c.hasMetrics() {
-			row = c.setCell(row, ui.AsPercDelta(prev.Cpu, curr.Cpu))
-			_ = c.setCell(row, ui.AsPercDelta(prev.Mem, curr.Mem))
+		row = c.setCell(row, ui.MetricPercent(prev.Metrics, curr.Metrics, false))
+		_ = c.setCell(row, ui.MetricPercent(prev.Metrics, curr.Metrics, true))
+		if curr.Metrics.Fresh() {
 			c.setDefCon(curr.Cpu, curr.Mem)
-		} else {
-			row = c.setCell(row, c.warnCell(render.NAValue, true))
-			_ = c.setCell(row, c.warnCell(render.NAValue, true))
 		}
 		c.updateStyle()
 	})

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Modified for k9+; see NOTICE.
+
 package inspect
 
 import (

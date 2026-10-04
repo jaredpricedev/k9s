@@ -1,3 +1,4 @@
+// Modified for k9+; see NOTICE.
 package view
 
 import (
@@ -90,6 +91,9 @@ type Pulse struct {
 	charts         Charts
 	prevFocusIndex int
 	chartGVRs      client.GVRs
+	metricsSample  client.MetricSample
+	metricsPoint   dao.Point
+	generation     uint64
 }
 
 // NewPulse returns a new alias view.
@@ -134,10 +138,11 @@ func (p *Pulse) Init(ctx context.Context) error {
 			col, x = 0, x+2
 		}
 	}
-	if p.app.Conn().HasMetrics() {
-		p.charts[client.CpuGVR] = p.makeSP(image.Point{X: chartRow, Y: 0}, image.Point{X: 2, Y: 4}, client.CpuGVR, "c")
-		p.charts[client.MemGVR] = p.makeSP(image.Point{X: chartRow, Y: 4}, image.Point{X: 2, Y: 4}, client.MemGVR, "Gi")
-	}
+	// Collection workers report availability. Discovery never blocks this UI callback.
+	p.charts[client.CpuGVR] = p.makeSP(image.Point{X: chartRow, Y: 0}, image.Point{X: 2, Y: 4}, client.CpuGVR, "c")
+	p.charts[client.MemGVR] = p.makeSP(image.Point{X: chartRow, Y: 4}, image.Point{X: 2, Y: 4}, client.MemGVR, "Gi")
+	p.charts[client.CpuGVR].SetLegend(" CPU N/A (waiting for a sample) ")
+	p.charts[client.MemGVR].SetLegend(" MEM N/A (waiting for a sample) ")
 	p.GetItem(0).Focus = true
 	p.app.SetFocus(p.charts[p.chartGVRs[0]])
 
@@ -186,21 +191,52 @@ func (p *Pulse) SeriesChanged(tt dao.TimeSeries) {
 	if !ok {
 		return
 	}
-	mem := p.charts[client.MemGVR]
+	mem, ok := p.charts[client.MemGVR]
 	if !ok {
 		return
 	}
 
 	for i := range tt {
 		t := tt[i]
-		cpu.SetMax(float64(t.Value.AllocatableCPU))
-		mem.SetMax(float64(t.Value.AllocatableMEM))
+		if !t.Sample.Fresh() {
+			continue
+		}
+		if t.Sample.Source == client.PodMetricsSource {
+			cpu.SetMax(float64(t.Value.CurrentCPU))
+			mem.SetMax(float64(t.Value.CurrentMEM))
+		} else {
+			cpu.SetMax(float64(t.Value.AllocatableCPU))
+			mem.SetMax(float64(t.Value.AllocatableMEM))
+		}
 		cpu.AddMetric(t.Time, float64(t.Value.CurrentCPU))
 		mem.AddMetric(t.Time, float64(t.Value.CurrentMEM))
 	}
 
 	last := tt[len(tt)-1]
-	perc := client.ToPercentage(last.Value.CurrentCPU, int64(cpu.GetMax()))
+	p.metricsSample = last.Sample
+	p.metricsPoint = last
+	if !last.Sample.Fresh() {
+		unknown := p.app.Styles.Semantic().Unknown.Color()
+		cpu.SetBorderColor(unknown)
+		mem.SetBorderColor(unknown)
+		cpu.SetLegend(" CPU " + pulseMetricText(&last, false) + " ")
+		mem.SetLegend(" MEM " + pulseMetricText(&last, true) + " ")
+		return
+	}
+	cpu.SetBorderColor(p.app.Styles.Semantic().Muted.Color())
+	mem.SetBorderColor(p.app.Styles.Semantic().Muted.Color())
+	if last.Sample.Source == client.PodMetricsSource {
+		// Namespace totals have no allocatable capacity denominator. A changing
+		// usage total cannot establish a workload health threshold.
+		cpu.SetColorIndex(0)
+		mem.SetColorIndex(0)
+		cpu.SetSeriesColors(p.app.Styles.Semantic().Progress.Color())
+		mem.SetSeriesColors(p.app.Styles.Semantic().Progress.Color())
+		cpu.SetLegend(" CPU " + pulseMetricText(&last, false) + " (usage) ")
+		mem.SetLegend(" MEM " + pulseMetricText(&last, true) + " (usage) ")
+		return
+	}
+	perc := last.Sample.Values.PercCPU
 	index := int(p.app.Config.K9s.Thresholds.LevelFor("cpu", perc))
 	cpu.SetColorIndex(int(p.app.Config.K9s.Thresholds.LevelFor("cpu", perc)))
 	nn := cpu.GetSeriesColorNames()
@@ -227,7 +263,7 @@ func (p *Pulse) SeriesChanged(tt dao.TimeSeries) {
 	if last.Value.AllocatableMEM == 0 {
 		nn[1] = grayC
 	}
-	perc = client.ToPercentage(last.Value.CurrentMEM, int64(mem.GetMax()))
+	perc = last.Sample.Values.PercMEM
 	index = int(p.app.Config.K9s.Thresholds.LevelFor("memory", perc))
 	mem.SetColorIndex(index)
 	mem.SetLegend(fmt.Sprintf(memFmt,
@@ -239,6 +275,25 @@ func (p *Pulse) SeriesChanged(tt dao.TimeSeries) {
 		"white",
 		render.AsThousands(int64(mem.GetMax())),
 	))
+}
+
+func pulseMetricText(point *dao.Point, memory bool) string {
+	sample := point.Sample.At(time.Now())
+	if sample.Source != client.PodMetricsSource || !sample.HasValue() {
+		return ui.MetricPercent(client.MetricSample{}, sample, memory)
+	}
+	value := fmt.Sprintf("%dm", point.Value.CurrentCPU)
+	if memory {
+		value = fmt.Sprintf("%dMi", point.Value.CurrentMEM)
+	}
+	if sample.State == client.MetricsStale {
+		state := "stale"
+		if sample.Failure != "" {
+			state += ": " + string(sample.Failure)
+		}
+		value += " (" + state + ")"
+	}
+	return value
 }
 
 // PulseChanged notifies the model data changed.
@@ -271,7 +326,9 @@ func (p *Pulse) PulseFailed(err error) {
 }
 
 func (p *Pulse) bindKeys() {
+	p.actions.Add(tcell.KeyCtrlO, ui.NewKeyAction("Actions", p.app.actionsCmd, true))
 	p.actions.Merge(ui.NewKeyActionsFromMap(ui.KeyMap{
+		ui.KeyM:          ui.NewKeyAction("Metric source", p.metricSourceCmd, true),
 		tcell.KeyEnter:   ui.NewKeyAction("Goto", p.enterCmd, true),
 		tcell.KeyTab:     ui.NewKeyAction("Next", p.nextFocusCmd(dirLeft), true),
 		tcell.KeyBacktab: ui.NewKeyAction("Prev", p.nextFocusCmd(dirRight), true),
@@ -284,6 +341,25 @@ func (p *Pulse) bindKeys() {
 		ui.KeyK:          ui.NewKeyAction("Up", p.nextFocusCmd(dirUp), false),
 		ui.KeyL:          ui.NewKeyAction("Next", p.nextFocusCmd(dirLeft), false),
 	}))
+}
+
+func (p *Pulse) metricSourceCmd(*tcell.EventKey) *tcell.EventKey {
+	namespace := p.model.GetNamespace()
+	if client.IsAllNamespaces(namespace) || namespace == "" {
+		namespace = "all"
+	}
+	text := fmt.Sprintf("Context: %s\nNamespace: %s\nMetrics: %s\n\nCPU: %s\nMEM: %s\n\nMissing and stale samples do not enter chart "+
+		"history or health thresholds.", p.app.Config.ActiveContextName(), namespace, ui.MetricDescription(p.metricsSample),
+		pulseMetricText(&p.metricsPoint, false), pulseMetricText(&p.metricsPoint, true))
+	if p.metricsSample.Source == client.PodMetricsSource {
+		text += "\n\nNamespace metrics report usage totals; no allocatable capacity denominator is available, " +
+			"so no utilization percent or health threshold is inferred."
+	}
+	view := NewDetails(p.app, "Pulse metric source", "observation", contentInspection, true).Update(text)
+	if err := p.app.inject(view, false); err != nil {
+		p.app.Flash().Err(err)
+	}
+	return nil
 }
 
 func (p *Pulse) keyboard(evt *tcell.EventKey) *tcell.EventKey {
@@ -307,6 +383,7 @@ func (*Pulse) Restart() {}
 // Start initializes resource watch loop.
 func (p *Pulse) Start() {
 	p.Stop()
+	generation, contextName := p.generation, p.app.Config.ActiveContextName()
 
 	ctx := p.defaultContext()
 	ctx, p.cancelFn = context.WithCancel(ctx)
@@ -319,19 +396,25 @@ func (p *Pulse) Start() {
 	go func() {
 		for {
 			select {
+			case <-ctx.Done():
+				return
 			case check, ok := <-gaugeChan:
 				if !ok {
 					return
 				}
 				p.app.QueueUpdateDraw(func() {
-					p.PulseChanged(check)
+					if p.generation == generation && p.app.Config.ActiveContextName() == contextName && p.app.Content.Top() == p {
+						p.PulseChanged(check)
+					}
 				})
 			case mx, ok := <-metricsChan:
 				if !ok {
 					return
 				}
 				p.app.QueueUpdateDraw(func() {
-					p.SeriesChanged(mx)
+					if p.generation == generation && p.app.Config.ActiveContextName() == contextName && p.app.Content.Top() == p {
+						p.SeriesChanged(mx)
+					}
 				})
 			}
 		}
@@ -340,6 +423,7 @@ func (p *Pulse) Start() {
 
 // Stop terminates watch loop.
 func (p *Pulse) Stop() {
+	p.generation++
 	if p.cancelFn == nil {
 		return
 	}

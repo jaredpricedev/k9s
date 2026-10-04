@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package ui
 
@@ -23,18 +24,23 @@ type (
 
 	// ActionOpts tracks various action options.
 	ActionOpts struct {
-		Visible   bool
-		Shared    bool
-		Plugin    bool
-		HotKey    bool
-		Dangerous bool
+		Visible           bool
+		Discoverable      bool
+		RequiresSelection bool
+		Shared            bool
+		Plugin            bool
+		HotKey            bool
+		Dangerous         bool
 	}
 
 	// KeyAction represents a keyboard action.
 	KeyAction struct {
-		Description string
-		Action      ActionHandler
-		Opts        ActionOpts
+		ID           string
+		Category     string
+		Description  string
+		Action       ActionHandler
+		Availability func() string
+		Opts         ActionOpts
 	}
 
 	// KeyMap tracks key to action mappings.
@@ -64,7 +70,11 @@ func NewSharedKeyAction(d string, a ActionHandler, visible bool) KeyAction {
 
 // NewKeyActionWithOpts returns a new keyboard action.
 func NewKeyActionWithOpts(d string, a ActionHandler, opts ActionOpts) KeyAction {
+	opts.Discoverable = true
+	opts.RequiresSelection = opts.RequiresSelection || opts.Dangerous || opts.Plugin
 	return KeyAction{
+		ID:          actionID(d),
+		Category:    actionCategory(d, opts),
 		Description: d,
 		Action:      a,
 		Opts:        opts,
@@ -125,6 +135,10 @@ func (a *KeyActions) snapshot() KeyMap {
 	defer a.mx.RUnlock()
 	return maps.Clone(a.actions)
 }
+
+// Snapshot returns an owned action map for help, hints and action discovery.
+// Handlers and availability callbacks must be invoked after the snapshot returns.
+func (a *KeyActions) Snapshot() KeyMap { return a.snapshot() }
 
 // Add adds a new key action.
 func (a *KeyActions) Add(k tcell.Key, ka KeyAction) {

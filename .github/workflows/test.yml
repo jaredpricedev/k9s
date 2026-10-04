@@ -10,8 +10,6 @@ on:
       - rc*
       - v*
   pull_request:
-    branches:
-      - master
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -38,3 +36,54 @@ jobs:
 
       - name: Check distribution license bundle
         run: make licenses
+
+  race:
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: 1
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7.0.1
+      - name: Install Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Run focused concurrency regressions
+        run: go test -race -p 4 ./internal/client ./internal/model ./internal/dao ./internal/ui ./internal/view ./internal/inspect ./internal/logstream ./internal/hubble
+
+  terminal:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7.0.1
+      - name: Install Go
+        uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Install Python for reproducible captures
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install terminal capture dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-dejavu-core
+          python3 -m pip install -r scripts/terminal-requirements.txt
+      - name: Build the application and Hubble terminal fixture
+        run: |
+          go build -o /tmp/k9plus .
+          go test -c -o /tmp/k9plus-view-tests ./internal/view
+      - name: Exercise resource journeys and delayed API responsiveness
+        run: python3 scripts/regression-journeys.py --binary /tmp/k9plus --output /tmp/terminal-evidence/resource --slow-api --performance --investigations
+      - name: Exercise Hubble freeze, navigation and retained evidence
+        run: python3 scripts/hubble-latency.py --binary /tmp/k9plus-view-tests --output /tmp/terminal-evidence/hubble
+      - name: Exercise narrow layouts across skins and color capabilities
+        run: python3 scripts/skin-journeys.py --binary /tmp/k9plus --output /tmp/terminal-evidence/skins
+      - name: Retain terminal cells and measurement metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terminal-evidence
+          path: /tmp/terminal-evidence

@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strings"
 
-	"github.com/derailed/k9s/internal/dao"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/k9s/internal/ui/dialog"
 	"github.com/derailed/tcell/v2"
@@ -48,12 +46,18 @@ func (r *RestartExtender) restartCmd(*tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 
-	r.Stop()
-	defer r.Start()
-	msg := fmt.Sprintf("Restart %s %s?", singularize(r.GVR().R()), paths[0])
-	if len(paths) > 1 {
-		msg = fmt.Sprintf("Restart %d %s?", len(paths), r.GVR().R())
+	session, err := captureOperation(r)
+	if err != nil {
+		r.App().Flash().Err(err)
+		return nil
 	}
+	targets, err := captureOperationTargets(r, session.context, paths)
+	if err != nil {
+		r.App().Flash().Err(err)
+		return nil
+	}
+	msg := fmt.Sprintf("Restart in context %s?\n%s\n\nAPI acceptance starts the rollout; watch READY / STATUS for completion.",
+		session.context, operationDestination(targets))
 	d := r.App().Styles.Dialog()
 
 	opts := dialog.RestartDialogOpts{
@@ -61,15 +65,13 @@ func (r *RestartExtender) restartCmd(*tcell.EventKey) *tcell.EventKey {
 		Message:      msg,
 		FieldManager: "kubectl-rollout",
 		Ack: func(opts *metav1.PatchOptions) bool {
-			ctx, cancel := context.WithTimeout(context.Background(), r.App().Conn().Config().CallTimeout())
-			defer cancel()
-			for _, path := range paths {
-				if err := r.restartRollout(ctx, path, opts); err != nil {
-					r.App().Flash().Err(err)
-				} else {
-					r.App().Flash().Infof("Restart in progress for `%s...", path)
-				}
+			if !session.confirm() {
+				return true
 			}
+			intent := *opts.DeepCopy()
+			session.submit("Restart", targets, func(ctx context.Context, target SelectedResourceTarget) error {
+				return session.restart(ctx, target, intent)
+			}, nil)
 			return true
 		},
 		Cancel: func() {},
@@ -77,27 +79,4 @@ func (r *RestartExtender) restartCmd(*tcell.EventKey) *tcell.EventKey {
 	dialog.ShowRestart(&d, r.App().Content.Pages, &opts)
 
 	return nil
-}
-
-func (r *RestartExtender) restartRollout(ctx context.Context, path string, opts *metav1.PatchOptions) error {
-	res, err := dao.AccessorFor(r.App().factory, r.GVR())
-	if err != nil {
-		return err
-	}
-	s, ok := res.(dao.Restartable)
-	if !ok {
-		return errors.New("resource is not restartable")
-	}
-
-	return s.Restart(ctx, path, opts)
-}
-
-// Helpers...
-
-func singularize(s string) string {
-	if strings.LastIndex(s, "s") == len(s)-1 {
-		return s[:len(s)-1]
-	}
-
-	return s
 }

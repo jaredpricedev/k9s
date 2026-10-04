@@ -25,9 +25,9 @@ func TestNewMenu(t *testing.T) {
 		{Mnemonic: "0", Description: "zero", Visible: true},
 	})
 
-	assert.Equal(t, " [#ff00ff:-:b]<0> [#ffffff:-:d]zero ", v.GetCell(0, 0).Text)
-	assert.Equal(t, " [#1e90ff:-:b]<a> [#ffffff:-:d]bleeA ", v.GetCell(0, 1).Text)
-	assert.Equal(t, " [#1e90ff:-:b]<b> [#ffffff:-:d]bleeB ", v.GetCell(1, 1).Text)
+	assert.Equal(t, " [#b6a3df:-:b]<0> [#e1e7e3:-:-]zero ", v.GetCell(0, 0).Text)
+	assert.Equal(t, " [#79c7d4:-:b]<a> [#e1e7e3:-:-]bleeA ", v.GetCell(0, 1).Text)
+	assert.Equal(t, " [#79c7d4:-:b]<b> [#e1e7e3:-:-]bleeB ", v.GetCell(1, 1).Text)
 }
 
 func TestMenuFitsDescriptionsWithoutLosingShortcutColumns(t *testing.T) {

@@ -8,6 +8,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"reflect"
+	"slices"
+	"strings"
 	"sync"
 
 	"github.com/derailed/k9s/internal"
@@ -50,9 +53,11 @@ type Table struct {
 	committedFilter    string
 	filterError        error
 	lastFiltered       *model1.TableData
+	renderedFilter     *model1.TableData
 	filterTotal        int
 	filterEditing      bool
 	filterDraftTouched bool
+	filterDraftPending bool
 	styles             *config.Styles
 	viewSetting        *config.ViewSetting
 	colorerFn          model1.ColorerFunc
@@ -66,6 +71,9 @@ type Table struct {
 	noIcon             bool
 	fullGVR            bool
 	literalFields      bool
+	layoutWidth        int
+	columnWidths       map[string]int
+	presentation       tablePresentation
 }
 
 // NewTable returns a new table view.
@@ -351,14 +359,14 @@ func (t *Table) ViewSettingsChanged(vs *config.ViewSetting) {
 
 // StylesChanged notifies the skin changed.
 func (t *Table) StylesChanged(s *config.Styles) {
-	t.SetBackgroundColor(s.Table().BgColor.Color())
+	t.styles = s
+	t.resolvePresentation(s)
+	t.SetBackgroundColor(t.presentation.canvas)
 	t.SetBorderColor(s.Frame().Border.FgColor.Color())
-	t.SetBorderFocusColor(s.Frame().Border.FocusColor.Color())
-	t.SetSelectedStyle(
-		tcell.StyleDefault.Foreground(t.styles.Table().CursorFgColor.Color()).
-			Background(t.styles.Table().CursorBgColor.Color()).Attributes(tcell.AttrBold))
-	t.selFgColor = s.Table().CursorFgColor.Color()
-	t.selBgColor = s.Table().CursorBgColor.Color()
+	t.SetBorderFocusColor(t.presentation.focus)
+	t.semanticSelection = true
+	t.selFgColor = t.presentation.text
+	t.selBgColor = t.presentation.selected
 	t.Refresh()
 }
 
@@ -403,21 +411,44 @@ func (t *Table) FilterInput(r rune) bool {
 
 // Filter filters out table data.
 func (t *Table) Filter(text string) {
+	t.mx.Lock()
+	t.filterDraftPending = false
+	t.mx.Unlock()
 	if text != "" {
 		t.TouchFilterDraft()
 	}
 	data := t.GetModel().Peek()
 	cdata := t.filterQuery(data, text)
-	if t.FilterError() == nil {
+	if t.FilterError() == nil && !t.sameFilterRows(cdata) {
 		t.UpdateUI(t.doUpdate(cdata), data)
 	}
 	t.UpdateTitle()
 }
 
+// Query edits often retain the same rows. Reuse their cells only when the full
+// rendered projection still agrees; normal refreshes always rebuild the view.
+func (t *Table) sameFilterRows(data *model1.TableData) bool {
+	previous := t.renderedFilter
+	if previous == nil || previous.RowCount() != data.RowCount() ||
+		t.GetRowCount() != data.RowCount()+1 || !reflect.DeepEqual(previous.Header(), data.Header()) {
+		return false
+	}
+	if data.RowCount() > 0 && t.GetSelectedItem() == "" {
+		return false
+	}
+	same := true
+	data.RowsRange(func(_ int, current model1.RowEvent) bool {
+		old, found := previous.FindRow(current.Row.ID)
+		same = found && old.Kind == current.Kind && slices.Equal(old.Row.Fields, current.Row.Fields) && slices.Equal(old.Deltas, current.Deltas)
+		return same
+	})
+	return same
+}
+
 // BeginFilter opens an empty editing draft without clearing committed results.
 func (t *Table) BeginFilter() {
 	t.mx.Lock()
-	t.filterEditing, t.filterDraftTouched = true, false
+	t.filterEditing, t.filterDraftTouched, t.filterDraftPending = true, false, false
 	t.mx.Unlock()
 }
 
@@ -430,7 +461,7 @@ func (t *Table) TouchFilterDraft() {
 
 func (t *Table) EndFilter() {
 	t.mx.Lock()
-	t.filterEditing = false
+	t.filterEditing, t.filterDraftPending = false, false
 	t.mx.Unlock()
 }
 
@@ -549,7 +580,8 @@ func (t *Table) shouldExcludeColumn(h model1.HeaderColumn) bool {
 	return (h.Hide || (!t.wide && h.Wide)) ||
 		(h.Name == "NAMESPACE" && !t.GetModel().ClusterWide()) ||
 		(h.MX && !t.hasMetrics) ||
-		(h.VS && vul.ImgScanner == nil)
+		(h.VS && vul.ImgScanner == nil) ||
+		(t.columnWidths != nil && t.columnWidths[h.Name] == 0)
 }
 
 func (t *Table) UpdateUI(cdata, data *model1.TableData) {
@@ -562,6 +594,7 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 	selectedID, _ := t.GetRowID(t.GetSelectedRowIndex())
 	_, selectedCol := t.GetSelection()
 	selectedRow := -1
+	t.fitColumns(cdata)
 	t.Clear()
 	fg := t.styles.Table().Header.FgColor.Color()
 	bg := t.styles.Table().Header.BgColor.Color()
@@ -604,6 +637,7 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 	} else {
 		t.SelectRow(0, 0, true)
 	}
+	t.renderedFilter = cdata
 	t.UpdateTitle()
 }
 
@@ -651,7 +685,15 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 			if c < len(re.Deltas) {
 				old = re.Deltas[c]
 			}
-			field += Deltas(old, original)
+			delta := Deltas(old, original)
+			if t.styles != nil && delta != "" {
+				delta = strings.ReplaceAll(strings.ReplaceAll(delta, "[red::b]", ""), "[green::b]", "")
+				if t.noIcon {
+					delta = strings.NewReplacer("↑", "+", "↓", "-", "Δ", "*").Replace(delta)
+				}
+				delta = t.presentation.deltaPrefix + delta + "[-::]"
+			}
+			field += delta
 		}
 
 		if h[c].Decorator != nil {
@@ -664,7 +706,27 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 		cell := tview.NewTableCell(field)
 		cell.SetExpansion(1)
 		cell.SetAlign(h[c].Align)
-		cell.SetTextColor(fgColor)
+		cellColor := fgColor
+		if t.styles != nil {
+			p := &t.presentation
+			cellColor = p.text
+			if statusColumn(h[c].Name) {
+				cellColor = t.statusColor(h[c].Name, original, fgColor)
+			}
+			cell.SetBackgroundColor(p.canvas)
+		}
+		cell.SetTextColor(cellColor)
+		if width := t.columnWidths[h[c].Name]; width > 0 {
+			cell.SetMaxWidth(width).SetExpansion(0)
+			if h[c].Name == "NAME" || h[c].Name == "NAMESPACE" || h[c].Name == "NODE" {
+				// Draw reserves two cells for the selection/mark marker. Keep
+				// the elision visible rather than clipping it behind the marker.
+				if col == 0 && t.semanticSelection {
+					width = max(1, width-2)
+				}
+				cell.SetText(tview.Escape(Truncate(original, width)))
+			}
+		}
 		if col == 0 {
 			cell.SetReference(re.Row.ID)
 		}
@@ -747,15 +809,43 @@ func (t *Table) AddHeaderCell(col int, h model1.HeaderColumn) {
 	sortCol := h.Name == sc.Name
 	selectedCol := col == t.getSelectedColIdx()
 	styles := t.styles.Table()
-	c := tview.NewTableCell(columnIndicator(sortCol, selectedCol, sc.ASC, &styles, h.Name))
+	text := columnIndicator(sortCol, selectedCol, sc.ASC, &styles, h.Name)
+	if t.noIcon {
+		text = strings.NewReplacer("↑", "^", "↓", "v").Replace(text)
+	}
+	c := tview.NewTableCell(text)
 	c.SetExpansion(1)
+	if width := t.columnWidths[h.Name]; width > 0 {
+		c.SetMaxWidth(width).SetExpansion(0)
+	}
 	c.SetSelectable(false)
 	c.SetAlign(h.Align)
 	t.SetCell(0, col, c)
 }
 
+// DeferFilterDraft validates edits immediately while retaining the committed
+// projection until the resource view coalesces a quiet draft or accepts Enter.
+func (t *Table) DeferFilterDraft(text string) {
+	_, err := model1.ValidateResourceFilter(text)
+	t.mx.Lock()
+	t.filterDraftPending, t.filterError = true, err
+	t.mx.Unlock()
+}
+
 func (t *Table) filtered(data *model1.TableData) *model1.TableData {
-	return t.filterQuery(data, t.cmdBuff.GetText())
+	query := t.cmdBuff.GetText()
+	t.mx.RLock()
+	pending := t.filterDraftPending
+	if pending {
+		if t.filterError != nil && t.lastFiltered != nil {
+			previous := t.lastFiltered
+			t.mx.RUnlock()
+			return previous
+		}
+		query = t.committedFilter
+	}
+	t.mx.RUnlock()
+	return t.filterQuery(data, query)
 }
 
 func (t *Table) filterQuery(data *model1.TableData, query string) *model1.TableData {
@@ -860,14 +950,7 @@ func (t *Table) styleTitle() string {
 	return title
 }
 
-// ROIndicator returns an icon showing whether the session is in readonly mode or not.
-func ROIndicator(ro, noIC bool) string {
-	switch {
-	case noIC:
-		return ""
-	case ro:
-		return lockedIC
-	default:
-		return unlockedIC
-	}
+// ROIndicator always renders a plain mode label, including with no-icons enabled.
+func ROIndicator(ro, _ bool) string {
+	return tview.Escape(ModeLabel(ro))
 }

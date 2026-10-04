@@ -14,11 +14,12 @@ import (
 type SelectTable struct {
 	*tview.Table
 
-	model      Tabular
-	selectedFn func(string) string
-	marks      sets.Set[string]
-	selFgColor tcell.Color
-	selBgColor tcell.Color
+	model             Tabular
+	selectedFn        func(string) string
+	marks             sets.Set[string]
+	selFgColor        tcell.Color
+	selBgColor        tcell.Color
+	semanticSelection bool
 }
 
 // SetModel sets the table model.
@@ -112,6 +113,9 @@ func (s *SelectTable) SelectRow(r, c int, broadcast bool) {
 }
 
 func (s *SelectTable) selectionChanged(r, c int) {
+	if s.semanticSelection {
+		return
+	}
 	if r < 0 {
 		return
 	}

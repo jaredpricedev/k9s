@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package data_test
 
@@ -66,27 +67,34 @@ func TestHelperInList(t *testing.T) {
 func TestEnsureDirPathNone(t *testing.T) {
 	const mod = 0744
 
-	dir := filepath.Join(os.TempDir(), "k9s-test")
-	_ = os.Remove(dir)
+	root := t.TempDir()
+	dir := filepath.Join(root, "created")
+	// Directory creation respects the process umask. Compare with an ordinary
+	// mkdir instead of sharing a fixed /tmp directory with other packages.
+	reference := filepath.Join(root, "reference")
+	require.NoError(t, os.Mkdir(reference, mod))
+	expected, err := os.Stat(reference)
+	require.NoError(t, err)
 
 	path := filepath.Join(dir, "duh.yaml")
 	require.NoError(t, data.EnsureDirPath(path, mod))
 
 	p, err := os.Stat(dir)
 	require.NoError(t, err)
-	assert.Equal(t, "drwxr--r--", p.Mode().String())
+	assert.Equal(t, expected.Mode(), p.Mode())
 }
 
 func TestEnsureDirPathNoOpt(t *testing.T) {
 	var mod os.FileMode = 0744
-	dir := filepath.Join(os.TempDir(), "k9s-test")
-	require.NoError(t, os.RemoveAll(dir))
+	dir := filepath.Join(t.TempDir(), "existing")
 	require.NoError(t, os.Mkdir(dir, mod))
+	expected, err := os.Stat(dir)
+	require.NoError(t, err)
 
 	path := filepath.Join(dir, "duh.yaml")
 	require.NoError(t, data.EnsureDirPath(path, mod))
 
 	p, err := os.Stat(dir)
 	require.NoError(t, err)
-	assert.Equal(t, "drwxr--r--", p.Mode().String())
+	assert.Equal(t, expected.Mode(), p.Mode())
 }

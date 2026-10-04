@@ -68,7 +68,7 @@ func TestNewCrumbs(t *testing.T) {
 	v.StackPushed(makeComponent("c2"))
 	v.StackPushed(makeComponent("c3"))
 
-	assert.Equal(t, "[#000000:#00ffff:b] <c1> [-:#000000:-] [#000000:#00ffff:b] <c2> [-:#000000:-] [#000000:#ffa500:b] <c3> [-:#000000:-] \n", v.GetText(false))
+	assert.Equal(t, "[#e1e7e3:#131a1e:b] <c1> [-:#0b0e11:-] [#e1e7e3:#131a1e:b] <c2> [-:#0b0e11:-] [#444645:#79c7d4:b] <c3> [-:#0b0e11:-] \n", v.GetText(false))
 }
 
 // Helpers...

@@ -294,7 +294,7 @@ func (p *Prompt) write(text, suggest string) {
 		text = tview.Escape(text)
 		if err != nil {
 			suggest = ""
-			text += " [" + p.styles.K9s.Frame.Status.ErrorColor.String() + "::-]  " + tview.Escape(err.Error()) + " · previous results retained[-::-]"
+			text += " [" + p.styles.Semantic().Failure.String() + "::-]  " + tview.Escape(err.Error()) + " · previous results retained[-::-]"
 		}
 	}
 	if suggest != "" {

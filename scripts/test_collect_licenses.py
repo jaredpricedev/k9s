@@ -73,7 +73,9 @@ class CollectorTest(unittest.TestCase):
         (self.module / "license.go").write_text("package licensing\n")
         with patch.object(collector, "run_go", self.go):
             collector.collect(self.output, ["linux/amd64"])
-        result = subprocess.run(["go", "list", "./..."], cwd=workspace,
+        # This temporary module tests package discovery, independently of the
+        # parent checkout's VCS environment or revision-stamping permissions.
+        result = subprocess.run(["go", "list", "-buildvcs=false", "./..."], cwd=workspace,
                                 env=dict(os.environ, GOTOOLCHAIN="local", GOWORK="off"),
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)

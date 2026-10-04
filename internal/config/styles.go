@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package config
 
 import (
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/derailed/k9s/internal/config/data"
 	"github.com/derailed/k9s/internal/config/json"
@@ -51,19 +53,21 @@ func (ts TextStyle) ToShortString() string {
 type (
 	// Styles tracks K9s styling options.
 	Styles struct {
-		K9s       Style `json:"k9s" yaml:"k9s"`
-		listeners []StyleListener
+		K9s        Style `json:"k9s" yaml:"k9s"`
+		listeners  []StyleListener
+		listenerMu sync.Mutex
 	}
 
 	// Style tracks K9s styles.
 	Style struct {
-		Body   Body   `json:"body" yaml:"body"`
-		Prompt Prompt `json:"prompt" yaml:"prompt"`
-		Help   Help   `json:"help" yaml:"help"`
-		Frame  Frame  `json:"frame" yaml:"frame"`
-		Info   Info   `json:"info" yaml:"info"`
-		Views  Views  `json:"views" yaml:"views"`
-		Dialog Dialog `json:"dialog" yaml:"dialog"`
+		Semantic SemanticPalette `json:"semantic,omitempty" yaml:"semantic,omitempty"`
+		Body     Body            `json:"body" yaml:"body"`
+		Prompt   Prompt          `json:"prompt" yaml:"prompt"`
+		Help     Help            `json:"help" yaml:"help"`
+		Frame    Frame           `json:"frame" yaml:"frame"`
+		Info     Info            `json:"info" yaml:"info"`
+		Views    Views           `json:"views" yaml:"views"`
+		Dialog   Dialog          `json:"dialog" yaml:"dialog"`
 	}
 
 	// Prompt tracks command styles
@@ -102,14 +106,15 @@ type (
 
 	// Dialog tracks dialog styles.
 	Dialog struct {
-		FgColor            Color `json:"fgColor" yaml:"fgColor"`
-		BgColor            Color `json:"bgColor" yaml:"bgColor"`
-		ButtonFgColor      Color `json:"buttonFgColor" yaml:"buttonFgColor"`
-		ButtonBgColor      Color `json:"buttonBgColor" yaml:"buttonBgColor"`
-		ButtonFocusFgColor Color `json:"buttonFocusFgColor" yaml:"buttonFocusFgColor"`
-		ButtonFocusBgColor Color `json:"buttonFocusBgColor" yaml:"buttonFocusBgColor"`
-		LabelFgColor       Color `json:"labelFgColor" yaml:"labelFgColor"`
-		FieldFgColor       Color `json:"fieldFgColor" yaml:"fieldFgColor"`
+		styleSource        *Styles `json:"-" yaml:"-"`
+		FgColor            Color   `json:"fgColor" yaml:"fgColor"`
+		BgColor            Color   `json:"bgColor" yaml:"bgColor"`
+		ButtonFgColor      Color   `json:"buttonFgColor" yaml:"buttonFgColor"`
+		ButtonBgColor      Color   `json:"buttonBgColor" yaml:"buttonBgColor"`
+		ButtonFocusFgColor Color   `json:"buttonFocusFgColor" yaml:"buttonFocusFgColor"`
+		ButtonFocusBgColor Color   `json:"buttonFocusBgColor" yaml:"buttonFocusBgColor"`
+		LabelFgColor       Color   `json:"labelFgColor" yaml:"labelFgColor"`
+		FieldFgColor       Color   `json:"fieldFgColor" yaml:"fieldFgColor"`
 	}
 
 	// Frame tracks frame styles.
@@ -265,42 +270,42 @@ func newStyle() Style {
 
 func newDialog() Dialog {
 	return Dialog{
-		FgColor:            "cadetblue",
-		BgColor:            "black",
-		ButtonBgColor:      "darkslateblue",
-		ButtonFgColor:      "black",
-		ButtonFocusBgColor: "dodgerblue",
-		ButtonFocusFgColor: "black",
-		LabelFgColor:       "white",
-		FieldFgColor:       "white",
+		FgColor:            "#e1e7e3",
+		BgColor:            "#131a1e",
+		ButtonBgColor:      "#1c292f",
+		ButtonFgColor:      "#e1e7e3",
+		ButtonFocusBgColor: "#79c7d4",
+		ButtonFocusFgColor: "#0b0e11",
+		LabelFgColor:       "#e1e7e3",
+		FieldFgColor:       "#e1e7e3",
 	}
 }
 
 func newPrompt() Prompt {
 	return Prompt{
-		FgColor:      "cadetblue",
-		BgColor:      "black",
-		SuggestColor: "dodgerblue",
+		FgColor:      "#e1e7e3",
+		BgColor:      "#0b0e11",
+		SuggestColor: "#a5b0aa",
 		Border: PromptBorder{
-			DefaultColor: "seagreen",
-			CommandColor: "aqua",
+			DefaultColor: "#79c7d4",
+			CommandColor: "#79c7d4",
 		},
 	}
 }
 
 func newCharts() Charts {
 	return Charts{
-		BgColor:            "black",
-		DialBgColor:        "black",
-		ChartBgColor:       "black",
-		DefaultDialColors:  Colors{Color("palegreen"), Color("orangered")},
-		DefaultChartColors: Colors{Color("palegreen"), Color("orangered")},
+		BgColor:            "#0b0e11",
+		DialBgColor:        "#0b0e11",
+		ChartBgColor:       "#0b0e11",
+		DefaultDialColors:  Colors{Color("#8fce88"), Color("#ef8278")},
+		DefaultChartColors: Colors{Color("#8fce88"), Color("#ef8278")},
 		ResourceColors: map[string]Colors{
-			CPU: {Color("dodgerblue"), Color("darkslateblue")},
-			MEM: {Color("yellow"), Color("goldenrod")},
+			CPU: {Color("#91b8ec"), Color("#1c292f")},
+			MEM: {Color("#b6a3df"), Color("#1c292f")},
 		},
-		FocusFgColor: "white",
-		FocusBgColor: "orange",
+		FocusFgColor: "#0b0e11",
+		FocusBgColor: "#79c7d4",
 	}
 }
 
@@ -327,142 +332,143 @@ func newFrame() Frame {
 
 func newHelp() Help {
 	return Help{
-		FgColor:      "cadetblue",
-		BgColor:      "black",
-		SectionColor: "green",
-		KeyColor:     "dodgerblue",
-		NumKeyColor:  "fuchsia",
+		FgColor:      "#e1e7e3",
+		BgColor:      "#0b0e11",
+		SectionColor: "#79c7d4",
+		KeyColor:     "#79c7d4",
+		NumKeyColor:  "#b6a3df",
 	}
 }
 
 func newBody() Body {
 	return Body{
-		FgColor:        "cadetblue",
-		BgColor:        "black",
-		LogoColor:      "orange",
-		LogoColorMsg:   "white",
-		LogoColorInfo:  "green",
-		LogoColorWarn:  "mediumvioletred",
-		LogoColorError: "red",
+		FgColor:        "#e1e7e3",
+		BgColor:        "#0b0e11",
+		LogoColor:      "#79c7d4",
+		LogoColorMsg:   "#e1e7e3",
+		LogoColorInfo:  "#91b8ec",
+		LogoColorWarn:  "#e7bd73",
+		LogoColorError: "#ef8278",
 	}
 }
 
 func newStatus() Status {
 	return Status{
-		NewColor:       "lightskyblue",
-		ModifyColor:    "greenyellow",
-		AddColor:       "dodgerblue",
-		PendingColor:   "darkorange",
-		ErrorColor:     "orangered",
-		HighlightColor: "aqua",
-		KillColor:      "mediumpurple",
-		CompletedColor: "lightslategray",
+		NewColor:       "#e1e7e3",
+		ModifyColor:    "#8fce88",
+		AddColor:       "#91b8ec",
+		PendingColor:   "#e7bd73",
+		ErrorColor:     "#ef8278",
+		HighlightColor: "#79c7d4",
+		KillColor:      "#a5b0aa",
+		CompletedColor: "#a5b0aa",
 	}
 }
 
 func newPicker() Picker {
 	return Picker{
-		MainColor:     "white",
-		FocusColor:    "aqua",
-		ShortcutColor: "aqua",
+		MainColor:     "#e1e7e3",
+		FocusColor:    "#79c7d4",
+		ShortcutColor: "#79c7d4",
 	}
 }
 
 func newLog() Log {
 	return Log{
-		FgColor:   "lightskyblue",
-		BgColor:   "black",
+		FgColor:   "#e1e7e3",
+		BgColor:   "#0b0e11",
 		Indicator: newLogIndicator(),
 	}
 }
 
 func newLogIndicator() LogIndicator {
 	return LogIndicator{
-		FgColor:        "dodgerblue",
-		BgColor:        "black",
-		ToggleOnColor:  "limegreen",
-		ToggleOffColor: "gray",
+		FgColor:        "#a5b0aa",
+		BgColor:        "#0b0e11",
+		ToggleOnColor:  "#79c7d4",
+		ToggleOffColor: "#a5b0aa",
 	}
 }
 
 func newYaml() Yaml {
 	return Yaml{
-		KeyColor:   "steelblue",
-		ColonColor: "white",
-		ValueColor: "papayawhip",
+		KeyColor:   "#b6a3df",
+		ColonColor: "#e1e7e3",
+		ValueColor: "#e1e7e3",
 	}
 }
 
 func newTitle() Title {
 	return Title{
-		FgColor:        "aqua",
-		BgColor:        "black",
-		HighlightColor: "fuchsia",
-		CounterColor:   "papayawhip",
-		FilterColor:    "seagreen",
+		FgColor:        "#e1e7e3",
+		BgColor:        "#0b0e11",
+		HighlightColor: "#79c7d4",
+		CounterColor:   "#a5b0aa",
+		FilterColor:    "#79c7d4",
 	}
 }
 
 func newInfo() Info {
 	return Info{
-		SectionColor: "white",
-		FgColor:      "orange",
-		CPUColor:     "lawngreen",
-		MEMColor:     "darkturquoise",
-		K9sRevColor:  "aqua",
+		SectionColor: "#a5b0aa",
+		FgColor:      "#e1e7e3",
+		CPUColor:     "#91b8ec",
+		MEMColor:     "#b6a3df",
+		K9sRevColor:  "#79c7d4",
 	}
 }
 
 func newXray() Xray {
 	return Xray{
-		FgColor:         "aqua",
-		BgColor:         "black",
-		CursorColor:     "dodgerblue",
-		CursorTextColor: "black",
-		GraphicColor:    "cadetblue",
+		FgColor:         "#e1e7e3",
+		BgColor:         "#0b0e11",
+		CursorColor:     "#1c292f",
+		CursorTextColor: "#e1e7e3",
+		GraphicColor:    "#a5b0aa",
 	}
 }
 
 func newTable() Table {
 	return Table{
-		FgColor:       "aqua",
-		BgColor:       "black",
-		CursorFgColor: "black",
-		CursorBgColor: "aqua",
-		MarkColor:     "palegreen",
+		FgColor:       "#e1e7e3",
+		BgColor:       "#0b0e11",
+		CursorFgColor: "#e1e7e3",
+		CursorBgColor: "#1c292f",
+		MarkColor:     "#b6a3df",
 		Header:        newTableHeader(),
 	}
 }
 
 func newTableHeader() TableHeader {
 	return TableHeader{
-		FgColor:                 "white",
-		BgColor:                 "black",
-		SorterColor:             "aqua",
-		SelectedSortColumnColor: "lightskyblue",
+		FgColor:                 "#a5b0aa",
+		BgColor:                 "#0b0e11",
+		SorterColor:             "#79c7d4",
+		SelectedSortColumnColor: "#79c7d4",
 	}
 }
 
 func newCrumb() Crumb {
 	return Crumb{
-		FgColor:     "black",
-		BgColor:     "aqua",
-		ActiveColor: "orange",
+		FgColor:     "#e1e7e3",
+		BgColor:     "#131a1e",
+		ActiveColor: "#79c7d4",
 	}
 }
 
 func newBorder() Border {
 	return Border{
-		FgColor:    "dodgerblue",
-		FocusColor: "lightskyblue",
+		FgColor:    "#a5b0aa",
+		FocusColor: "#79c7d4",
 	}
 }
 
 func newMenu() Menu {
 	return Menu{
-		FgColor:     "white",
-		KeyColor:    "dodgerblue",
-		NumKeyColor: "fuchsia",
+		FgStyle:     TextStyleNormal,
+		FgColor:     "#e1e7e3",
+		KeyColor:    "#79c7d4",
+		NumKeyColor: "#b6a3df",
 	}
 }
 
@@ -480,6 +486,7 @@ func NewStyles() *Styles {
 
 // Reset resets styles.
 func (s *Styles) Reset(invert bool) {
+	s.K9s = newStyle()
 	if err := yaml.Unmarshal(stockSkinTpl, s); err != nil {
 		s.K9s = newStyle()
 	}
@@ -500,11 +507,15 @@ func (s *Styles) BgColor() tcell.Color {
 
 // AddListener registers a new listener.
 func (s *Styles) AddListener(l StyleListener) {
+	s.listenerMu.Lock()
+	defer s.listenerMu.Unlock()
 	s.listeners = append(s.listeners, l)
 }
 
 // RemoveListener removes a listener.
 func (s *Styles) RemoveListener(l StyleListener) {
+	s.listenerMu.Lock()
+	defer s.listenerMu.Unlock()
 	victim := -1
 	for i, lis := range s.listeners {
 		if lis == l {
@@ -519,7 +530,10 @@ func (s *Styles) RemoveListener(l StyleListener) {
 }
 
 func (s *Styles) fireStylesChanged() {
-	for _, list := range s.listeners {
+	s.listenerMu.Lock()
+	listeners := append([]StyleListener(nil), s.listeners...)
+	s.listenerMu.Unlock()
+	for _, list := range listeners {
 		list.StylesChanged(s)
 	}
 }
@@ -551,13 +565,36 @@ func (s *Styles) Title() Title {
 
 // Charts returns charts styles.
 func (s *Styles) Charts() Charts {
-	return s.K9s.Views.Charts
+	c := s.K9s.Views.Charts
+	fg := ReadableForeground(c.FocusFgColor.Color(), c.FocusBgColor.Color())
+	if fg != c.FocusFgColor.Color() {
+		c.FocusFgColor = Color(fmt.Sprintf("#%06x", fg.Hex()))
+	}
+	return c
 }
 
 // Dialog returns dialog styles.
 func (s *Styles) Dialog() Dialog {
-	return s.K9s.Dialog
+	d := s.K9s.Dialog
+	d.styleSource = s
+	readable := func(fg, bg Color) Color {
+		color := ReadableForeground(fg.Color(), bg.Color())
+		if color == fg.Color() {
+			return fg
+		}
+		return Color(fmt.Sprintf("#%06x", color.Hex()))
+	}
+	d.FgColor = readable(d.FgColor, d.BgColor)
+	d.LabelFgColor = readable(d.LabelFgColor, d.BgColor)
+	d.FieldFgColor = readable(d.FieldFgColor, d.BgColor)
+	d.ButtonFgColor = readable(d.ButtonFgColor, d.ButtonBgColor)
+	d.ButtonFocusFgColor = readable(d.ButtonFocusFgColor, d.ButtonFocusBgColor)
+	return d
 }
+
+// StyleSource returns the optional runtime skin source without serializing a
+// backlink into the skin. Standalone dialog color configurations return nil.
+func (d *Dialog) StyleSource() *Styles { return d.styleSource }
 
 // Table returns table styles.
 func (s *Styles) Table() Table {
@@ -576,6 +613,7 @@ func (s *Styles) Views() Views {
 
 // Invert inverts all colors in the Style.
 func (s *Style) Invert() {
+	s.Semantic.Invert()
 	s.Body.Invert()
 	s.Prompt.Invert()
 	s.Help.Invert()
@@ -779,6 +817,7 @@ func (s *Styles) Load(path string, invert bool) error {
 	if err := data.JSONValidator.Validate(json.SkinSchema, bb); err != nil {
 		return err
 	}
+	s.K9s.Semantic = SemanticPalette{}
 	if err := yaml.Unmarshal(bb, s); err != nil {
 		return err
 	}
@@ -792,16 +831,18 @@ func (s *Styles) Load(path string, invert bool) error {
 
 // Update apply terminal colors based on styles.
 func (s *Styles) Update() {
+	s.applySemanticOverrides()
+	p := s.Semantic()
 	tview.Styles.PrimitiveBackgroundColor = s.BgColor()
-	tview.Styles.ContrastBackgroundColor = s.BgColor()
-	tview.Styles.MoreContrastBackgroundColor = s.BgColor()
+	tview.Styles.ContrastBackgroundColor = p.Panel.Color()
+	tview.Styles.MoreContrastBackgroundColor = p.Selected.Color()
 	tview.Styles.PrimaryTextColor = s.FgColor()
 	tview.Styles.BorderColor = s.K9s.Frame.Border.FgColor.Color()
 	tview.Styles.FocusColor = s.K9s.Frame.Border.FocusColor.Color()
 	tview.Styles.TitleColor = s.FgColor()
 	tview.Styles.GraphicsColor = s.FgColor()
-	tview.Styles.SecondaryTextColor = s.FgColor()
-	tview.Styles.TertiaryTextColor = s.FgColor()
+	tview.Styles.SecondaryTextColor = p.Muted.Color()
+	tview.Styles.TertiaryTextColor = p.Category.Color()
 	tview.Styles.InverseTextColor = s.FgColor()
 	tview.Styles.ContrastSecondaryTextColor = s.FgColor()
 

@@ -107,8 +107,13 @@ func (c *Crumbs) refresh(crumbs []string) {
 		if i == last {
 			bgColor = c.styles.Frame().Crumb.ActiveColor
 		}
+		foreground := config.ReadableForeground(c.styles.Frame().Crumb.FgColor.Color(), bgColor.Color())
+		name := c.styles.Frame().Crumb.FgColor.String()
+		if foreground.Hex() >= 0 {
+			name = fmt.Sprintf("#%06x", foreground.Hex())
+		}
 		_, _ = fmt.Fprintf(c, "[%s:%s:b] <%s> [-:%s:-] ",
-			c.styles.Frame().Crumb.FgColor,
+			name,
 			bgColor, tview.Escape(crumb),
 			c.styles.Body().BgColor)
 	}

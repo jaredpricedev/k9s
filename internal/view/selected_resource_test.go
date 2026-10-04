@@ -59,8 +59,8 @@ func TestPulseAndXrayInvestigationCommandsKeepNavigationOpen(t *testing.T) {
 				}
 			}
 			command.investigationCommand(actionsCommand)
-			palette, ok := app.Content.Top().(*actionPalette)
-			if !ok || palette.target.Err() == nil {
+			palette, ok := app.Content.GetPrimitive(actionsCommand).(*actionPalette)
+			if !ok || palette.target.Err() == nil || app.Content.Top() != view {
 				t.Fatal("actions did not open a safe navigation palette", app.Content.Top())
 			}
 		})
@@ -104,6 +104,8 @@ func TestCombinedFluxSelectionMatchesNativeIdentity(t *testing.T) {
 }
 
 func TestInspectionRejectsSameNameReplacementBeforeReadingEvidence(t *testing.T) {
+	// Other browser tests register synthetic metadata under the Pod GVR. This
+	// fixture models a native resource and must not inherit that global registry.
 	metas := dao.MetaAccess
 	dao.MetaAccess = dao.NewMeta()
 	t.Cleanup(func() { dao.MetaAccess = metas })

@@ -18,7 +18,7 @@ func TestNewLogoView(t *testing.T) {
 	v.Reset()
 
 	assert.Contains(t, v.Logo().GetText(false), "██")
-	assert.Equal(t, 10, strings.Count(v.Logo().GetText(false), "[#ffa500::b]"))
+	assert.Equal(t, 10, strings.Count(v.Logo().GetText(false), "[#79c7d4::b]"))
 	assert.Empty(t, v.Status().GetText(false))
 }
 
@@ -27,19 +27,19 @@ func TestLogoStatus(t *testing.T) {
 		logo, msg, e string
 	}{
 		"info": {
-			"[#008000::b]",
+			"[#91b8ec::b]",
 			"blee",
-			"[#ffffff::b]blee\n",
+			"[#e1e7e3::b]blee\n",
 		},
 		"warn": {
-			"[#c71585::b]",
+			"[#e7bd73::b]",
 			"blee",
-			"[#ffffff::b]blee\n",
+			"[#e1e7e3::b]blee\n",
 		},
 		"err": {
-			"[#ff0000::b]",
+			"[#ef8278::b]",
 			"blee",
-			"[#ffffff::b]blee\n",
+			"[#e1e7e3::b]blee\n",
 		},
 	}
 

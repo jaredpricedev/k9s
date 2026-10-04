@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view_test
 
@@ -30,7 +31,8 @@ func TestAliasNew(t *testing.T) {
 
 	require.NoError(t, v.Init(makeContext(t)))
 	assert.Equal(t, "Aliases", v.Name())
-	assert.Len(t, v.Hints(), 7)
+	assert.Len(t, v.Hints(), 8)
+	assertActionRegistry(t, v)
 }
 
 func TestAliasSearch(t *testing.T) {

@@ -1,0 +1,205 @@
+{
+  "started_at": "2026-10-04T01:00:54.112496+00:00",
+  "binary": "/workspace/k9plus-final",
+  "binary_sha256": "41ebaf355805effdabab6f7bdf21353cd6ddc7e755edf779c0e2e6e18584267e",
+  "source_git_commit": "4be90d992e080c8e7775b028afae9d78423e50bb",
+  "source_git_status": "M .github/workflows/lint.yml\n M .github/workflows/test.yml\n M MODIFICATIONS.md\n M README.md\n M ROADMAP.md\n M docs/hubble.md\n M docs/presentation.md\n M internal/client/client.go\n M internal/client/metrics.go\n M internal/config/data/helpers_test.go\n M internal/config/json/schemas/k9s.json\n M internal/config/types.go\n M internal/dao/helm_chart.go\n M internal/dao/helm_history.go\n M internal/dao/recorder.go\n M internal/hubble/model.go\n M internal/hubble/model_test.go\n M internal/model/cluster.go\n M internal/model/cluster_info.go\n M internal/model1/table_data.go\n M internal/render/container.go\n M internal/render/node.go\n M internal/render/pod.go\n M internal/render/pod_test.go\n M internal/ui/action.go\n M internal/ui/action_test.go\n M internal/ui/indicator.go\n M internal/ui/indicator_test.go\n M internal/ui/pages.go\n M internal/ui/table.go\n M internal/ui/table_filter_test.go\n M internal/view/action_palette.go\n M internal/view/alias_test.go\n M internal/view/app.go\n M internal/view/app_test.go\n M internal/view/browser.go\n M internal/view/cluster_info.go\n M internal/view/cm_test.go\n M internal/view/command.go\n M internal/view/container_test.go\n M internal/view/context_test.go\n M internal/view/details.go\n M internal/view/dir_test.go\n M internal/view/dp_test.go\n M internal/view/ds_test.go\n M internal/view/header_layout_test.go\n M internal/view/help.go\n M internal/view/help_test.go\n M internal/view/hubble.go\n M internal/view/hubble_detail.go\n M internal/view/hubble_resource.go\n M internal/view/hubble_test.go\n M internal/view/inspection_links.go\n M internal/view/live_view.go\n M internal/view/log.go\n M internal/view/log_workbench.go\n M internal/view/log_workbench_test.go\n M internal/view/ns_test.go\n M internal/view/pf_test.go\n M internal/view/pod_test.go\n M internal/view/priorityclass_test.go\n M internal/view/pulse.go\n M internal/view/pvc_test.go\n M internal/view/rbac_test.go\n M internal/view/reference_test.go\n M internal/view/resource_inspector.go\n M internal/view/restart_extender.go\n M internal/view/scale_extender.go\n M internal/view/screen_dump_test.go\n M internal/view/secret_test.go\n M internal/view/sts_test.go\n M internal/view/svc_test.go\n M internal/view/table.go\n M scripts/capture-demo.py\n M scripts/test_collect_licenses.py\n?? CONTEXT.md\n?? docs/adr/\n?? docs/capabilities.md\n?? docs/evidence-bundles.md\n?? docs/evidence/\n?? docs/first-run.md\n?? docs/hubble-performance-2026-10-04.md\n?? docs/inspection.md\n?? docs/maintenance.md\n?? docs/operations.md\n?? docs/pressure.md\n?? docs/resource-comparison.md\n?? docs/validation-2026-10-04.md\n?? internal/client/config_snapshot.go\n?? internal/client/config_snapshot_test.go\n?? internal/client/metric_sample.go\n?? internal/client/metric_sample_test.go\n?? internal/dao/helm_operation_test.go\n?? internal/dao/recorder_sample_test.go\n?? internal/hubble/readiness.go\n?? internal/inspect/bundle.go\n?? internal/inspect/bundle_test.go\n?? internal/inspect/snapshot.go\n?? internal/inspect/snapshot_test.go\n?? internal/model/cluster_info_lifecycle_test.go\n?? internal/model/cluster_metrics_test.go\n?? internal/render/metric_availability.go\n?? internal/render/metric_availability_test.go\n?? internal/ui/action_metadata.go\n?? internal/ui/action_metadata_test.go\n?? internal/ui/dialog/message.go\n?? internal/ui/indicator_identity_test.go\n?? internal/ui/message_modal.go\n?? internal/ui/message_modal_test.go\n?? internal/ui/presentation_capture_test.go\n?? internal/view/action_catalog.go\n?? internal/view/action_catalog_test.go\n?? internal/view/action_registry_fixture_test.go\n?? internal/view/capability_diagnostics.go\n?? internal/view/capability_diagnostics_test.go\n?? internal/view/evidence_bundle.go\n?? internal/view/evidence_bundle_test.go\n?? internal/view/hubble_actions.go\n?? internal/view/hubble_resource_test.go\n?? internal/view/hubble_table.go\n?? internal/view/hubble_terminal_test.go\n?? internal/view/inspection_evidence_test.go\n?? internal/view/log_workbench_history.go\n?? internal/view/log_workbench_query.go\n?? internal/view/log_workbench_render.go\n?? internal/view/log_workbench_state.go\n?? internal/view/log_workbench_style.go\n?? internal/view/operation_runner.go\n?? internal/view/operation_runner_test.go\n?? internal/view/operations_integration_test.go\n?? internal/view/pressure.go\n?? internal/view/pressure_test.go\n?? internal/view/pulse_metrics_test.go\n?? internal/view/resource_comparison.go\n?? internal/view/resource_comparison_test.go\n?? scripts/hubble-latency.py\n?? scripts/regression-journeys.py\n?? scripts/render-presentation.py\n?? scripts/skin-journeys.py\n?? scripts/terminal-requirements.txt",
+  "go_sources_and_journey_sha256": "5def0f5f5a8b703df4886c960dd0d370b587dcdd1c15a3212b3f1ad97ee2f168",
+  "toolchain": "go version go1.25.8 linux/amd64",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "pyte": "0.8.2",
+  "pillow": "12.3.0",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+  "logical_cpus": 5,
+  "cpu_quota": "400000 100000",
+  "gomaxprocs": "4",
+  "memory_limit_bytes": "17179869184",
+  "load_average_start": [
+    0.09716796875,
+    0.6796875,
+    2.2587890625
+  ],
+  "coverage": "Real PTY, emitted cells, disposable loopback Kubernetes API fixtures. No live cluster or Relay.",
+  "timing_method": "Input write to committed-query title + count + actual resource row parsed from emitted real PTY output. Includes Python parser overhead; target100ms is reported, not a machine-independent CI gate.",
+  "journeys": [
+    {
+      "fixture": "10000 retained Pods, 20 committed regex filters",
+      "samples_ms": [
+        495.34,
+        1008.399,
+        494.602,
+        660.148,
+        404.906,
+        1229.537,
+        789.604,
+        814.552,
+        864.176,
+        621.167,
+        287.733,
+        625.216,
+        656.832,
+        547.311,
+        687.177,
+        475.571,
+        598.046,
+        337.693,
+        663.361,
+        907.474
+      ],
+      "median_ms": 641.024,
+      "p95_ms": 1008.399,
+      "target_ms": 100,
+      "p95_meets_target": false,
+      "method": "Input write to emitted visible result/count parsed from real PTY; includes Python parser overhead, no drain wait.",
+      "result": "passed",
+      "name": "native-10000-filter"
+    },
+    {
+      "fixture": "5-second restart PATCH",
+      "filter_paint_ms": 20.333,
+      "quit_ms": 7.442,
+      "quit_while_api_pending_seconds": 0.518,
+      "result": "passed",
+      "name": "slow-five-second-api"
+    }
+  ],
+  "samples": [
+    {
+      "input": "'/target-00001\\r'",
+      "started_at": "2026-10-04T01:00:59.698913+00:00",
+      "result": "passed",
+      "paint_ms": 495.34
+    },
+    {
+      "input": "'/target-00002\\r'",
+      "started_at": "2026-10-04T01:01:00.195139+00:00",
+      "result": "passed",
+      "paint_ms": 1008.399
+    },
+    {
+      "input": "'/target-00003\\r'",
+      "started_at": "2026-10-04T01:01:01.204282+00:00",
+      "result": "passed",
+      "paint_ms": 494.602
+    },
+    {
+      "input": "'/target-00004\\r'",
+      "started_at": "2026-10-04T01:01:01.699756+00:00",
+      "result": "passed",
+      "paint_ms": 660.148
+    },
+    {
+      "input": "'/target-00005\\r'",
+      "started_at": "2026-10-04T01:01:02.360431+00:00",
+      "result": "passed",
+      "paint_ms": 404.906
+    },
+    {
+      "input": "'/target-00006\\r'",
+      "started_at": "2026-10-04T01:01:02.766114+00:00",
+      "result": "passed",
+      "paint_ms": 1229.537
+    },
+    {
+      "input": "'/target-00007\\r'",
+      "started_at": "2026-10-04T01:01:03.996227+00:00",
+      "result": "passed",
+      "paint_ms": 789.604
+    },
+    {
+      "input": "'/target-00008\\r'",
+      "started_at": "2026-10-04T01:01:04.786350+00:00",
+      "result": "passed",
+      "paint_ms": 814.552
+    },
+    {
+      "input": "'/target-00009\\r'",
+      "started_at": "2026-10-04T01:01:05.601750+00:00",
+      "result": "passed",
+      "paint_ms": 864.176
+    },
+    {
+      "input": "'/target-00010\\r'",
+      "started_at": "2026-10-04T01:01:06.466662+00:00",
+      "result": "passed",
+      "paint_ms": 621.167
+    },
+    {
+      "input": "'/target-00011\\r'",
+      "started_at": "2026-10-04T01:01:07.088619+00:00",
+      "result": "passed",
+      "paint_ms": 287.733
+    },
+    {
+      "input": "'/target-00012\\r'",
+      "started_at": "2026-10-04T01:01:07.376835+00:00",
+      "result": "passed",
+      "paint_ms": 625.216
+    },
+    {
+      "input": "'/target-00013\\r'",
+      "started_at": "2026-10-04T01:01:08.002497+00:00",
+      "result": "passed",
+      "paint_ms": 656.832
+    },
+    {
+      "input": "'/target-00014\\r'",
+      "started_at": "2026-10-04T01:01:08.660315+00:00",
+      "result": "passed",
+      "paint_ms": 547.311
+    },
+    {
+      "input": "'/target-00015\\r'",
+      "started_at": "2026-10-04T01:01:09.208146+00:00",
+      "result": "passed",
+      "paint_ms": 687.177
+    },
+    {
+      "input": "'/target-00016\\r'",
+      "started_at": "2026-10-04T01:01:09.895903+00:00",
+      "result": "passed",
+      "paint_ms": 475.571
+    },
+    {
+      "input": "'/target-00017\\r'",
+      "started_at": "2026-10-04T01:01:10.371965+00:00",
+      "result": "passed",
+      "paint_ms": 598.046
+    },
+    {
+      "input": "'/target-00018\\r'",
+      "started_at": "2026-10-04T01:01:10.970496+00:00",
+      "result": "passed",
+      "paint_ms": 337.693
+    },
+    {
+      "input": "'/target-00019\\r'",
+      "started_at": "2026-10-04T01:01:11.308913+00:00",
+      "result": "passed",
+      "paint_ms": 663.361
+    },
+    {
+      "input": "'/target-00020\\r'",
+      "started_at": "2026-10-04T01:01:11.972870+00:00",
+      "result": "passed",
+      "paint_ms": 907.474
+    },
+    {
+      "input": "'/no-such-workload\\r'",
+      "started_at": "2026-10-04T01:01:17.824163+00:00",
+      "result": "passed",
+      "paint_ms": 20.333
+    }
+  ],
+  "running": null,
+  "finished_at": "2026-10-04T01:01:18.533973+00:00",
+  "source_git_commit_end": "4be90d992e080c8e7775b028afae9d78423e50bb",
+  "binary_sha256_end": "41ebaf355805effdabab6f7bdf21353cd6ddc7e755edf779c0e2e6e18584267e",
+  "binary_unchanged": true,
+  "load_average_end": [
+    0.654296875,
+    0.76904296875,
+    2.24658203125
+  ]
+}
