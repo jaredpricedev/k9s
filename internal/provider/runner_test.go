@@ -59,7 +59,11 @@ func TestProviderHelperProcess(_ *testing.T) {
 		time.Sleep(10 * time.Second)
 		fmt.Print("late output")
 	case "descendant":
-		child := exec.CommandContext(context.Background(), os.Args[0], "-test.run=TestProviderHelperProcess", "--", "sleep")
+		bin, err := os.Executable()
+		if err != nil {
+			os.Exit(2)
+		}
+		child := exec.CommandContext(context.Background(), bin, "-test.run=TestProviderHelperProcess", "--", "sleep")
 		child.Env, child.Stdout, child.Stderr = os.Environ(), os.Stdout, os.Stderr
 		if err := child.Start(); err != nil {
 			os.Exit(2)
@@ -100,7 +104,7 @@ func TestRunBoundsOutputAndCancelsProducingProcess(t *testing.T) {
 }
 
 func TestRunDistinguishesTimeoutCancellationFailureAndMissing(t *testing.T) {
-	for _, mode := range []string{"timeout", "cancel", helperFailure, "absent", "denied"} {
+	for _, mode := range []string{"timeout", "cancel", helperFailure, string(Absent), string(Denied)} {
 		t.Run(mode, func(t *testing.T) {
 			in := helperInput(t, "sleep")
 			ctx, cancel := context.WithCancel(context.Background())
@@ -115,10 +119,10 @@ func TestRunDistinguishesTimeoutCancellationFailureAndMissing(t *testing.T) {
 				want = Canceled
 			case helperFailure:
 				in.Args[2] = helperFailure
-			case "absent":
-				in.Executable = filepath.Join(t.TempDir(), "absent")
-			case "denied":
-				in.Executable = filepath.Join(t.TempDir(), "denied")
+			case string(Absent):
+				in.Executable = filepath.Join(t.TempDir(), string(Absent))
+			case string(Denied):
+				in.Executable = filepath.Join(t.TempDir(), string(Denied))
 				if err := os.WriteFile(in.Executable, []byte("unexecutable"), 0600); err != nil {
 					t.Fatal(err)
 				}
@@ -131,10 +135,10 @@ func TestRunDistinguishesTimeoutCancellationFailureAndMissing(t *testing.T) {
 			if time.Since(started) > 2*time.Second {
 				t.Fatal("cancellation did not bound execution")
 			}
-			if mode == "absent" && !errors.Is(result.Err, ErrAbsent) {
+			if mode == string(Absent) && !errors.Is(result.Err, ErrAbsent) {
 				t.Fatal(result.Err)
 			}
-			if mode == "denied" && !errors.Is(result.Err, ErrDenied) {
+			if mode == string(Denied) && !errors.Is(result.Err, ErrDenied) {
 				t.Fatal(result.Err)
 			}
 			if mode == helperFailure && result.ExitCode != 23 {
@@ -157,7 +161,7 @@ func TestDiscoverChecksOnlyExplicitSpecsAndSeparatesStates(t *testing.T) {
 	in := helperInput(t, "version")
 	ready := Spec{ID: "fixture", Executable: in.Executable, VersionArgs: in.Args, Env: in.Env, Dir: in.Dir, Limits: in.Limits}
 	checks := Discover(context.Background(), scope, ready,
-		Spec{ID: "absent", Executable: filepath.Join(t.TempDir(), "missing"), VersionArgs: []string{"--version"}},
+		Spec{ID: string(Absent), Executable: filepath.Join(t.TempDir(), "missing"), VersionArgs: []string{"--version"}},
 		Spec{ID: "denied-api", Probe: func(context.Context, Scope) (Observation, error) { return Observation{}, ErrDenied }},
 		Spec{ID: "incompatible", Executable: in.Executable, VersionArgs: in.Args, Env: in.Env, Dir: in.Dir, Compatible: func(string) bool { return false }})
 	wants := []CapabilityState{Ready, Absent, Denied, Incompatible}
