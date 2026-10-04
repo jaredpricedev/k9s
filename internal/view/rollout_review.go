@@ -241,7 +241,10 @@ func (v *rolloutReviewView) StylesChanged(styles *config.Styles) {
 func (v *rolloutReviewView) Draw(screen tcell.Screen) {
 	if !v.destinationCurrent() && (v.following || v.recoveryCancel != nil || v.recoveryModal != nil) {
 		v.stopRecoveryPreview()
-		v.dismissRecoveryForm()
+		v.recoveryNotice = "Destination changed; retained confirmation is unavailable. Cancel and reopen rollout review."
+		if v.recoveryModal != nil {
+			v.recoveryModal.SetText(v.recoveryNotice)
+		}
 		v.stopOutcome()
 		v.render()
 	}
