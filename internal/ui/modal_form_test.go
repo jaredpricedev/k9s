@@ -94,3 +94,42 @@ func TestResponsiveFormStacksCompleteRecoveryButtonsAtMinimum(t *testing.T) {
 	_, saveY, _, _ := form.GetButton(1).GetRect()
 	require.Greater(t, saveY, cancelY)
 }
+
+func TestResponsiveConfirmPinsContextAndShowsThreeGuidanceRows(t *testing.T) {
+	guidance := []string{
+		"Requested storage: 10Gi -> 20Gi",
+		"API acceptance != resize complete",
+		"StorageClass allows expansion",
+		"UID/version rechecks are required",
+		"Controller progress unconfirmed",
+		"Filesystem progress unconfirmed",
+	}
+	for _, size := range [][2]int{{80, 24}, {40, 16}} {
+		t.Run(fmt.Sprintf("%dx%d", size[0], size[1]), func(t *testing.T) {
+			form := tview.NewForm().AddButton("Cancel", nil).AddButton("Request expansion", nil)
+			modal := ui.NewModalForm("Review expansion", form).
+				SetContext("PVC apps/data · UID pv-uid\nContext reviewed").SetText(strings.Join(guidance, "\n"))
+			app := tview.NewApplication().SetRoot(modal, true).SetFocus(modal)
+			frame := modalFrame(t, modal, size[0], size[1])
+			require.Contains(t, frame, "PVC apps/data")
+			require.Contains(t, frame, "Context reviewed")
+			for _, line := range guidance[:3] {
+				require.Contains(t, frame, line)
+			}
+			require.Contains(t, frame, "Cancel")
+			require.Contains(t, frame, "Request expansion")
+			form.GetButton(0).InputHandler()(tcell.NewEventKey(tcell.KeyPgDn, 0, tcell.ModNone),
+				func(p tview.Primitive) { app.SetFocus(p) })
+			frame = modalFrame(t, modal, size[0], size[1])
+			for _, line := range guidance[3:] {
+				require.Contains(t, frame, line)
+			}
+			require.Contains(t, frame, "PVC apps/data")
+			require.Contains(t, frame, "Cancel")
+			form.GetButton(0).InputHandler()(tcell.NewEventKey(tcell.KeyPgUp, 0, tcell.ModNone),
+				func(p tview.Primitive) { app.SetFocus(p) })
+			frame = modalFrame(t, modal, size[0], size[1])
+			require.Contains(t, frame, guidance[0])
+		})
+	}
+}

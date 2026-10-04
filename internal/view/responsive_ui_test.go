@@ -3,6 +3,7 @@
 package view
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,14 +11,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/config/mock"
+	"github.com/derailed/k9s/internal/inspect"
 	"github.com/derailed/k9s/internal/workspace"
+	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
 	"github.com/stretchr/testify/require"
 )
 
 const responsiveTestNS, responsiveOOMReason = "apps", "OOMKilled"
+const responsiveTestQuery = "name:api"
+const responsiveFixtureName = "fixture"
+const responsiveKindField = "kind"
 
 func saveResponsiveFrame(t *testing.T, name, frame string) {
 	t.Helper()
@@ -123,4 +130,127 @@ func TestFailedCommandRecoveryRestoresExactEditableInputWithoutExecuting(t *test
 	require.Equal(t, command, a.CmdBuff().GetText())
 	require.True(t, a.CmdBuff().IsActive())
 	require.Nil(t, a.Content.Top(), "recovery only edits input; it never dispatches a command")
+}
+
+func TestWorkspaceDetailsEscapeRetainsOwnerQueryAndSelection(t *testing.T) {
+	app := NewApp(mock.NewMockConfig(t))
+	require.NoError(t, app.Content.Init(context.WithValue(context.Background(), internal.KeyApp, app)))
+	owner := NewDetails(app, "Owner", "retained", contentInspection, true).Update("Retained owner")
+	require.NoError(t, app.inject(owner, false))
+	w := newDailyWorkspace(app, workspace.Store{Version: 1}, inventoryCommand, "")
+	w.path = filepath.Join(t.TempDir(), "workspaces.yaml")
+	require.NoError(t, app.inject(w, false))
+	w.scope = workspace.Scope{Name: testWorkspaceName, Context: app.Config.ActiveContextName(), Namespaces: []string{testWorkspaceNamespace}}
+	w.mode, w.query = inventoryCommand, responsiveTestQuery
+	w.snapshot = workspace.Snapshot{ObservedAt: time.Now(), Resources: []workspace.Resource{{Ref: workspaceFixtureRef(testWorkspaceAPIName), Kind: inspectionPodKind, Summary: testWorkspaceCrashLoopReason}}}
+	w.render()
+	selected := w.selectedKey()
+	screen := tcell.NewSimulationScreen("UTF-8")
+	require.NoError(t, screen.Init())
+	screen.SetSize(80, 24)
+	app.SetScreen(screen).SetRoot(app.Content, true).SetFocus(w.table)
+	painted := make(chan struct{}, 1)
+	app.SetAfterDrawFunc(func(tcell.Screen) {
+		select {
+		case painted <- struct{}{}:
+		default:
+		}
+	})
+	finished := make(chan error, 1)
+	go func() { finished <- app.Application.Run() }()
+	t.Cleanup(func() { app.Stop(); <-finished; w.Stop() })
+	select {
+	case <-painted:
+	case <-time.After(time.Second):
+		t.Fatal("workspace did not draw")
+	}
+	for range 3 {
+		app.Application.QueueUpdateDraw(func() { w.showRowDetails() })
+		checked := make(chan bool, 1)
+		app.Application.QueueUpdateDraw(func() {
+			app.SetAfterDrawFunc(func(tcell.Screen) {
+				if !app.Content.IsTopDialog() {
+					select {
+					case checked <- app.Content.Top() == w && w.query == responsiveTestQuery && w.selectedKey() == selected:
+					default:
+					}
+				}
+			})
+		})
+		app.QueueEvent(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone))
+		select {
+		case ok := <-checked:
+			require.True(t, ok, "dialog dismissal changed retained workspace")
+		case <-time.After(time.Second):
+			t.Fatal("dialog dismissal blocked")
+		}
+	}
+}
+
+func TestEvidenceFormNativeTypingAndFocusAdvance(t *testing.T) {
+	for _, size := range [][2]int{{120, 34}, {80, 24}, {60, 18}, {40, 16}} {
+		t.Run(fmt.Sprintf("%dx%d", size[0], size[1]), func(t *testing.T) { evidenceNativeTyping(t, size) })
+	}
+}
+
+func evidenceNativeTyping(t *testing.T, size [2]int) {
+	t.Helper()
+	app := NewApp(mock.NewMockConfig(t))
+	app.App.Init()
+	var trace []string
+	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		trace = append(trace, fmt.Sprintf("%s focus=%T dialog=%v", event.Name(), app.GetFocus(), app.Content.IsTopDialog()))
+		return app.keyboard(event)
+	})
+	require.NoError(t, app.Content.Init(context.WithValue(context.Background(), internal.KeyApp, app)))
+	observation := inspect.NewObservation(inspect.ResourceIdentity{GVR: podCmd, Name: responsiveFixtureName, UID: "fixture-uid"},
+		"native test fixture", time.Now().UTC(), map[string]any{responsiveKindField: inspectionPodKind})
+	v := &evidenceView{Details: NewDetails(app, "Offline evidence", "import", contentInspection, true),
+		bundle: inspect.NewBundle([]inspect.Observation{observation}), ready: true}
+	require.NoError(t, app.inject(v, false))
+	v.renderBundle()
+	screen := tcell.NewSimulationScreen("UTF-8")
+	require.NoError(t, screen.Init())
+	screen.SetSize(size[0], size[1])
+	app.SetScreen(screen).SetRoot(app.Content, true)
+	finished := make(chan error, 1)
+	go func() { finished <- app.Application.Run() }()
+	t.Cleanup(func() { app.Stop(); <-finished; v.Stop() })
+	var ready, dialog bool
+	var focus tview.Primitive
+	app.Application.QueueUpdateDraw(func() {
+		screen.SetSize(size[0], size[1])
+		ready = v.ready
+		v.noteForm(false)
+		dialog, focus = app.Content.IsTopDialog(), app.GetFocus()
+	})
+	require.True(t, ready)
+	require.True(t, dialog)
+	require.IsType(t, &tview.InputField{}, focus)
+	const note = "Fixture note: inspect allocation evidence before changing memory."
+	for _, r := range note {
+		app.QueueEvent(tcell.NewEventKey(tcell.KeyRune, r, tcell.ModNone))
+	}
+	app.QueueEvent(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+	app.QueueEvent(tcell.NewEventKey(tcell.KeyTab, 0, tcell.ModNone))
+	app.QueueEvent(tcell.NewEventKey(tcell.KeyEnter, 0, tcell.ModNone))
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		done := false
+		app.Application.QueueUpdateDraw(func() { done = len(v.bundle.Notes) == 1 })
+		if done {
+			require.Equal(t, []string{note}, v.bundle.Notes)
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	var text, eventTrace string
+	app.Application.QueueUpdateDraw(func() {
+		eventTrace = strings.Join(trace, "\n")
+		if state := v.forms["evidence-note"]; state != nil {
+			text = state.modal.GetTitle()
+		}
+		text += " / " + fmt.Sprint(v.bundle.Notes)
+	})
+	t.Fatalf("Native typing/submission failed: %s\n%s", text, eventTrace)
 }
