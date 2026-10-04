@@ -90,7 +90,12 @@ func TestHistoryActualUIDispatcherAppliesSuccessAndRetainsFailure(t *testing.T) 
 	})
 	done := make(chan error, 1)
 	go func() { done <- a.Application.Run() }()
-	t.Cleanup(func() { v.Stop(); a.Stop(); <-done })
+	t.Cleanup(func() {
+		// Lifecycle fields share the UI dispatcher with late provider callbacks.
+		a.Application.QueueUpdateDraw(v.Stop)
+		a.Stop()
+		<-done
+	})
 	select {
 	case <-painted:
 	case <-time.After(time.Second):
