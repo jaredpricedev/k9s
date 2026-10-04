@@ -14,6 +14,7 @@ import (
 	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/model"
+	"github.com/derailed/k9s/internal/model1"
 	"github.com/derailed/k9s/internal/render"
 	"github.com/derailed/k9s/internal/slogs"
 	"github.com/derailed/k9s/internal/ui"
@@ -148,12 +149,12 @@ func (t *Table) defaultEnv() Env {
 	target := tableResourceForPath(t, t.app.Config.ActiveContextName(), path)
 	if target.Err() != nil {
 		env := k8sEnv(t.app.Conn().Config())
-		env["FILTER"] = t.CmdBuff().GetText()
+		env["FILTER"] = t.CommittedFilter()
 		return env
 	}
 	row := t.GetSelectedRow(path)
 	env := defaultEnv(t.app.Conn().Config(), target.Path(), t.GetModel().Peek().Header(), row)
-	env["FILTER"] = t.CmdBuff().GetText()
+	env["FILTER"] = t.CommittedFilter()
 	if env["FILTER"] == "" {
 		env["NAMESPACE"], env["FILTER"] = target.Namespace, target.Name
 	}
@@ -203,17 +204,20 @@ func (t *Table) SetEnterFn(f EnterFunc) {
 func (*Table) SetExtraActionsFn(BoostActionsFunc) {}
 
 // BufferCompleted indicates input was accepted.
-func (t *Table) BufferCompleted(text, _ string) {
+func (t *Table) BufferCompleted(_, _ string) {
 	t.app.QueueUpdateDraw(func() {
-		t.Filter(text)
+		t.Filter(t.CmdBuff().GetText())
 	})
 }
 
 // BufferChanged indicates the buffer was changed.
-func (*Table) BufferChanged(_, _ string) {}
+func (t *Table) BufferChanged(_, _ string) { t.TouchFilterDraft() }
 
 // BufferActive indicates the buff activity changed.
 func (t *Table) BufferActive(state bool, k model.BufferKind) {
+	if !state {
+		t.EndFilter()
+	}
 	t.app.BufferActive(state, k)
 	if !state {
 		t.app.SetFocus(t)
@@ -349,7 +353,14 @@ func (t *Table) activateCmd(evt *tcell.EventKey) *tcell.EventKey {
 	if t.app.InCmdMode() {
 		return evt
 	}
-	t.App().ResetPrompt(t.CmdBuff())
+	t.BeginFilter()
+	t.CmdBuff().ClearText(false)
+	prompt := t.App().Prompt()
+	prompt.SetModel(t.CmdBuff())
+	prompt.SetFilterValidator(model1.ValidateResourceFilter)
+	prompt.SetFilterClearHandler(t.TouchFilterDraft)
+	t.App().SetFocus(prompt)
+	t.CmdBuff().SetActive(true)
 
 	return evt
 }

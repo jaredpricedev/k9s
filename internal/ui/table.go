@@ -39,27 +39,33 @@ type (
 // Table represents tabular data.
 type Table struct {
 	*SelectTable
-	gvr            *client.GVR
-	sortCol        model1.SortColumn
-	selectedColIdx int
-	manualSort     bool
-	Path           string
-	Extras         string
-	actions        *KeyActions
-	cmdBuff        *model.FishBuff
-	styles         *config.Styles
-	viewSetting    *config.ViewSetting
-	colorerFn      model1.ColorerFunc
-	decorateFn     DecorateFunc
-	wide           bool
-	toast          bool
-	hasMetrics     bool
-	ctx            context.Context
-	mx             sync.RWMutex
-	readOnly       bool
-	noIcon         bool
-	fullGVR        bool
-	literalFields  bool
+	gvr                *client.GVR
+	sortCol            model1.SortColumn
+	selectedColIdx     int
+	manualSort         bool
+	Path               string
+	Extras             string
+	actions            *KeyActions
+	cmdBuff            *model.FishBuff
+	committedFilter    string
+	filterError        error
+	lastFiltered       *model1.TableData
+	filterTotal        int
+	filterEditing      bool
+	filterDraftTouched bool
+	styles             *config.Styles
+	viewSetting        *config.ViewSetting
+	colorerFn          model1.ColorerFunc
+	decorateFn         DecorateFunc
+	wide               bool
+	toast              bool
+	hasMetrics         bool
+	ctx                context.Context
+	mx                 sync.RWMutex
+	readOnly           bool
+	noIcon             bool
+	fullGVR            bool
+	literalFields      bool
 }
 
 // NewTable returns a new table view.
@@ -390,20 +396,82 @@ func (t *Table) FilterInput(r rune) bool {
 		return false
 	}
 	t.cmdBuff.Add(r)
-	t.ClearSelection()
-	t.doUpdate(t.filtered(t.GetModel().Peek()))
-	t.UpdateTitle()
-	t.SelectFirstRow()
+	t.Filter(t.cmdBuff.GetText())
 
 	return true
 }
 
 // Filter filters out table data.
-func (t *Table) Filter(string) {
-	t.ClearSelection()
-	t.doUpdate(t.filtered(t.GetModel().Peek()))
+func (t *Table) Filter(text string) {
+	if text != "" {
+		t.TouchFilterDraft()
+	}
+	data := t.GetModel().Peek()
+	cdata := t.filterQuery(data, text)
+	if t.FilterError() == nil {
+		t.UpdateUI(t.doUpdate(cdata), data)
+	}
 	t.UpdateTitle()
-	t.SelectFirstRow()
+}
+
+// BeginFilter opens an empty editing draft without clearing committed results.
+func (t *Table) BeginFilter() {
+	t.mx.Lock()
+	t.filterEditing, t.filterDraftTouched = true, false
+	t.mx.Unlock()
+}
+
+// TouchFilterDraft records either an edit or an explicit clear/reset gesture.
+func (t *Table) TouchFilterDraft() {
+	t.mx.Lock()
+	t.filterDraftTouched = true
+	t.mx.Unlock()
+}
+
+func (t *Table) EndFilter() {
+	t.mx.Lock()
+	t.filterEditing = false
+	t.mx.Unlock()
+}
+
+// CommittedFilter is the valid query responsible for the displayed result.
+func (t *Table) CommittedFilter() string {
+	t.mx.RLock()
+	defer t.mx.RUnlock()
+	return t.committedFilter
+}
+
+// FilterError reports the current draft's validation failure, if any.
+func (t *Table) FilterError() error {
+	t.mx.RLock()
+	defer t.mx.RUnlock()
+	return t.filterError
+}
+
+// FilterStatusText describes the result without introducing a selectable row.
+func (t *Table) FilterStatusText() string {
+	t.mx.RLock()
+	query, err, data, total := t.committedFilter, t.filterError, t.lastFiltered, t.filterTotal
+	t.mx.RUnlock()
+	if err != nil {
+		return err.Error() + " · previous results retained"
+	}
+	if data == nil {
+		return ""
+	}
+	count := data.RowCount()
+	if query == "" {
+		if count == 0 {
+			return "No resources"
+		}
+		return ""
+	}
+	mode, _ := model1.ValidateResourceFilter(query)
+	status := fmt.Sprintf("%s · %d/%d", mode, count, total)
+	if count == 0 {
+		status = "No matches · " + status
+	}
+	return status
 }
 
 // Hints returns the view hints.
@@ -485,6 +553,10 @@ func (t *Table) shouldExcludeColumn(h model1.HeaderColumn) bool {
 }
 
 func (t *Table) UpdateUI(cdata, data *model1.TableData) {
+	if t.FilterError() != nil {
+		t.UpdateTitle()
+		return
+	}
 	// Capture the raw resource ID before replacing the cells. Remembering only
 	// the row index changes the selected object when a watched field is sorted.
 	selectedID, _ := t.GetRowID(t.GetSelectedRowIndex())
@@ -525,8 +597,12 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 
 	if selectedRow >= 0 {
 		t.SelectRow(selectedRow, selectedCol, true)
+	} else if t.GetRowCount() > 1 {
+		// A zero-match view may leave tview's cursor beyond the rebuilt cells.
+		// Establish a resource selection immediately, before the next draw/input.
+		t.SelectRow(1, 0, true)
 	} else {
-		t.updateSelection(true)
+		t.SelectRow(0, 0, true)
 	}
 	t.UpdateTitle()
 }
@@ -679,10 +755,33 @@ func (t *Table) AddHeaderCell(col int, h model1.HeaderColumn) {
 }
 
 func (t *Table) filtered(data *model1.TableData) *model1.TableData {
-	return data.Filter(model1.FilterOpts{
+	return t.filterQuery(data, t.cmdBuff.GetText())
+}
+
+func (t *Table) filterQuery(data *model1.TableData, query string) *model1.TableData {
+	t.mx.RLock()
+	if t.filterEditing && !t.filterDraftTouched && query == "" {
+		query = t.committedFilter
+	}
+	t.mx.RUnlock()
+	filtered, err := data.FilterChecked(model1.FilterOpts{
 		Toast:  t.toast,
-		Filter: t.cmdBuff.GetText(),
+		Filter: query,
 	})
+	t.mx.Lock()
+	defer t.mx.Unlock()
+	t.filterError = err
+	if err != nil {
+		if t.lastFiltered != nil {
+			return t.lastFiltered
+		}
+		// The first malformed query still keeps the initial unfiltered state.
+		t.lastFiltered = data.Filter(model1.FilterOpts{Toast: t.toast})
+		t.filterTotal = data.RowCount()
+		return t.lastFiltered
+	}
+	t.committedFilter, t.lastFiltered, t.filterTotal = query, filtered, data.RowCount()
+	return filtered
 }
 
 // CmdBuff returns the associated command buffer.
@@ -742,7 +841,7 @@ func (t *Table) styleTitle() string {
 		title = SkinTitle(fmt.Sprintf(NSTitleFmt, resource, ns, render.AsThousands(rc)), &styles)
 	}
 
-	buff := t.cmdBuff.GetText()
+	buff := t.CommittedFilter()
 	if internal.IsLabelSelector(buff) {
 		if sel, err := ExtractLabelSelector(buff); err == nil {
 			buff = render.Truncate(sel.String(), maxTruncate)
@@ -752,11 +851,13 @@ func (t *Table) styleTitle() string {
 	} else if buff != "" {
 		buff = render.Truncate(buff, maxTruncate)
 	}
-	if buff == "" {
-		return title
+	if buff != "" {
+		title += SkinTitle(fmt.Sprintf(SearchFmt, tview.Escape(buff)), &styles)
 	}
-
-	return title + SkinTitle(fmt.Sprintf(SearchFmt, buff), &styles)
+	if status := t.FilterStatusText(); status != "" {
+		title += " " + tview.Escape(status) + " "
+	}
+	return title
 }
 
 // ROIndicator returns an icon showing whether the session is in readonly mode or not.

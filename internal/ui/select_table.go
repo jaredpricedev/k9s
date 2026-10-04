@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package ui
 
@@ -108,12 +109,6 @@ func (s *SelectTable) SelectRow(r, c int, broadcast bool) {
 	}
 	defer s.SetSelectionChangedFunc(s.selectionChanged)
 	s.Select(r, c)
-}
-
-// UpdateSelection refresh selected row.
-func (s *SelectTable) updateSelection(broadcast bool) {
-	r, c := s.GetSelection()
-	s.SelectRow(r, c, broadcast)
 }
 
 func (s *SelectTable) selectionChanged(r, c int) {
