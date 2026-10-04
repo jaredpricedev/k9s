@@ -443,6 +443,9 @@ func (w *dailyWorkspace) setMode(mode string) {
 	if w.snapshot.ObservedAt.IsZero() && mode != dailyWorkspaceScopesMode && w.scope.Name != "" {
 		w.refresh()
 	}
+	if w.app.Content != nil && w.app.Content.Top() == w {
+		w.app.Menu().HydrateMenu(w.Hints())
+	}
 }
 func dailyWorkspaceAccepts(generation, current uint64, contextName, currentContext string, top bool) bool {
 	return generation == current && contextName == currentContext && top

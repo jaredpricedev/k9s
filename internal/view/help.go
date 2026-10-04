@@ -73,6 +73,20 @@ func (h *Help) Init(ctx context.Context) error {
 	return nil
 }
 
+// Start refreshes a retained Help page and owns its skin listener.
+func (h *Help) Start() {
+	h.Table.Start()
+	h.app.Styles.RemoveListener(h)
+	h.app.Styles.AddListener(h)
+	h.StylesChanged(h.app.Styles)
+}
+
+// Stop releases both table and Help listeners while preserving reader state.
+func (h *Help) Stop() {
+	h.Table.Stop()
+	h.app.Styles.RemoveListener(h)
+}
+
 // InCmdMode checks if prompt is active.
 func (*Help) InCmdMode() bool {
 	return false
