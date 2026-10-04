@@ -35,6 +35,8 @@ func BenchmarkTableFilter10K(b *testing.B) {
 				fields[col] = "0/1"
 			case "STATUS":
 				fields[col] = "CrashLoopBackOff"
+			case "PF":
+				fields[col] = "Ⓕ"
 			case "RESTARTS":
 				fields[col] = "7"
 			case "NODE":
