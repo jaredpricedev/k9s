@@ -73,12 +73,14 @@ captures and test provenance are retained in the
 | Observation comparison | Keep baseline A immutable; capture B explicitly with separate source, time and UID labels. Mark recreated identities and unavailable inputs. API bookkeeping normalization is reversible without another read; Secret bodies and credential-shaped fields are excluded from the shared safe projection. |
 | Resource pressure | Inspect configured requests/limits, optional metrics usage, OOM/last termination and UID-scoped scheduling events. Keep init phases, restartable sidecars, Pod-level budgets and overhead distinct. Missing or stale usage remains N/A; throttling remains unknown without its counters. |
 | Capacity and autoscaling review | Add a captured read-only capacity workspace with effective Pod requests, scheduling reservation, reported limits, fresh usage coverage, quota/LimitRange, HPA inputs, optional VPA recommendations and per-node allocatable evidence. Bounded independent reads preserve partial/denied sources; history remains not configured and aggregate CPU never becomes a scheduling verdict. |
+| Storage diagnosis and expansion | Join bounded Pod/PVC/PV/class/CSI/attachment/UID-event evidence without inferring usage, mounting or completed resize. Preview one explicitly supported increase, freshly recheck captured UID/version/binding and submit a conditional size-only patch through retained guarded-operation receipts. Read-only mode blocks submission; API acceptance remains separate from controller/filesystem progress. |
+| Node maintenance | Add a bounded captured Node/workload/PDB/constraint preview before drain. Native kubectl eligibility and eviction semantics remain in use; reviewed Pod UID scope, Node identity checks, explicit local-data/DaemonSet choices, per-target receipts and separate recovery observations preserve denied, partial and canceled outcomes. |
 | Portable evidence | Preview explicitly selected live evidence or retained comparison/inspection observations before saving. JSON and Markdown retain identity, source, time and completeness. Offline import never refreshes a resource or contacts the recorded context; exports create a new 0600 file without overwriting. Bundle, field and preview limits are explicit, and stopped or replaced forms cannot act on abandoned evidence. |
 | Validation and maintenance | Add targeted regressions, race checks, protected disposable-cluster integration tests, actual PTY journeys, reproducible frozen-data benchmarks and capture provenance. Document first-run tasks, capability limits, domain vocabulary and fork maintenance responsibilities. |
 
 See [inspection](docs/inspection.md), [operations](docs/operations.md),
 [capabilities](docs/capabilities.md), [comparison](docs/resource-comparison.md),
-[pressure](docs/pressure.md), [capacity review](docs/capacity-review.md), [evidence bundles](docs/evidence-bundles.md) and
+[pressure](docs/pressure.md), [capacity review](docs/capacity-review.md), [storage diagnosis](docs/storage-review.md), [evidence bundles](docs/evidence-bundles.md) and
 [dated validation](docs/validation-2026-10-04.md) for behavior, safeguards and
 verification scope. Heuristic redaction is not a confidentiality guarantee.
 Fixtures, historical live checks and current measurements are identified separately;
@@ -117,6 +119,8 @@ assembled separately for distributions and are not source inventory entries.
 - `NOTICE`
 - `docs/capacity-review-validation-2026-10-04.md`
 - `docs/capacity-review.md`
+- `docs/storage-review-validation-2026-10-04.md`
+- `docs/storage-review.md`
 - `go.mod`
 - `go.sum`
 
@@ -292,6 +296,20 @@ assembled separately for distributions and are not source inventory entries.
 - `internal/render/pod_test.go`
 - `internal/view/capacity_review.go`
 - `internal/view/capacity_review_test.go`
+- `internal/storage/collect.go`
+- `internal/storage/expand.go`
+- `internal/storage/join.go`
+- `internal/storage/project.go`
+- `internal/storage/render.go`
+- `internal/storage/stages.go`
+- `internal/storage/storage_test.go`
+- `internal/storage/transport_test.go`
+- `internal/storage/types.go`
+- `internal/view/storage_expand_form.go`
+- `internal/view/storage_expand_operation.go`
+- `internal/view/storage_expand_operation_test.go`
+- `internal/view/storage_review.go`
+- `internal/view/storage_review_test.go`
 - `internal/watch/factory.go`
 - `internal/watch/factory_test.go`
 
@@ -333,6 +351,7 @@ assembled separately for distributions and are not source inventory entries.
 - `plugins/cloudnative-pg.yaml`
 - `plugins/flux.yaml`
 - `scripts/probe-capacity.py`
+- `scripts/probe-storage.py`
 - `skins/high-contrast.yaml`
 - `skins/monochrome.yaml`
 

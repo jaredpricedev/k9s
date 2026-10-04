@@ -61,6 +61,11 @@ func (s *operationSession) cordon(ctx context.Context, target SelectedResourceTa
 
 //nolint:gocritic // Keep the selected node immutable across concurrent pod evictions.
 func (s *operationSession) drain(ctx context.Context, target SelectedResourceTarget, opts dao.DrainOptions) error {
+	return s.drainReviewed(ctx, target, opts, nil)
+}
+
+//nolint:gocritic // The captured selected node is immutable across native eviction workers.
+func (s *operationSession) drainReviewed(ctx context.Context, target SelectedResourceTarget, opts dao.DrainOptions, reviewed map[string]string) error {
 	if err := checkOperationTarget(&target); err != nil {
 		return err
 	}
@@ -81,7 +86,11 @@ func (s *operationSession) drain(ctx context.Context, target SelectedResourceTar
 		return err
 	}
 	guardedClient := maintenanceClient{Interface: s.typed, ctx: ctx,
-		discoveryClient: &maintenanceDiscovery{DiscoveryInterface: s.typed.Discovery(), ctx: ctx}}
+		discoveryClient: &maintenanceDiscovery{DiscoveryInterface: s.typed.Discovery(), ctx: ctx},
+		review: &maintenancePodReview{ctx: ctx, nodeName: target.Name, reviewed: reviewed, verifyNode: func(readCtx context.Context) error {
+			_, err := s.readTarget(readCtx, &target)
+			return err
+		}}}
 	helper := drain.Helper{
 		Ctx: ctx, Client: guardedClient, GracePeriodSeconds: opts.GracePeriodSeconds, Timeout: opts.Timeout,
 		DeleteEmptyDirData: opts.DeleteEmptyDirData, IgnoreAllDaemonSets: opts.IgnoreAllDaemonSets,
@@ -106,6 +115,12 @@ func (s *operationSession) drain(ctx context.Context, target SelectedResourceTar
 			return err
 		}
 		usingEviction = !evictionVersion.Empty()
+	}
+	fmt.Fprintf(operationOutput(ctx), "Native preflight: %d eligible reviewed Pods.\n", len(pods))
+	if usingEviction {
+		fmt.Fprintln(operationOutput(ctx), "Pod eviction selected; API admission decides each request.")
+	} else {
+		fmt.Fprintln(operationOutput(ctx), "Pod delete selected; PDB admission is bypassed by disable-eviction or unsupported eviction API.")
 	}
 	expected := make(map[string]types.UID, len(pods))
 	for _, pod := range pods {
@@ -153,35 +168,41 @@ type maintenanceClient struct {
 	expected        map[string]types.UID
 	ctx             context.Context
 	discoveryClient *maintenanceDiscovery
+	review          *maintenancePodReview
 }
 
 func (c maintenanceClient) CoreV1() typedcorev1.CoreV1Interface {
-	return maintenanceCore{CoreV1Interface: c.Interface.CoreV1(), expected: c.expected}
+	return maintenanceCore{CoreV1Interface: c.Interface.CoreV1(), expected: c.expected, review: c.review}
 }
 func (c maintenanceClient) PolicyV1() typedpolicyv1.PolicyV1Interface {
-	return maintenancePolicy{PolicyV1Interface: c.Interface.PolicyV1(), expected: c.expected}
+	return maintenancePolicy{PolicyV1Interface: c.Interface.PolicyV1(), expected: c.expected, review: c.review}
 }
 func (c maintenanceClient) PolicyV1beta1() typedpolicyv1beta1.PolicyV1beta1Interface {
-	return maintenancePolicyBeta{PolicyV1beta1Interface: c.Interface.PolicyV1beta1(), expected: c.expected}
+	return maintenancePolicyBeta{PolicyV1beta1Interface: c.Interface.PolicyV1beta1(), expected: c.expected, review: c.review}
 }
 
 type maintenanceCore struct {
 	typedcorev1.CoreV1Interface
 	expected map[string]types.UID
+	review   *maintenancePodReview
 }
 
 func (c maintenanceCore) Pods(namespace string) typedcorev1.PodInterface {
-	return maintenancePods{PodInterface: c.CoreV1Interface.Pods(namespace), namespace: namespace, expected: c.expected}
+	return maintenancePods{PodInterface: c.CoreV1Interface.Pods(namespace), namespace: namespace, expected: c.expected, review: c.review}
 }
 
 type maintenancePods struct {
 	typedcorev1.PodInterface
 	namespace string
 	expected  map[string]types.UID
+	review    *maintenancePodReview
 }
 
 //nolint:gocritic // The native PodInterface requires DeleteOptions by value.
 func (p maintenancePods) Delete(ctx context.Context, name string, opts metav1.DeleteOptions) error {
+	if err := p.review.checkNode(ctx); err != nil {
+		return err
+	}
 	uid, err := maintenanceUID(p.expected, p.namespace, name)
 	if err != nil {
 		return err
@@ -198,19 +219,24 @@ func (p maintenancePods) Delete(ctx context.Context, name string, opts metav1.De
 type maintenancePolicy struct {
 	typedpolicyv1.PolicyV1Interface
 	expected map[string]types.UID
+	review   *maintenancePodReview
 }
 
 func (p maintenancePolicy) Evictions(namespace string) typedpolicyv1.EvictionInterface {
-	return maintenanceEvictions{EvictionInterface: p.PolicyV1Interface.Evictions(namespace), namespace: namespace, expected: p.expected}
+	return maintenanceEvictions{EvictionInterface: p.PolicyV1Interface.Evictions(namespace), namespace: namespace, expected: p.expected, review: p.review}
 }
 
 type maintenanceEvictions struct {
 	typedpolicyv1.EvictionInterface
 	namespace string
 	expected  map[string]types.UID
+	review    *maintenancePodReview
 }
 
 func (p maintenanceEvictions) Evict(ctx context.Context, eviction *policyv1.Eviction) error {
+	if err := p.review.checkNode(ctx); err != nil {
+		return err
+	}
 	uid, err := maintenanceUID(p.expected, p.namespace, eviction.Name)
 	if err != nil {
 		return err
@@ -231,19 +257,24 @@ func (p maintenanceEvictions) Evict(ctx context.Context, eviction *policyv1.Evic
 type maintenancePolicyBeta struct {
 	typedpolicyv1beta1.PolicyV1beta1Interface
 	expected map[string]types.UID
+	review   *maintenancePodReview
 }
 
 func (p maintenancePolicyBeta) Evictions(namespace string) typedpolicyv1beta1.EvictionInterface {
-	return maintenanceEvictionsBeta{EvictionInterface: p.PolicyV1beta1Interface.Evictions(namespace), namespace: namespace, expected: p.expected}
+	return maintenanceEvictionsBeta{EvictionInterface: p.PolicyV1beta1Interface.Evictions(namespace), namespace: namespace, expected: p.expected, review: p.review}
 }
 
 type maintenanceEvictionsBeta struct {
 	typedpolicyv1beta1.EvictionInterface
 	namespace string
 	expected  map[string]types.UID
+	review    *maintenancePodReview
 }
 
 func (p maintenanceEvictionsBeta) Evict(ctx context.Context, eviction *policyv1beta1.Eviction) error {
+	if err := p.review.checkNode(ctx); err != nil {
+		return err
+	}
 	uid, err := maintenanceUID(p.expected, p.namespace, eviction.Name)
 	if err != nil {
 		return err
