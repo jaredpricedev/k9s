@@ -7,6 +7,7 @@ import (
 
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
+	"github.com/mattn/go-runewidth"
 )
 
 const (
@@ -33,6 +34,7 @@ type Gauge struct {
 	state               State
 	resolution          int
 	deltaOK, deltaFault delta
+	status              string
 }
 
 // NewGauge returns a new gauge.
@@ -68,6 +70,13 @@ func (g *Gauge) Add(ok, fault int) {
 	g.state = State{OK: ok, Fault: fault}
 }
 
+// SetStatus replaces the numeric dial when no readable observation exists.
+func (g *Gauge) SetStatus(status string) {
+	g.mx.Lock()
+	defer g.mx.Unlock()
+	g.status = status
+}
+
 type number struct {
 	ok    bool
 	val   int
@@ -83,6 +92,16 @@ func (g *Gauge) Draw(sc tcell.Screen) {
 	defer g.mx.RUnlock()
 
 	rect := g.asRect()
+	if rect.Dx() <= 0 || rect.Dy() <= 0 {
+		return
+	}
+	if g.status != "" {
+		tview.Print(sc, g.status, rect.Min.X, rect.Min.Y+max(0, rect.Dy()/2-1), rect.Dx(), tview.AlignCenter, tcell.ColorGray)
+		if rect.Dy() > 2 {
+			tview.Print(sc, g.legend, rect.Min.X, min(rect.Max.Y-1, rect.Min.Y+rect.Dy()/2+1), rect.Dx(), tview.AlignCenter, tcell.ColorWhite)
+		}
+		return
+	}
 	mid := image.Point{X: rect.Min.X + rect.Dx()/2, Y: rect.Min.Y + rect.Dy()/2 - 1}
 	var (
 		fmat = "%d"
@@ -92,6 +111,11 @@ func (g *Gauge) Draw(sc tcell.Screen) {
 	style := tcell.StyleDefault.Background(g.bgColor)
 
 	total := len(d1)*3 + len(d2)*3 + 1
+	if rect.Dx() < total+2 || rect.Dy() < 6 {
+		label := runewidth.Truncate(fmt.Sprintf("%d total / %d faults", g.state.OK, g.state.Fault), rect.Dx(), "…")
+		tview.Print(sc, label, rect.Min.X, rect.Min.Y, rect.Dx(), tview.AlignLeft, tcell.ColorWhite)
+		return
+	}
 	colors := g.colorForSeries()
 	o := image.Point{X: mid.X, Y: mid.Y - 1}
 	o.X -= total / 2

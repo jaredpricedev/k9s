@@ -86,7 +86,7 @@ func InitConnection(config *Config, log *slog.Logger) (*APIClient, error) {
 
 // ConnectionOK returns connection status.
 func (a *APIClient) ConnectionOK() bool {
-	return a.connOK
+	return a.getConnOK()
 }
 
 func makeSAR(ns string, gvr *GVR, name string) *authorizationv1.SelfSubjectAccessReview {

@@ -83,34 +83,35 @@ type Graphable interface {
 type Pulse struct {
 	*tview.Grid
 
-	app            *App
-	gvr            *client.GVR
-	model          *model.Pulse
-	cancelFn       context.CancelFunc
-	actions        *ui.KeyActions
-	charts         Charts
-	prevFocusIndex int
-	chartGVRs      client.GVRs
-	metricsSample  client.MetricSample
-	metricsPoint   dao.Point
-	generation     uint64
+	app           *App
+	gvr           *client.GVR
+	model         *model.Pulse
+	cancelFn      context.CancelFunc
+	actions       *ui.KeyActions
+	charts        Charts
+	selectedIndex int
+	chartGVRs     client.GVRs
+	metricsSample client.MetricSample
+	metricsPoint  dao.Point
+	generation    uint64
+	healthPoints  map[*client.GVR]model.HealthPoint
 }
 
 // NewPulse returns a new alias view.
 func NewPulse(gvr *client.GVR) ResourceViewer {
 	return &Pulse{
-		Grid:           tview.NewGrid(),
-		model:          model.NewPulse(gvr),
-		actions:        ui.NewKeyActions(),
-		prevFocusIndex: -1,
+		Grid:    tview.NewGrid(),
+		model:   model.NewPulse(gvr),
+		actions: ui.NewKeyActions(),
+		gvr:     gvr,
 	}
 }
 
 // Init initializes the view.
 func (p *Pulse) Init(ctx context.Context) error {
-	p.SetBorder(true)
+	p.SetBorder(false)
 	p.SetGap(0, 0)
-	p.SetBorderPadding(0, 0, 1, 1)
+	p.SetBorderPadding(0, 0, 0, 0)
 	var err error
 	if p.app, err = extractApp(ctx); err != nil {
 		return err
@@ -120,16 +121,21 @@ func (p *Pulse) Init(ctx context.Context) error {
 	frame := p.app.Styles.Frame()
 	p.SetTitle(ui.SkinTitle(fmt.Sprintf(NSTitleFmt, pulseTitle, ns), &frame))
 
-	index, chartRow := 4, 6
+	// Namespaced Pulse includes Services and Events so failures in those reads
+	// remain inspectable. Nodes and Namespaces belong to the all-scope view.
+	index, chartRow := 2, 8
 	if client.IsAllNamespace(ns) {
 		index, chartRow = 0, 8
 	}
 	p.chartGVRs = corpusGVRs[index:]
 
 	p.charts = make(Charts, len(p.chartGVRs))
+	p.healthPoints = make(map[*client.GVR]model.HealthPoint, len(p.chartGVRs)-2)
 	var x, y, col int
 	for _, gvr := range p.chartGVRs[:len(p.chartGVRs)-2] {
+		p.healthPoints[gvr] = model.HealthPoint{GVR: gvr, Namespace: ns, State: model.HealthLoading}
 		p.charts[gvr] = p.makeGA(image.Point{X: x, Y: y}, image.Point{X: 2, Y: 2}, gvr)
+		p.charts[gvr].(*tchart.Gauge).SetStatus("loading")
 		col, y = col+1, y+2
 		if y > 6 {
 			y = 0
@@ -143,8 +149,11 @@ func (p *Pulse) Init(ctx context.Context) error {
 	p.charts[client.MemGVR] = p.makeSP(image.Point{X: chartRow, Y: 4}, image.Point{X: 2, Y: 4}, client.MemGVR, "Gi")
 	p.charts[client.CpuGVR].SetLegend(" CPU N/A (waiting for a sample) ")
 	p.charts[client.MemGVR].SetLegend(" MEM N/A (waiting for a sample) ")
-	p.GetItem(0).Focus = true
-	p.app.SetFocus(p.charts[p.chartGVRs[0]])
+	if index != 0 {
+		p.selectedIndex = p.findIndex(p.charts[client.PodGVR])
+	}
+	p.GetItem(p.selectedIndex).Focus = true
+	p.app.SetFocus(p.charts[p.chartGVRs[p.selectedIndex]])
 
 	p.bindKeys()
 	p.app.Styles.AddListener(p)
@@ -298,26 +307,75 @@ func pulseMetricText(point *dao.Point, memory bool) string {
 
 // PulseChanged notifies the model data changed.
 func (p *Pulse) PulseChanged(pt model.HealthPoint) {
-	v, ok := p.charts[pt.GVR]
+	if p.model != nil && pt.Namespace != p.model.GetNamespace() {
+		return
+	}
+	_, ok := p.charts[pt.GVR]
 	if !ok {
 		return
 	}
 
-	nn := v.GetSeriesColorNames()
-	if pt.Total == 0 {
-		nn[0] = grayC
+	if p.healthPoints == nil {
+		p.healthPoints = make(map[*client.GVR]model.HealthPoint)
 	}
-	if pt.Faults == 0 {
-		nn[1] = grayC
+	if previous := p.healthPoints[pt.GVR]; previous.HasValue() && !pt.HasValue() {
+		pt.Total, pt.Faults, pt.ObservedAt, pt.Source = previous.Total, previous.Faults, previous.ObservedAt, previous.Source
+		pt.State, pt.Failure = model.HealthStale, pt.State
+	}
+	p.healthPoints[pt.GVR] = pt
+	p.updateHealthChart(pt)
+	p.updateCoverageTitle()
+}
+
+func (p *Pulse) updateHealthChart(pt model.HealthPoint) {
+	v := p.charts[pt.GVR]
+	if gauge, ok := v.(*tchart.Gauge); ok {
+		status := ""
+		if !pt.HasValue() {
+			status = string(pt.State)
+			if status == "" {
+				status = "loading"
+			}
+		}
+		gauge.SetStatus(status)
 	}
 
-	v.SetLegend(cases.Title(language.English).String(pt.GVR.R()))
-	if pt.Faults > 0 {
-		v.SetBorderColor(tcell.ColorDarkRed)
-	} else {
-		v.SetBorderColor(tcell.ColorDarkOliveGreen)
+	legend := cases.Title(language.English).String(pt.GVR.R())
+	if pt.State == model.HealthStale {
+		legend += " (stale)"
 	}
-	v.Add(pt.Total, pt.Faults)
+	v.SetLegend(legend)
+	colors := p.app.Styles.Charts().DefaultDialColors.Colors()
+	if custom, ok := p.app.Styles.Charts().ResourceColors[v.ID()]; ok {
+		colors = custom.Colors()
+	}
+	if pt.State != model.HealthAvailable && pt.State != model.HealthEmpty {
+		unknown := p.app.Styles.Semantic().Unknown.Color()
+		colors = []tcell.Color{unknown, unknown}
+	}
+	v.SetSeriesColors(colors...)
+	if pt.State != model.HealthAvailable && pt.State != model.HealthEmpty {
+		v.SetBorderColor(p.app.Styles.Semantic().Unknown.Color())
+	} else if pt.Faults > 0 {
+		v.SetBorderColor(p.app.Styles.Semantic().Failure.Color())
+	} else {
+		v.SetBorderColor(p.app.Styles.Semantic().Healthy.Color())
+	}
+	if pt.HasValue() {
+		v.Add(pt.Total, pt.Faults)
+	}
+}
+
+func (p *Pulse) updateCoverageTitle() {
+	var readable int
+	for _, gvr := range p.chartGVRs[:len(p.chartGVRs)-2] {
+		pt := p.healthPoints[gvr].At(time.Now())
+		if pt.State == model.HealthAvailable || pt.State == model.HealthEmpty {
+			readable++
+		}
+	}
+	frame := p.app.Styles.Frame()
+	p.SetTitle(ui.SkinTitle(fmt.Sprintf(" Pulses(%s) | %d/%d readable ", p.model.GetNamespace(), readable, len(p.chartGVRs)-2), &frame))
 }
 
 // PulseFailed notifies the load failed.
@@ -328,6 +386,7 @@ func (p *Pulse) PulseFailed(err error) {
 func (p *Pulse) bindKeys() {
 	p.actions.Add(tcell.KeyCtrlO, ui.NewKeyAction("Actions", p.app.actionsCmd, true))
 	p.actions.Merge(ui.NewKeyActionsFromMap(ui.KeyMap{
+		ui.KeyS:          ui.NewKeyAction("Health source", p.healthSourceCmd, true),
 		ui.KeyM:          ui.NewKeyAction("Metric source", p.metricSourceCmd, true),
 		tcell.KeyEnter:   ui.NewKeyAction("Goto", p.enterCmd, true),
 		tcell.KeyTab:     ui.NewKeyAction("Next", p.nextFocusCmd(dirLeft), true),
@@ -341,6 +400,60 @@ func (p *Pulse) bindKeys() {
 		ui.KeyK:          ui.NewKeyAction("Up", p.nextFocusCmd(dirUp), false),
 		ui.KeyL:          ui.NewKeyAction("Next", p.nextFocusCmd(dirLeft), false),
 	}))
+}
+
+func (p *Pulse) healthSourceCmd(*tcell.EventKey) *tcell.EventKey {
+	graph, ok := p.app.GetFocus().(Graphable)
+	if !ok {
+		return nil
+	}
+	gvr := p.chartGVRs[p.findIndex(graph)]
+	if gvr == client.CpuGVR || gvr == client.MemGVR {
+		return p.metricSourceCmd(nil)
+	}
+	pt := p.healthPoints[gvr].At(time.Now())
+	text := fmt.Sprintf("Context: %s\nNamespace: %s\nResource: %s\nState: %s\nSource: %s\nRead at: %s\nLast attempt: %s\n", p.app.Config.ActiveContextName(), p.model.GetNamespace(), gvr, pt.State, pt.Source, pulseTime(pt.ObservedAt), pulseTime(pt.CheckedAt))
+	if pt.HasValue() {
+		text += fmt.Sprintf("\nRetained total: %d\nRetained faults: %d\n", pt.Total, pt.Faults)
+	}
+	if pt.Failure != "" {
+		text += "Latest collection: " + string(pt.Failure) + "\n"
+	}
+	if pt.Message != "" {
+		text += "\n" + pt.Message + "\n"
+	}
+	text += "\n" + pulseNextCheck(pt)
+	view := NewDetails(p.app, "Pulse health source", "observation", contentInspection, true).Update(text)
+	if err := p.app.inject(view, false); err != nil {
+		p.app.Flash().Err(err)
+	}
+	return nil
+}
+
+func pulseTime(at time.Time) string {
+	if at.IsZero() {
+		return "not collected"
+	}
+	return at.UTC().Format(time.RFC3339)
+}
+
+func pulseNextCheck(pt model.HealthPoint) string {
+	state := pt.State
+	if state == model.HealthStale {
+		state = pt.Failure
+	}
+	switch state {
+	case model.HealthDenied:
+		return "Check list permission for this resource and namespace; Enter opens the resource browser."
+	case model.HealthAbsent:
+		return "Confirm the resource API is served by this cluster; Enter opens the resource browser."
+	case model.HealthUnavailable:
+		return "Check the cluster connection and API availability; collection retries every 10s."
+	case model.HealthLoading, "":
+		return "Waiting for the initial read; collection retries every 10s."
+	default:
+		return "Counts describe a read-only health check of the resource snapshot, not an application SLO. Enter opens the resource browser."
+	}
 }
 
 func (p *Pulse) metricSourceCmd(*tcell.EventKey) *tcell.EventKey {
@@ -384,6 +497,7 @@ func (*Pulse) Restart() {}
 func (p *Pulse) Start() {
 	p.Stop()
 	generation, contextName := p.generation, p.app.Config.ActiveContextName()
+	p.updateCoverageTitle()
 
 	ctx := p.defaultContext()
 	ctx, p.cancelFn = context.WithCancel(ctx)
@@ -395,12 +509,16 @@ func (p *Pulse) Start() {
 
 	go func() {
 		for {
+			if gaugeChan == nil && metricsChan == nil {
+				return
+			}
 			select {
 			case <-ctx.Done():
 				return
 			case check, ok := <-gaugeChan:
 				if !ok {
-					return
+					gaugeChan = nil
+					continue
 				}
 				p.app.QueueUpdateDraw(func() {
 					if p.generation == generation && p.app.Config.ActiveContextName() == contextName && p.app.Content.Top() == p {
@@ -409,7 +527,8 @@ func (p *Pulse) Start() {
 				})
 			case mx, ok := <-metricsChan:
 				if !ok {
-					return
+					metricsChan = nil
+					continue
 				}
 				p.app.QueueUpdateDraw(func() {
 					if p.generation == generation && p.app.Config.ActiveContextName() == contextName && p.app.Content.Top() == p {
@@ -484,95 +603,33 @@ func (*Pulse) ExtraHints() map[string]string {
 }
 
 func (p *Pulse) enterCmd(*tcell.EventKey) *tcell.EventKey {
-	v := p.App().GetFocus()
-	s, ok := v.(Graphable)
-	if !ok {
-		return nil
+	if graph, ok := p.app.GetFocus().(Graphable); ok {
+		p.selectedIndex = p.findIndex(graph)
 	}
-	g, ok := v.(Graphable)
-	if !ok {
-		return nil
+	gvr := p.chartGVRs[p.selectedIndex]
+	if gvr == client.CpuGVR || gvr == client.MemGVR {
+		gvr = client.PodGVR
 	}
-	p.prevFocusIndex = p.findIndex(g)
-	for i := range len(p.charts) {
-		gi := p.GetItem(i)
-		if i == p.prevFocusIndex {
-			gi.Focus = true
-		} else {
-			gi.Focus = false
-		}
-	}
-
 	p.Stop()
-	res := client.NewGVR(s.ID()).R()
-	if res == "cpu" || res == "memory" {
-		res = client.PodGVR.String()
-	}
-	p.App().SetFocus(p.App().Main)
-	p.App().gotoResource(res+" "+p.model.GetNamespace(), "", false, true)
-
+	p.app.SetFocus(p.app.Main)
+	p.app.gotoResource(gvr.String()+" "+p.model.GetNamespace(), "", false, true)
 	return nil
 }
 
-func (p *Pulse) nextFocusCmd(direction int) func(evt *tcell.EventKey) *tcell.EventKey {
+func (p *Pulse) nextFocusCmd(direction int) func(*tcell.EventKey) *tcell.EventKey {
 	return func(*tcell.EventKey) *tcell.EventKey {
-		v := p.app.GetFocus()
-		g, ok := v.(Graphable)
-		if !ok {
+		if len(p.chartGVRs) == 0 {
 			return nil
 		}
-
-		currentIndex := p.findIndex(g)
-		nextIndex, total := currentIndex+direction, len(p.charts)
-
-		switch direction {
-		case dirLeft:
-			if nextIndex >= total {
-				nextIndex = 0
-			}
-			p.prevFocusIndex = -1
-		case dirRight:
-			if nextIndex < 0 {
-				nextIndex = total - 1
-			}
-			p.prevFocusIndex = -1
-		case dirUp:
-			if p.app.Conn().HasMetrics() {
-				if currentIndex >= total-2 {
-					if p.prevFocusIndex >= 0 && p.prevFocusIndex != currentIndex {
-						nextIndex = p.prevFocusIndex
-					} else if currentIndex == p.chartGVRs.Len()-1 {
-						nextIndex += 1
-					}
-				} else {
-					p.prevFocusIndex = currentIndex
-				}
-			}
-		case dirDown:
-			if p.app.Conn().HasMetrics() {
-				if currentIndex >= total-6 && currentIndex < total-2 {
-					switch {
-					case (currentIndex % 4) <= 1:
-						p.prevFocusIndex, nextIndex = currentIndex, total-2
-					case (currentIndex % 4) <= 3:
-						p.prevFocusIndex, nextIndex = currentIndex, total-1
-					}
-				} else if currentIndex >= total-2 {
-					return nil
-				}
-			}
+		if graph, ok := p.app.GetFocus().(Graphable); ok {
+			p.selectedIndex = p.findIndex(graph)
 		}
-		if nextIndex < 0 {
-			nextIndex = 0
-		} else if nextIndex > total-1 {
-			nextIndex = currentIndex
+		step := 1
+		if direction < 0 {
+			step = -1
 		}
-		p.GetItem(nextIndex).Focus = false
-		p.GetItem(nextIndex).Item.Blur()
-		i, v := p.nextFocus(nextIndex)
-		p.GetItem(i).Focus = true
-		p.app.SetFocus(v)
-
+		p.selectedIndex = (p.selectedIndex + step + len(p.chartGVRs)) % len(p.chartGVRs)
+		p.app.SetFocus(p.charts[p.chartGVRs[p.selectedIndex]])
 		return nil
 	}
 }
@@ -594,7 +651,7 @@ func (p *Pulse) makeSP(loc, span image.Point, gvr *client.GVR, unit string) *tch
 
 func (p *Pulse) makeGA(loc, span image.Point, gvr *client.GVR) *tchart.Gauge {
 	g := tchart.NewGauge(gvr.String())
-	g.SetBorder(true)
+	g.SetBorder(false)
 	g.SetBackgroundColor(p.app.Styles.Charts().BgColor.Color())
 	if cc, ok := p.app.Styles.Charts().ResourceColors[gvr.String()]; ok {
 		g.SetSeriesColors(cc.Colors()...)
@@ -610,18 +667,6 @@ func (p *Pulse) makeGA(loc, span image.Point, gvr *client.GVR) *tchart.Gauge {
 
 // ----------------------------------------------------------------------------
 // Helpers
-
-func (p *Pulse) nextFocus(index int) (int, tview.Primitive) {
-	if index >= len(p.chartGVRs) {
-		return 0, p.charts[p.chartGVRs[0]]
-	}
-
-	if index < 0 {
-		return len(p.chartGVRs) - 1, p.charts[p.chartGVRs[len(p.chartGVRs)-1]]
-	}
-
-	return index, p.charts[p.chartGVRs[index]]
-}
 
 func (p *Pulse) findIndex(g Graphable) int {
 	for i, gvr := range p.chartGVRs {
