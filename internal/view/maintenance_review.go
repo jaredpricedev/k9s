@@ -351,7 +351,7 @@ func (v *maintenanceView) renderChrome() {
 		}
 	}
 	if !v.destinationCurrent() {
-		state = "Retained | destination changed; reopen"
+		state = retainedDestinationChanged
 	}
 	lines := []string{identity, source, state}
 	for index, line := range lines {

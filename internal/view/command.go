@@ -109,7 +109,11 @@ func (c *Command) suggestionAliases() []string {
 }
 
 func (c *Command) updateSuggestionAliases() {
-	aliases := []string{providersCommand, capacityCommandToken, "operations", "ops", configurationCommand, jobReviewCommandToken, activityCommand, networkReviewCommandToken, maintenanceCommandToken, accessCommandName, taskbookCommandName}
+	aliases := []string{
+		providersCommand, capacityCommandToken, "operations", "ops",
+		configurationCommand, storageCommandToken, gitopsCommandToken, jobReviewCommandToken,
+		maintenanceCommandToken, accessCommandName, taskbookCommandName, activityCommand, networkReviewCommandToken,
+	}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
 		return
@@ -327,6 +331,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.providerCommand(p.GetLine())
 	case networkReviewCommandToken:
 		c.networkReviewCommand(p.GetLine())
+	case gitopsCommandToken:
+		c.gitopsCommand(p.GetLine())
 	default:
 		return false
 	}
@@ -346,6 +352,8 @@ func (c *Command) specialCmd(p *cmd.Interpreter, pushCmd bool) bool {
 		c.comparisonCommand()
 	case p.Cmd() == "pressure":
 		c.pressureCommand()
+	case p.Cmd() == storageCommandToken:
+		c.storageCommand()
 	case p.Cmd() == capacityCommandToken:
 		c.capacityCommand()
 	case p.Cmd() == "evidence" || p.Cmd() == "evidence-open":

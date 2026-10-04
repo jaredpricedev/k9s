@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"regexp"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -42,6 +43,7 @@ type Tree struct {
 	inUpdate    int32
 	refreshRate time.Duration
 	query       string
+	listenerMu  sync.RWMutex
 }
 
 // NewTree returns a new model.
@@ -64,11 +66,15 @@ func (t *Tree) SetFilter(q string) {
 
 // AddListener adds a listener.
 func (t *Tree) AddListener(l TreeListener) {
+	t.listenerMu.Lock()
+	defer t.listenerMu.Unlock()
 	t.listeners = append(t.listeners, l)
 }
 
 // RemoveListener delete a listener.
 func (t *Tree) RemoveListener(l TreeListener) {
+	t.listenerMu.Lock()
+	defer t.listenerMu.Unlock()
 	victim := -1
 	for i, lis := range t.listeners {
 		if lis == l {
@@ -244,6 +250,7 @@ func (t *Tree) resourceMeta() ResourceMeta {
 			Renderer: &render.Table{},
 		}
 	}
+	meta = meta.instantiate()
 	if meta.DAO == nil {
 		meta.DAO = &dao.Resource{}
 	}
@@ -252,15 +259,21 @@ func (t *Tree) resourceMeta() ResourceMeta {
 }
 
 func (t *Tree) fireTreeChanged(root *xray.TreeNode) {
-	for _, l := range t.listeners {
+	for _, l := range t.listenerSnapshot() {
 		l.TreeChanged(root)
 	}
 }
 
 func (t *Tree) fireTreeLoadFailed(err error) {
-	for _, l := range t.listeners {
+	for _, l := range t.listenerSnapshot() {
 		l.TreeLoadFailed(err)
 	}
+}
+
+func (t *Tree) listenerSnapshot() []TreeListener {
+	t.listenerMu.RLock()
+	defer t.listenerMu.RUnlock()
+	return append([]TreeListener(nil), t.listeners...)
 }
 
 func (t *Tree) getMeta(ctx context.Context, gvr *client.GVR) (ResourceMeta, error) {

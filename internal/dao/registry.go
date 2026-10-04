@@ -49,12 +49,6 @@ var scalableRes = sets.New(client.DpGVR, client.StsGVR, client.RsGVR, client.RcG
 // ResourceMetas represents a collection of resource metadata.
 type ResourceMetas map[*client.GVR]*metav1.APIResource
 
-func (m ResourceMetas) clear() {
-	for k := range m {
-		delete(m, k)
-	}
-}
-
 // MetaAccess tracks resources metadata.
 var MetaAccess = NewMeta()
 
@@ -62,6 +56,7 @@ var MetaAccess = NewMeta()
 type Meta struct {
 	resMetas ResourceMetas
 	mx       sync.RWMutex
+	request  uint64
 }
 
 // NewMeta returns a resource meta.
@@ -161,19 +156,40 @@ func IsScalable(m *metav1.APIResource) bool {
 
 // LoadResources hydrates server preferred+CRDs resource metadata.
 func (m *Meta) LoadResources(f Factory) error {
-	m.mx.Lock()
-	defer m.mx.Unlock()
+	return m.collectResources(func(resources ResourceMetas) error {
+		if err := loadPreferred(f, resources); err != nil {
+			return err
+		}
+		loadNonResource(resources)
+		loadCRDs(f, resources)
+		return nil
+	})
+}
 
-	m.resMetas.clear()
-	if err := loadPreferred(f, m.resMetas); err != nil {
+// InvalidateRequests rejects discovery started for a replaced browsing session,
+// while retaining the last usable metadata until fresh collection succeeds.
+func (m *Meta) InvalidateRequests() {
+	m.mx.Lock()
+	m.request++
+	m.mx.Unlock()
+}
+
+func (m *Meta) collectResources(collect func(ResourceMetas) error) error {
+	m.mx.Lock()
+	m.request++
+	request := m.request
+	m.mx.Unlock()
+	resources := make(ResourceMetas)
+	// Discovery can wait for the API or a credential provider. Metadata lookup
+	// and terminal actions must remain usable while that collection is pending.
+	if err := collect(resources); err != nil {
 		return err
 	}
-	loadNonResource(m.resMetas)
-
-	// We've actually loaded all the CRDs in loadPreferred, and we're now adding
-	// some additional CRD properties on top of that.
-	loadCRDs(f, m.resMetas)
-
+	m.mx.Lock()
+	if request == m.request {
+		m.resMetas = resources
+	}
+	m.mx.Unlock()
 	return nil
 }
 

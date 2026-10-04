@@ -77,7 +77,7 @@ func (h *History) getValsCmd(app *App, _ ui.Tabular, _ *client.GVR, path string)
 		return
 	}
 	name, rev := tt[0], tt[1]
-	h.Values = model.NewRevValues(h.GVR(), client.FQN(ns, name), rev)
+	h.Values = model.NewRevValues(h.GVR(), client.FQN(ns, name), rev, h.App().factory)
 	v := NewLiveView(h.App(), "Values", h.Values)
 	if err := v.app.inject(v, false); err != nil {
 		v.app.Flash().Err(err)

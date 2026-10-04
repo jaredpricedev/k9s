@@ -12,6 +12,7 @@ import (
 	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/dao"
+	"github.com/derailed/k9s/internal/model"
 	"github.com/derailed/k9s/internal/port"
 	"github.com/derailed/k9s/internal/slogs"
 	"github.com/derailed/k9s/internal/ui"
@@ -128,34 +129,38 @@ func ensurePodPortFwdAllowed(factory dao.Factory, podName string) error {
 	return nil
 }
 
-func runForward(v ResourceViewer, pf watch.Forwarder, f *portforward.PortForwarder) {
-	v.App().factory.AddForwarder(pf)
-
-	v.App().QueueUpdateDraw(func() {
-		DismissPortForwards(v, v.App().Content.Pages)
+func runForward(v ResourceViewer, factory *watch.Factory, owner model.Component, revision uint64, pf watch.Forwarder, f *portforward.PortForwarder) {
+	app := v.App()
+	go app.QueueUpdateDraw(func() {
+		if app.IsRunning() && app.Config.DestinationRevision() == revision && app.Content.Top() == owner {
+			DismissPortForwards(v, app.Content.Pages)
+		}
 	})
-
-	pf.SetActive(true)
-	if err := f.ForwardPorts(); err != nil {
-		v.App().Flash().Warnf("PortForward failed for %s: %s. Deleting!", pf.ID(), err)
+	err := f.ForwardPorts()
+	// Cleanup belongs to the captured factory, independently of a running UI.
+	factory.DeleteOwnedForwarder(pf)
+	if err != nil && app.IsRunning() {
+		go app.QueueUpdateDraw(func() {
+			if app.IsRunning() && app.Config.DestinationRevision() == revision && app.Content.Top() == owner {
+				app.Flash().Warnf("PortForward ended for %s; local binding or remote stream failed.", pf.ID())
+			}
+		})
 	}
-	v.App().QueueUpdateDraw(func() {
-		v.App().factory.DeleteForwarder(pf.ID())
-		pf.SetActive(false)
-	})
 }
 
 func startFwdCB(v ResourceViewer, path string, pts port.PortTunnels) error {
+	factory, owner := v.App().factory, v.App().Content.Top()
+	revision := v.App().Config.DestinationRevision()
 	if err := pts.CheckAvailable(context.Background()); err != nil {
 		return err
 	}
 
 	tt := make([]string, 0, len(pts))
 	for _, pt := range pts {
-		if _, ok := v.App().factory.ForwarderFor(dao.PortForwardID(path, pt.Container, pt.PortMap())); ok {
+		if _, ok := factory.ForwarderFor(dao.PortForwardID(path, pt.Container, pt.PortMap())); ok {
 			return fmt.Errorf("port-forward is already active on pod %s", path)
 		}
-		pf := dao.NewPortForwarder(v.App().factory)
+		pf := dao.NewPortForwarder(factory)
 		fwd, err := pf.Start(path, pt)
 		if err != nil {
 			return err
@@ -164,7 +169,11 @@ func startFwdCB(v ResourceViewer, path string, pts port.PortTunnels) error {
 			slogs.PFID, pf.ID(),
 			slogs.PFTunnel, pt,
 		)
-		go runForward(v, pf, fwd)
+		// Register before launching the worker: a reconnect can stop this stream
+		// even if the scheduler has not entered ForwardPorts yet.
+		pf.SetActive(true)
+		factory.AddForwarder(pf)
+		go runForward(v, factory, owner, revision, pf, fwd)
 		tt = append(tt, pt.LocalPort)
 	}
 	if len(tt) == 1 {
@@ -177,6 +186,8 @@ func startFwdCB(v ResourceViewer, path string, pts port.PortTunnels) error {
 }
 
 func showFwdDialog(v ResourceViewer, path string, cb PortForwardCB) error {
+	factory, owner := v.App().factory, v.App().Content.Top()
+	revision := v.App().Config.DestinationRevision()
 	mm, anns, err := fetchPodPorts(v.App().factory, path)
 	if err != nil {
 		return err
@@ -203,7 +214,12 @@ func showFwdDialog(v ResourceViewer, path string, cb PortForwardCB) error {
 
 		return startFwdCB(v, path, pts)
 	}
-	ShowPortForwards(v, path, ports, anns, cb)
+	ShowPortForwards(v, path, ports, anns, func(view ResourceViewer, target string, tunnels port.PortTunnels) error {
+		if view.App().factory != factory || view.App().Config.DestinationRevision() != revision || view.App().Content.Top() != owner {
+			return fmt.Errorf("destination changed; reopen the port-forward dialog for the current resource")
+		}
+		return cb(view, target, tunnels)
+	})
 
 	return nil
 }

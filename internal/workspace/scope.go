@@ -114,7 +114,7 @@ func NormalizeScope(scope Scope) (Scope, error) {
 		return Scope{}, err
 	}
 	switch out.Layout {
-	case "", "queue", "inventory", "pins", "coverage", "history", "activity":
+	case "", "queue", "inventory", "pins", "coverage", categoryHistory, "activity":
 	default:
 		return Scope{}, fmt.Errorf("unknown workspace layout %q", out.Layout)
 	}

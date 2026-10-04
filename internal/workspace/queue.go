@@ -16,6 +16,7 @@ import (
 
 const (
 	SeverityCritical  = "critical"
+	categoryHistory   = "history"
 	SeverityWarning   = "warning"
 	SeverityInfo      = "info"
 	CertificateWindow = 14 * 24 * time.Hour
