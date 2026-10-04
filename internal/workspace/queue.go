@@ -20,7 +20,6 @@ const (
 	SeverityWarning   = "warning"
 	SeverityInfo      = "info"
 	CertificateWindow = 14 * 24 * time.Hour
-	categoryHistory   = "history"
 )
 
 // Classify reads present resource status only. Conditions are interpreted by
