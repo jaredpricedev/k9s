@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	authorizationv1 "k8s.io/api/authorization/v1"
+	"k8s.io/apimachinery/pkg/util/cache"
+	clocktesting "k8s.io/utils/clock/testing"
 )
 
 func TestMakeSAR(t *testing.T) {
@@ -152,12 +154,14 @@ func TestIsValidNamespace(t *testing.T) {
 
 func TestCheckCacheBool(t *testing.T) {
 	c := NewTestAPIClient()
+	cacheClock := clocktesting.NewFakeClock(time.Unix(0, 0))
+	c.cache = cache.NewLRUExpireCacheWithClock(cacheSize, cacheClock)
 
 	const key = "fred"
 	uu := map[string]struct {
-		key                  string
-		val                  any
-		found, actual, sleep bool
+		key                   string
+		val                   any
+		found, actual, expire bool
 	}{
 		"setTrue": {
 			key:    key,
@@ -175,9 +179,9 @@ func TestCheckCacheBool(t *testing.T) {
 			val: false,
 		},
 		"expired": {
-			key:   key,
-			val:   true,
-			sleep: true,
+			key:    key,
+			val:    true,
+			expire: true,
 		},
 	}
 
@@ -185,8 +189,8 @@ func TestCheckCacheBool(t *testing.T) {
 	for k := range uu {
 		u := uu[k]
 		c.cache.Add(key, u.val, expiry)
-		if u.sleep {
-			time.Sleep(expiry)
+		if u.expire {
+			cacheClock.Step(expiry + time.Nanosecond)
 		}
 		t.Run(k, func(t *testing.T) {
 			val, ok := c.checkCacheBool(u.key)

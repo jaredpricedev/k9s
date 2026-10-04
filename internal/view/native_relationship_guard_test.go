@@ -55,6 +55,7 @@ func nativeGuardFixture(t *testing.T, cachedUID types.UID) (*Browser, *nativeGua
 	dao.MetaAccess.RegisterMeta(client.PodGVR.String(), &metav1.APIResource{Kind: "Pod", Namespaced: true})
 	t.Cleanup(func() { dao.MetaAccess = previous })
 	app := NewApp(mock.NewMockConfig(t))
+	app.command = NewCommand(app)
 	_, err := app.Config.ActivateContext("ct-1-1")
 	require.NoError(t, err)
 	connection := &nativeGuardConnection{Connection: mock.NewMockConnection()}
