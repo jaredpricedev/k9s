@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// Modified for k9+; see NOTICE.
 package view
 
 import (
@@ -11,14 +12,18 @@ import (
 )
 
 func (w *HubbleView) hubblePalette() logDetailPalette {
-	styles := config.NewStyles()
-	if w.app != nil && w.app.Styles != nil {
-		styles = w.app.Styles
+	p := w.semanticPalette()
+	readable := func(c config.Color) string {
+		color := config.ReadableForeground(config.ReadableForeground(c.Color(), p.Canvas.Color()), p.Panel.Color())
+		if color.Hex() < 0 {
+			return c.String()
+		}
+		return fmt.Sprintf("#%06x", color.Hex())
 	}
 	return logDetailPalette{
-		foreground: styles.Body().FgColor.String(), key: styles.Views().Yaml.KeyColor.String(),
-		value: styles.K9s.Frame.Status.ModifyColor.String(), muted: styles.Views().Log.Indicator.ToggleOffColor.String(),
-		warning: styles.K9s.Frame.Status.PendingColor.String(), failure: styles.K9s.Frame.Status.ErrorColor.String(),
+		foreground: readable(p.Text), key: readable(p.Category),
+		value: readable(p.Healthy), muted: readable(p.Muted),
+		warning: readable(p.Warning), failure: readable(p.Failure),
 	}
 }
 
@@ -35,7 +40,7 @@ func (w *HubbleView) hubbleDetail(e *hubble.Event) string {
 	switch e.Verdict {
 	case "DROPPED", "ERROR":
 		verdictColor = p.failure
-	case "FORWARDED":
+	case hubbleForwarded:
 		verdictColor = p.value
 	}
 	var b strings.Builder
@@ -66,6 +71,11 @@ func (w *HubbleView) hubbleDetail(e *hubble.Event) string {
 func (w *HubbleView) renderHubbleStatus(st *hubble.Status, state, coverage, loss string, evicted uint64) {
 	p := w.hubblePalette()
 	stateColor := p.key
+	if st.Error != "" {
+		stateColor = p.failure
+	} else if st.Phase == "live observation" || st.Phase == "status only" {
+		stateColor = p.value
+	}
 	if w.frozen {
 		stateColor = p.warning
 	}
@@ -85,10 +95,13 @@ func (w *HubbleView) renderHubbleStatus(st *hubble.Status, state, coverage, loss
 	if st.Error != "" || st.CoverageError != "" {
 		diagnosticColor = p.failure
 	}
-	w.status.SetText(detailStyled(stateColor, "b", state) + detailStyled(p.muted, "", " | node coverage: "+coverage) +
+	text := detailStyled(stateColor, "b", state) + detailStyled(p.muted, "", " | node coverage: "+coverage) +
 		detailStyled(p.muted, "", fmt.Sprintf(" | retained observed events: %d", len(w.displayed))) + "\n" +
 		detailStyled(lossColor, "", "Reported loss: "+loss) + detailStyled(p.muted, "", fmt.Sprintf(" | local evictions: %d | L7 redacted", evicted)) + "\n" +
 		detailStyled(diagnosticColor, "", diagnostics) + "\n" +
 		detailStyled(p.muted, "", w.notice) + detailStyled(p.key, "", " | filter: "+w.expression) + "\n" +
-		detailStyled(p.muted, "", shortcuts))
+		detailStyled(p.muted, "", shortcuts)
+	if w.status.GetText(false) != text {
+		w.status.SetText(text)
+	}
 }
