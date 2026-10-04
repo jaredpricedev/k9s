@@ -13,11 +13,11 @@ context safety, selection, and the return path from investigations.
 | Navigation and actions | Search available actions for the selected resource instead of memorizing shortcuts. | One action menu; frequently used shortcuts still work. | Shipped on master (PR #6) |
 | Resource troubleshooting | Bring conditions, recent events, restarts and ownership together. | Open an inspector on demand. | Shipped on master (PR #6) |
 | TLS and certificates | Show expiry, SANs, issuer, chain information and where a certificate is used; optional endpoint checks. | A certificate view with deeper inspection rather than more columns everywhere. | Shipped on master (PR #6) |
-| Workload relationships | Jump between Deployment, Pods, Service, EndpointSlices and Ingress/Gateway. | Contextual links before attempting a large topology map. | Open [PR #7](https://github.com/jaredpricedev/k9s/pull/7); UID/lifecycle gates in [#21](https://github.com/jaredpricedev/k9s/issues/21) |
-| Change visibility | Compare explicit observations A/B with source, time and recreated identity. | A stays fixed; bookkeeping normalization is reversible. Desired-source comparison remains a later increment. | Open daily-workspace review stack below |
-| Resource pressure | Investigate requests, limits, usage, OOM kills and scheduling evidence. | Workload-focused snapshots; missing usage is N/A and throttling stays unknown without counters. | Open daily-workspace review stack below |
-| Context safety | Clear production identity, convenient read-only mode and destination-aware action confirmations. | Persistent compact indicators and full F2 destination details. | Open daily-workspace review stack below |
-| Performance and interaction polish | Faster large lists, reliable cancellation, stable selection and consistent inspectors. | Improve existing workflows; retain bounded evidence and disclose measurements. | Open daily-workspace review stack below |
+| Workload relationships | Jump between Deployment, Pods, Service, EndpointSlices and Ingress/Gateway. | Contextual links before attempting a large topology map. | Shipped on master ([PR #7](https://github.com/jaredpricedev/k9s/pull/7)); [usage and limits](docs/workload-relationships.md) |
+| Change visibility | Compare explicit observations A/B with source, time and recreated identity. | A stays fixed; bookkeeping normalization is reversible. Desired-source comparison remains a later increment. | Shipped on master; delivery below |
+| Resource pressure | Investigate requests, limits, usage, OOM kills and scheduling evidence. | Workload-focused snapshots; missing usage is N/A and throttling stays unknown without counters. | Shipped on master; delivery below |
+| Context safety | Clear production identity, convenient read-only mode and destination-aware action confirmations. | Persistent compact indicators and full F2 destination details. | Shipped on master; delivery below |
+| Performance and interaction polish | Faster large lists, reliable cancellation, stable selection and consistent inspectors. | Improve existing workflows; retain bounded evidence and disclose measurements. | Shipped on master; delivery below |
 
 ## PR #6 delivery
 
@@ -28,50 +28,66 @@ context safety, selection, and the return path from investigations.
 | TLS | Begin with certificate parsing, expiry, SANs and resource links. Review trust validation, active probes and sensitive-data handling separately. | `:tls` on Secrets/Certificates/Ingresses/Gateways; public metadata, references, offline trust verification and explicit verified endpoint probes from k9plus. |
 
 PR #6 completes the scoped increments for these three areas; see [usage and limits](docs/resource-investigation.md).
-It does not implement the five other roadmap areas. TLS revocation, mTLS client
+The later roadmap areas are delivered below. TLS revocation, mTLS client
 identity, STARTTLS, in-pod probing and exhaustive cross-namespace consumer discovery
 are outside this delivery. No certificate or network-policy changes are automatic.
 
-Remaining Hubble features are tracked in [BACKLOG.md](BACKLOG.md). No merges or
-policy application without user approval.
+Remaining Hubble features are tracked in [BACKLOG.md](BACKLOG.md). Network-policy
+changes require explicit action and confirmation.
 
 The daily-app correctness, visual foundation, investigation and evidence increments
 are tracked in [issue #8](https://github.com/jaredpricedev/k9s/issues/8), with dependencies
 and acceptance criteria in its linked issues. Proposed performance and usability goals
 are targets until measured; fixture validation does not establish live-cluster coverage.
 
-## Daily workspace review stack
+## Daily workspace delivery
 
-The complete implementation is available on `codex/daily-kubernetes-trust`.
-The focused PRs are open and unmerged; the branch includes the stack's prerequisites.
-The existing workload-relationships PR is independently updated and reviewed.
-The final validation PR records the review order, checks and captured evidence.
+All nineteen implementation issues (#9–#27) are shipped on the default `master`
+branch. The delivery includes the workload relationships from PR #7 alongside
+the daily-workspace increments and their core fixes. The links below retain the
+review history; build and run the default branch with Go 1.25.8.
 
-| Linked issue | Delivered behavior | Review |
-| --- | --- | --- |
-| #9 | Canonical selected resource identity, guarded synthetic views, nonzero fatal recovery | [PR #28](https://github.com/jaredpricedev/k9s/pull/28) |
-| #10 | Validated drafts retain committed filters and resource selection | [PR #30](https://github.com/jaredpricedev/k9s/pull/30) |
-| #11, #13 | Explicit metrics visibility and destination identity, correct memory trends | [Workspace PR #32](https://github.com/jaredpricedev/k9s/pull/32) |
-| #12 | Owned action-map snapshots and synchronized mutation | [PR #29](https://github.com/jaredpricedev/k9s/pull/29) |
-| #14, #20 | Default-branch installation, first-run tasks, feature matrix, maintenance, CI and reproducible evidence | [Validation PR #39](https://github.com/jaredpricedev/k9s/pull/39) |
-| #15 | Asynchronous restart, scale and delete with captured destination and UID conditions | [Operations PR #33](https://github.com/jaredpricedev/k9s/pull/33) |
-| #16, #17 | Semantic/custom skins and readable compact fault layouts | [PR #31](https://github.com/jaredpricedev/k9s/pull/31) |
-| #18, #19 | Retained frozen Hubble rows and bounded paginated workload scope | [Hubble PR #34](https://github.com/jaredpricedev/k9s/pull/34) |
-| #21 | UID checks, canceled navigation, preserved source state | [Existing PR #7](https://github.com/jaredpricedev/k9s/pull/7) |
-| #22, #23 | Shared action/help registry, retained fault-first snapshots and explicit stream modes | [Workspace PR #32](https://github.com/jaredpricedev/k9s/pull/32) |
-| #24 | Explicit selected-only capability checks and verified Relay readiness | [Diagnostics PR #36](https://github.com/jaredpricedev/k9s/pull/36) |
-| #25 | Immutable A/B observations with identity, noise controls and sensitive-content limits | [Comparison PR #35](https://github.com/jaredpricedev/k9s/pull/35) |
-| #26 | Requests, limits, optional usage, last OOM and bounded scheduling evidence | [Pressure PR #37](https://github.com/jaredpricedev/k9s/pull/37) |
-| #27 | Bounded reviewed JSON/Markdown evidence and offline import | [Evidence PR #38](https://github.com/jaredpricedev/k9s/pull/38) |
+| Linked issue | Delivered behavior | Status | Delivery |
+| --- | --- | --- | --- |
+| #9 | Canonical selected resource identity, guarded synthetic views, nonzero fatal recovery | Merged on master | [PR #28](https://github.com/jaredpricedev/k9s/pull/28) |
+| #10 | Validated drafts retain committed filters and resource selection | Merged on master | [PR #30](https://github.com/jaredpricedev/k9s/pull/30) |
+| #11 | Explicit metrics visibility and correct memory trends | Merged on master | [Workspace PR #32](https://github.com/jaredpricedev/k9s/pull/32) |
+| #12 | Owned action-map snapshots and synchronized mutation | Merged on master | [PR #29](https://github.com/jaredpricedev/k9s/pull/29) |
+| #13 | Persistent destination identity, access mode and full F2 details | Merged on master | [Workspace PR #32](https://github.com/jaredpricedev/k9s/pull/32) |
+| #14 | Default-branch installation, first-run tasks and feature matrix | Merged on master | [Validation PR #39](https://github.com/jaredpricedev/k9s/pull/39) |
+| #15 | Asynchronous restart, scale and delete with captured destination and UID conditions | Merged on master | [Operations PR #33](https://github.com/jaredpricedev/k9s/pull/33) |
+| #16 | Semantic and custom skins with readable selection and severity | Merged on master | [PR #31](https://github.com/jaredpricedev/k9s/pull/31) |
+| #17 | Compact layouts preserve fault states, readiness and restarts | Merged on master | [PR #31](https://github.com/jaredpricedev/k9s/pull/31) |
+| #18 | Frozen Hubble rows retain identity across ingestion and eviction | Merged on master | [Hubble PR #34](https://github.com/jaredpricedev/k9s/pull/34) |
+| #19 | Bounded, paginated workload Hubble scope | Merged on master | [Hubble PR #34](https://github.com/jaredpricedev/k9s/pull/34) |
+| #20 | Maintenance, CI and reproducible validation evidence | Merged on master | [Validation PR #39](https://github.com/jaredpricedev/k9s/pull/39) |
+| #21 | Relationship UID checks, canceled navigation and retained source state | Merged on master | [PR #7](https://github.com/jaredpricedev/k9s/pull/7) |
+| #22 | Shared action discovery and help registry | Merged on master | [Workspace PR #32](https://github.com/jaredpricedev/k9s/pull/32) |
+| #23 | Retained fault-first snapshots and explicit log/stream modes | Merged on master | [Workspace PR #32](https://github.com/jaredpricedev/k9s/pull/32) |
+| #24 | Explicit selected-only capability checks and verified Relay readiness | Merged on master | [Diagnostics PR #36](https://github.com/jaredpricedev/k9s/pull/36) |
+| #25 | Immutable A/B observations with identity, noise controls and sensitive-content limits | Merged on master | [Comparison PR #35](https://github.com/jaredpricedev/k9s/pull/35) |
+| #26 | Requests, limits, optional usage, last OOM and bounded scheduling evidence | Merged on master | [Pressure PR #37](https://github.com/jaredpricedev/k9s/pull/37) |
+| #27 | Bounded reviewed JSON/Markdown evidence and offline import | Merged on master | [Evidence PR #38](https://github.com/jaredpricedev/k9s/pull/38) |
 
-Review the core fixes #28–#30 independently, then the stack #31 → #32 → #33 →
-#34 → #35 → #36 → #37 → #38 → #39. The stack already includes the core foundation
-and its integrated refinements; the independent fixes provide a narrow delivery
-option. Choose an integration path instead of assuming both sets can be merged
-without reconciling their shared changes. Later stack PRs target their immediate
-predecessor, so each diff shows one increment. PR #7 remains separate; it is not
-part of the integrated daily-workspace branch. Rerun checks at the chosen revision.
+The core fixes [#28](https://github.com/jaredpricedev/k9s/pull/28),
+[#29](https://github.com/jaredpricedev/k9s/pull/29) and
+[#30](https://github.com/jaredpricedev/k9s/pull/30), and delivery PRs
+[#31](https://github.com/jaredpricedev/k9s/pull/31) through
+[#39](https://github.com/jaredpricedev/k9s/pull/39), are included together with
+[PR #7](https://github.com/jaredpricedev/k9s/pull/7). Source identity checks and
+namespace return ownership keep related-resource navigation coherent with the
+persistent destination header, including after later user navigation.
+
+## Validation and remaining work
 
 See [dated validation](docs/validation-2026-10-04.md) for actual PTY, race and
-disposable Kubernetes coverage. Live Relay/Gateway runs, other operating systems
-and operator usability review remain explicit coverage gaps.
+disposable Kubernetes coverage. Its captured source revisions, binary hashes and
+CI snapshot remain historical evidence; they do not establish passing hosted CI
+for a later merge revision.
+
+The documented 10,000-Pod filtering result has p95 **107.274 ms**, above the
+100 ms target. The implementation is delivered; that performance target remains
+unmet in the recorded sample. Live Relay and Gateway/HTTPRoute runs, other
+operating systems and operator usability review remain explicit coverage gaps.
+Desired-source comparison and the deeper protocol/topology features listed above
+remain later increments.

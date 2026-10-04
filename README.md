@@ -2,12 +2,13 @@
 
 # k9+
 
-**A Kubernetes terminal app with inline GitOps workflows and certificate diagnostics.**
+**A Kubernetes terminal workspace for daily operations and investigation.**
 
 k9+ is an independently maintained fork of [k9s](https://github.com/derailed/k9s),
 licensed under Apache-2.0. It keeps the familiar terminal workflow and adds native
-Flux controls, cert-manager navigation, measured performance improvements and
-small UI refinements. It is not affiliated with or endorsed by the k9s maintainers.
+Flux controls, cert-manager navigation, retained troubleshooting evidence,
+network flows and explicit resource comparisons. It is not affiliated with or
+endorsed by the k9s maintainers.
 
 The app displays **k9+**; its command and package name are **`k9plus`**.
 
@@ -40,20 +41,24 @@ Existing YAML keeps its `k9s:` root for compatibility. The Go module path also
 remains unchanged, so install this fork from its checkout rather than the
 upstream `go install` path. Upstream package-manager commands install k9s.
 
-## Daily workspace review
+## Daily Kubernetes workspace
 
-The [issue #8 review stack](ROADMAP.md#daily-workspace-review-stack) adds persistent
-destination identity, readable compact tables, shared action discovery, retained
-fault evidence, explicit A/B comparison, resource pressure, capability diagnostics
-and portable offline evidence. The changes are open for review and are available
-together on the integration branch:
+The current default branch includes the [issue #8 implementation](ROADMAP.md#daily-workspace-delivery):
+persistent destination identity, readable compact tables, validated filters,
+shared action discovery and help, asynchronous guarded mutations, bounded log
+and Hubble workbenches, retained fault evidence and workload relationships.
+Explicit A/B comparison, resource pressure, capability diagnostics and portable
+offline evidence open on demand.
+
+Start in read-only mode and choose your destination:
 
 ```sh
-git clone --branch codex/daily-kubernetes-trust https://github.com/jaredpricedev/k9s.git k9plus-review
-cd k9plus-review
-make build
 ./execs/k9plus --readonly --context your-context -n your-namespace
 ```
+
+Use `F2` to reveal the complete destination and `Ctrl-O` to search the actions
+available in the current view. Investigation snapshots retain their identity,
+query and scroll position when returning from related resources.
 
 ![Actual 80-column terminal capture preserving fault status, readiness and restarts](docs/evidence/ui-2026-10-04/pods-80x24-stock-true-color.png)
 
@@ -72,6 +77,11 @@ and [Hubble measurements](docs/hubble-performance-2026-10-04.md).
 | Reconcile without leaving the UI | `Shift-R`, then confirm |
 | Suspend / resume Flux resource | `Shift-T`, then confirm |
 | Certificate health and expiry | `:certificates all` |
+| Destination / action discovery | `F2` / `Ctrl-O` |
+| Troubleshoot / related resources | `:troubleshoot`, then `g` |
+| Compare observations / resource pressure | `:compare` / `:pressure` |
+| Capability diagnostics | `:diagnostics` |
+| Capture / open offline evidence | `:evidence` / `:evidence-open /absolute/path.json` |
 | Related resources / full status | `g` / `i` in supported views |
 | Help / command prompt / quit | `?` / `:` / `:quit` |
 
@@ -80,9 +90,10 @@ cert-manager views require the corresponding CRDs; the rest of the app works
 without them. Optional CLI plugins need their respective tools.
 
 See [Flux workflows](docs/flux.md), [certificate workflows](docs/certificates.md),
-[optional plugins](plugins/README.md) and the [review findings](docs/review-2026-09-06.md).
+[workload relationships](docs/workload-relationships.md), [optional plugins](plugins/README.md)
+and the [review findings](docs/review-2026-09-06.md).
 Start with the [first-run task guide](docs/first-run.md). The
-[feature matrix](ROADMAP.md) distinguishes shipped features, open PRs and proposals.
+[feature matrix](ROADMAP.md) records shipped features and remaining proposals.
 The [upstream documentation](https://k9scli.io/topics/commands/) describes the
 inherited navigation workflow; use `k9plus` and this fork's configuration paths.
 

@@ -34,6 +34,7 @@ type Table struct {
 	command             *cmd.Interpreter
 	operationGeneration atomic.Uint64
 	filterRequests      resourceFilterRequests
+	expectedTarget      *SelectedResourceTarget
 }
 
 // NewTable returns a new viewer.

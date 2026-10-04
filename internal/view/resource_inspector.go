@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/derailed/k9s/internal/client"
+	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
 	corev1 "k8s.io/api/core/v1"
@@ -30,21 +31,27 @@ type inspectionSnapshot struct {
 	CapturedAt time.Time
 }
 
+type inspectionReturnDestination struct {
+	sourceNamespace, destinationNamespace string
+	revision                              uint64
+}
+
 // inspectionDetails cancels on exit and never updates a replaced screen.
 type inspectionDetails struct {
 	*Details
-	cancel          context.CancelFunc
-	generation      uint64
-	contextName     string
-	secretPath      string
-	target          SelectedResourceTarget
-	connection      client.Connection
-	snapshot        inspectionSnapshot
-	displayEvidence string
-	messagesCompact bool
-	loader          func(context.Context) (string, error)
-	snapshotLoader  func(context.Context, SelectedResourceTarget) (inspectionSnapshot, error)
-	related         func(context.Context, SelectedResourceTarget) ([]inspectionReference, error)
+	cancel            context.CancelFunc
+	generation        uint64
+	contextName       string
+	returnDestination *inspectionReturnDestination
+	secretPath        string
+	target            SelectedResourceTarget
+	connection        client.Connection
+	snapshot          inspectionSnapshot
+	displayEvidence   string
+	messagesCompact   bool
+	loader            func(context.Context) (string, error)
+	snapshotLoader    func(context.Context, SelectedResourceTarget) (inspectionSnapshot, error)
+	related           func(context.Context, SelectedResourceTarget) ([]inspectionReference, error)
 }
 
 func (d *inspectionDetails) SelectedResource() SelectedResourceTarget { return d.target }
@@ -55,6 +62,7 @@ func (d *inspectionDetails) Stop() {
 		d.cancel()
 		d.cancel = nil
 	}
+	d.app.Styles.RemoveListener(d)
 	d.Details.Stop()
 }
 
@@ -110,6 +118,8 @@ func (d *inspectionDetails) Init(ctx context.Context) error {
 	if err := d.Details.Init(ctx); err != nil {
 		return err
 	}
+	d.app.Styles.RemoveListener(d.Details)
+	d.app.Styles.AddListener(d)
 	d.actions.Add(ui.KeyR, ui.NewKeyAction("Refresh snapshot", func(*tcell.EventKey) *tcell.EventKey { d.refresh(); return nil }, true))
 	d.actions.Add(ui.KeyM, ui.NewKeyAction("Toggle full messages", func(*tcell.EventKey) *tcell.EventKey {
 		d.messagesCompact = !d.messagesCompact
@@ -128,13 +138,44 @@ func (d *inspectionDetails) Init(ctx context.Context) error {
 	return nil
 }
 func (d *inspectionDetails) Start() {
+	d.restoreNavigationNamespace()
 	d.app.Styles.RemoveListener(d.Details)
-	d.app.Styles.AddListener(d.Details)
+	d.app.Styles.RemoveListener(d)
+	d.app.Styles.AddListener(d)
+	d.StylesChanged(d.app.Styles)
 	d.app.Prompt().SetModel(d.cmdBuff)
 	if d.snapshot.Text != "" {
 		d.app.Flash().Infof("Retained snapshot from %s; r makes a new observation", d.snapshot.CapturedAt.UTC().Format(time.RFC3339))
 	}
 }
+
+// StylesChanged recolors retained evidence without resetting its accepted search
+// or scroll position. The inspector owns this listener, rather than Details.
+func (d *inspectionDetails) StylesChanged(s *config.Styles) {
+	d.applyStyles(s)
+	text := d.displayEvidence
+	if text == "" {
+		text = strings.Join(d.model.Peek(), "\n")
+	}
+	d.renderSnapshotText(text)
+}
+
+func (d *inspectionDetails) restoreNavigationNamespace() {
+	if d.returnDestination == nil {
+		return
+	}
+	destination := d.returnDestination
+	d.returnDestination = nil
+	if d.app.Content.Top() != d || d.contextName != d.app.Config.ActiveContextName() ||
+		d.app.Config.ActiveNamespace() != destination.destinationNamespace ||
+		d.app.Config.DestinationRevision() != destination.revision {
+		return
+	}
+	if err := d.app.switchNS(destination.sourceNamespace); err != nil {
+		d.app.Flash().Err(err)
+	}
+}
+
 func (d *inspectionDetails) refresh() {
 	if d.contextName != d.app.Config.ActiveContextName() {
 		d.app.Flash().Warn("Context changed; reopen inspection")

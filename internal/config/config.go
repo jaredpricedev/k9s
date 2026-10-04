@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/derailed/k9s/internal/client"
@@ -23,9 +24,10 @@ import (
 
 // Config tracks K9s configuration options.
 type Config struct {
-	K9s      *K9s `yaml:"k9s" json:"k9s"`
-	conn     client.Connection
-	settings data.KubeSettings
+	K9s                 *K9s `yaml:"k9s" json:"k9s"`
+	conn                client.Connection
+	settings            data.KubeSettings
+	destinationRevision atomic.Uint64
 }
 
 // NewConfig creates a new default config.
@@ -153,12 +155,23 @@ func (c *Config) Reset() {
 }
 
 func (c *Config) ActivateContext(n string) (*data.Context, error) {
+	previous := c.ActiveContextName()
 	ct, err := c.K9s.ActivateContext(n)
 	if err != nil {
 		return nil, fmt.Errorf("set current context failed. %w", err)
 	}
 
+	if c.ActiveContextName() != previous {
+		c.destinationRevision.Add(1)
+	}
 	return ct, nil
+}
+
+// DestinationRevision changes whenever the active namespace or context changes,
+// including a round trip back to its earlier value. Retained navigation uses it
+// to distinguish its own destination from a later user choice.
+func (c *Config) DestinationRevision() uint64 {
+	return c.destinationRevision.Load()
 }
 
 // CurrentContext fetch the configuration active context.
@@ -205,7 +218,14 @@ func (c *Config) SetActiveNamespace(ns string) error {
 		return err
 	}
 
-	return ct.Namespace.SetActive(ns, c.settings)
+	previous := c.ActiveNamespace()
+	if err := ct.Namespace.SetActive(ns, c.settings); err != nil {
+		return err
+	}
+	if c.ActiveNamespace() != previous {
+		c.destinationRevision.Add(1)
+	}
+	return nil
 }
 
 // ActiveView returns the active view in the current context.

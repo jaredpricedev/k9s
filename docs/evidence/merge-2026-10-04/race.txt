@@ -1,0 +1,8 @@
+ok  	github.com/derailed/k9s/internal/client	1.101s
+ok  	github.com/derailed/k9s/internal/model	1.386s
+ok  	github.com/derailed/k9s/internal/dao	6.567s
+ok  	github.com/derailed/k9s/internal/ui	1.906s
+ok  	github.com/derailed/k9s/internal/view	23.763s
+ok  	github.com/derailed/k9s/internal/inspect	2.722s
+ok  	github.com/derailed/k9s/internal/logstream	1.653s
+ok  	github.com/derailed/k9s/internal/hubble	1.134s
