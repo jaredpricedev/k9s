@@ -120,6 +120,13 @@ func (a *App) Shutdown() {
 		a.SetRunning(false)
 		a.Halt()
 		jobs := map[string]func(){
+			"local sessions": func() {
+				ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+				defer cancel()
+				if err := a.localSessions.Shutdown(ctx); err != nil {
+					slog.Error("Local session cleanup was not confirmed", slogs.Error, err)
+				}
+			},
 			"scanner": a.stopImgScanner,
 			"pages and recordings": func() {
 				defer a.shutdownLogRecordings()
@@ -136,13 +143,6 @@ func (a *App) Shutdown() {
 					a.factory.Terminate()
 				}
 				closePreparedSession(a.Conn())
-			},
-			"shell pod": func() {
-				if a.Config != nil && a.Conn() != nil {
-					if err := nukeK9sShell(a); err != nil {
-						slog.Error("Unable to remove k9+ shell pod", slogs.Error, err)
-					}
-				}
 			},
 			"configuration": func() {
 				if a.Config != nil {

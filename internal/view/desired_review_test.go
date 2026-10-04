@@ -149,7 +149,7 @@ func TestDesiredReviewLifecycleBlocksQueuesAfterExitAndRejectsChangedDestination
 func TestDesiredReviewCopiesCapturedScopeAndRetainsLocalSearchSelection(t *testing.T) {
 	original := review.Scope{Context: desiredReviewFixtureContext, Namespaces: []string{desiredReviewFixtureNamespace}, CapturedUIDs: map[string]types.UID{"resource": desiredReviewFixtureOldUID}}
 	copied := copyDesiredReviewScope(original)
-	original.Namespaces[0] = "other"
+	original.Namespaces[0] = guardedTestOtherContext
 	original.CapturedUIDs["resource"] = "new"
 	if copied.Namespaces[0] != desiredReviewFixtureNamespace || copied.CapturedUIDs["resource"] != desiredReviewFixtureOldUID {
 		t.Fatal("scope changed under async reader")

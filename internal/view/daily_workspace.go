@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/derailed/k9s/internal/activity"
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/model"
@@ -28,6 +29,7 @@ const (
 	dailyWorkspaceScopesMode       = "scopes"
 	dailyWorkspaceQueueMode        = "queue"
 	dailyWorkspaceHistoryMode      = "history"
+	dailyWorkspaceActivityMode     = "activity"
 	dailyWorkspacePinsMode         = "pins"
 	dailyWorkspaceDeleteToken      = "delete"
 	dailyWorkspaceFormPage         = "daily-workspace-form"
@@ -36,6 +38,7 @@ const (
 	dailyWorkspaceCoverageMode     = "coverage"
 	dailyWorkspaceCoverageComplete = "complete"
 	dailyWorkspaceKindCol          = "KIND"
+	dailyWorkspaceInvestigateLabel = "Investigate"
 )
 
 type dailyWorkspaceRow struct {
@@ -62,6 +65,8 @@ type dailyWorkspace struct {
 	path, contextName, mode, query, notice string
 	snapshot                               workspace.Snapshot
 	observationWindow                      *workspace.QueueWindow
+	activityWindow                         *activity.Window
+	activityEventCoverage                  []workspace.Coverage
 	jobSources                             map[string]*review.JobReviewSnapshot
 	jobSourcesOmitted                      int
 	coverage                               []workspace.Coverage
@@ -133,14 +138,22 @@ func (w *dailyWorkspace) SetFilter(query string, _ bool)       { w.applyQuery(qu
 func (w *dailyWorkspace) InCmdMode() bool                      { return w.prompting }
 func (w *dailyWorkspace) Actions() *ui.KeyActions {
 	if action, ok := w.actions.Get(tcell.KeyEnter); ok {
-		action.Description = "Investigate"
+		action.Description = dailyWorkspaceInvestigateLabel
 		if w.mode == dailyWorkspaceScopesMode {
 			action.Description = "Open scope"
 		}
 		if w.mode == dailyWorkspaceCoverageMode {
 			action.Description = "Coverage details"
 		}
-		action.Opts.RequiresSelection = w.mode != dailyWorkspaceScopesMode && w.mode != dailyWorkspaceCoverageMode && w.mode != dailyWorkspaceHistoryMode
+		action.Opts.RequiresSelection = !w.localEvidenceMode() && w.mode != dailyWorkspaceScopesMode
+		switch {
+		case w.localEvidenceMode():
+			action.Description = "Retained evidence"
+		case w.mode == dailyWorkspaceScopesMode:
+			action.Description = "Open scope"
+		default:
+			action.Description = dailyWorkspaceInvestigateLabel
+		}
 		if w.mode == dailyWorkspaceCoverageMode {
 			action.Opts.RequiresSelection = false
 		}
@@ -150,7 +163,7 @@ func (w *dailyWorkspace) Actions() *ui.KeyActions {
 }
 func (w *dailyWorkspace) Hints() model.MenuHints { return actionCatalogHints(w, w.app) }
 func (*dailyWorkspace) ExtraHints() map[string]string {
-	return map[string]string{"Workspace": "1 Daily · 2 Inventory · 3 Coverage · 4 Pins · 5 Scopes · 6 History. " +
+	return map[string]string{"Workspace": "1 Daily · 2 Inventory · 3 Coverage · 4 Pins · 5 Scopes · 6 History · 7 Activity. " +
 		"J reviews selected Job/CronJob; i investigates retained identity. / searches retained rows; r refreshes only saved namespaces."}
 }
 func (w *dailyWorkspace) Init(context.Context) error {
@@ -238,7 +251,7 @@ func (w *dailyWorkspace) makeActions() *ui.KeyActions {
 		label   string
 		visible bool
 	}{
-		{tcell.KeyEnter, "Investigate", true},
+		{tcell.KeyEnter, dailyWorkspaceInvestigateLabel, true},
 		{ui.KeyR, "Refresh", true},
 		{ui.KeySlash, dailyWorkspaceSearchLabel, true},
 		{ui.KeyN, "New scope", true},
@@ -254,6 +267,7 @@ func (w *dailyWorkspace) makeActions() *ui.KeyActions {
 		{ui.Key4, "Pins", false},
 		{ui.Key5, "Scopes", true},
 		{ui.Key6, "Observed history", true},
+		{ui.Key7, "Application activity", true},
 		{ui.KeyI, "Investigate captured identity", false},
 		{ui.KeyShiftJ, "Job outcomes and schedule", true},
 		{ui.KeyV, "Selected row details", true},
@@ -269,9 +283,9 @@ func (w *dailyWorkspace) makeActions() *ui.KeyActions {
 		}
 		if key == ui.KeyP || key == ui.KeyL || key == ui.KeyShiftJ || key == ui.KeyI || key == tcell.KeyEnter {
 			action.Opts.RequiresSelection = key != tcell.KeyEnter ||
-				(w.mode != dailyWorkspaceScopesMode && w.mode != dailyWorkspaceCoverageMode && w.mode != dailyWorkspaceHistoryMode)
+				(w.mode != dailyWorkspaceScopesMode && !w.localEvidenceMode())
 			action.Availability = func() string {
-				if key == tcell.KeyEnter && (w.mode == dailyWorkspaceCoverageMode || w.mode == dailyWorkspaceHistoryMode) {
+				if key == tcell.KeyEnter && w.localEvidenceMode() {
 					row, _ := w.table.GetSelection()
 					if row > 0 && row <= len(w.rows) {
 						return ""
@@ -316,18 +330,7 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 	case e.Key() == tcell.KeyEscape:
 		return w.app.PrevCmd(e)
 	case e.Key() == tcell.KeyEnter:
-		if w.mode == dailyWorkspaceScopesMode {
-			row, _ := w.table.GetSelection()
-			if row > 0 && row <= len(w.rows) {
-				w.useScope(w.rows[row-1].scopeName)
-			}
-			return nil
-		}
-		if w.mode == dailyWorkspaceCoverageMode || w.mode == dailyWorkspaceHistoryMode {
-			w.showRowDetails()
-			return nil
-		}
-		w.app.openTargetInspection(w.SelectedResource(), troubleshootCommand)
+		w.activateSelection()
 		return nil
 	case e.Rune() == 'J':
 		w.app.openJobReview(w.SelectedResource())
@@ -371,11 +374,26 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 			w.app.Flash().Err(err)
 		}
 		return nil
-	case strings.ContainsRune("123456", e.Rune()) && e.Rune() != 0:
+	case strings.ContainsRune("1234567", e.Rune()) && e.Rune() != 0:
 		w.setMode(dailyWorkspaceModeForDigit(e.Rune()))
 		return nil
 	}
 	return e
+}
+
+func (w *dailyWorkspace) activateSelection() {
+	if w.mode == dailyWorkspaceScopesMode {
+		row, _ := w.table.GetSelection()
+		if row > 0 && row <= len(w.rows) {
+			w.useScope(w.rows[row-1].scopeName)
+		}
+		return
+	}
+	if w.localEvidenceMode() {
+		w.showRowDetails()
+		return
+	}
+	w.app.openTargetInspection(w.SelectedResource(), troubleshootCommand)
 }
 func (w *dailyWorkspace) showRowDetailsKey() *tcell.EventKey {
 	w.showRowDetails()
@@ -385,7 +403,7 @@ func (w *dailyWorkspace) showRowDetailsKey() *tcell.EventKey {
 func dailyWorkspaceModeForDigit(key rune) string {
 	return map[rune]string{
 		'1': dailyWorkspaceQueueMode, '2': inventoryCommand, '3': dailyWorkspaceCoverageMode,
-		'4': dailyWorkspacePinsMode, '5': dailyWorkspaceScopesMode, '6': dailyWorkspaceHistoryMode,
+		'4': dailyWorkspacePinsMode, '5': dailyWorkspaceScopesMode, '6': dailyWorkspaceHistoryMode, '7': dailyWorkspaceActivityMode,
 	}[key]
 }
 
@@ -414,8 +432,8 @@ func (w *dailyWorkspace) setMode(mode string) {
 	w.table.Select(1, 0)
 	w.render()
 	if selected := w.tabSelections[mode]; selected != "" {
-		for i, row := range w.rows {
-			if dailyWorkspaceRowKey(&row) == selected {
+		for i := range w.rows {
+			if dailyWorkspaceRowKey(&w.rows[i]) == selected {
 				w.table.Select(i+1, 0)
 				w.renderDetail()
 				break
@@ -476,18 +494,32 @@ func (w *dailyWorkspace) refresh() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	w.cancel = cancel
 	scope := w.scope
+	includeActivityEvents := w.mode == dailyWorkspaceActivityMode
 	w.notice = "Reading scope… 10 second deadline"
 	w.render()
 	go func() {
 		defer cancel()
 		snapshot := w.collect(ctx, reader, scope, time.Now())
+		var events *activity.EventCollection
+		if includeActivityEvents {
+			result := activity.CollectEvents(ctx, reader, &scope, &snapshot)
+			events = &result
+		}
 		refreshErr := ctx.Err()
 		w.app.QueueUpdateDraw(func() {
 			if !dailyWorkspaceAccepts(generation, w.generation, w.contextName, w.app.Config.ActiveContextName(), w.app.Content.Top() == w) {
 				return
 			}
 			w.cancel = nil
+			priorActivityAt := w.activityWindow.LastRefreshAt
 			w.acceptSnapshot(snapshot, refreshErr)
+			if w.activityWindow.LastRefreshAt.After(priorActivityAt) {
+				w.activityWindow.ObserveEvents(events)
+				w.activityEventCoverage = nil
+				if events != nil {
+					w.activityEventCoverage = events.Coverage
+				}
+			}
 			w.render()
 		})
 	}()

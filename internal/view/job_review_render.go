@@ -14,7 +14,7 @@ import (
 	"github.com/derailed/tview"
 )
 
-const jobReviewIdleMarker, jobReviewSelectedMarker = "  ", "> "
+const jobReviewIndent, jobReviewSelectedMarker = "  ", "> "
 
 func (v *jobReviewView) render() {
 	if v.identityBar == nil {
@@ -173,7 +173,7 @@ func jobReviewRuns(s *review.JobReviewSnapshot, selected, width, rows int) strin
 	fmt.Fprintln(&b, tableRow([]string{"JOB", "OUTCOME"}, columns))
 	for index := start; index < min(len(s.Runs), start+limit); index++ {
 		run := &s.Runs[index]
-		marker := jobReviewIdleMarker
+		marker := jobReviewIndent
 		if index == selected {
 			marker = jobReviewSelectedMarker
 		}
@@ -203,7 +203,7 @@ func jobReviewPods(s *review.JobReviewSnapshot, selected, width, rows int) strin
 	fmt.Fprintln(&b, tableRow([]string{"POD", "PHASE"}, columns))
 	for index := start; index < min(len(s.Pods), start+limit); index++ {
 		pod := &s.Pods[index]
-		marker := jobReviewIdleMarker
+		marker := jobReviewIndent
 		if index == selected {
 			marker = jobReviewSelectedMarker
 		}
@@ -270,7 +270,7 @@ func jobOutcomeMarker(state string) string {
 }
 
 func jobReviewEvidence(s *review.JobReviewSnapshot) string {
-	data, err := json.MarshalIndent(s, "", "  ")
+	data, err := json.MarshalIndent(s, "", jobReviewIndent)
 	if err != nil {
 		return "Job evidence unavailable: " + err.Error()
 	}
@@ -278,7 +278,7 @@ func jobReviewEvidence(s *review.JobReviewSnapshot) string {
 }
 
 func jobRunEvidence(run *review.JobRun, at time.Time) string {
-	data, err := json.MarshalIndent(run, "", "  ")
+	data, err := json.MarshalIndent(run, "", jobReviewIndent)
 	if err != nil {
 		return "Job evidence unavailable: " + err.Error()
 	}
@@ -286,7 +286,7 @@ func jobRunEvidence(run *review.JobRun, at time.Time) string {
 }
 
 func jobPodEvidence(pod *review.JobReviewPod, at time.Time) string {
-	data, err := json.MarshalIndent(pod, "", "  ")
+	data, err := json.MarshalIndent(pod, "", jobReviewIndent)
 	if err != nil {
 		return "Pod evidence unavailable: " + err.Error()
 	}
