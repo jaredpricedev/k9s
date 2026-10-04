@@ -144,6 +144,7 @@ func (v *accessView) editQuestion() {
 	form.AddInputField("Subresource (optional)", q.Subresource, 36, bounded, func(s string) { q.Subresource = s })
 	form.AddInputField("Name (optional)", q.Name, 36, bounded, func(s string) { q.Name = s })
 	modal := ui.NewModalForm("Explicit access question", form)
+	modal.SetContext("Context: " + q.Context)
 	v.modal = modal
 	generation := v.generation
 	active := func() bool {
