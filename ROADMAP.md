@@ -2,7 +2,7 @@
 
 # k9plus roadmap
 
-The next stage is documented in the [daily Kubernetes toolkit roadmap](docs/toolkit-roadmap-2026-10-03.md). Its first horizon provides clearer investigation overviews, saved scopes, daily findings, scoped inventory and connection checks; see [usage and limits](docs/daily-workspace.md). Later horizons propose change and release review and broader engineering workflows. The tables below retain the earlier delivery history.
+The next stage is documented in the [daily Kubernetes toolkit roadmap](docs/toolkit-roadmap-2026-10-03.md). Its first horizon provides clearer investigation overviews, saved scopes, daily findings, scoped inventory and connection checks; see [usage and limits](docs/daily-workspace.md). The next increment begins change and release review with local authored intent and native Deployment evidence; see [behavior and remaining work](docs/change-release-review.md). The tables below retain the earlier delivery history.
 
 Keep the basic resource browser fast and familiar. Advanced tools open on demand;
 no background discovery on ordinary resource refreshes. Preserve existing shortcuts,
@@ -16,7 +16,7 @@ context safety, selection, and the return path from investigations.
 | Resource troubleshooting | Bring conditions, recent events, restarts and ownership together. | Open an inspector on demand. | Shipped on master (PR #6) |
 | TLS and certificates | Show expiry, SANs, issuer, chain information and where a certificate is used; optional endpoint checks. | A certificate view with deeper inspection rather than more columns everywhere. | Shipped on master (PR #6) |
 | Workload relationships | Jump between Deployment, Pods, Service, EndpointSlices and Ingress/Gateway. | Contextual links before attempting a large topology map. | Shipped on master ([PR #7](https://github.com/jaredpricedev/k9s/pull/7)); [usage and limits](https://github.com/jaredpricedev/k9s/blob/1978cb74caab53f74403e9e776d18bb2975e01e4/docs/workload-relationships.md) |
-| Change visibility | Compare explicit observations A/B with source, time and recreated identity. | A stays fixed; bookkeeping normalization is reversible. Desired-source comparison remains a later increment. | Shipped on master; delivery below |
+| Change visibility | Compare explicit observations A/B with source, time and recreated identity; review local authored manifest fields. | Retained source identity, named reads and explicit limits; no inferred prune plan. | A/B shipped on master; local desired review in this increment |
 | Resource pressure | Investigate requests, limits, usage, OOM kills and scheduling evidence. | Workload-focused snapshots; missing usage is N/A and throttling stays unknown without counters. | Shipped on master; delivery below |
 | Context safety | Clear production identity, convenient read-only mode and destination-aware action confirmations. | Persistent compact indicators and full F2 destination details. | Shipped on master; delivery below |
 | Performance and interaction polish | Faster large lists, reliable cancellation, stable selection and consistent inspectors. | Improve existing workflows; retain bounded evidence and disclose measurements. | Shipped on master; delivery below |
@@ -91,5 +91,5 @@ The documented 10,000-Pod filtering result has p95 **107.274 ms**, above the
 100 ms target. The implementation is delivered; that performance target remains
 unmet in the recorded sample. Live Relay and Gateway/HTTPRoute runs, other
 operating systems and operator usability review remain explicit coverage gaps.
-Desired-source comparison and the deeper protocol/topology features listed above
-remain later increments.
+Named-provider desired sources, server previews, guarded recovery execution and
+the deeper protocol/topology features listed above remain later increments.

@@ -85,6 +85,12 @@ automated captures do not establish human operator usability or universal latenc
 
 ## Changed files relative to upstream
 
+The change/release increment adds `internal/review` for explicit local source
+identity, bounded authored-field comparison and typed native Deployment rollout
+evidence. Native terminal views expose source-fixed refresh, scoped named reads,
+UID-owned revisions/Pods and retained recovery previews without submitting
+mutations. See [usage and fidelity](docs/change-release-review.md).
+
 The following inventory compares the complete accumulated application tree with
 upstream
 `84852e6e47ae830b30c921ffa5838443387e096e`, including additions, modifications,
