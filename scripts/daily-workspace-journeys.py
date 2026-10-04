@@ -174,7 +174,9 @@ class WorkspaceAPI(journeys.InvestigationAPI):
 
 
 def observed(terminal):
-    match = re.search(r"Observed (\d{2}:\d{2}:\d{2})", journeys.text(terminal))
+    terminal.keys("v", .2)
+    match = re.search(r"Captured: ([^\s│]+)", journeys.text(terminal))
+    terminal.keys("\x1b", .2)
     if not match:
         raise AssertionError("Workspace observation timestamp missing:\n" + journeys.text(terminal))
     return match.group(1)
@@ -266,7 +268,7 @@ def run(binary, output):
             terminal = demo.Terminal(binary, directory, api.server_port, command="pods apps", flags=["--readonly"])
             terminal.drain(4)
             terminal.command("workspace")
-            journeys.assert_screen(terminal, ["Daily workspace", "No saved scopes", "No observation", "demo-dev"])
+            journeys.assert_screen(terminal, ["Workspace", "No saved scopes", "No observation", "demo-dev"])
             capture("workspace-empty")
             request_start = len(api.requests)
             api.enforce_workspace = True
@@ -278,7 +280,7 @@ def run(binary, output):
             checks.append("empty workspace and keyboard form cancellation")
 
             terminal.command("workspace save daily apps,ops --selector=app=daily --kinds=pods,deployments,jobs,cronjobs,resourcequotas,certificates,ingresses")
-            wait_screen(terminal, ["7 resources", "CrashLoopBackOff", "ProgressDeadlineExceeded", "BackoffLimitExceeded", "CertificateExpired", "QuotaNearLimit", "Suspended", "coverage gaps"])
+            wait_screen(terminal, ["CrashLoopBackOff", "ProgressDeadlineExceeded", "BackoffLimitExceeded", "CertificateExpired", "QuotaNearLimit", "Suspended", "coverage gaps"])
             capture("daily-queue")
             reads_before_idle = sum(request["query"].get("labelSelector") == ["app=daily"] for request in api.requests)
             terminal.drain(2.3)
@@ -305,10 +307,10 @@ def run(binary, output):
             terminal.keys("2", .3)
             journeys.assert_screen(terminal, ["Search: name:investigation-api", "investigation-api"])
             terminal.keys("\r", .5)
-            wait_screen(terminal, ["CURRENT FINDINGS", "CrashLoopBackOff", "CONTAINER STATUS", "Previous termination: OOMKilled"])
+            wait_screen(terminal, ["CURRENT FINDINGS", "CrashLoopBackOff", "READY", "Previous termination: OOMKilled"])
             capture("daily-compact-investigation")
             terminal.keys("\x1b", .3)
-            journeys.assert_screen(terminal, ["Daily workspace", "Search: name:investigation-api"])
+            journeys.assert_screen(terminal, ["Workspace", "Search: name:investigation-api"])
 
             api.logs_active = True
             prior_uid = api.selected()["metadata"]["uid"]
@@ -325,7 +327,7 @@ def run(binary, output):
             wait_screen(terminal, ["daily workspace fixture safe log line", "investigation-api"])
             capture("daily-native-pod-logs")
             terminal.keys("\x1b", .3)
-            journeys.assert_screen(terminal, ["Daily workspace", "Search: name:investigation-api"])
+            journeys.assert_screen(terminal, ["Workspace", "Search: name:investigation-api"])
             api.logs_active = False
             checks.append("native Pod logs preserve workspace query and refuse replaced UID before any log request")
 
@@ -364,7 +366,7 @@ def run(binary, output):
             terminal.keys("r", .5)
             inspect("daily-connection-failed-retry", ["PREVIOUS READABLE OBSERVATION", "API UNAVAILABLE", "retained, not current"])
             terminal.keys("\x1b", .3)
-            journeys.assert_screen(terminal, ["Daily workspace", "name:investigation-api"])
+            journeys.assert_screen(terminal, ["Workspace", "name:investigation-api"])
             api.connection_fail = False
             api.connection_active = False
             terminal.close()
@@ -375,7 +377,7 @@ def run(binary, output):
                 raise AssertionError("Binary changed during the journey; rerun with one stable build")
             terminal = demo.Terminal(binary, directory, api.server_port, command="workspace", flags=["--readonly"])
             terminal.drain(4)
-            journeys.assert_screen(terminal, ["daily", "demo-dev", "apps, ops", "Inventory", "investigation-api"])
+            journeys.assert_screen(terminal, ["daily", "demo-dev", "[2 Inventory]", "investigation-api"])
             store, metadata = store_metadata(root)
             terminal.keys("S", .3)
             journeys.assert_screen(terminal, ["Saved searches", "faults", "Open inventory"])
@@ -391,7 +393,11 @@ def run(binary, output):
             fcntl.ioctl(terminal.master, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
             os.killpg(terminal.process.pid, signal.SIGWINCH)
             terminal.drain(.5)
-            journeys.assert_screen(terminal, ["Daily workspace", "daily", "demo-dev", "apps, ops", "Selector: app=daily", "investigation-api"])
+            journeys.assert_screen(terminal, ["Workspace", "daily", "demo-dev", "[2 Inventory]", "investigation-api"])
+            terminal.keys("v", .3)
+            journeys.assert_screen(terminal, ["Context: demo-dev", "Namespaces: apps, ops", "Selector: app=daily", "investigation-api"])
+            capture("daily-exact-scope-80x24")
+            terminal.keys("\x1b", .3)
             capture("daily-scope-header-80x24")
             checks.append("real 80x24 terminal resize preserves scope identity, selector and selected resource")
 

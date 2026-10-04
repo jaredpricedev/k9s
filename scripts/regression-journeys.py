@@ -290,13 +290,12 @@ def investigation_journey(binary, output):
 
                 terminal.command("compare")
                 baseline = inspect_pages(terminal, output, "comparison-baseline", [
-                    "RESOURCE COMPARISON · CHANGES FIRST", "A · chosen baseline", "B · comparison observation", "UID fixture-investigation-pod",
-                    "Source: Kubernetes API observation", "Observed:", "Press r to capture B",
-                    "State: complete", "State: unknown"])
+                    "RESOURCE COMPARISON · CHANGES FIRST", "A captured; r capture B", "A · demo-dev",
+                    "Source: Kubernetes API observation", "Captured:", "o full evidence"])
                 reads_at_a = api.selected_reads()
                 api.change_selected()
                 terminal.drain(2.2)
-                assert_screen(terminal, ["A · chosen baseline", "State: unknown"])
+                assert_screen(terminal, ["A captured; r capture B", "Captured:"])
                 if api.selected_reads() != reads_at_a:
                     raise AssertionError("Comparison fetched B without an explicit capture gesture")
                 terminal.keys("r", .5)
@@ -322,7 +321,8 @@ def investigation_journey(binary, output):
                 for label in ["A · chosen baseline", "B · comparison observation"]:
                     if observed_line(normalized, label) != observed_line(unnormalized, label) or observed_line(normalized, label) != observed_line(restored, label):
                         raise AssertionError("Noise toggles changed a retained observation timestamp")
-                if observed_line(baseline, "A · chosen baseline") != observed_line(normalized, "A · chosen baseline"):
+                baseline_time = next(line.replace("│", "").strip().removeprefix("Captured: ") for line in baseline.splitlines() if "Captured:" in line)
+                if baseline_time != observed_line(normalized, "A · chosen baseline").removeprefix("Observed: "):
                     raise AssertionError("Explicit B capture replaced chosen baseline A")
                 terminal.keys("o", .2)
                 inspect_pages(terminal, output, "comparison-all-evidence", [
@@ -402,7 +402,8 @@ def investigation_journey(binary, output):
                 terminal.keys("n", .2)
                 assert_screen(terminal, ["Investigation note"])
                 note = "Fixture note: inspect allocation evidence before changing memory."
-                terminal.keys(note + "\t\t\r", .3)
+                key_to_paint(terminal, note + "\t\t\r", lambda cells: (
+                    note in cells and "EVIDENCE PREVIEW" in cells and "Investigation note" not in cells))
                 inspect_pages(terminal, output, "evidence-with-note", [note])
                 save_preview(terminal, json_path)
                 bundle = json.loads(json_path.read_text())

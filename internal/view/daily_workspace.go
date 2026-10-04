@@ -163,7 +163,7 @@ func (w *dailyWorkspace) Start() {
 	w.StylesChanged(w.app.Styles)
 	w.originalCapture = w.app.GetInputCapture()
 	w.app.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
-		if w.prompting || w.formOpen {
+		if w.prompting || w.formOpen || w.app.Content.IsTopDialog() {
 			return e
 		}
 		if !w.app.Prompt().InCmdMode() && (e.Rune() == '/' || e.Key() == tcell.KeyEscape) {

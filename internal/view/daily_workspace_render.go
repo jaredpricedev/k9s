@@ -375,6 +375,9 @@ func (w *dailyWorkspace) showRowDetails() {
 	if row > 0 && row <= len(w.rows) {
 		selected := w.rows[row-1]
 		message += "\n" + strings.Join(selected.cells, "\n") + "\n\n" + selected.detail
+		if selected.ref != nil {
+			message += "\nCaptured UID: " + selected.ref.UID
+		}
 	}
 	const page = "workspace-row-detail"
 	var modal *ui.MessageModal
