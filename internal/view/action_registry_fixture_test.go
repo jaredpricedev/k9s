@@ -26,6 +26,13 @@ func assertActionRegistry(t *testing.T, viewer actionRegistryViewer) {
 	require.True(t, action.Opts.Visible)
 	require.Equal(t, "Actions", action.Description)
 	require.NotNil(t, action.Action)
+	seen := make(map[string]bool)
+	for _, hint := range viewer.Hints() {
+		require.NotEmpty(t, hint.Mnemonic, "a hint must identify its command")
+		require.NotEmpty(t, hint.Description, "a hint must explain its action")
+		require.False(t, seen[hint.Mnemonic], "duplicate command hint: %s", hint.Mnemonic)
+		seen[hint.Mnemonic] = true
+	}
 	for _, hint := range viewer.Hints() {
 		if hint.Mnemonic == "Ctrl-O" {
 			require.True(t, hint.Visible)
