@@ -380,7 +380,7 @@ func (w *dailyWorkspace) setMode(mode string) {
 	w.render()
 	if selected := w.tabSelections[mode]; selected != "" {
 		for i, row := range w.rows {
-			if dailyWorkspaceRowKey(row) == selected {
+			if dailyWorkspaceRowKey(&row) == selected {
 				w.table.Select(i+1, 0)
 				w.renderDetail()
 				break

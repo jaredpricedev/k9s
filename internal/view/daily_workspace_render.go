@@ -76,7 +76,7 @@ func dailyWorkspaceRefKey(ref *workspace.ResourceRef) string {
 	}
 	return ref.GVR + "/" + ref.Namespace + "/" + ref.Name + "/" + ref.UID
 }
-func dailyWorkspaceRowKey(row dailyWorkspaceRow) string {
+func dailyWorkspaceRowKey(row *dailyWorkspaceRow) string {
 	if row.scopeName != "" {
 		return "scope/" + row.scopeName
 	}
@@ -91,36 +91,18 @@ func dailyWorkspaceRowKey(row dailyWorkspaceRow) string {
 func (w *dailyWorkspace) selectedKey() string {
 	row, _ := w.table.GetSelection()
 	if row > 0 && row <= len(w.rows) {
-		return dailyWorkspaceRowKey(w.rows[row-1])
+		return dailyWorkspaceRowKey(&w.rows[row-1])
 	}
 	return ""
 }
 func (w *dailyWorkspace) makeRows(terms []dailyWorkspaceTerm) ([]string, []dailyWorkspaceRow) {
+	if w.mode == dailyWorkspaceScopesMode {
+		return w.scopeRows(terms)
+	}
 	rows := make([]dailyWorkspaceRow, 0)
 	headers := []string{"PRIORITY", dailyWorkspaceKindCol, "NAMESPACE", "NAME", "FINDING"}
 	add := func(row dailyWorkspaceRow) { rows = append(rows, row) }
 	switch w.mode {
-	case dailyWorkspaceScopesMode:
-		headers = []string{"", "SCOPE", "CONTEXT", "NAMESPACES", "SELECTOR"}
-		for i := range w.store.Scopes {
-			scope := &w.store.Scopes[i]
-			if !dailyWorkspaceMatch(terms, "scope", strings.Join(scope.Namespaces, ","), scope.Name, scope.Context+" "+scope.LabelSelector) {
-				continue
-			}
-			marker := " "
-			if scope.Name == w.store.Active {
-				marker = "*"
-			}
-			if scope.Context != w.contextName {
-				marker = "↗"
-			}
-			add(dailyWorkspaceRow{
-				cells:     []string{marker, scope.Name, scope.Context, strings.Join(scope.Namespaces, ", "), scope.LabelSelector},
-				scopeName: scope.Name,
-				detail: "Enter opens this saved scope. Context changes are explicit with :ctx. " +
-					"n creates; e edits the selected scope; d removes local metadata.",
-			})
-		}
 	case inventoryCommand:
 		headers = []string{dailyWorkspaceKindCol, "NAMESPACE", "NAME", statusCol, "AGE"}
 		for _, resource := range w.snapshot.Resources {
@@ -232,7 +214,8 @@ func (w *dailyWorkspace) render() {
 		w.table.SetCell(0, col, tview.NewTableCell(header).SetSelectable(false).SetTextColor(palette.Focus.Color()).SetBackgroundColor(canvas).SetAttributes(tcell.AttrBold))
 	}
 	selectRow := 1
-	for i, row := range rows {
+	for i := range rows {
+		row := &rows[i]
 		for col, original := range w.displayColumns {
 			value := row.cells[original]
 			cell := tview.NewTableCell(tview.Escape(value)).SetTextColor(text).SetBackgroundColor(canvas)
@@ -263,28 +246,10 @@ func (w *dailyWorkspace) render() {
 		}
 	}
 	if len(rows) == 0 {
-		message := "No rows match this search. / changes or clears it."
-		if w.query == "" {
-			switch w.mode {
-			case dailyWorkspaceScopesMode:
-				message = "No saved scopes. Press n to create your daily workspace."
-			case dailyWorkspaceQueueMode:
-				message = "No findings observed. Coverage shows checks and unknowns."
-				if w.snapshot.ObservedAt.IsZero() {
-					message = "No observation yet. Press r to read this scope."
-				}
-			case inventoryCommand:
-				message = "No resources observed. r refreshes; Coverage shows gaps."
-			case dailyWorkspacePinsMode:
-				message = "No pins. Select a resource in Daily or Inventory and press p."
-			case dailyWorkspaceCoverageMode:
-				message = "No observation yet. r reads the saved namespaces."
-			}
-		}
 		// An empty-state message occupies one full-width row, rather than the
 		// resource table's narrow identity column.
 		w.table.Clear()
-		w.table.SetCell(0, 0, tview.NewTableCell(tview.Escape(message)).SetSelectable(false).SetTextColor(palette.Unknown.Color()).SetExpansion(1))
+		w.table.SetCell(0, 0, tview.NewTableCell(tview.Escape(w.emptyRowsMessage())).SetSelectable(false).SetTextColor(palette.Unknown.Color()).SetExpansion(1))
 		selectRow = 0
 	}
 	w.table.Select(selectRow, 0)
@@ -478,4 +443,50 @@ func (w *dailyWorkspace) constrainColumns(width int) {
 			}
 		}
 	}
+}
+
+func (w *dailyWorkspace) scopeRows(terms []dailyWorkspaceTerm) ([]string, []dailyWorkspaceRow) {
+	headers := []string{"", "SCOPE", "CONTEXT", "NAMESPACES", "SELECTOR"}
+	rows := make([]dailyWorkspaceRow, 0)
+	for i := range w.store.Scopes {
+		scope := &w.store.Scopes[i]
+		if !dailyWorkspaceMatch(terms, "scope", strings.Join(scope.Namespaces, ","), scope.Name, scope.Context+" "+scope.LabelSelector) {
+			continue
+		}
+		marker := " "
+		if scope.Name == w.store.Active {
+			marker = "*"
+		}
+		if scope.Context != w.contextName {
+			marker = "↗"
+		}
+		rows = append(rows, dailyWorkspaceRow{
+			cells: []string{marker, scope.Name, scope.Context, strings.Join(scope.Namespaces, ", "), scope.LabelSelector}, scopeName: scope.Name,
+			detail: "Enter opens this saved scope. Context changes are explicit with :ctx. " +
+				"n creates; e edits the selected scope; d removes local metadata.",
+		})
+	}
+	return headers, rows
+}
+
+func (w *dailyWorkspace) emptyRowsMessage() string {
+	if w.query != "" {
+		return "No rows match this search. / changes or clears it."
+	}
+	switch w.mode {
+	case dailyWorkspaceScopesMode:
+		return "No saved scopes. Press n to create your daily workspace."
+	case dailyWorkspaceQueueMode:
+		if w.snapshot.ObservedAt.IsZero() {
+			return "No observation yet. Press r to read this scope."
+		}
+		return "No findings observed. Coverage shows checks and unknowns."
+	case inventoryCommand:
+		return "No resources observed. r refreshes; Coverage shows gaps."
+	case dailyWorkspacePinsMode:
+		return "No pins. Select a resource in Daily or Inventory and press p."
+	case dailyWorkspaceCoverageMode:
+		return "No observation yet. r reads the saved namespaces."
+	}
+	return "No rows match this search. / changes or clears it."
 }
