@@ -12,6 +12,7 @@ import (
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/model"
+	"github.com/derailed/k9s/internal/provider"
 	"github.com/derailed/k9s/internal/review"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/k9s/internal/view/cmd"
@@ -53,6 +54,12 @@ type desiredReviewView struct {
 	reader                          dynamic.Interface
 	resolve                         review.Resolver
 	load                            func(context.Context, string) (review.Source, error)
+	loadProfile                     func(context.Context, string, provider.Scope, review.ProviderRun) (review.Source, error)
+	runProvider                     review.ProviderRun
+	preview                         func(context.Context, dynamic.Interface, review.Resolver, review.Source, review.Scope, time.Time) review.ServerPreview
+	serverPreview                   *review.ServerPreview
+	serverPreviewEvidence           string
+	previewOpen                     bool
 	collect                         func(context.Context, dynamic.Interface, review.Resolver, review.Source, review.Scope, time.Time) review.Snapshot
 	path, query, notice             string
 	contextName                     string
@@ -107,7 +114,8 @@ func newDesiredReviewView(a *App, scope review.Scope, path string) *desiredRevie
 		Flex: tview.NewFlex().SetDirection(tview.FlexRow), app: a, table: tview.NewTable(),
 		header: tview.NewTextView(), footer: tview.NewTextView(), detail: tview.NewTextView(),
 		pages: tview.NewPages(), prompt: tview.NewInputField(),
-		scope: copyDesiredReviewScope(scope), path: path, contextName: scope.Context, load: review.LoadSource, collect: review.Collect,
+		scope: copyDesiredReviewScope(scope), path: path, contextName: scope.Context,
+		load: review.LoadSource, loadProfile: review.LoadSourceProfile, preview: review.PreviewServer, collect: review.Collect,
 	}
 	if a != nil && a.Config != nil {
 		w.revision = a.Config.DestinationRevision()
@@ -154,8 +162,10 @@ func (w *desiredReviewView) InCmdMode() bool         { return w.prompting || w.f
 func (w *desiredReviewView) Actions() *ui.KeyActions { return w.actions }
 func (w *desiredReviewView) Hints() model.MenuHints  { return actionCatalogHints(w, w.app) }
 func (*desiredReviewView) ExtraHints() map[string]string {
-	return map[string]string{"Review": "Local declared-field comparison; r refreshes live with the same source. " +
-		"n explicitly selects/reloads source. Enter opens retained detail."}
+	return map[string]string{
+		"Review": "Local declared-field comparison; r refreshes live with the same retained source. " +
+			"Enter opens changes; e opens provenance. p explicitly confirms server admission preview.",
+		"Source": "n selects/reloads a manifest or @source-profile.yaml. Configured renderer/Git commands run only on that explicit source selection."}
 }
 func (w *desiredReviewView) Init(context.Context) error {
 	w.StylesChanged(w.app.Styles)
@@ -210,6 +220,7 @@ func (w *desiredReviewView) Stop() {
 		}
 	}
 	if w.formOpen {
+		w.app.Content.Pages.ClearPageResources()
 		w.app.Content.Pages.RemovePage(desiredReviewSourcePage)
 		w.formOpen = false
 	}
@@ -241,6 +252,7 @@ func (w *desiredReviewView) makeActions() *ui.KeyActions {
 	}{
 		{tcell.KeyEnter, "review.detail", "Review detail", false},
 		{ui.KeyE, "review.evidence", "Evidence / source", false},
+		{ui.KeyP, "review.server-preview", "Explicit server dry-run / admission preview", false},
 		{ui.KeyR, "review.refresh", "Refresh live", false},
 		{ui.KeyN, "review.source", "Select / reload source", false},
 		{ui.KeySlash, "review.search", dailyWorkspaceSearchLabel, false},
@@ -278,6 +290,7 @@ func (w *desiredReviewView) key(e *tcell.EventKey) *tcell.EventKey {
 		if w.detailOpen {
 			w.detailOpen = false
 			w.evidenceOpen = false
+			w.previewOpen = false
 			w.pages.SwitchToPage(desiredReviewTablePage)
 			w.render()
 			w.focusContent()
@@ -291,6 +304,7 @@ func (w *desiredReviewView) key(e *tcell.EventKey) *tcell.EventKey {
 			}
 			w.detailOpen = true
 			w.evidenceOpen = false
+			w.previewOpen = false
 			w.detailKey = desiredReviewEntryKey(&entry)
 			w.pages.SwitchToPage(desiredReviewDetailPage)
 			w.render()
@@ -307,6 +321,9 @@ func (w *desiredReviewView) key(e *tcell.EventKey) *tcell.EventKey {
 		w.pages.SwitchToPage(desiredReviewDetailPage)
 		w.render()
 		w.focusContent()
+		return nil
+	case e.Rune() == 'p':
+		w.confirmServerPreview()
 		return nil
 	case e.Rune() == 'r':
 		w.refresh()
@@ -384,7 +401,7 @@ func (w *desiredReviewView) beginRead() context.Context {
 		w.cancel()
 	}
 	w.generation++
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), review.CollectionTimeout)
 	w.cancel = cancel
 	return ctx
 }
@@ -409,12 +426,20 @@ func (w *desiredReviewView) loadSource(path string) {
 	ctx := w.beginRead()
 	generation := w.generation
 	load := w.load
+	profileLoader, runner := w.loadProfile, w.runProvider
+	scope := provider.Scope{Context: w.contextName, Namespace: w.scope.DefaultNamespace, Revision: w.revision}
 	cancel := w.cancel
-	w.notice = "Loading explicit local source…"
+	w.notice = "Loading explicitly selected source…"
 	w.render()
 	go func() {
 		defer cancel()
-		source, err := load(ctx, path)
+		var source review.Source
+		var err error
+		if strings.HasPrefix(path, "@") {
+			source, err = profileLoader(ctx, strings.TrimPrefix(path, "@"), scope, runner)
+		} else {
+			source, err = load(ctx, path)
+		}
 		if ctx.Err() != nil {
 			err = ctx.Err()
 		}
@@ -430,6 +455,9 @@ func (w *desiredReviewView) loadSource(path string) {
 			}
 			w.source = source
 			w.path = source.Identity.Path
+			if source.Identity.Provider != "" {
+				w.path = "@" + source.Identity.Path
+			}
 			w.snapshot = review.Snapshot{}
 			w.latest = nil
 			w.retainedReasons = nil
@@ -437,6 +465,9 @@ func (w *desiredReviewView) loadSource(path string) {
 			w.rows = nil
 			w.detailOpen = false
 			w.evidenceOpen = false
+			w.previewOpen = false
+			w.serverPreview = nil
+			w.serverPreviewEvidence = ""
 			w.detailKey = ""
 			w.pages.SwitchToPage(desiredReviewTablePage)
 			w.refresh()
@@ -591,7 +622,7 @@ func (w *desiredReviewView) sourceForm() {
 	frame := tview.NewFrame(form).SetBorders(0, 0, 1, 0, 0, 0)
 	frame.SetBorder(true).SetBorderPadding(1, 1, 1, 1).SetTitle(" Select review source ").SetBackgroundColor(styles.BgColor.Color())
 	modal := &dailyWorkspaceModal{Frame: frame, form: form, color: styles.FgColor.Color(),
-		message: "Select an explicit YAML or JSON manifest. Reloading is a new source observation; r keeps the retained source unchanged. " +
+		message: "Select a YAML/JSON manifest, or @/path/source-profile.yaml for a configured renderer or Git revision. Reloading observes a new source; r keeps it fixed. " +
 			"Live reads stay inside the captured destination and workspace scope."}
 	w.app.Content.Pages.AddPage(desiredReviewSourcePage, modal, false, true)
 	w.app.SetFocus(modal)

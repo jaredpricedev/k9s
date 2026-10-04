@@ -32,10 +32,13 @@ type Source struct {
 }
 
 type SourceIdentity struct {
-	Path, SHA256 string
-	Bytes        int64
-	Documents    int
-	LoadedAt     time.Time
+	Path, SHA256                                           string
+	Name, Provider, ProfileSHA256, InputPath, InputSHA256  string
+	Revision, RequestedRevision, Renderer, RendererVersion string
+	Options                                                []string
+	Bytes                                                  int64
+	Documents                                              int
+	LoadedAt                                               time.Time
 }
 
 type Manifest struct {
