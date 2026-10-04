@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/rest"
 )
 
 // SnapshotConfigFlags copies flag values without copying ConfigFlags' internal
@@ -46,11 +47,21 @@ func copyConfigSlice(value *[]string) *[]string {
 }
 
 // Snapshot captures flags without loading kubeconfig or contacting a cluster.
-// Its independent loader can be used while the live client switches context.
+// Same-context background work retains the committed session's actor. A snapshot
+// of another context uses an independent loader while the live client switches.
 func (c *Config) Snapshot(contextName string) *Config {
 	flags := SnapshotConfigFlags(c.flags)
+	sameContext := contextName == "" || (flags.Context != nil && *flags.Context == contextName)
 	if contextName != "" {
 		flags.Context = &contextName
 	}
-	return &Config{flags: flags, proxy: c.proxy}
+	snapshot := &Config{flags: flags, proxy: c.proxy}
+	if sameContext {
+		c.mx.RLock()
+		if c.preparedREST != nil {
+			snapshot.preparedREST = rest.CopyConfig(c.preparedREST)
+		}
+		c.mx.RUnlock()
+	}
+	return snapshot
 }
