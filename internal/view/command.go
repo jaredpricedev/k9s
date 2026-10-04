@@ -328,6 +328,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.maintenanceCommand()
 	case upgradeReadinessCommand:
 		c.upgradeReadinessCommand(p.GetLine())
+	case operatorCommandToken:
+		c.operatorCommand()
 	case providersCommand:
 		c.providerCommand(p.GetLine())
 	case gitopsCommandToken:
@@ -351,8 +353,6 @@ func (c *Command) specialCmd(p *cmd.Interpreter, pushCmd bool) bool {
 		c.comparisonCommand()
 	case p.Cmd() == "pressure":
 		c.pressureCommand()
-	case p.Cmd() == operatorCommandToken:
-		c.operatorCommand()
 	case p.Cmd() == storageCommandToken:
 		c.storageCommand()
 	case p.Cmd() == capacityCommandToken:
