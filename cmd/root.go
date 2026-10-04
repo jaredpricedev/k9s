@@ -74,7 +74,8 @@ func Execute() {
 	}
 }
 
-func run(*cobra.Command, []string) error {
+func run(*cobra.Command, []string) (runErr error) {
+	defer recoverFatalPanic(&runErr)
 	if err := config.InitLocs(); err != nil {
 		return err
 	}
@@ -89,15 +90,6 @@ func run(*cobra.Command, []string) error {
 	defer func() {
 		if logFile != nil {
 			_ = logFile.Close()
-		}
-	}()
-	defer func() {
-		if err := recover(); err != nil {
-			slog.Error("Boom!! k9+ init failed", slogs.Error, err)
-			slog.Error("", slogs.Stack, string(debug.Stack()))
-			printLogo(color.Red)
-			fmt.Printf("%s", color.Colorize("Boom!! ", color.Red))
-			fmt.Printf("%v.\n", err)
 		}
 	}()
 
@@ -129,6 +121,18 @@ func run(*cobra.Command, []string) error {
 	}
 
 	return nil
+}
+
+// A recovered fatal failure must reach Execute's nonzero exit path. Ordinary
+// quit still returns nil and keeps the existing successful exit behavior.
+func recoverFatalPanic(result *error) { //nolint:gocritic // Deferred recovery must update the named return value.
+	if recovered := recover(); recovered != nil {
+		slog.Error("Boom!! k9+ failed", slogs.Error, recovered)
+		slog.Error("", slogs.Stack, string(debug.Stack()))
+		printLogo(color.Red)
+		fmt.Printf("%s%v.\n", color.Colorize("Boom!! ", color.Red), recovered)
+		*result = fmt.Errorf("fatal k9+ failure: %v", recovered)
+	}
 }
 
 func loadConfiguration() (*config.Config, error) {
