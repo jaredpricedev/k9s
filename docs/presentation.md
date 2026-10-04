@@ -4,7 +4,7 @@ k9+ uses neutral text for names and values, separate category colors for source 
 
 ![Actual 80×24 Pod table capture in stock true-color mode](evidence/ui-2026-10-04/pods-80x24-stock-true-color.png)
 
-This actual PTY capture uses synthetic names and a disposable loopback API fixture. The [12-capture evidence index](evidence/ui-2026-10-04/README.md) includes all three skins, both terminal color modes, full destination panels, raw terminal text and the unchanged manifest. Its recorded binary hash is `41ebaf355805effdabab6f7bdf21353cd6ddc7e755edf779c0e2e6e18584267e`; later filtering/performance changes were not recaptured in this set.
+This actual PTY capture uses synthetic names and a disposable loopback API fixture. The [12-capture evidence index](evidence/ui-2026-10-04/README.md) includes all three skins, both terminal color modes, full destination panels, raw terminal text and the unchanged manifest. Its recorded binary hash is `a28a1f48b72d255348ad72bc4124d5973cc003a4070520c81743bd668aa57747`; the clean final capture was built from source commit `76ac522ff90ce3ddf25d320e911c55c7720b818a` and includes the queued-filter correction.
 
 ## Terminal size and actions
 

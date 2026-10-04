@@ -39,6 +39,22 @@ The delayed API journey holds a UID-conditioned restart PATCH for five seconds. 
 
 The Hubble journey runs native tview/tcell components with 10,000 retained synthetic events. It checks frozen body identity across a 10,000-event eviction burst, navigation/detail/back, and explicit resume. It does not connect to Relay. Its fixture is opt-in through the supplied script; ordinary tests never start a collector.
 
+
+## Clean final build and terminal journeys
+
+The final documented release build passed from clean source commit C `76ac522ff90ce3ddf25d320e911c55c7720b818a`: Go 1.25.8, CGO_ENABLED=0, netgo, Linux amd64 v1 and stripped release flags. The immutable binary SHA-256 is `a28a1f48b72d255348ad72bc4124d5973cc003a4070520c81743bd668aa57747`. [Build provenance](evidence/validation-2026-10-04/clean-build.json), [full binary metadata](evidence/validation-2026-10-04/clean-build-info.txt), and successful CLI [help](evidence/validation-2026-10-04/cli-help.txt), [info](evidence/validation-2026-10-04/cli-info.txt) and [version](evidence/validation-2026-10-04/cli-version.txt) outputs identify what ran.
+
+The [original final journey JSON](evidence/validation-2026-10-04/final-journeys.json) records four passed actual-PTY journeys on that binary, captured at 2026-10-04T01:41:51.139592+00:00. Source C remains the runtime validation revision; a later documentation-only capture commit adds the preserved reports and index links.
+
+| Clean-build behavioral journey | Result | Elapsed including deliberate waits |
+| --- | --- | ---: |
+| Resources, 80×24, no icons | passed | 34.745 s |
+| Resources, 100×30 | passed | 34.904 s |
+| Resources, 120×34 | passed | 35.108 s |
+| Selected diagnostics / A-B comparison / pressure / offline evidence | passed | 44.233 s |
+
+These durations include startup and drain waits. They are **not keystroke-to-paint measurements** and do not replace the separately retained performance samples. Coverage remains disposable loopback API fixtures, not a live-cluster or human-study claim.
+
 ## Timing and limits
 
 Performance reports distinguish ingestion, view assembly and terminal output. PTY timings measure input writes to asserted visible output parsed by pyte; they include Python parsing and Escape decoding. They do not measure a graphical terminal compositor. Reports retain samples, median/p95, workload, platform and binary hashes. The issue's p95≤100 ms goal is a documented local target, not a machine-independent CI gate.
@@ -53,7 +69,7 @@ The [native resource-filter report](filter-performance-2026-10-04.md) retains al
 
 CI retains ordinary tests, lint and license checks, adds CGO-enabled race coverage, and runs structural terminal assertions. Raw captures contain synthetic names and evidence. Do not replace reproducible assertions with screenshot pixel matching.
 
-GitHub returned no workflow runs or commit statuses for the reviewed heads or the master baseline during this session. Local verification is recorded below; an empty status response does not establish a passing hosted CI run.
+Earlier queries of the reviewed heads and master baseline returned no workflow runs or commit statuses; those historical empty responses do not establish passing hosted CI. The [dated GitHub review/CI snapshot](evidence/validation-2026-10-04/review-pr-status.json) records PR #39 at 2026-10-04 01:40:10 UTC on source C `76ac522ff90ce3ddf25d320e911c55c7720b818a`: `k9+ Lint` and `k9+ Test` are in progress, so hosted CI is not yet established as passing. This snapshot precedes the documentation-only capture commit. Later check outcomes are reported on the pull request without rewriting the original dated evidence.
 
 ## Integration matrix
 

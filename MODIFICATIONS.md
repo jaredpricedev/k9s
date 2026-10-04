@@ -75,10 +75,10 @@ automated captures do not establish human operator usability or universal latenc
 
 The following inventory compares the complete accumulated review tree with upstream
 `84852e6e47ae830b30c921ffa5838443387e096e`, including additions, modifications,
-removals, attribution-only updates and current filter, UI and validation evidence.
-Files are grouped by ownership boundary; removed paths are marked explicitly.
-Generated THIRD_PARTY_LICENSES and ignored build outputs are assembled separately
-for distributions and are not source inventory entries.
+removals, attribution-only updates and final filter, UI, clean-build, CLI and
+validation evidence. Files are grouped by ownership boundary; removed paths are
+marked explicitly. Generated THIRD_PARTY_LICENSES and ignored build outputs are
+assembled separately for distributions and are not source inventory entries.
 
 ### Project, build and release files
 
@@ -621,9 +621,15 @@ for distributions and are not source inventory entries.
 - `docs/evidence/ui-2026-10-04/pods-80x24-stock-true-color.png`
 - `docs/evidence/ui-2026-10-04/pods-80x24-stock-true-color.txt`
 - `docs/evidence/validation-2026-10-04/README.md`
+- `docs/evidence/validation-2026-10-04/clean-build-info.txt`
+- `docs/evidence/validation-2026-10-04/clean-build.json`
+- `docs/evidence/validation-2026-10-04/cli-help.txt`
+- `docs/evidence/validation-2026-10-04/cli-info.txt`
+- `docs/evidence/validation-2026-10-04/cli-version.txt`
 - `docs/evidence/validation-2026-10-04/comparison.txt`
 - `docs/evidence/validation-2026-10-04/diagnostics.txt`
 - `docs/evidence/validation-2026-10-04/evidence.txt`
+- `docs/evidence/validation-2026-10-04/final-journeys.json`
 - `docs/evidence/validation-2026-10-04/go-cgo0.txt`
 - `docs/evidence/validation-2026-10-04/go-race.txt`
 - `docs/evidence/validation-2026-10-04/hubble.txt`
@@ -634,6 +640,7 @@ for distributions and are not source inventory entries.
 - `docs/evidence/validation-2026-10-04/lint.txt`
 - `docs/evidence/validation-2026-10-04/operations.txt`
 - `docs/evidence/validation-2026-10-04/pressure.txt`
+- `docs/evidence/validation-2026-10-04/review-pr-status.json`
 - `docs/evidence/validation-2026-10-04/workspace-followup-race.txt`
 - `docs/evidence/validation-2026-10-04/workspace-followup.txt`
 - `docs/evidence/validation-2026-10-04/workspace.txt`

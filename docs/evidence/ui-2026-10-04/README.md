@@ -4,11 +4,11 @@ All 12 capture checks passed at 80×24: stock, high-contrast and monochrome skin
 
 PNG content comes only from actual PTY terminal cells emitted by the app and rasterized with `pyte` and Pillow. The adjacent TXT files preserve the captured terminal text. `TCELL_TRUECOLOR=disable` forced the 256-color runs; these images are actual terminal captures, separate from the simulation-screen palette approximations described in [presentation.md](../../presentation.md).
 
-The [original manifest](manifest.json) is copied byte-for-byte, preserving its timestamps, filenames, expected visible strings and recorded binary hash. The captures were taken at 00:55:24–00:55:33 UTC from `/workspace/k9plus-final`, originally written to `/workspace/k9plus-evidence/skins`.
+The [original manifest](manifest.json) is copied byte-for-byte, preserving its timestamps, filenames, expected visible strings and recorded binary hash. This clean final capture was taken at `2026-10-04T01:39:05.206649+00:00`–`2026-10-04T01:39:13.496704+00:00` from `/workspace/k9plus-review-final`, built from source commit `76ac522ff90ce3ddf25d320e911c55c7720b818a` using the documented `make build` configuration with `CGO_ENABLED=0` and `netgo`. Original output remains at `/workspace/k9plus-evidence/skins-clean-final`.
 
-Captured binary SHA-256: `41ebaf355805effdabab6f7bdf21353cd6ddc7e755edf779c0e2e6e18584267e`.
+Captured binary SHA-256: `a28a1f48b72d255348ad72bc4124d5973cc003a4070520c81743bd668aa57747`.
 
-These images document that captured binary. Later filtering/performance changes were not recaptured here, so this directory does not establish the appearance or behavior of a later source snapshot or binary. It contains no human operator research or live-cluster rollout evidence.
+These images document the clean final binary and source commit recorded above, including the queued-filter correction. The earlier `41ebaf355805effdabab6f7bdf21353cd6ddc7e755edf779c0e2e6e18584267e` capture set is preserved separately at `/workspace/k9plus-evidence/skins`. This directory does not establish the behavior of any later source snapshot or binary. It contains no human operator research or live-cluster rollout evidence.
 
 | Skin | Terminal mode | Pod table | Full destination |
 | --- | --- | --- | --- |

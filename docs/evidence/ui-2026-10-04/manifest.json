@@ -1,7 +1,7 @@
 {
   "source": "actual PTY terminal cells; disposable local API fixture",
   "result": "passed",
-  "binary_sha256": "41ebaf355805effdabab6f7bdf21353cd6ddc7e755edf779c0e2e6e18584267e",
+  "binary_sha256": "a28a1f48b72d255348ad72bc4124d5973cc003a4070520c81743bd668aa57747",
   "captures": [
     {
       "file": "pods-80x24-stock-true-color.png",
@@ -20,7 +20,7 @@
       "color_mode": "true-color",
       "width": 80,
       "height": 24,
-      "captured_at": "2026-10-04T00:55:24.803560+00:00"
+      "captured_at": "2026-10-04T01:39:05.206649+00:00"
     },
     {
       "file": "pods-80x24-stock-true-color-destination.png",
@@ -33,7 +33,7 @@
       "color_mode": "true-color",
       "width": 80,
       "height": 24,
-      "captured_at": "2026-10-04T00:55:25.047684+00:00"
+      "captured_at": "2026-10-04T01:39:05.458297+00:00"
     },
     {
       "file": "pods-80x24-stock-256.png",
@@ -52,7 +52,7 @@
       "color_mode": "256",
       "width": 80,
       "height": 24,
-      "captured_at": "2026-10-04T00:55:25.598820+00:00"
+      "captured_at": "2026-10-04T01:39:07.018206+00:00"
     },
     {
       "file": "pods-80x24-stock-256-destination.png",
@@ -65,7 +65,7 @@
       "color_mode": "256",
       "width": 80,
       "height": 24,
-      "captured_at": "2026-10-04T00:55:25.844544+00:00"
+      "captured_at": "2026-10-04T01:39:07.261150+00:00"
     },
     {
       "file": "pods-80x24-high-contrast-true-color.png",
@@ -84,7 +84,7 @@
       "color_mode": "true-color",
       "width": 80,
       "height": 24,
-      "captured_at": "2026-10-04T00:55:27.406309+00:00"
+      "captured_at": "2026-10-04T01:39:07.812242+00:00"
     },
     {
       "file": "pods-80x24-high-contrast-true-color-destination.png",
@@ -97,7 +97,7 @@
       "color_mode": "true-color",
       "width": 80,
       "height": 24,
-      "captured_at": "2026-10-04T00:55:27.652550+00:00"
+      "captured_at": "2026-10-04T01:39:08.056413+00:00"
     },
     {
       "file": "pods-80x24-high-contrast-256.png",
@@ -116,7 +116,7 @@
       "color_mode": "256",
       "width": 80,
       "height": 24,
-      "captured_at": "2026-10-04T00:55:29.211227+00:00"
+      "captured_at": "2026-10-04T01:39:09.619292+00:00"
     },
     {
       "file": "pods-80x24-high-contrast-256-destination.png",
@@ -129,7 +129,7 @@
       "color_mode": "256",
       "width": 80,
       "height": 24,
-      "captured_at": "2026-10-04T00:55:29.454282+00:00"
+      "captured_at": "2026-10-04T01:39:09.869181+00:00"
     },
     {
       "file": "pods-80x24-monochrome-true-color.png",
@@ -148,7 +148,7 @@
       "color_mode": "true-color",
       "width": 80,
       "height": 24,
-      "captured_at": "2026-10-04T00:55:31.012517+00:00"
+      "captured_at": "2026-10-04T01:39:11.432134+00:00"
     },
     {
       "file": "pods-80x24-monochrome-true-color-destination.png",
@@ -161,7 +161,7 @@
       "color_mode": "true-color",
       "width": 80,
       "height": 24,
-      "captured_at": "2026-10-04T00:55:31.256035+00:00"
+      "captured_at": "2026-10-04T01:39:11.679894+00:00"
     },
     {
       "file": "pods-80x24-monochrome-256.png",
@@ -180,7 +180,7 @@
       "color_mode": "256",
       "width": 80,
       "height": 24,
-      "captured_at": "2026-10-04T00:55:32.815320+00:00"
+      "captured_at": "2026-10-04T01:39:13.246857+00:00"
     },
     {
       "file": "pods-80x24-monochrome-256-destination.png",
@@ -193,7 +193,7 @@
       "color_mode": "256",
       "width": 80,
       "height": 24,
-      "captured_at": "2026-10-04T00:55:33.060022+00:00"
+      "captured_at": "2026-10-04T01:39:13.496704+00:00"
     }
   ]
 }

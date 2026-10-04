@@ -1,0 +1,20 @@
+[36m████ ██       ██████        ████[0m
+[36m██   ██  ██   ██  ██   ██     ██[0m
+[36m██   ████     ██████ ██████   ██[0m
+[36m██   ██  ██       ██   ██     ██[0m
+[36m████ ██    ██ ██████        ████[0m
+[k9+] Independent fork of k9s • Apache-2.0
+
+[36mVersion:[0m           v0.1.0-dev
+[36mConfig:[0m            /workspace/k9plus-cli-smoke-bv91wlzm/config/k9plus/config.yaml
+[36mCustom Views:[0m      /workspace/k9plus-cli-smoke-bv91wlzm/config/k9plus/views.yaml
+[36mCustom Jumps:[0m      /workspace/k9plus-cli-smoke-bv91wlzm/config/k9plus/jumps.yaml
+[36mPlugins:[0m           /workspace/k9plus-cli-smoke-bv91wlzm/config/k9plus/plugins.yaml
+[36mHotkeys:[0m           /workspace/k9plus-cli-smoke-bv91wlzm/config/k9plus/hotkeys.yaml
+[36mAliases:[0m           /workspace/k9plus-cli-smoke-bv91wlzm/config/k9plus/aliases.yaml
+[36mSkins:[0m             /workspace/k9plus-cli-smoke-bv91wlzm/config/k9plus/skins
+[36mContext Configs:[0m   /workspace/k9plus-cli-smoke-bv91wlzm/data/k9plus/clusters
+[36mLogs:[0m              /workspace/k9plus-cli-smoke-bv91wlzm/state/k9plus/k9plus.log
+[36mBenchmarks:[0m        /workspace/k9plus-cli-smoke-bv91wlzm/state/k9plus/benchmarks
+[36mScreenDumps:[0m       /workspace/k9plus-cli-smoke-bv91wlzm/state/k9plus/screen-dumps
+2026/10/04 01:39:19 ERROR Unable to reads k9+ config file error="open /workspace/k9plus-cli-smoke-bv91wlzm/config/k9plus/config.yaml: no such file or directory"
