@@ -15,7 +15,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/derailed/k9s/internal/client"
@@ -45,6 +44,7 @@ const (
 var editorEnvVars = []string{"K9PLUS_EDITOR", "KUBE_EDITOR", "EDITOR"}
 
 type shellOpts struct {
+	ctx               context.Context
 	clear, background bool
 	pipes             []string
 	binary            string
@@ -99,6 +99,7 @@ func runK(a *App, opts *shellOpts) error {
 }
 
 func run(a *App, opts *shellOpts) (ok bool, errC chan error, outC chan string) {
+	opts.ctx = a.sessionContext()
 	errChan := make(chan error, 1)
 	statusChan := make(chan string, 1)
 
@@ -185,28 +186,16 @@ func execute(opts *shellOpts, statusChan chan<- string) error {
 	if opts.clear {
 		clearScreen()
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer func() {
-		if !opts.background {
-			cancel()
-			clearScreen()
-		}
-	}()
-
-	var interrupted bool
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func(cancel context.CancelFunc) {
-		defer slog.Debug("Got signal canceled")
-		select {
-		case sig := <-sigChan:
-			slog.Debug("Command canceled with signal", slogs.Sig, sig)
-			cancel()
-		case <-ctx.Done():
-			slog.Debug("Signal context canceled!")
-		}
-		interrupted = true
-	}(cancel)
+	ctx := opts.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if !opts.background {
+		var stop context.CancelFunc
+		ctx, stop = signal.NotifyContext(ctx, terminationSignals()...)
+		defer stop()
+		defer clearScreen()
+	}
 
 	cmds := make([]*exec.Cmd, 0, 1)
 	cmd := exec.CommandContext(ctx, opts.binary, opts.args...)
@@ -242,7 +231,7 @@ func execute(opts *shellOpts, statusChan chan<- string) error {
 
 	var o, e bytes.Buffer
 	err := pipe(ctx, opts, statusChan, &o, &e, cmds...)
-	if err != nil && !interrupted {
+	if err != nil && ctx.Err() == nil {
 		slog.Error("Pipe Exec failed",
 			slogs.Error, err,
 			slogs.Command, cmds,

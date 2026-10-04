@@ -44,7 +44,7 @@ func printVersion(short bool) {
 }
 
 func printTuple(fmat, section, value string, outputColor color.Paint) {
-	if outputColor != -1 {
+	if outputColor != -1 && outputColorEnabled() {
 		_, _ = fmt.Fprintf(out, fmat, color.Colorize(section+":", outputColor), value)
 		return
 	}

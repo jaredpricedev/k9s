@@ -50,7 +50,10 @@ func printInfo(*cobra.Command, []string) error {
 
 func printLogo(c color.Paint) {
 	for _, l := range ui.LogoSmall {
-		_, _ = fmt.Fprintln(out, color.Colorize(l, c))
+		if outputColorEnabled() {
+			l = color.Colorize(l, c)
+		}
+		_, _ = fmt.Fprintln(out, l)
 	}
 	_, _ = fmt.Fprintln(out, "[k9+] Independent fork of k9s • Apache-2.0")
 	_, _ = fmt.Fprintln(out)

@@ -5,7 +5,6 @@ package ui
 
 import (
 	"log/slog"
-	"os"
 	"sync"
 
 	"github.com/derailed/k9s/internal/client"
@@ -152,13 +151,12 @@ func (a *App) bindKeys() {
 }
 
 // BailOut exits the application.
-func (a *App) BailOut(exitCode int) {
+func (a *App) BailOut(_ int) {
 	if err := a.Config.Save(true); err != nil {
 		slog.Error("Config save failed!", slogs.Error, err)
 	}
 
 	a.Stop()
-	os.Exit(exitCode)
 }
 
 // ResetPrompt reset the prompt model and marks buffer as active.
