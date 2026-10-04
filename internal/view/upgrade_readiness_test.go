@@ -98,7 +98,7 @@ func TestUpgradeReadinessDispatcherRefreshAndLifecycle(t *testing.T) {
 	dispatch(func() { d.refresh() })
 	failed := next()
 	failure := evidence("")
-	failure.ServerVersionState = "denied"
+	failure.ServerVersionState = testWorkspaceCoverageDenied
 	complete(failed, failure)
 	require.Eventually(t, func() bool {
 		ok := false
@@ -204,7 +204,7 @@ func TestUpgradeReadinessVersionHTTPDeadlineAndInvalidScope(t *testing.T) {
 	got = loadUpgradeReadiness(context.Background(), conn, connectionHealthRequest{Context: "ctx", Namespace: "team-a"})
 	require.Less(t, time.Since(started), 4*time.Second)
 	require.Equal(t, "canceled/timeout", got.ServerVersionState)
-	require.Equal(t, "denied", got.Nodes.State)
+	require.Equal(t, testWorkspaceCoverageDenied, got.Nodes.State)
 	require.True(t, got.AllFactReadsFailed())
 	select {
 	case <-canceled:
@@ -248,7 +248,7 @@ func runUpgradeTestDispatcher(t *testing.T, app *App) func(func()) {
 
 func TestUpgradeReadinessCompactFailedRefreshKeepsAttemptGaps(t *testing.T) {
 	d := &upgradeReadinessDetails{request: connectionHealthRequest{Context: "ctx", Namespace: "apps"}, snapshot: upgrade.Snapshot{Context: "ctx", Namespace: "apps", ObservedAt: time.Unix(1, 0), ServerVersion: "prior"}}
-	failed := upgrade.Snapshot{Context: "ctx", Namespace: "apps", ObservedAt: time.Unix(2, 0), ServerVersionState: "denied", Nodes: upgrade.Section{State: "canceled/timeout"}}
+	failed := upgrade.Snapshot{Context: "ctx", Namespace: "apps", ObservedAt: time.Unix(2, 0), ServerVersionState: testWorkspaceCoverageDenied, Nodes: upgrade.Section{State: "canceled/timeout"}}
 	d.acceptSnapshot(&failed)
 	text := renderUpgradeReadiness(&d.snapshot, d.status, 40)
 	for _, want := range []string{"retained earlier evidence", "1970-01-01T00:00:02Z", "API:denied", "nodes:canceled/timeout"} {
