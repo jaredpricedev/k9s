@@ -5,6 +5,7 @@ package ui
 
 import (
 	"log/slog"
+	"maps"
 	"slices"
 	"sync"
 
@@ -77,9 +78,11 @@ func NewKeyActions() *KeyActions {
 	}
 }
 
-// NewKeyActionsFromMap construct actions from key map.
+// NewKeyActionsFromMap copies the key map. The caller retains ownership of mm.
 func NewKeyActionsFromMap(mm KeyMap) *KeyActions {
-	return &KeyActions{actions: mm}
+	a := NewKeyActions()
+	maps.Copy(a.actions, mm)
+	return a
 }
 
 // Get fetches an action given a key.
@@ -102,20 +105,25 @@ func (a *KeyActions) Len() int {
 
 // Reset clears out actions.
 func (a *KeyActions) Reset(aa *KeyActions) {
-	a.Clear()
-	a.Merge(aa)
+	km := aa.snapshot()
+	a.mx.Lock()
+	a.actions = km
+	a.mx.Unlock()
 }
 
 // Range ranges over all actions and triggers a given function.
 func (a *KeyActions) Range(f RangeFn) {
-	var km KeyMap
-	a.mx.RLock()
-	km = a.actions
-	a.mx.RUnlock()
-
-	for k, v := range km {
+	for k, v := range a.snapshot() {
 		f(k, v)
 	}
+}
+
+// snapshot captures an owned copy, so callbacks and other action sets never
+// access a mutable map after its owner's lock has been released.
+func (a *KeyActions) snapshot() KeyMap {
+	a.mx.RLock()
+	defer a.mx.RUnlock()
+	return maps.Clone(a.actions)
 }
 
 // Add adds a new key action.
@@ -138,10 +146,11 @@ func (a *KeyActions) Bulk(aa KeyMap) {
 
 // Merge merges given actions into existing set.
 func (a *KeyActions) Merge(aa *KeyActions) {
+	km := aa.snapshot()
 	a.mx.Lock()
 	defer a.mx.Unlock()
 
-	for k, v := range aa.actions {
+	for k, v := range km {
 		a.actions[k] = v
 	}
 }
@@ -168,14 +177,9 @@ func (a *KeyActions) ClearDanger() {
 	}
 }
 
-// Set replace actions with new ones.
+// Set overlays the given actions, preserving existing keys as Merge does.
 func (a *KeyActions) Set(aa *KeyActions) {
-	a.mx.Lock()
-	defer a.mx.Unlock()
-
-	for k, v := range aa.actions {
-		a.actions[k] = v
-	}
+	a.Merge(aa)
 }
 
 // Delete deletes actions by the given keys.
