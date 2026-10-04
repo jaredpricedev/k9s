@@ -5,7 +5,6 @@
 package dialog
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/derailed/k9s/internal/config"
@@ -15,17 +14,37 @@ import (
 
 // ShowError pops an error dialog.
 func ShowError(styles *config.Dialog, pages *ui.Pages, msg string) {
+	ShowErrorRecovery(styles, pages, msg, ErrorRecovery{})
+}
+
+// ErrorRecovery lets a caller offer an explicit edit/help/retry action. The
+// dialog never executes a suggestion, changes a query or retries on dismissal.
+type ErrorRecovery struct {
+	Title, Instruction, ActionLabel string
+	Action                          func()
+}
+
+func ShowErrorRecovery(styles *config.Dialog, pages *ui.Pages, msg string, recovery ErrorRecovery) {
+	if recovery.Title == "" {
+		recovery.Title = "Error · retained view"
+	}
+	if recovery.Instruction == "" {
+		recovery.Instruction = "Close to return to your view; revise input or retry explicitly.\n? shows actions and :diagnostics reviews available access."
+	}
 	f := tview.NewForm()
 	f.SetItemPadding(0)
 	f.SetButtonsAlign(tview.AlignCenter)
 	f.AddButton("Dismiss", func() {
 		dismiss(pages)
 	})
+	if recovery.Action != nil && recovery.ActionLabel != "" {
+		f.AddButton(recovery.ActionLabel, func() { dismiss(pages); recovery.Action() })
+	}
 	f.SetFocus(0)
-	modal := tview.NewModalForm("<error>", f)
+	modal := ui.NewModalForm(recovery.Title, f)
 	StyleForm(styles, f)
 	modal.SetBackgroundColor(styles.BgColor.Color())
-	modal.SetText(cowTalk(tview.Escape(msg)))
+	modal.SetText(tview.Escape(strings.TrimSpace(msg)) + "\n\n" + tview.Escape(recovery.Instruction))
 	modal.SetTextColor(styles.FgColor.Color())
 	modal.SetDoneFunc(func(int, string) {
 		dismiss(pages)
@@ -33,21 +52,4 @@ func ShowError(styles *config.Dialog, pages *ui.Pages, msg string) {
 	pages.AddPage(dialogKey, modal, false, false)
 	bindPageForm(styles, pages, dialogKey, f, modal)
 	pages.ShowPage(dialogKey)
-}
-
-func cowTalk(says string) string {
-	msg := fmt.Sprintf("< Ruroh? %s >", strings.TrimSuffix(says, "\n"))
-	buff := make([]string, 0, len(cow)+3)
-	buff = append(buff, msg)
-	buff = append(buff, cow...)
-
-	return strings.Join(buff, "\n")
-}
-
-var cow = []string{
-	`\   ^__^            `,
-	` \  (oo)\_______    `,
-	`    (__)\       )\/\`,
-	`        ||----w |   `,
-	`        ||     ||   `,
 }

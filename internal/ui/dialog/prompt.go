@@ -42,7 +42,7 @@ func ShowPrompt(styles *config.Dialog, pages *ui.Pages, title, msg string, actio
 	}
 
 	f.SetFocus(0)
-	modal := tview.NewModalForm("<"+title+">", f)
+	modal := ui.NewModalForm("<"+title+">", f)
 	modal.SetText(msg)
 	modal.SetTextColor(styles.FgColor.Color())
 	modal.SetDoneFunc(func(int, string) {

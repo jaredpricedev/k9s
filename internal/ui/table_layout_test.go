@@ -169,3 +169,43 @@ func TestTableDrawPreservesNonselectableView(t *testing.T) {
 	assert.False(t, columns)
 	assert.NotContains(t, layoutScreenText(screen, 80, 24), "> ", "static views do not imply a selected resource")
 }
+
+func TestNativeProviderLayoutPreservesCompleteStatusAndRetainedDetail(t *testing.T) {
+	for _, fixture := range []struct {
+		resource, state string
+		header          model1.Header
+		fields          model1.Fields
+	}{
+		{"flux", "Reconciling", model1.Header{{Name: "NAMESPACE"}, {Name: "NAME"}, {Name: "KIND"}, {Name: "STATUS"}, {Name: "SUSPEND"}, {Name: "REVISION"}, {Name: "SOURCE"}}, model1.Fields{"payments", "京都-long-production-release-controller", "Kustomization", "Reconciling", "false", "main@sha1:abcdef0123456789", "GitRepository:payments/repo"}},
+		{"certificates", "NotReady", model1.Header{{Name: "NAMESPACE"}, {Name: "NAME"}, {Name: "STATUS"}, {Name: "EXPIRES"}, {Name: "RENEWAL"}, {Name: "ISSUER"}}, model1.Fields{"payments", "京都-long-production-certificate", "NotReady", "2026-10-06T03:04:05Z", "2026-10-05T03:04:05Z", "ClusterIssuer:production"}},
+	} {
+		t.Run(fixture.resource, func(t *testing.T) {
+			styles := config.NewStyles()
+			require.NoError(t, styles.Load("../../skins/monochrome.yaml", false))
+			gvr := client.NewGVR("v1/" + fixture.resource)
+			m := &podLayoutModel{all: true}
+			m.data = model1.NewTableDataFull(gvr, client.NamespaceAll, fixture.header, model1.NewRowEventsWithEvts(model1.RowEvent{Row: model1.Row{ID: "payments/resource", Fields: fixture.fields}}))
+			v := ui.NewTable(gvr)
+			v.Init(context.WithValue(context.Background(), internal.KeyStyles, styles))
+			v.SetModel(m)
+			v.SetNoIcon(true)
+			v.UpdateUI(v.Update(m.data, true), m.data)
+			v.SelectRow(1, 0, true)
+			screen := tcell.NewSimulationScreen("")
+			require.NoError(t, screen.Init())
+			defer screen.Fini()
+			for _, size := range [][2]int{{120, 34}, {80, 24}, {60, 24}, {40, 16}, {80, 24}} {
+				screen.SetSize(size[0], size[1])
+				screen.Clear()
+				v.SetRect(0, 0, size[0], size[1])
+				v.Draw(screen)
+				text := layoutScreenText(screen, size[0], size[1])
+				require.Contains(t, text, fixture.state)
+				require.Equal(t, fixture.fields, v.GetSelectedRow("payments/resource").Fields)
+				if fixture.resource == "certificates" && strings.Contains(text, "EXPIRES") {
+					require.Contains(t, text, "2026-10-06T03:04:05Z", "dates are complete or intentionally hidden")
+				}
+			}
+		})
+	}
+}

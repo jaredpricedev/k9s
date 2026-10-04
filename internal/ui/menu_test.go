@@ -143,3 +143,25 @@ func TestMenuSharesShortNamespaceColumnAtNarrowWidths(t *testing.T) {
 		}
 	}
 }
+
+func TestCompactMenuUsesActionIdentityInsteadOfLabelSpelling(t *testing.T) {
+	styles := config.NewStyles()
+	menu := ui.NewMenu(styles)
+	hints := ui.NewKeyActionsFromMap(ui.KeyMap{
+		tcell.KeyEnter: ui.NewKeyAction("Inspect retained evidence", func(*tcell.EventKey) *tcell.EventKey { return nil }, true),
+		ui.KeySlash:    ui.NewSharedKeyAction("Filter Mode", func(*tcell.EventKey) *tcell.EventKey { return nil }, false),
+		ui.KeySpace:    ui.NewKeyAction("Freeze", func(*tcell.EventKey) *tcell.EventKey { return nil }, false),
+	}).Hints()
+	menu.SetCompact(true)
+	menu.HydrateMenu(hints)
+	screen := tcell.NewSimulationScreen("")
+	require.NoError(t, screen.Init())
+	defer screen.Fini()
+	screen.SetSize(120, 1)
+	menu.SetRect(0, 0, 120, 1)
+	menu.Draw(screen)
+	text := menu.GetCell(0, 0).Text
+	require.Contains(t, text, "Inspect retained evidence")
+	require.Contains(t, text, "Freeze")
+	require.Contains(t, text, "Filter Mode")
+}

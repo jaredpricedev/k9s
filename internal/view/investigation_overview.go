@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	investigationEvidenceTab = 4
-	investigationAppRole     = "app"
+	investigationCurrentColumn = "CURRENT"
+	investigationEvidenceTab   = 4
+	investigationAppRole       = "app"
 )
 
 var investigationTabs = []string{"Overview", "Containers", "Events", "Resources", "Evidence"}
@@ -107,6 +108,7 @@ func (d *inspectionDetails) selectInvestigationTab(tab int) {
 	row, col := d.text.GetScrollOffset()
 	d.tabStates[d.activeTab] = investigationTabState{query: d.inspectionQuery, region: d.currentRegion, row: row, col: col}
 	d.activeTab = tab
+	d.text.SetWrap(tab == investigationEvidenceTab)
 	state := d.tabStates[tab]
 	d.inspectionQuery, d.currentRegion = state.query, state.region
 	d.cmdBuff.SetText(state.query, "", true)
@@ -118,8 +120,17 @@ func (d *inspectionDetails) selectInvestigationTab(tab int) {
 // Draw reacts to viewport width without changing retained observations,
 // accepted search, tab choice or scroll position.
 func (d *inspectionDetails) Draw(screen tcell.Screen) {
-	_, _, width, _ := d.GetInnerRect()
+	if d.CompactWorkspace() && ui.DrawTaskSizeNotice(screen, d.Box) {
+		return
+	}
+	_, _, width, height := d.GetInnerRect()
 	if d.snapshot.Investigation != nil && d.CompactWorkspace() {
+		identityRows := 3
+		if height < 16 {
+			identityRows = 1
+		}
+		d.Flex.ResizeItem(d.identityBar, identityRows, 0)
+		d.text.SetWrap(d.activeTab == investigationEvidenceTab)
 		if width != d.overviewWidth {
 			d.overviewWidth = width
 			d.renderSnapshotText(d.displayEvidence)
@@ -171,17 +182,7 @@ func (d *inspectionDetails) renderInvestigationChrome() {
 			detailStyled(p.Muted.String(), "", fitInvestigation(second, width)) + "\n" +
 			detailStyled(p.Warning.String(), "", fitInvestigation(third, width)))
 	}
-	var tabs strings.Builder
-	for index, name := range investigationTabs {
-		label := fmt.Sprintf("%d %s", index+1, name)
-		if index == d.activeTab {
-			tabs.WriteString(detailStyled(p.Focus.String(), "b", "["+label+"]"))
-		} else {
-			tabs.WriteString(detailStyled(p.Muted.String(), "", label))
-		}
-		tabs.WriteString("  ")
-	}
-	d.tabsBar.SetText(tabs.String())
+	d.tabsBar.SetText(ui.TaskTabs(investigationTabs, d.activeTab, width))
 }
 
 func (d *inspectionDetails) investigationWidth() int {
@@ -218,25 +219,15 @@ func investigationOverview(i *inspect.Investigation, width int) string {
 	issues := 0
 	for index := range i.Containers {
 		c := &i.Containers[index]
-		if !c.CurrentIssue() {
-			continue
-		}
-		issues++
-		if issues > 2 {
-			continue
-		}
-		fmt.Fprintln(&b, fitInvestigation("[!] "+c.CurrentLabel()+" · "+c.Name+" · Pod "+c.Pod, width))
-		if c.LastTermination != nil {
-			fmt.Fprintln(&b, fitInvestigation("[~] Previous termination: "+c.LastTermination.Label()+" · "+relativeAt(c.LastTermination.FinishedAt, i.CapturedAt), width))
-		} else {
-			fmt.Fprintln(&b, "[?] Previous termination: not reported")
+		if c.CurrentIssue() {
+			issues++
 		}
 	}
 	if issues == 0 {
 		for _, c := range i.Conditions {
 			if c.Adverse {
 				issues++
-				fmt.Fprintln(&b, fitInvestigation("[!] "+c.Type+"="+c.Status+" · "+c.Reason, width))
+				fmt.Fprintln(&b, fitInvestigation("Current: "+c.Type+"="+c.Status+" · "+c.Reason, width))
 				if issues >= 2 {
 					break
 				}
@@ -245,111 +236,157 @@ func investigationOverview(i *inspect.Investigation, width int) string {
 	}
 	if issues == 0 {
 		fmt.Fprintln(&b, "[?] No current fault established by these sources.")
-		if i.Phase != "" {
-			fmt.Fprintln(&b, fitInvestigation("    API phase: "+i.Phase+"; inspect conditions and retained evidence.", width))
-		}
-	}
-	if issues > 2 {
-		fmt.Fprintf(&b, "    %d more affected containers; 2 opens all containers.\n", issues-2)
 	}
 	if len(i.Containers) > 0 {
-		b.WriteString("\nCONTAINER STATUS · current / previous remain separate\n")
-		b.WriteString(investigationContainerTable(i, width, 4))
-	} else {
-		b.WriteString("\nCONDITIONS · current API values\n")
-		b.WriteString(tableRow([]string{"CONDITION", statusCol, "REASON"}, []int{24, 9, max(12, width-35)}) + "\n")
-		for _, c := range i.Conditions[:min(len(i.Conditions), 4)] {
-			b.WriteString(tableRow([]string{c.Type, c.Status, c.Reason}, []int{24, 9, max(12, width-35)}) + "\n")
-		}
-		if len(i.Conditions) == 0 {
-			b.WriteString("[?] No conditions reported; absence is not proof of health.\n")
-		}
-	}
-	b.WriteString("\nVISIBILITY\n")
-	coverage := make([]string, 0, len(i.Coverage))
-	for _, c := range i.Coverage {
-		if c.Source == "selector-matching Pods" {
-			continue
-		}
-		state := c.State
-		if state == inspect.ObservationComplete {
-			state = "collected"
-			if strings.HasPrefix(c.Source, "events") {
-				state = "retained / bounded"
+		b.WriteString(investigationCurrentTable(i, width, 4))
+		for index := range min(len(i.Containers), 4) {
+			c := &i.Containers[index]
+			if c.LastTermination != nil {
+				previous := "Previous termination: " + c.LastTermination.Label() + " · " + c.Name
+				if width < 50 {
+					label := c.LastTermination.Reason
+					if c.LastTermination.ExitCode != nil {
+						label += fmt.Sprintf("/%d", *c.LastTermination.ExitCode)
+					}
+					previous = "Previous: " + label + " · " + c.Name
+				}
+				fmt.Fprintln(&b, fitInvestigation(previous, width))
 			}
 		}
-		coverage = append(coverage, c.Source+": "+state)
-	}
-	// Wrap badges at word boundaries so a missing source is never clipped out.
-	line := ""
-	for _, badge := range coverage {
-		if line != "" && runewidth.StringWidth(line+" · "+badge) > width {
-			fmt.Fprintln(&b, line)
-			line = ""
-		}
-		if line != "" {
-			line += " · "
-		}
-		line += badge
-	}
-	if line != "" {
-		fmt.Fprintln(&b, line)
-	}
-	b.WriteString("NEXT CHECKS\n")
-	if issues > 0 {
-		b.WriteString("2 containers: current vs previous · 3 events: retained history\n")
 	} else {
-		b.WriteString("2 containers · 3 events · 5 evidence: sources and full messages\n")
+		for _, c := range i.Conditions[:min(len(i.Conditions), 3)] {
+			fmt.Fprintln(&b, fitInvestigation(c.Type+"="+c.Status+" · "+c.Reason, width))
+		}
+		if len(i.Conditions) == 0 {
+			b.WriteString("[?] Conditions unavailable; absence is not health.\n")
+		}
 	}
+	var gaps []string
+	for _, coverage := range i.Coverage {
+		if coverage.State != inspect.ObservationComplete {
+			gaps = append(gaps, coverage.Source+": "+coverage.State)
+		}
+	}
+	if width < 50 {
+		next := "NEXT CHECKS: g Pod · 2 containers · 5"
+		if i.Identity.GVR == client.PodGVR.String() {
+			next = "NEXT CHECKS: l logs · 2 containers · 5"
+		}
+		fmt.Fprintln(&b, fitInvestigation(next, width))
+		gap := "Sources collected; 5 full evidence"
+		if len(gaps) > 0 {
+			gap = "Unknown coverage · 5 full evidence"
+			for _, item := range gaps {
+				if strings.HasPrefix(item, "metrics:") {
+					gap = item + " · 5 all gaps"
+					break
+				}
+			}
+		}
+		fmt.Fprintln(&b, fitInvestigation(gap, width))
+		b.WriteString("Past exit historical; cause unknown.\n")
+		return b.String()
+	}
+	if len(gaps) > 0 {
+		b.WriteString("VISIBILITY GAPS · 5 full evidence\n")
+		for _, gap := range gaps[:min(2, len(gaps))] {
+			fmt.Fprintln(&b, fitInvestigation("[?] "+gap, width))
+		}
+		if len(gaps) > 2 {
+			fmt.Fprintf(&b, "%d more gaps in 5 Evidence\n", len(gaps)-2)
+		}
+	} else {
+		b.WriteString("Sources collected; events remain retained history.\n")
+	}
+	b.WriteString("NEXT CHECKS · proposed, cause unconfirmed\n")
 	if i.Identity.GVR == client.PodGVR.String() {
-		b.WriteString("l Pod logs · :pressure budgets · 6 compare chosen A\n")
+		b.WriteString("l Pod logs · 2 containers · 3 events\n")
 	} else {
-		b.WriteString("g related: choose Pod · :pressure budgets · 6 compare chosen A\n")
+		b.WriteString("g related Pod · 2 containers · 3 events\n")
+	}
+	b.WriteString("5 evidence · :pressure budgets · 6 compare\n")
+	b.WriteString("Previous exit is historical; current cause unknown.\n")
+	return b.String()
+}
+
+func investigationCurrentTable(i *inspect.Investigation, width, limit int) string {
+	var b strings.Builder
+	widths := []int{min(18, max(7, width-39)), min(25, max(17, width-30)), 5, 7}
+	if width < 50 {
+		widths = []int{max(7, width-32), 17, 5, 7}
+	}
+	// Preserve the complete fault state before secondary identity characters.
+	for total := widths[0] + widths[1] + widths[2] + widths[3] + 3; total > width; total-- {
+		if widths[0] > 3 {
+			widths[0]--
+		} else if widths[3] > 2 {
+			widths[3]--
+		} else {
+			break
+		}
+	}
+	headers := []string{"CONTAINER", investigationCurrentColumn, readyCol, "RESTART"}
+	if width < 50 {
+		headers = []string{nameCol, investigationCurrentColumn, "RDY", "R"}
+	}
+	fmt.Fprintln(&b, tableRow(headers, widths))
+	for index := range min(len(i.Containers), limit) {
+		c := &i.Containers[index]
+		ready, restarts := investigationReady(c), "?"
+		if c.Restarts != nil {
+			restarts = fmt.Sprint(*c.Restarts)
+		}
+		fmt.Fprintln(&b, tableRow([]string{c.Name, c.CurrentLabel(), ready, restarts}, widths))
+	}
+	if len(i.Containers) > limit {
+		fmt.Fprintf(&b, "%d more; 2 full containers\n", len(i.Containers)-limit)
 	}
 	return b.String()
 }
 
-func investigationContainerTable(i *inspect.Investigation, width, limit int) string {
-	var b strings.Builder
-	nameWidth := 18
-	stateWidth := 25
-	if width < 90 {
-		nameWidth = 13
-		stateWidth = 22
+func investigationReady(c *inspect.InvestigationContainer) string {
+	if c.Ready == nil {
+		return "?"
 	}
-	fmt.Fprintln(&b, tableRow([]string{"CONTAINER", "CURRENT", "READY", "RESTART", "PREVIOUS"}, []int{nameWidth, stateWidth, 7, 7, max(8, width-nameWidth-stateWidth-25)}))
-	if len(i.Containers) == 0 {
-		b.WriteString("[?] No container statuses reported for this resource.\n")
+	if *c.Ready {
+		return "yes"
+	}
+	return "no"
+}
+
+func investigationContainerTable(i *inspect.Investigation, width, limit int) string {
+	// Previous exits are separate historical rows at narrow widths, rather than
+	// wrapping a record into what looks like another container.
+	if width < 80 {
+		var b strings.Builder
+		b.WriteString(investigationCurrentTable(i, width, limit))
+		for index := range min(len(i.Containers), limit) {
+			c := &i.Containers[index]
+			previous := "none reported"
+			if c.LastTermination != nil {
+				previous = c.LastTermination.Label()
+			}
+			fmt.Fprintln(&b, fitInvestigation("Previous · "+c.Name+": "+previous, width))
+		}
 		return b.String()
 	}
+	var b strings.Builder
+	widths := []int{18, 25, 7, 7, max(8, width-61)}
+	fmt.Fprintln(&b, tableRow([]string{"CONTAINER", investigationCurrentColumn, readyCol, "RESTART", "PREVIOUS"}, widths))
 	for index := range min(len(i.Containers), limit) {
 		c := &i.Containers[index]
-		ready := "?"
-		if c.Ready != nil {
-			ready = "no"
-			if *c.Ready {
-				ready = "yes"
-			}
-		}
-		restarts := "?"
+		ready, restarts := investigationReady(c), "?"
 		if c.Restarts != nil {
 			restarts = fmt.Sprint(*c.Restarts)
 		}
 		previous := "none reported"
 		if c.LastTermination != nil {
 			previous = c.LastTermination.Reason
-			if previous == "" {
-				previous = "terminated"
-			}
 		}
-		name := c.Name
-		if c.Role != investigationAppRole {
-			name += " (" + c.Role + ")"
-		}
-		fmt.Fprintln(&b, tableRow([]string{name, c.CurrentLabel(), ready, restarts, previous}, []int{nameWidth, stateWidth, 7, 7, max(8, width-nameWidth-stateWidth-25)}))
+		fmt.Fprintln(&b, tableRow([]string{c.Name, c.CurrentLabel(), ready, restarts, previous}, widths))
 	}
-	if len(i.Containers) > limit {
-		fmt.Fprintf(&b, "%d more rows; 2 opens full container detail.\n", len(i.Containers)-limit)
+	if len(i.Containers) == 0 {
+		b.WriteString("[?] No container statuses reported.\n")
 	}
 	return b.String()
 }

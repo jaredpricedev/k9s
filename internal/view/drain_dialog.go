@@ -62,7 +62,8 @@ func ShowDrain(view ResourceViewer, sels []string, opts dao.DrainOptions, okFn D
 		DismissDrain(view, pages)
 	}
 
-	modal := tview.NewModalForm("<Drain>", f)
+	modal := ui.NewModalForm("<Drain>", f)
+	modal.SetDialogColors(&styles)
 	path := "Drain "
 	if len(sels) == 1 {
 		path += sels[0]
@@ -70,8 +71,8 @@ func ShowDrain(view ResourceViewer, sels []string, opts dao.DrainOptions, okFn D
 		path += fmt.Sprintf("(%d) nodes", len(sels))
 	}
 	path += "?"
-	message := tview.Escape(path+"\nContext: "+contextName) +
-		"\nGrace: seconds; -1 = Pod default, 0 = immediate." +
+	modal.SetContext(path + "\nContext: " + contextName)
+	message := "Grace: seconds; -1 = Pod default, 0 = immediate." +
 		"\nTimeout: duration (5s, 2m); 0 = no timeout."
 	modal.SetText(message)
 	f.AddButton("Cancel", dismiss)

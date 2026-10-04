@@ -74,7 +74,7 @@ func ShowDelete(styles *config.Dialog, pages *ui.Pages, msg string, ok okFunc, c
 	}
 	f.SetFocus(2)
 
-	confirm := tview.NewModalForm("<Delete>", f)
+	confirm := ui.NewModalForm("<Delete>", f)
 	confirm.SetText(msg)
 	confirm.SetDoneFunc(func(int, string) {
 		dismiss(pages)
