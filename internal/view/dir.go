@@ -5,7 +5,6 @@ package view
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path"
 	"slices"
@@ -14,7 +13,6 @@ import (
 	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/ui"
-	"github.com/derailed/k9s/internal/ui/dialog"
 	"github.com/derailed/tcell/v2"
 )
 
@@ -205,32 +203,7 @@ func (d *Dir) applyCmd(evt *tcell.EventKey) *tcell.EventKey {
 		return evt
 	}
 
-	opts := []string{"-f"}
-	if containsDir(sel) {
-		opts = append(opts, "-R")
-	}
-	if isKustomized(sel) {
-		opts = []string{"-k"}
-	}
-	d.Stop()
-	defer d.Start()
-	{
-		args := make([]string, 0, 10)
-		args = append(args, "apply")
-		args = append(args, opts...)
-		args = append(args, sel)
-		res, err := runKu(context.Background(), d.App(), &shellOpts{clear: false, args: args})
-		if err != nil {
-			res = "status:\n  " + err.Error() + "\nmessage:\n" + fmtResults(res)
-		} else {
-			res = "message:\n" + fmtResults(res)
-		}
-
-		details := NewDetails(d.App(), "Applied Manifest", sel, contentYAML, true).Update(res)
-		if err := d.App().inject(details, false); err != nil {
-			d.App().Flash().Err(err)
-		}
-	}
+	d.fileOperation("Apply", sel)
 
 	return nil
 }
@@ -241,36 +214,7 @@ func (d *Dir) delCmd(evt *tcell.EventKey) *tcell.EventKey {
 		return evt
 	}
 
-	opts := []string{"-f"}
-	msgResource := "manifest"
-	if containsDir(sel) {
-		opts = append(opts, "-R")
-	}
-	if isKustomized(sel) {
-		opts = []string{"-k"}
-		msgResource = "kustomization"
-	}
-
-	d.Stop()
-	defer d.Start()
-	msg := fmt.Sprintf("Delete resource(s) in %s %s", msgResource, sel)
-	dlg := d.App().Styles.Dialog()
-	dialog.ShowConfirm(&dlg, d.App().Content.Pages, "Confirm Delete", msg, func() {
-		args := make([]string, 0, 10)
-		args = append(args, "delete")
-		args = append(args, opts...)
-		args = append(args, sel)
-		res, err := runKu(context.Background(), d.App(), &shellOpts{clear: false, args: args})
-		if err != nil {
-			res = "status:\n  " + err.Error() + "\nmessage:\n" + fmtResults(res)
-		} else {
-			res = "message:\n" + fmtResults(res)
-		}
-		details := NewDetails(d.App(), "Deleted Manifest", sel, contentYAML, true).Update(res)
-		if err := d.App().inject(details, false); err != nil {
-			d.App().Flash().Err(err)
-		}
-	}, func() {})
+	d.fileOperation("Delete", sel)
 
 	return nil
 }

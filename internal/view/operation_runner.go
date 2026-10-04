@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
 )
 
@@ -31,22 +32,33 @@ import (
 // belongs to the originating table, so results cannot paint a replacement view.
 // Writes keep running after navigation; leaving a screen does not undo a request.
 type operationSession struct {
-	app        *App
-	table      *Table
-	context    string
-	namespace  string
-	generation uint64
-	timeout    time.Duration
-	dynamic    dynamic.Interface
-	typed      kubernetes.Interface
+	app          *App
+	table        *Table
+	context      string
+	namespace    string
+	generation   uint64
+	revision     uint64
+	timeout      time.Duration
+	dynamic      dynamic.Interface
+	typed        kubernetes.Interface
+	stillCurrent func() bool
 }
 
-const maxOperationTargets = 100
+const (
+	maxOperationTargets           = 100
+	operationMetadataField        = "metadata"
+	operationSpecField            = "spec"
+	operationResourceVersionField = "resourceVersion"
+	operationUIDField             = "uid"
+)
 
 type operationOutcome struct {
-	Target       SelectedResourceTarget
-	Err          error
-	NotSubmitted bool
+	Target        SelectedResourceTarget
+	Err           error
+	NotSubmitted  bool
+	State         operationState
+	AcceptedSteps []string
+	Output        string
 }
 
 func captureOperationScreen(v ResourceViewer) (*operationSession, error) {
@@ -66,7 +78,7 @@ func captureOperationScreen(v ResourceViewer) (*operationSession, error) {
 	}
 	t := v.GetTable()
 	return &operationSession{app: app, table: t, context: app.Config.ActiveContextName(),
-		namespace: t.GetModel().GetNamespace(), generation: t.operationGeneration.Load(), timeout: timeout}, nil
+		namespace: t.GetModel().GetNamespace(), generation: t.operationGeneration.Load(), revision: app.Config.DestinationRevision(), timeout: timeout}, nil
 }
 
 func captureOperation(v ResourceViewer) (*operationSession, error) {
@@ -90,8 +102,13 @@ func captureOperation(v ResourceViewer) (*operationSession, error) {
 }
 
 func (s *operationSession) current() bool {
-	if s.app.Config.ActiveContextName() != s.context || s.table.operationGeneration.Load() != s.generation ||
-		s.table.GetModel().GetNamespace() != s.namespace {
+	if s.app.Config.ActiveContextName() != s.context || s.app.Config.DestinationRevision() != s.revision {
+		return false
+	}
+	if s.table == nil {
+		return s.stillCurrent != nil && s.stillCurrent()
+	}
+	if s.table.operationGeneration.Load() != s.generation || s.table.GetModel().GetNamespace() != s.namespace {
 		return false
 	}
 	v, ok := s.app.Content.Top().(TableViewer)
@@ -110,7 +127,9 @@ func (s *operationSession) dispatch(fn func()) {
 	if !s.app.IsRunning() {
 		return
 	}
-	s.app.QueueUpdateDraw(func() {
+	// A stopped event loop cannot hold a completed operation worker open. The
+	// dispatcher rechecks ownership before displaying any late result.
+	go s.app.QueueUpdateDraw(func() {
 		if s.app.IsRunning() && s.current() {
 			fn()
 		}
@@ -152,46 +171,30 @@ func operationDestination(targets []SelectedResourceTarget) string {
 func startOperationBatch(timeout time.Duration, targets []SelectedResourceTarget,
 	work func(context.Context, SelectedResourceTarget) error,
 	publish func(operationOutcome), done func([]operationOutcome),
-) {
-	if timeout <= 0 {
-		timeout = 10 * time.Second
-	}
-	targets = append([]SelectedResourceTarget(nil), targets...)
-	go func() {
-		batchCtx, batchCancel := context.WithTimeout(context.Background(), timeout)
-		defer batchCancel()
-		outcomes := make([]operationOutcome, 0, len(targets))
-		for _, target := range targets {
-			ctx, cancel := context.WithTimeout(batchCtx, timeout)
-			err := ctx.Err()
-			notSubmitted := err != nil
-			if err == nil && target.UnavailableReason != "" {
-				err, notSubmitted = target.Err(), true
-			}
-			if err == nil {
-				err = work(ctx, target)
-			}
-			cancel()
-			outcome := operationOutcome{Target: target, Err: err, NotSubmitted: notSubmitted}
-			outcomes = append(outcomes, outcome)
-			if publish != nil {
-				publish(outcome)
-			}
-		}
-		if done != nil {
-			done(outcomes)
-		}
-	}()
+) *operationTask {
+	task := newOperationTask(timeout, targets)
+	task.start(work, publish, done)
+	return task
 }
 
 func (s *operationSession) submit(action string, targets []SelectedResourceTarget,
 	work func(context.Context, SelectedResourceTarget) error, accepted func(SelectedResourceTarget),
-) {
+) *operationTask {
 	if !s.confirm() {
-		return
+		return nil
 	}
-	s.app.Flash().Infof("Submitting %s for %d resource(s) in context %s...", action, len(targets), s.context)
-	startOperationBatch(s.timeout, targets, work, nil, func(outcomes []operationOutcome) {
+	if len(targets) == 0 || len(targets) > maxOperationTargets {
+		s.app.Flash().Warnf("Select 1 to %d targets before submitting an operation", maxOperationTargets)
+		return nil
+	}
+	task := newOperationTask(s.timeout, targets)
+	if err := s.app.operations.add(task, action, s.context); err != nil {
+		task.cancel()
+		s.app.Flash().Err(err)
+		return nil
+	}
+	s.app.Flash().Infof("Submitting %s for %d resource(s) in context %s; :operations reviews/cancels", action, len(targets), s.context)
+	task.start(work, nil, func(outcomes []operationOutcome) {
 		s.dispatch(func() {
 			if accepted != nil {
 				for _, outcome := range outcomes {
@@ -203,36 +206,47 @@ func (s *operationSession) submit(action string, targets []SelectedResourceTarge
 			s.showResults(action, outcomes)
 		})
 	})
+	return task
 }
 
 func (s *operationSession) showResults(action string, outcomes []operationOutcome) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Context: %s\nOperation: %s\n\n", s.context, action)
-	var accepted, notSubmitted int
+	var accepted, uncertain, failed int
 	for _, outcome := range outcomes {
-		if outcome.Err == nil {
+		state := outcome.State
+		if state == "" {
+			state = operationResultState(outcome.Err, outcome.NotSubmitted, false)
+		}
+		if state == operationAccepted || state == operationCompleted {
 			accepted++
-			fmt.Fprintf(&b, "ACCEPTED  %s %s\n", operationResourceName(&outcome.Target), outcome.Target.Path())
-		} else if outcome.NotSubmitted {
-			notSubmitted++
-			fmt.Fprintf(&b, "NOT SUBMITTED  %s %s: %s\n", operationResourceName(&outcome.Target), outcome.Target.Path(), operationOutcomeError(&outcome))
 		} else {
-			fmt.Fprintf(&b, "FAILED    %s %s: %s\n", operationResourceName(&outcome.Target), outcome.Target.Path(), operationOutcomeError(&outcome))
+			failed++
+			if state == operationUnknown {
+				uncertain++
+			}
+		}
+		fmt.Fprintf(&b, "%s  %s %s\n", state, operationResourceName(&outcome.Target), outcome.Target.Path())
+		for _, step := range outcome.AcceptedSteps {
+			fmt.Fprintf(&b, "  ACCEPTED: %s\n", step)
+		}
+		if outcome.Err != nil {
+			fmt.Fprintf(&b, "  %s\n", operationOutcomeError(&outcome))
 		}
 	}
 	b.WriteString("\n" +
-		"Acceptance confirms the API request, not controller completion.\n" +
-		"Watch READY / STATUS and events for the resulting state.\n" +
-		"Leaving this view does not undo a submitted request.\n")
+		"Acceptance confirms the API request, not controller completion. COMPLETED records an external command exit.\n" +
+		"Cancellation does not roll back accepted writes. UNKNOWN: inspect the captured destination before retrying.\n" +
+		":operations retains receipts after navigation and can cancel remaining work.\n")
 	if len(outcomes) == 1 {
 		if outcomes[0].Err != nil {
-			s.app.Flash().Errf("%s %s: %s", action, outcomes[0].Target.Path(), operationOutcomeError(&outcomes[0]))
+			s.app.Flash().Errf("%s %s: %s; :operations has the receipt", outcomes[0].State, action, operationOutcomeError(&outcomes[0]))
 		} else {
-			s.app.Flash().Infof("%s accepted for %s; watch READY / STATUS for completion", action, outcomes[0].Target.Path())
+			s.app.Flash().Infof("%s %s for %s; :operations has the receipt", outcomes[0].State, action, outcomes[0].Target.Path())
 		}
 		return
 	}
-	s.app.Flash().Infof("%s: %d accepted, %d failed, %d not submitted", action, accepted, len(outcomes)-accepted-notSubmitted, notSubmitted)
+	s.app.Flash().Infof("%s: %d accepted/completed, %d other outcomes (%d unknown); :operations", action, accepted, failed, uncertain)
 	d := NewDetails(s.app, "Operation results", action, contentTXT, false).Update(tview.Escape(b.String()))
 	if err := s.app.inject(d, false); err != nil {
 		s.app.Flash().Err(err)
@@ -240,6 +254,12 @@ func (s *operationSession) showResults(action string, outcomes []operationOutcom
 }
 
 func operationOutcomeError(outcome *operationOutcome) string {
+	if outcome.State == operationCancelled {
+		return "canceled before a write was attempted"
+	}
+	if outcome.State == operationUnknown {
+		return "acceptance may be unknown; inspect the captured destination before retrying. No automatic retry"
+	}
 	if outcome.NotSubmitted && errors.Is(outcome.Err, context.DeadlineExceeded) {
 		return "batch deadline ended before this request started"
 	}
@@ -363,7 +383,11 @@ func (s *operationSession) restart(ctx context.Context, target SelectedResourceT
 		if err != nil {
 			return err
 		}
+		operationBeginWrite(ctx)
 		_, err = s.resource(&target).Patch(ctx, target.Name, types.MergePatchType, patch, opts)
+		if err == nil {
+			operationAcceptWrite(ctx, "restart request")
+		}
 		return err
 	})
 }
@@ -423,7 +447,11 @@ func (s *operationSession) scale(ctx context.Context, target SelectedResourceTar
 		if setErr := unstructured.SetNestedField(o.Object, int64(replicas), "spec", "replicas"); setErr != nil {
 			return setErr
 		}
+		operationBeginWrite(ctx)
 		_, err = s.resource(&target).Update(ctx, o, metav1.UpdateOptions{}, "scale")
+		if err == nil {
+			operationAcceptWrite(ctx, fmt.Sprintf("desired replicas %d", replicas))
+		}
 		return err
 	})
 }
@@ -447,7 +475,12 @@ func (s *operationSession) delete(ctx context.Context, target SelectedResourceTa
 			period := int64(grace)
 			opts.GracePeriodSeconds = &period
 		}
-		return s.resource(&target).Delete(ctx, target.Name, opts)
+		operationBeginWrite(ctx)
+		err = s.resource(&target).Delete(ctx, target.Name, opts)
+		if err == nil {
+			operationAcceptWrite(ctx, "delete request")
+		}
+		return err
 	})
 }
 
@@ -456,11 +489,18 @@ func (s *operationSession) delete(ctx context.Context, target SelectedResourceTa
 type pinnedOperationConnection struct {
 	client.Connection
 	config      *client.Config
+	source      *client.Config
 	contextName string
 }
 
 func (c pinnedOperationConnection) Config() *client.Config { return c.config }
 func (c pinnedOperationConnection) ActiveContext() string  { return c.contextName }
+func (c pinnedOperationConnection) RestConfig() (*rest.Config, error) {
+	if c.source == nil {
+		return nil, errors.New("committed operation destination is unavailable")
+	}
+	return c.source.RESTConfig()
+}
 
 type pinnedOperationFactory struct {
 	dao.Factory
@@ -472,20 +512,11 @@ func (f pinnedOperationFactory) Client() client.Connection   { return f.connecti
 func (f pinnedOperationFactory) DeleteForwarder(path string) { f.forwarders.Kill(path) }
 
 func captureSyntheticDelete(v ResourceViewer, contextName string) (dao.Nuker, error) {
-	app := v.App()
-	conn := app.Conn()
-	if conn != nil {
-		flags := client.SnapshotConfigFlags(conn.Config().Flags())
-		flags.Context = &contextName
-		conn = pinnedOperationConnection{Connection: conn, config: client.NewConfig(flags), contextName: contextName}
+	factory, err := captureSyntheticOperationFactory(v, contextName)
+	if err != nil {
+		return nil, err
 	}
-	forwarders := watch.NewForwarders()
-	if v.GVR() == client.PfGVR {
-		for k, forwarder := range app.factory.Forwarders() {
-			forwarders[k] = forwarder
-		}
-	}
-	accessor, err := dao.AccessorFor(pinnedOperationFactory{Factory: app.factory, connection: conn, forwarders: forwarders}, v.GVR())
+	accessor, err := dao.AccessorFor(factory, v.GVR())
 	if err != nil {
 		return nil, err
 	}
@@ -494,4 +525,28 @@ func captureSyntheticDelete(v ResourceViewer, contextName string) (dao.Nuker, er
 		return nil, fmt.Errorf("resource %s cannot be deleted", v.GVR())
 	}
 	return nuker, nil
+}
+
+func captureSyntheticOperationFactory(v ResourceViewer, contextName string) (dao.Factory, error) {
+	app := v.App()
+	if app == nil || app.factory == nil {
+		return nil, errors.New("operation factory is unavailable")
+	}
+	conn := app.Conn()
+	if conn == nil {
+		return nil, errors.New("operation connection is unavailable")
+	}
+	if conn.Config() == nil {
+		return nil, errors.New("operation configuration is unavailable")
+	}
+	flags := client.SnapshotConfigFlags(conn.Config().Flags())
+	flags.Context = &contextName
+	conn = pinnedOperationConnection{Connection: conn, config: client.NewConfig(flags), source: conn.Config(), contextName: contextName}
+	forwarders := watch.NewForwarders()
+	if v.GVR() == client.PfGVR {
+		for k, forwarder := range app.factory.Forwarders() {
+			forwarders[k] = forwarder
+		}
+	}
+	return pinnedOperationFactory{Factory: app.factory, connection: conn, forwarders: forwarders}, nil
 }

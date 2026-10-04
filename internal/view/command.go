@@ -111,7 +111,7 @@ func (c *Command) updateSuggestionAliases() {
 	if c.alias == nil {
 		return
 	}
-	aliases := make([]string, 0, len(c.alias.Alias))
+	aliases := []string{"operations", "ops"}
 	for alias := range c.alias.Alias {
 		aliases = append(aliases, alias)
 	}
@@ -309,6 +309,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.desiredReviewCommand(p.GetLine())
 	case "rollout":
 		c.rolloutReviewCommand()
+	case "operations", "ops":
+		c.operationsCommand()
 	default:
 		return false
 	}

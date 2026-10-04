@@ -1,16 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view
 
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/dao"
 	"github.com/derailed/k9s/internal/model"
+	"github.com/derailed/k9s/internal/model1"
 	"github.com/derailed/k9s/internal/render/helm"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/k9s/internal/ui/dialog"
@@ -97,34 +101,85 @@ func (h *History) rollbackCmd(evt *tcell.EventKey) *tcell.EventKey {
 
 	ns, nrev := client.Namespaced(path)
 	tt := strings.Split(nrev, ":")
-	n, rev := nrev, ""
-	if len(tt) == 2 {
-		n, rev = tt[0], tt[1]
+	if len(tt) != 2 {
+		h.App().Flash().Warn("Select an explicit Helm revision before rollback")
+		return nil
 	}
-
-	h.Stop()
-	defer h.Start()
-	msg := fmt.Sprintf("RollingBack chart [yellow::b]%s[-::-] to release <[orangered::b]%s[-::-]>?", n, rev)
-	dialog.ShowConfirmAck(h.App().App, h.App().Content.Pages, n, false, "Confirm Rollback", msg, func() {
-		ctx, cancel := context.WithTimeout(context.Background(), h.App().Conn().Config().CallTimeout())
+	n, rev := tt[0], tt[1]
+	version, err := strconv.Atoi(rev)
+	if err != nil || version <= 0 {
+		h.App().Flash().Warn("Select an explicit positive Helm revision")
+		return nil
+	}
+	session, err := captureOperationScreen(h)
+	if err != nil {
+		h.App().Flash().Err(err)
+		return nil
+	}
+	factory, err := captureSyntheticOperationFactory(h, session.context)
+	if err != nil || factory.Client() == nil || factory.Client().Config() == nil {
+		h.App().Flash().Warn("Helm operation client is unavailable")
+		return nil
+	}
+	row, found := h.GetTable().GetModel().Peek().FindRow(path)
+	if !found {
+		h.App().Flash().Warn("Selected Helm revision is no longer retained; refresh first")
+		return nil
+	}
+	expected := slices.Clone(row.Row.Fields)
+	var hm dao.HelmHistory
+	hm.Init(factory, h.GVR())
+	h.App().Flash().Info("Reading selected Helm revision before confirmation...")
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), boundedOperationTimeout(session.timeout))
 		defer cancel()
-		if err := h.rollback(ctx, client.FQN(ns, n), rev); err != nil {
-			h.App().Flash().Err(err)
-		} else {
-			h.App().Flash().Infof("Rollout restart in progress for char `%s...", n)
+		if destinationErr := freezeHelmOperationDestination(factory); destinationErr != nil {
+			session.dispatch(func() { h.App().Flash().Err(destinationErr) })
+			return
 		}
-	}, func() {})
-
+		obj, err := hm.Get(ctx, path)
+		var fingerprint string
+		if err == nil {
+			revision, ok := obj.(helm.ReleaseRes)
+			if !ok || revision.Release == nil || revision.Release.Info == nil || revision.Release.Chart == nil || revision.Release.Chart.Metadata == nil {
+				err = fmt.Errorf("selected Helm revision metadata is unavailable; refresh and review again")
+			} else {
+				current := model1.NewRow(len(expected))
+				err = (helm.History{}).Render(obj, ns, &current)
+				if err == nil && !slices.Equal(current.Fields, expected) {
+					err = fmt.Errorf("selected Helm revision changed; refresh and review again")
+				}
+				if err == nil {
+					fingerprint, err = dao.HelmRevisionFingerprint(revision.Release)
+				}
+			}
+		}
+		session.dispatch(func() {
+			if err != nil {
+				h.App().Flash().Err(err)
+				return
+			}
+			msg := fmt.Sprintf("Rollback Helm release %s/%s to revision %s?\nContext: %s\nProvider identity: %s\nHelm retains "+
+				"ownership. Cancellation does not undo accepted writes.", ns, n, rev, session.context, fingerprint)
+			dialog.ShowConfirmAck(h.App().App, h.App().Content.Pages, n, false, "Confirm Rollback", msg, func() {
+				target := SelectedResourceTarget{Context: session.context, GVR: h.GVR(), Namespace: ns, Name: n + ":" + rev}
+				session.submit("Helm rollback to "+rev, []SelectedResourceTarget{target}, func(ctx context.Context, _ SelectedResourceTarget) error {
+					fmt.Fprintf(operationOutput(ctx), "Provider identity: %s\n", fingerprint)
+					ctx = observeHelmOperation(ctx)
+					return hm.RollbackSnapshot(ctx, client.FQN(ns, n), rev, fingerprint)
+				}, nil)
+			}, func() {})
+		})
+	}()
 	return nil
 }
 
-func (h *History) rollback(ctx context.Context, path, rev string) error {
-	var hm dao.HelmHistory
-	hm.Init(h.App().factory, h.GVR())
-	if err := hm.Rollback(ctx, path, rev); err != nil {
-		return err
-	}
-	h.Refresh()
-
-	return nil
+func observeHelmOperation(ctx context.Context) context.Context {
+	return dao.WithHelmOperationObserver(ctx, func(method, resourcePath string, accepted bool) {
+		if accepted {
+			operationAcceptWrite(ctx, method+" "+resourcePath)
+		} else {
+			operationBeginWrite(ctx)
+		}
+	})
 }
