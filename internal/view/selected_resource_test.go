@@ -9,6 +9,7 @@ import (
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config/mock"
+	"github.com/derailed/k9s/internal/dao"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -58,8 +59,8 @@ func TestPulseAndXrayInvestigationCommandsKeepNavigationOpen(t *testing.T) {
 				}
 			}
 			command.investigationCommand(actionsCommand)
-			palette, ok := app.Content.Top().(*actionPalette)
-			if !ok || palette.target.Err() == nil {
+			palette, ok := app.Content.GetPrimitive(actionsCommand).(*actionPalette)
+			if !ok || palette.target.Err() == nil || app.Content.Top() != view {
 				t.Fatal("actions did not open a safe navigation palette", app.Content.Top())
 			}
 		})
@@ -103,6 +104,11 @@ func TestCombinedFluxSelectionMatchesNativeIdentity(t *testing.T) {
 }
 
 func TestInspectionRejectsSameNameReplacementBeforeReadingEvidence(t *testing.T) {
+	// Other browser tests register synthetic metadata under the Pod GVR. This
+	// fixture models a native resource and must not inherit that global registry.
+	metas := dao.MetaAccess
+	dao.MetaAccess = dao.NewMeta()
+	t.Cleanup(func() { dao.MetaAccess = metas })
 	obj := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "v1", "kind": "Pod",
 		"metadata": map[string]any{"namespace": "team", "name": "app", "uid": "replacement"},
