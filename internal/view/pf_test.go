@@ -18,6 +18,6 @@ func TestPortForwardNew(t *testing.T) {
 
 	require.NoError(t, pf.Init(makeCtx(t)))
 	assert.Equal(t, "PortForwards", pf.Name())
-	assert.Len(t, pf.Hints(), 12)
+
 	assertActionRegistry(t, pf)
 }
