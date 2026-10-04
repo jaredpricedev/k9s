@@ -81,6 +81,13 @@ type Source struct {
 	Identity              inspect.ResourceIdentity
 	Kind, ResourceVersion string
 	CapturedAt            time.Time
+	Owners                []OwnerReference
+	OwnerOmitted          int
+}
+
+type OwnerReference struct {
+	GVR, Kind, APIVersion, Name, UID string
+	Controller, ControllerReported   bool
 }
 
 type Fact struct{ Name, Value string }

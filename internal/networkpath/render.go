@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/mattn/go-runewidth"
 )
 
-var Tabs = []string{"Path", "DNS", "Backends", "Routes", "Policies", "Flows", "Evidence"}
+var Tabs = []string{"Path", "DNS", "Backends", "Routes", "Policies", "Flows", "Evidence", "Edges"}
 
 func (s *Snapshot) TabItems(tab int) []*Item {
 	groups := map[int]string{1: GroupDNS, 2: GroupBackends, 3: GroupRoutes, 4: GroupPolicies, 5: GroupFlows}
@@ -32,7 +34,8 @@ func ItemKey(item *Item) string {
 	key := item.Source.Identity.GVR + "/" + item.Source.Identity.Namespace + "/" + item.Source.Identity.Name + "/" + item.Source.Identity.UID + "/" + item.Group
 	for _, fact := range item.Facts {
 		if fact.Name == "Addresses" || fact.Name == "Configured entrypoint" || fact.Name == "Backend port" ||
-			fact.Name == "Retained flow record ID" || fact.Name == "Drop grouping key" || fact.Name == "Configured HTTP match" {
+			fact.Name == "Reported flow time" || fact.Name == "Source peer" || fact.Name == "Destination peer" || fact.Name == "Reported ports" ||
+			fact.Name == "Edge identity" || fact.Name == "Retained flow record ID" || fact.Name == "Drop grouping key" || fact.Name == "Configured HTTP match" {
 			key += "/" + fact.Value
 		}
 	}
@@ -154,9 +157,5 @@ func (s *Snapshot) Evidence(item *Item) string {
 }
 
 func clip(value string, width int) string {
-	runes := []rune(safe(value))
-	if len(runes) > max(1, width) {
-		return string(runes[:max(0, width-1)]) + "…"
-	}
-	return string(runes)
+	return runewidth.Truncate(safe(value), max(1, width), "…")
 }
