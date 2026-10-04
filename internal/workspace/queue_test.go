@@ -33,13 +33,13 @@ func TestQueuePodSeparatesCurrentFaultFromHistoricalOOM(t *testing.T) {
 		}},
 	})
 	findings := Classify(ResourceRef{}, kindPod, &object, testNow)
-	if len(findings) != 1 || findings[0].Category != "history" || findings[0].Severity != SeverityInfo || !strings.Contains(findings[0].Detail, "historical") {
+	if len(findings) != 1 || findings[0].Category != categoryHistory || findings[0].Severity != SeverityInfo || !strings.Contains(findings[0].Detail, "historical") {
 		t.Fatalf("previous OOM treated as a current incident: %#v", findings)
 	}
 	status := object.Object["status"].(map[string]any)["containerStatuses"].([]any)[0].(map[string]any)
 	status[containerStateField] = map[string]any{"waiting": map[string]any{statusReasonField: "CrashLoopBackOff", "message": "back-off restarting container"}}
 	findings = Classify(ResourceRef{}, kindPod, &object, testNow)
-	if len(findings) != 2 || findings[0].Category != "fault" || findings[0].Reason != "CrashLoopBackOff" || findings[1].Category != "history" {
+	if len(findings) != 2 || findings[0].Category != "fault" || findings[0].Reason != "CrashLoopBackOff" || findings[1].Category != categoryHistory {
 		t.Fatalf("current fault and historical state not separate: %#v", findings)
 	}
 }

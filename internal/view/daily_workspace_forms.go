@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
@@ -270,6 +271,7 @@ func (w *dailyWorkspace) deleteScopeForm() {
 				w.generation++
 				w.scope = workspace.Scope{}
 				w.snapshot = workspace.Snapshot{}
+				w.resetObservationWindow(time.Now())
 				w.coverage = nil
 			}
 			dismiss()
