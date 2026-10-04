@@ -216,7 +216,7 @@ func TestCollectRejectsCrossNamespaceAndMissingUIDResponses(t *testing.T) {
 		return true, &unstructured.UnstructuredList{Items: []unstructured.Unstructured{testObject(kindPod, "outside", "outside"), missingUID, testObject(kindPod, testNamespace, "valid")}}, nil
 	})
 	snapshot := Collect(context.Background(), reader, Scope{Namespaces: []string{testNamespace}, Kinds: []string{podsResourceName}}, testNow)
-	if len(snapshot.Resources) != 1 || snapshot.Resources[0].Ref.Name != "valid" || snapshot.Coverage[0].State == "complete" {
+	if len(snapshot.Resources) != 1 || snapshot.Resources[0].Ref.Name != "valid" || snapshot.Coverage[0].State == coverageComplete {
 		t.Fatalf("accepted malformed identities: %#v", snapshot)
 	}
 }
