@@ -47,6 +47,7 @@ const (
 	kindCertificate           = "Certificate"
 	coverageInvalid           = "invalid"
 	coverageCanceled          = "canceled"
+	coverageComplete          = "complete"
 	podsResourceName          = "pods"
 	observedGenerationField   = "observedGeneration"
 	conditionsField           = "conditions"
@@ -323,7 +324,7 @@ func collectQuery(
 		}
 		continuation = objects.GetContinue()
 		if continuation == "" {
-			coverage.State, coverage.Detail = "complete", "Current resource state observed"
+			coverage.State, coverage.Detail = coverageComplete, "Current resource state observed"
 			if invalidObjects > 0 {
 				coverage.State, coverage.Detail = coverageUnavailable, fmt.Sprintf("Skipped %d malformed or unidentified resources; inventory is incomplete", invalidObjects)
 			}
