@@ -8,7 +8,6 @@ import (
 
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/ui"
-	"github.com/derailed/tview"
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -22,7 +21,7 @@ func TestDeleteDialog(t *testing.T) {
 	}
 	ShowDelete(new(config.Dialog), p, "Yo", okFunc, func() {})
 
-	d := p.GetPrimitive(dialogKey).(*tview.ModalForm)
+	d := p.GetPrimitive(dialogKey).(*ui.ModalForm)
 	assert.NotNil(t, d)
 
 	dismiss(p)

@@ -28,7 +28,7 @@ type evidenceView struct {
 }
 
 type evidenceForm struct {
-	modal      *tview.ModalForm
+	modal      *ui.ModalForm
 	cleanup    func()
 	generation uint64
 }
@@ -328,7 +328,7 @@ func (v *evidenceView) noteForm(snippet bool) {
 	}
 	form.AddInputField(label, "", 48, func(s string, _ rune) bool { return len(s) <= 8<<10 }, func(s string) { value = s })
 	const page = "evidence-note"
-	modal := tview.NewModalForm(title, form)
+	modal := ui.NewModalForm(title, form)
 	state := &evidenceForm{modal: modal, generation: v.generation}
 	dismiss := func() {
 		if v.formActive(page, state) {
@@ -381,7 +381,7 @@ func (v *evidenceView) saveForm() {
 		SetLabelColor(styles.LabelFgColor.Color()).SetFieldTextColor(styles.FieldFgColor.Color()).SetFieldBackgroundColor(styles.BgColor.Color())
 	form.AddInputField("New absolute .json/.md path", "", 48, nil, func(s string) { path = s })
 	const page = "evidence-save"
-	modal := tview.NewModalForm("Export evidence", form)
+	modal := ui.NewModalForm("Export evidence", form)
 	state := &evidenceForm{modal: modal, generation: v.generation}
 	dismiss := func() {
 		if v.formActive(page, state) {

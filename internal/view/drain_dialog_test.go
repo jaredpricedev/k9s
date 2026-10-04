@@ -12,6 +12,7 @@ import (
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config/mock"
 	"github.com/derailed/k9s/internal/dao"
+	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
 	"github.com/stretchr/testify/assert"
@@ -194,7 +195,7 @@ func TestDrainDoesNotOpenInReadOnlyMode(t *testing.T) {
 	assert.Nil(t, app.Content.GetPrimitive(drainKey))
 }
 
-func newDrainFormTest(t *testing.T, sels []string, callback DrainFunc) (*App, *tview.Form, *tview.ModalForm) {
+func newDrainFormTest(t *testing.T, sels []string, callback DrainFunc) (*App, *tview.Form, *ui.ModalForm) {
 	t.Helper()
 	app := NewApp(mock.NewMockConfig(t))
 	_, err := app.Config.ActivateContext("ct-1-1")
@@ -203,7 +204,7 @@ func newDrainFormTest(t *testing.T, sels []string, callback DrainFunc) (*App, *t
 	b.app = app
 	app.Content.Pages.AddPage("main", b, true, true)
 	ShowDrain(b, sels, dao.DrainOptions{GracePeriodSeconds: -1, Timeout: 5 * time.Second}, callback)
-	modal, ok := app.Content.GetPrimitive(drainKey).(*tview.ModalForm)
+	modal, ok := app.Content.GetPrimitive(drainKey).(*ui.ModalForm)
 	require.True(t, ok)
 	var form *tview.Form
 	modal.Focus(func(p tview.Primitive) { form = p.(*tview.Form) })
@@ -237,7 +238,7 @@ func pressDrainKey(t *testing.T, app *App, key *tcell.EventKey) {
 	focus.InputHandler()(key, func(p tview.Primitive) { app.SetFocus(p) })
 }
 
-func drainDialogText(t *testing.T, modal *tview.ModalForm) string {
+func drainDialogText(t *testing.T, modal *ui.ModalForm) string {
 	t.Helper()
 	return strings.Join(strings.Fields(drawnText(t, modal, 120, 40)), " ")
 }
