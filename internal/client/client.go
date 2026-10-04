@@ -86,7 +86,7 @@ func InitConnection(config *Config, log *slog.Logger) (*APIClient, error) {
 
 // ConnectionOK returns connection status.
 func (a *APIClient) ConnectionOK() bool {
-	return a.connOK
+	return a.getConnOK()
 }
 
 func makeSAR(ns string, gvr *GVR, name string) *authorizationv1.SelfSubjectAccessReview {
@@ -318,8 +318,8 @@ func (a *APIClient) CheckConnectivity() bool {
 	cfg, err := a.config.RESTConfig()
 	if err != nil {
 		slog.Error("RestConfig load failed", slogs.Error, err)
-		a.connOK = false
-		return a.connOK
+		a.setConnOK(false)
+		return a.getConnOK()
 	}
 	cfg.Timeout = a.config.CallTimeout()
 	client, err := kubernetes.NewForConfig(cfg)
