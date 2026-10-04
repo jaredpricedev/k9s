@@ -20,6 +20,12 @@ import (
 const PreviewAccepted = "admission accepted"
 const PreviewConflict = "field conflict"
 const PreviewFieldManager = "k9plus-preview"
+const previewCreationTimestamp = "creationTimestamp"
+const previewGeneration = "generation"
+const previewManagedFields = "managedFields"
+const previewResourceVersion = "resourceVersion"
+const previewUID = "uid"
+const previewSelfLink = "selfLink"
 
 type ServerPreviewEntry struct {
 	Identity               Identity
@@ -93,7 +99,7 @@ func previewTarget(ctx context.Context, reader dynamic.Interface, current *resol
 	object.SetNamespace(current.manifest.Namespace)
 	// Source-provided server-managed metadata never chooses a different identity.
 	for _, field := range []string{
-		"uid", "resourceVersion", "managedFields", "creationTimestamp", "generation", "deletionTimestamp", "deletionGracePeriodSeconds", "selfLink",
+		previewUID, previewResourceVersion, previewManagedFields, previewCreationTimestamp, previewGeneration, "deletionTimestamp", "deletionGracePeriodSeconds", "selfLink",
 	} {
 		unstructured.RemoveNestedField(object.Object, "metadata", field)
 	}
@@ -190,7 +196,7 @@ func boundedPreview(ctx context.Context, invoke func() (*unstructured.Unstructur
 func previewProjectionObject(object map[string]any) map[string]any {
 	out := deepCopyManifest(object)
 	unstructured.RemoveNestedField(out, "status")
-	for _, field := range []string{"uid", "resourceVersion", "managedFields", "creationTimestamp", "generation", "selfLink"} {
+	for _, field := range []string{previewUID, previewResourceVersion, previewManagedFields, previewCreationTimestamp, previewGeneration, previewSelfLink} {
 		unstructured.RemoveNestedField(out, "metadata", field)
 	}
 	return out

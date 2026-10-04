@@ -20,13 +20,27 @@ import (
 	ktesting "k8s.io/client-go/testing"
 )
 
+const (
+	previewTestVersion     = "v1"
+	previewTestAppLabel    = "app"
+	previewTestAppsGroup   = "apps"
+	previewTestDeployments = "deployments"
+	previewTestSecret      = "secret"
+	previewTestContext     = "pinned"
+	previewTestGet         = "get"
+	previewTestReplacement = "replacement"
+	previewTestOther       = "other"
+)
+
 func previewFixture(t *testing.T) (Source, Scope, *unstructured.Unstructured, Resolver) {
 	t.Helper()
 	source, err := LoadSource(t.Context(), sourceTestFile(t, "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: checkout\n  namespace: team\nspec: {replicas: 2}\n"))
 	require.NoError(t, err)
-	gvr := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
-	scope := Scope{Context: "pinned", Namespaces: []string{"team"}, CapturedUIDs: map[string]types.UID{IdentityKey(gvr, "team", "checkout"): "live-uid"}}
-	live := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "apps/v1", "kind": "Deployment", "metadata": map[string]any{"name": "checkout", "namespace": "team", "uid": "live-uid", "resourceVersion": "9", "labels": map[string]any{"app": "checkout"}}, "spec": map[string]any{"replicas": int64(1)}}}
+	gvr := schema.GroupVersionResource{Group: previewTestAppsGroup, Version: previewTestVersion, Resource: previewTestDeployments}
+	scope := Scope{Context: previewTestContext, Namespaces: []string{"team"}, CapturedUIDs: map[string]types.UID{IdentityKey(gvr, "team", "checkout"): "live-uid"}}
+	live := observedObject(authored("team", "checkout", 1), types.UID("live-uid"))
+	live.SetResourceVersion("9")
+	live.SetLabels(map[string]string{previewTestAppLabel: "checkout"})
 	resolve := func(context.Context, string, string) (Mapping, error) {
 		return Mapping{GVR: gvr, Namespaced: true}, nil
 	}
@@ -37,7 +51,7 @@ func TestServerPreviewOnlyExplicitDryRunAndRetainsIdentityPermissionsAndOwnershi
 	source, scope, live, resolve := previewFixture(t)
 	dyn := fake.NewSimpleDynamicClient(runtime.NewScheme(), live)
 	original, _ := json.Marshal(source.Objects[0].Object)
-	dyn.PrependReactor("patch", "deployments", func(action ktesting.Action) (bool, runtime.Object, error) {
+	dyn.PrependReactor("patch", previewTestDeployments, func(action ktesting.Action) (bool, runtime.Object, error) {
 		patch := action.(ktesting.PatchAction)
 		require.Equal(t, types.ApplyPatchType, patch.GetPatchType())
 		require.Equal(t, "team", patch.GetNamespace())
@@ -80,7 +94,7 @@ func TestServerPreviewCreateIsSeparateFromCandidateAndNeverPersists(t *testing.T
 	source, scope, _, resolve := previewFixture(t)
 	scope.CapturedUIDs = nil
 	dyn := fake.NewSimpleDynamicClient(runtime.NewScheme())
-	dyn.PrependReactor("create", "deployments", func(action ktesting.Action) (bool, runtime.Object, error) {
+	dyn.PrependReactor("create", previewTestDeployments, func(action ktesting.Action) (bool, runtime.Object, error) {
 		opts := action.(interface{ GetCreateOptions() metav1.CreateOptions }).GetCreateOptions()
 		require.Equal(t, []string{metav1.DryRunAll}, opts.DryRun)
 		require.Equal(t, PreviewFieldManager, opts.FieldManager)
@@ -93,7 +107,7 @@ func TestServerPreviewCreateIsSeparateFromCandidateAndNeverPersists(t *testing.T
 	require.Equal(t, PreviewAccepted, result.Entries[0].State)
 	require.Equal(t, "create dry-run", result.Entries[0].Request)
 	for _, action := range dyn.Actions() {
-		require.Contains(t, []string{"get", "create"}, action.GetVerb())
+		require.Contains(t, []string{previewTestGet, "create"}, action.GetVerb())
 		require.Equal(t, "team", action.GetNamespace())
 	}
 	_, err := dyn.Resource(result.Entries[0].Identity.GVR).Namespace("team").Get(t.Context(), "checkout", metav1.GetOptions{})
@@ -101,21 +115,21 @@ func TestServerPreviewCreateIsSeparateFromCandidateAndNeverPersists(t *testing.T
 }
 
 func TestServerPreviewRejectsReplacedExcludedAndOutOfScopeBeforeAdmission(t *testing.T) {
-	for _, scenario := range []string{"replacement", "secret", "cluster scoped", "namespace", "selector", "duplicate", "unsupported"} {
+	for _, scenario := range []string{previewTestReplacement, previewTestSecret, "cluster scoped", collectNamespace, "selector", "duplicate", "unsupported"} {
 		t.Run(scenario, func(t *testing.T) {
 			source, scope, live, resolve := previewFixture(t)
 			switch scenario {
-			case "replacement":
+			case previewTestReplacement:
 				live.SetUID("replacement-uid")
-			case "secret":
+			case previewTestSecret:
 				source.Objects[0].Kind = "Secret"
 				source.Objects[0].SecretExcluded = true
 			case "cluster scoped":
 				resolve = func(context.Context, string, string) (Mapping, error) {
-					return Mapping{GVR: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}, Namespaced: false}, nil
+					return Mapping{GVR: schema.GroupVersionResource{Group: previewTestAppsGroup, Version: previewTestVersion, Resource: previewTestDeployments}, Namespaced: false}, nil
 				}
-			case "namespace":
-				scope.Namespaces = []string{"other"}
+			case collectNamespace:
+				scope.Namespaces = []string{previewTestOther}
 			case "selector":
 				scope.CapturedUIDs = nil
 				scope.LabelSelector = "app=other"
@@ -131,7 +145,7 @@ func TestServerPreviewRejectsReplacedExcludedAndOutOfScopeBeforeAdmission(t *tes
 				require.NotEqual(t, PreviewAccepted, entry.State)
 			}
 			for _, action := range dyn.Actions() {
-				require.Equal(t, "get", action.GetVerb(), "invalid target must never invoke admission")
+				require.Equal(t, previewTestGet, action.GetVerb(), "invalid target must never invoke admission")
 			}
 		})
 	}
@@ -139,13 +153,13 @@ func TestServerPreviewRejectsReplacedExcludedAndOutOfScopeBeforeAdmission(t *tes
 
 func TestServerPreviewClassifiesDeniedConflictValidationWithoutLeakingAuthoredDiagnostics(t *testing.T) {
 	for _, serverErr := range []error{
-		apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "deployments"}, "checkout", errors.New(sourceTestToken)),
-		apierrors.NewConflict(schema.GroupResource{Group: "apps", Resource: "deployments"}, "checkout", errors.New(sourceTestToken)),
+		apierrors.NewForbidden(schema.GroupResource{Group: previewTestAppsGroup, Resource: previewTestDeployments}, "checkout", errors.New(sourceTestToken)),
+		apierrors.NewConflict(schema.GroupResource{Group: previewTestAppsGroup, Resource: previewTestDeployments}, "checkout", errors.New(sourceTestToken)),
 		apierrors.NewBadRequest(sourceTestToken),
 	} {
 		source, scope, live, resolve := previewFixture(t)
 		dyn := fake.NewSimpleDynamicClient(runtime.NewScheme(), live)
-		dyn.PrependReactor("patch", "deployments", func(ktesting.Action) (bool, runtime.Object, error) { return true, nil, serverErr })
+		dyn.PrependReactor("patch", previewTestDeployments, func(ktesting.Action) (bool, runtime.Object, error) { return true, nil, serverErr })
 		result := PreviewServer(t.Context(), dyn, resolve, source, scope, time.Now())
 		require.NotEqual(t, PreviewAccepted, result.Entries[0].State)
 		encoded, err := json.Marshal(result)
@@ -159,7 +173,7 @@ func TestServerPreviewCancellationIsBoundedAndEveryRequestRemainsDryRun(t *testi
 	ctx, cancel := context.WithCancel(context.Background())
 	entered := make(chan struct{})
 	release := make(chan struct{})
-	dyn.PrependReactor("patch", "deployments", func(ktesting.Action) (bool, runtime.Object, error) {
+	dyn.PrependReactor("patch", previewTestDeployments, func(ktesting.Action) (bool, runtime.Object, error) {
 		close(entered)
 		<-release
 		return true, nil, context.Canceled

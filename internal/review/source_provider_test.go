@@ -30,20 +30,20 @@ func successCommand(in provider.Input, data string) provider.Result {
 }
 
 func TestExplicitSourceProfilesRenderBoundedNamedInputsAndRetainProvenance(t *testing.T) {
-	for _, kind := range []string{"file", "kustomize", "helm", "git"} {
+	for _, kind := range []string{sourceProviderFile, sourceProviderKustomize, sourceProviderHelm, sourceProviderGit} {
 		t.Run(kind, func(t *testing.T) {
 			dir := sourceTestDirectory(t)
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "manifest.yaml"), []byte(sourceTestManifest), 0600))
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "kustomization.yaml"), []byte("resources: [manifest.yaml]\n"), 0600))
 			path := dir
 			extra := ""
-			if kind == "file" {
+			if kind == sourceProviderFile {
 				path = filepath.Join(dir, "manifest.yaml")
 			}
-			if kind == "helm" {
+			if kind == sourceProviderHelm {
 				extra = "release: checkout\nnamespace: team-a\n"
 			}
-			if kind == "git" {
+			if kind == sourceProviderGit {
 				extra = "revision: refs/tags/release-2\nmanifest: manifest.yaml\n"
 			}
 			profile := sourceProfileFixture(t, "name: release-source\nprovider: "+kind+"\npath: "+path+"\n"+extra)
@@ -58,7 +58,7 @@ func TestExplicitSourceProfilesRenderBoundedNamedInputsAndRetainProvenance(t *te
 				}
 				return successCommand(in, sourceTestManifest+"---\napiVersion: v1\nkind: Secret\nmetadata: {name: credential}\ndata: {token: private-fixture-credential}\n")
 			}
-			scope := provider.Scope{Context: "pinned", Namespace: "team-a", Revision: 42}
+			scope := provider.Scope{Context: previewTestContext, Namespace: "team-a", Revision: 42}
 			source, err := LoadSourceProfile(context.Background(), profile, scope, run)
 			require.NoError(t, err)
 			require.Equal(t, "release-source", source.Identity.Name)
@@ -66,7 +66,7 @@ func TestExplicitSourceProfilesRenderBoundedNamedInputsAndRetainProvenance(t *te
 			require.Equal(t, profile, source.Identity.Path)
 			require.NotEmpty(t, source.Identity.ProfileSHA256)
 			require.NotEmpty(t, source.Identity.SHA256)
-			if kind == "file" {
+			if kind == sourceProviderFile {
 				require.Empty(t, calls)
 				return
 			}
@@ -79,7 +79,7 @@ func TestExplicitSourceProfilesRenderBoundedNamedInputsAndRetainProvenance(t *te
 				require.LessOrEqual(t, call.Limits.StdoutBytes, int64(MaxSourceBytes))
 				require.Greater(t, call.Limits.Timeout, time.Duration(0))
 			}
-			if kind == "git" {
+			if kind == sourceProviderGit {
 				require.Equal(t, "refs/tags/release-2", source.Identity.RequestedRevision)
 				require.Equal(t, strings.Repeat("a", 40), source.Identity.Revision)
 				require.Contains(t, source.Identity.Options, strings.Repeat("a", 40)+":manifest.yaml")
@@ -161,7 +161,7 @@ func TestRendererFailureLimitsCancellationAndChangedInputsCannotReplaceSource(t 
 	require.ErrorContains(t, err, "inputs changed")
 	_, err = sourceCommand(context.Background(), func(context.Context, provider.Input) provider.Result {
 		return provider.Result{State: provider.Succeeded, Stdout: []byte(strings.Repeat("x", 10))}
-	}, provider.Scope{}, "helm", dir, []string{"version"}, 9)
+	}, provider.Scope{}, sourceProviderHelm, dir, []string{"version"}, 9)
 	require.ErrorContains(t, err, "limit")
 }
 
@@ -192,7 +192,7 @@ func TestGitRevisionIsResolvedOnceAndNeverInterpolatedOrCheckedOut(t *testing.T)
 			require.NotEqual(t, "fetch", arg)
 			require.NotEqual(t, "clone", arg)
 		}
-		require.Equal(t, "git", call.Executable)
+		require.Equal(t, sourceProviderGit, call.Executable)
 	}
 	missing := func(context.Context, provider.Input) provider.Result {
 		return provider.Result{State: provider.Failed, Err: errors.New("missing executable")}
@@ -202,13 +202,13 @@ func TestGitRevisionIsResolvedOnceAndNeverInterpolatedOrCheckedOut(t *testing.T)
 }
 
 func TestGitProviderReadsExactCommittedBlobWithoutChangingCheckout(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
+	if _, err := exec.LookPath(sourceProviderGit); err != nil {
 		t.Skip("git executable unavailable")
 	}
 	dir := sourceTestDirectory(t)
 	invoke := func(args ...string) []byte {
 		t.Helper()
-		result := provider.Run(t.Context(), provider.Input{ProviderID: "git-fixture", Executable: "git", Dir: dir, Args: args})
+		result := provider.Run(t.Context(), provider.Input{ProviderID: "git-fixture", Executable: sourceProviderGit, Dir: dir, Args: args})
 		require.Equal(t, provider.Succeeded, result.State, "%v", result.Err)
 		return result.Stdout
 	}
@@ -244,9 +244,9 @@ func TestRendererRejectsEmptyVersionScopeMismatchAndCanceledSuccess(t *testing.T
 		require.ErrorContains(t, err, "version")
 		require.Equal(t, 1, calls, "an unavailable version must stop before rendering")
 	}
-	_, err := LoadSourceProfile(t.Context(), profile, provider.Scope{Context: "pinned"}, func(_ context.Context, in provider.Input) provider.Result {
+	_, err := LoadSourceProfile(t.Context(), profile, provider.Scope{Context: previewTestContext}, func(_ context.Context, in provider.Input) provider.Result {
 		result := successCommand(in, "version-v1")
-		result.Scope.Context = "other"
+		result.Scope.Context = previewTestOther
 		return result
 	})
 	require.ErrorContains(t, err, "scope")
