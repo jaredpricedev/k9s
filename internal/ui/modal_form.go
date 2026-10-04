@@ -202,13 +202,7 @@ func (m *ModalForm) drawGuidance(screen tcell.Screen, x, y, width, height int) (
 }
 
 func (m *ModalForm) drawButtons(screen tcell.Screen, x, bottom, width int, infoScrollable bool) int {
-	hint := "Tab next · Shift-Tab previous · Esc cancel"
-	if width < 48 {
-		hint = "Tab next · Esc cancel"
-	}
-	if infoScrollable {
-		hint = "PgUp/PgDn info · Tab · Esc cancel"
-	}
+	hint := m.controlsHint(width, infoScrollable)
 	tview.Print(screen, hint, x, bottom, width, tview.AlignLeft, m.colors.FgColor.Color())
 	buttonY := bottom - 1
 	buttonsWidth := 0
@@ -249,6 +243,30 @@ func (m *ModalForm) drawButtons(screen tcell.Screen, x, bottom, width int, infoS
 	return buttonY
 }
 
+func (m *ModalForm) controlsHint(width int, infoScrollable bool) string {
+	hint := "Tab next · Shift-Tab previous · Esc cancel"
+	if width < 48 {
+		hint = "Tab next · Esc cancel"
+	}
+	if infoScrollable {
+		hint = "PgUp/PgDn info · Tab · Esc cancel"
+	}
+	for index := range m.form.GetFormItemCount() {
+		if _, ok := m.form.GetFormItem(index).(*tview.Checkbox); !ok {
+			continue
+		}
+		checkboxHint := "Space toggle · " + hint
+		if tview.TaggedStringWidth(checkboxHint) > width {
+			if infoScrollable {
+				return "Space toggle·PgUp/PgDn·Esc cancel"
+			}
+			return "Space toggle · Tab · Esc cancel"
+		}
+		return checkboxHint
+	}
+	return hint
+}
+
 func (m *ModalForm) drawFields(screen tcell.Screen, x, y, available, fieldHeight int, stacked bool) {
 	step := 1
 	labelWidth := 0
@@ -278,9 +296,13 @@ func (m *ModalForm) drawFields(screen tcell.Screen, x, y, available, fieldHeight
 			item.SetRect(0, 0, 0, 0)
 			continue
 		}
-		item.SetFormAttributes(labelWidth, m.colors.LabelFgColor.Color(), m.colors.BgColor.Color(), m.colors.FieldFgColor.Color(), m.colors.BgColor.Color())
+		fieldLabelWidth := labelWidth
+		if _, ok := item.(*tview.Checkbox); ok {
+			fieldLabelWidth = min(labelWidth, max(0, available-3))
+		}
+		item.SetFormAttributes(fieldLabelWidth, m.colors.LabelFgColor.Color(), m.colors.BgColor.Color(), m.colors.FieldFgColor.Color(), m.colors.BgColor.Color())
 		item.SetRect(x, row, available, 1)
-		draw := func() { drawModalField(screen, item, stacked) }
+		draw := func() { drawModalField(screen, item, stacked, fieldLabelWidth) }
 		if item.HasFocus() {
 			focusedDraw = draw
 		} else {
@@ -292,7 +314,7 @@ func (m *ModalForm) drawFields(screen tcell.Screen, x, y, available, fieldHeight
 	}
 }
 
-func drawModalField(screen tcell.Screen, item tview.FormItem, stacked bool) {
+func drawModalField(screen tcell.Screen, item tview.FormItem, stacked bool, labelWidth int) {
 	restore := func() {}
 	if stacked {
 		label := item.GetLabel()
@@ -309,5 +331,34 @@ func drawModalField(screen tcell.Screen, item tview.FormItem, stacked bool) {
 		}
 	}
 	item.Draw(screen)
+	if checkbox, ok := item.(*tview.Checkbox); ok {
+		drawModalCheckbox(screen, checkbox, labelWidth)
+	}
 	restore()
+}
+
+// Keep the native Checkbox input and callbacks, but make both boolean states
+// visible independently of the skin's field background.
+func drawModalCheckbox(screen tcell.Screen, checkbox *tview.Checkbox, labelWidth int) {
+	x, y, width, height := checkbox.GetInnerRect()
+	if labelWidth == 0 {
+		labelWidth = tview.TaggedStringWidth(checkbox.GetLabel())
+	}
+	if height < 1 || width-labelWidth < 3 {
+		return
+	}
+	x += labelWidth
+	_, _, style, _ := screen.GetContent(x, y)
+	fg, bg, _ := style.Decompose()
+	style = style.Foreground(config.ReadableForeground(fg, bg))
+	if screen.Colors() == 0 {
+		style = style.Reverse(checkbox.HasFocus())
+	}
+	marker := "[ ]"
+	if checkbox.IsChecked() {
+		marker = "[x]"
+	}
+	for offset, glyph := range marker {
+		screen.SetContent(x+offset, y, glyph, nil, style)
+	}
 }
