@@ -277,6 +277,9 @@ func TestCapturedForwardLifetimeCancellationAlsoStopsPreflight(t *testing.T) {
 		close(entered)
 		<-request.Context().Done()
 		close(closed)
+		// A canceled request must abort the synthetic exchange. Returning
+		// normally would let net/http emit an empty 200 racing client cancel.
+		panic(http.ErrAbortHandler)
 	}
 	setup, cancelSetup := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancelSetup()
