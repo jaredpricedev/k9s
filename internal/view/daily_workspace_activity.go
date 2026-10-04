@@ -11,7 +11,10 @@ import (
 	"github.com/derailed/k9s/internal/workspace"
 )
 
-const activityCommand = "activity"
+const (
+	activityCommand       = "activity"
+	activityRetainedState = "retained"
+)
 
 func (w *dailyWorkspace) localEvidenceMode() bool {
 	return w.mode == dailyWorkspaceCoverageMode || w.mode == dailyWorkspaceHistoryMode || w.mode == dailyWorkspaceActivityMode
@@ -23,7 +26,7 @@ func (w *dailyWorkspace) activityStatus(width int) string {
 	}
 	eventState := "?"
 	if len(w.activityEventCoverage) > 0 {
-		eventState = "retained"
+		eventState = activityRetainedState
 		for _, c := range w.activityEventCoverage {
 			if c.State != dailyWorkspaceCoverageComplete || c.Truncated {
 				eventState = "partial"
