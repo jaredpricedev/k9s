@@ -325,6 +325,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.localSessionsCommand()
 	case maintenanceCommandToken:
 		c.maintenanceCommand()
+	case "security-review":
+		c.securityReviewCommand()
 	case providersCommand:
 		c.providerCommand(p.GetLine())
 	case gitopsCommandToken:

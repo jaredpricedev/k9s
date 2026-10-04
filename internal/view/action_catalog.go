@@ -127,12 +127,21 @@ func changeReviewActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 	if reason == "" && target.UID == "" {
 		reason = "Reopen the workload to capture its identity before review"
 	}
+	securityReason := target.UnavailableReason
+	if securityReason == "" {
+		if err := securityReviewTargetError(target); err != nil {
+			securityReason = err.Error()
+		}
+	}
 	return []ui.ActionDescriptor{
 		{ID: "command.review", Label: "Review local manifest", Category: ui.ActionInspect, Shortcut: ":review", Discoverable: true,
 			Handler: func(*tcell.EventKey) *tcell.EventKey { app.openDesiredReview(""); return nil }},
 		{ID: "resource.rollout", Label: "Controller rollout review", Category: ui.ActionInspect, Shortcut: ":rollout",
 			Discoverable: true, RequiresSelection: true, UnavailableReason: reason,
 			Handler: func(*tcell.EventKey) *tcell.EventKey { app.openRolloutReview(target); return nil }},
+		{ID: "resource.security-review", Label: "Declared security review", Category: ui.ActionInspect, Shortcut: ":security-review",
+			Discoverable: true, RequiresSelection: true, UnavailableReason: securityReason,
+			Handler: func(*tcell.EventKey) *tcell.EventKey { app.openSecurityReview(target); return nil }},
 	}
 }
 

@@ -46,6 +46,9 @@ func TestDisconnectedWorkspaceRemainsUsableBeyondBackgroundRetryBudget(t *testin
 			require.Greater(t, atomic.LoadInt32(&a.conRetry), a.Config.K9s.MaxConnRetry)
 		})
 	}
+
+	security := &securityReviewView{}
+	require.True(t, retainedDisconnectedWorkspace(security), "the bounded security snapshot remains usable while browsing reconnects")
 }
 
 func (w *workspaceDiscoveryOwner) SelectedResource() SelectedResourceTarget { return w.target }
