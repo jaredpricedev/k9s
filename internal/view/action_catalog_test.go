@@ -124,3 +124,59 @@ func TestInvestigationActionsReflectResourceAndRetainedEvidenceAvailability(t *t
 	descriptor = action(inspector, "resource.evidence")
 	assert.True(t, descriptor.Available())
 }
+
+func TestActionCatalogHintsReservePrimarySpaceForAvailableActions(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		opts     ui.ActionOpts
+		readOnly bool
+		reason   string
+	}{
+		{name: "available", opts: ui.ActionOpts{Visible: true, Priority: 2}},
+		{name: "retained-evidence-pending", opts: ui.ActionOpts{Visible: true, Priority: 2}, reason: "Wait for retained evidence"},
+		{name: "read-only", opts: ui.ActionOpts{Visible: true, Dangerous: true, Priority: 2}, readOnly: true, reason: "Read-only mode: changes are disabled"},
+		{name: "selection-unknown", opts: ui.ActionOpts{Visible: true, RequiresSelection: true, Priority: 2}, reason: "This action needs a selected API resource"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			app := NewApp(mock.NewMockConfig(t))
+			app.Config.K9s.ReadOnly = test.readOnly
+			owner := &discoveryOwner{Details: NewDetails(app, "test", "", contentTXT, false)}
+			action := ui.NewKeyActionWithOpts("Inspect retained entry", func(*tcell.EventKey) *tcell.EventKey { return nil }, test.opts)
+			if test.name == "retained-evidence-pending" {
+				action.Availability = func() string { return test.reason }
+			}
+			owner.actions.Add(ui.KeyL, action)
+			var descriptor ui.ActionDescriptor
+			for _, item := range actionCatalog(owner, app) {
+				if item.Key == ui.KeyL {
+					descriptor = item
+					break
+				}
+			}
+			require.Equal(t, action.ID, descriptor.ID)
+			require.Equal(t, 2, descriptor.Priority, "discovery keeps binding priority")
+			require.Equal(t, test.reason, descriptor.UnavailableReason)
+			require.True(t, descriptor.Discoverable)
+			require.NotNil(t, descriptor.Handler)
+			found := false
+			for _, hint := range actionCatalogHints(owner, app) {
+				if hint.Mnemonic != descriptor.Shortcut {
+					continue
+				}
+				found = true
+				require.Equal(t, descriptor.Visible, hint.Visible)
+				require.Contains(t, hint.Description, descriptor.Label)
+				if test.reason == "" {
+					require.Equal(t, 2, hint.Priority)
+				} else {
+					require.Zero(t, hint.Priority)
+					require.Contains(t, hint.Description, test.reason)
+				}
+			}
+			require.True(t, found, "disabled bindings stay in full contextual hints")
+			binding, ok := owner.actions.Get(ui.KeyL)
+			require.True(t, ok)
+			require.Equal(t, test.opts.Priority, binding.Opts.Priority, "projection must preserve source binding")
+		})
+	}
+}
