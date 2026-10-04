@@ -358,7 +358,7 @@ func (b *Browser) TableNoData(mdata *model1.TableData) {
 		return
 	}
 
-	cdata := b.Update(mdata, b.app.Conn().HasMetrics())
+	hasMetrics := b.app.Conn().HasMetrics()
 	b.app.QueueUpdateDraw(func() {
 		if b.getUpdating() {
 			return
@@ -369,6 +369,7 @@ func (b *Browser) TableNoData(mdata *model1.TableData) {
 			b.app.Flash().Warnf("No resources found for %s in %q namespace", b.GVR(), client.PrintNamespace(b.GetNamespace()))
 		}
 		b.refreshActions()
+		cdata := b.Update(mdata, hasMetrics)
 		b.UpdateUI(cdata, mdata)
 	})
 }
@@ -384,7 +385,7 @@ func (b *Browser) TableDataChanged(mdata *model1.TableData) {
 		return
 	}
 
-	cdata := b.Update(mdata, b.app.Conn().HasMetrics())
+	hasMetrics := b.app.Conn().HasMetrics()
 	b.app.QueueUpdateDraw(func() {
 		if b.getUpdating() {
 			return
@@ -399,6 +400,7 @@ func (b *Browser) TableDataChanged(mdata *model1.TableData) {
 			}
 		}
 		b.refreshActions()
+		cdata := b.Update(mdata, hasMetrics)
 		b.UpdateUI(cdata, mdata)
 	})
 }
