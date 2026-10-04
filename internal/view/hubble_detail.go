@@ -9,6 +9,8 @@ import (
 
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/hubble"
+	"github.com/derailed/k9s/internal/ui"
+	"github.com/derailed/tcell/v2"
 )
 
 func (w *HubbleView) hubblePalette() logDetailPalette {
@@ -95,13 +97,50 @@ func (w *HubbleView) renderHubbleStatus(st *hubble.Status, state, coverage, loss
 	if st.Error != "" || st.CoverageError != "" {
 		diagnosticColor = p.failure
 	}
-	text := detailStyled(stateColor, "b", state) + detailStyled(p.muted, "", " | node coverage: "+coverage) +
+	w.statusFull = detailStyled(stateColor, "b", state) + detailStyled(p.muted, "", " | node coverage: "+coverage) +
 		detailStyled(p.muted, "", fmt.Sprintf(" | retained observed events: %d", len(w.displayed))) + "\n" +
 		detailStyled(lossColor, "", "Reported loss: "+loss) + detailStyled(p.muted, "", fmt.Sprintf(" | local evictions: %d | L7 redacted", evicted)) + "\n" +
 		detailStyled(diagnosticColor, "", diagnostics) + "\n" +
 		detailStyled(p.muted, "", w.notice) + detailStyled(p.key, "", " | filter: "+w.expression) + "\n" +
-		detailStyled(p.muted, "", shortcuts)
+		detailStyled(p.muted, "", "S full status | "+shortcuts)
+	text := w.statusFull
+	_, _, width, _ := w.GetInnerRect()
+	if width >= 40 && width < 110 {
+		stateLabel := strings.ToUpper(st.Phase)
+		if w.frozen {
+			stateLabel = "FROZEN"
+		}
+		shortCoverage := "unknown"
+		if st.CoverageKnown {
+			shortCoverage = fmt.Sprintf("%d/%d", st.Connected, st.Connected+st.Unavailable)
+		}
+		lossLabel := loss
+		if w.statusOnly {
+			lossLabel = "unobserved"
+		}
+		first := fmt.Sprintf("%s · coverage:%s", ui.Truncate(stateLabel, 22), shortCoverage)
+		second := fmt.Sprintf("Loss:%s evict:%d · L7 redacted", ui.Truncate(lossLabel, 12), evicted)
+		third := "S status · Enter detail · Esc back"
+		if diagnostics != "" {
+			third = "S status · " + ui.Truncate(diagnostics, max(1, width-11))
+		}
+		if st.Error != "" || st.Phase == "not connected" {
+			third = "r reconnect · S error/status"
+		}
+		text = detailStyled(stateColor, "b", first) + "\n" + detailStyled(lossColor, "", second) + "\n" + detailStyled(p.key, "", third)
+		w.ResizeItem(w.status, 3, 0)
+	} else {
+		w.ResizeItem(w.status, 5, 0)
+	}
 	if w.status.GetText(false) != text {
 		w.status.SetText(text)
 	}
+}
+
+func (w *HubbleView) Draw(screen tcell.Screen) {
+	if ui.DrawTaskSizeNotice(screen, w.Box) {
+		return
+	}
+	w.render()
+	w.Flex.Draw(screen)
 }
