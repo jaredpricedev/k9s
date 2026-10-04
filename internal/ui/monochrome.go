@@ -63,4 +63,4 @@ func (s monochromeScreen) SetCell(x, y int, style tcell.Style, chars ...rune) {
 
 func (s monochromeScreen) SetStyle(style tcell.Style)     { s.Screen.SetStyle(s.style(style)) }
 func (s monochromeScreen) Fill(r rune, style tcell.Style) { s.Screen.Fill(r, s.style(style)) }
-func (s monochromeScreen) Colors() int                    { return 0 }
+func (monochromeScreen) Colors() int                      { return 0 }
