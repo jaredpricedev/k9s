@@ -328,55 +328,7 @@ func renderPodPressure(pod *corev1.Pod, metrics *pressureMetrics) string {
 }
 
 func pressureBudgets(pod *corev1.Pod, metrics *pressureMetrics) []inspect.ResourceBudget {
-	statuses := make(map[string]*corev1.ContainerStatus)
-	for _, group := range [][]corev1.ContainerStatus{pod.Status.ContainerStatuses, pod.Status.InitContainerStatuses, pod.Status.EphemeralContainerStatuses} {
-		for index := range group {
-			statuses[group[index].Name] = &group[index]
-		}
-	}
-	var budgets []inspect.ResourceBudget
-	add := func(name, role string, resources corev1.ResourceRequirements) {
-		budget := inspect.ResourceBudget{Pod: pod.Name, UID: string(pod.UID), Container: name, Role: role,
-			MetricsState: string(metrics.sample.State), MetricsReason: metrics.sample.Reason,
-			ObservedAt: metrics.sample.ObservedAt, Window: metrics.window, CurrentState: workspaceUnknown}
-		budget.CPURequest, budget.CPULimit, budget.CPUUsage, budget.CPURequestRatio, budget.CPULimitRatio = pressureResourceValues(
-			resources, metrics.containers[name], corev1.ResourceCPU, metrics.sample.Fresh(), pressureBudgetQuantity,
-		)
-		budget.MemoryRequest, budget.MemoryLimit, budget.MemoryUsage, budget.MemoryRequestRatio, budget.MemoryLimitRatio = pressureResourceValues(
-			resources, metrics.containers[name], corev1.ResourceMemory, metrics.sample.Fresh(), pressureBudgetQuantity,
-		)
-		if status := statuses[name]; status != nil {
-			switch {
-			case status.State.Waiting != nil:
-				budget.CurrentState = "waiting " + status.State.Waiting.Reason
-			case status.State.Terminated != nil:
-				budget.CurrentState = fmt.Sprintf("%s · exit %d", status.State.Terminated.Reason, status.State.Terminated.ExitCode)
-			case status.State.Running != nil:
-				budget.CurrentState = "running"
-				if role == investigationAppRole && !status.Ready {
-					budget.CurrentState += " / not ready"
-				}
-			}
-		}
-		budgets = append(budgets, budget)
-	}
-	for index := range pod.Spec.InitContainers {
-		container := &pod.Spec.InitContainers[index]
-		role := "init"
-		if container.RestartPolicy != nil && *container.RestartPolicy == corev1.ContainerRestartPolicyAlways {
-			role = "sidecar"
-		}
-		add(container.Name, role, container.Resources)
-	}
-	for index := range pod.Spec.Containers {
-		container := &pod.Spec.Containers[index]
-		add(container.Name, investigationAppRole, container.Resources)
-	}
-	for index := range pod.Spec.EphemeralContainers {
-		container := &pod.Spec.EphemeralContainers[index]
-		add(container.Name, "ephemeral", container.Resources)
-	}
-	return budgets
+	return inspect.NewResourceBudgets(pod, &metrics.sample, metrics.containers, metrics.window)
 }
 
 func pressureResourceValues(
@@ -444,19 +396,6 @@ func pressureQuantity(values corev1.ResourceList, resource corev1.ResourceName) 
 		return fmt.Sprintf("%gm", 1000*q.AsApproximateFloat64())
 	}
 	return fmt.Sprintf("%.2fMiB (%s)", float64(q.Value())/(1024*1024), q.String())
-}
-
-// pressureBudgetQuantity fits the typed budget table while retaining the same
-// units. The evidence report preserves Kubernetes' original quantity as well.
-func pressureBudgetQuantity(values corev1.ResourceList, resource corev1.ResourceName) string {
-	q, ok := values[resource]
-	if !ok {
-		return pressureUnset
-	}
-	if resource == corev1.ResourceCPU {
-		return fmt.Sprintf("%gm", 1000*q.AsApproximateFloat64())
-	}
-	return fmt.Sprintf("%.2fMiB", float64(q.Value())/(1024*1024))
 }
 
 func renderPressureConfiguration(b *strings.Builder, source string, resources corev1.ResourceRequirements) {

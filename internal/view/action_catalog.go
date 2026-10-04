@@ -137,6 +137,7 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		run                           func()
 	}{
 		{"resource.pressure", "Resource pressure", ":pressure", ui.ActionInspect, func() { NewCommand(app).pressureCommand() }},
+		{"resource.capacity", "Capacity and autoscaling review", ":capacity", ui.ActionInspect, func() { NewCommand(app).capacityCommand() }},
 		{"resource.evidence", "Capture evidence preview", ":evidence", ui.ActionExport, func() { NewCommand(app).evidenceCommand("evidence") }},
 	} {
 		reason := target.UnavailableReason
@@ -144,6 +145,11 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		_, selectedView := owner.(SelectedResource)
 		if !resourceView && !selectedView {
 			reason = "Open a resource list and select an API object first"
+		}
+		if item.id == "resource.capacity" && reason == "" {
+			if err := capacityTargetError(&target); err != nil {
+				reason = err.Error()
+			}
 		}
 		if item.id == "resource.evidence" {
 			switch owner.(type) {
