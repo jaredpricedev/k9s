@@ -108,7 +108,7 @@ func (c *Command) suggestionAliases() []string {
 }
 
 func (c *Command) updateSuggestionAliases() {
-	aliases := []string{providersCommand}
+	aliases := []string{providersCommand, "access"}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
 		return
