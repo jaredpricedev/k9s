@@ -4,13 +4,13 @@ module github.com/derailed/k9s
 go 1.25.8
 
 require (
-	github.com/cilium/cilium v1.18.1
 	github.com/adrg/xdg v0.5.3
 	github.com/anchore/clio v0.1.1
 	github.com/anchore/grype v0.110.0
 	github.com/anchore/syft v1.42.3
 	github.com/atotto/clipboard v0.1.4
 	github.com/cenkalti/backoff/v4 v4.3.0
+	github.com/cilium/cilium v1.18.1
 	github.com/derailed/tcell/v2 v2.3.1-rc.4
 	github.com/derailed/tview v0.8.5
 	github.com/fatih/color v1.19.0
@@ -28,6 +28,7 @@ require (
 	github.com/olekukonko/tablewriter v1.1.4
 	github.com/petergtz/pegomock v2.9.0+incompatible
 	github.com/rakyll/hey v0.1.5
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/sahilm/fuzzy v0.1.3
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1

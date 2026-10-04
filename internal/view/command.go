@@ -309,6 +309,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.desiredReviewCommand(p.GetLine())
 	case "rollout":
 		c.rolloutReviewCommand()
+	case jobReviewCommandToken:
+		c.jobReviewCommand()
 	default:
 		return false
 	}

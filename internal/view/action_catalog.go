@@ -105,6 +105,7 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 	}
 	result = append(result, investigationActions(owner, app)...)
 	result = append(result, changeReviewActions(owner, app)...)
+	result = append(result, jobReviewActions(owner, app)...)
 	result = append(result, workspaceActions(app)...)
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Category != result[j].Category {
@@ -273,4 +274,17 @@ func (p *actionPalette) close() {
 	if top := p.app.Content.Top(); top != nil {
 		p.app.SetFocus(top)
 	}
+}
+
+func jobReviewActions(owner actionOwner, app *App) []ui.ActionDescriptor {
+	target := actionTarget(owner, app.Config.ActiveContextName())
+	reason := ""
+	if err := jobReviewTargetError(target); err != nil {
+		reason = err.Error()
+	}
+	return []ui.ActionDescriptor{{
+		ID: "resource.job-review", Label: "Scheduled / one-off Job review", Category: ui.ActionInspect, Shortcut: ":" + jobReviewCommandToken,
+		Discoverable: true, RequiresSelection: true, UnavailableReason: reason,
+		Handler: func(*tcell.EventKey) *tcell.EventKey { app.openJobReview(target); return nil },
+	}}
 }
