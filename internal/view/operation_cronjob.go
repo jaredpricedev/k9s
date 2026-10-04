@@ -17,6 +17,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
+const (
+	manualJobAnnotation     = "cronjob.kubernetes.io/instantiate"
+	cronScheduledAnnotation = "batch.kubernetes.io/cronjob-scheduled-timestamp"
+)
+
 //nolint:gocritic // Preserve the captured CronJob identity in the worker.
 func (s *operationSession) triggerCronJob(ctx context.Context, target SelectedResourceTarget) error {
 	if err := checkOperationTarget(&target); err != nil {
@@ -53,6 +58,11 @@ func (s *operationSession) triggerCronJob(ctx context.Context, target SelectedRe
 			Controller: &controller, BlockOwnerDeletion: &controller,
 		}},
 	}, Spec: *cron.Spec.JobTemplate.Spec.DeepCopy()}
+	if job.Annotations == nil {
+		job.Annotations = make(map[string]string)
+	}
+	job.Annotations[manualJobAnnotation] = "manual"
+	delete(job.Annotations, cronScheduledAnnotation)
 	if contextErr := ctx.Err(); contextErr != nil {
 		return contextErr
 	}
