@@ -14,6 +14,7 @@ import (
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/config/mock"
+	"github.com/derailed/k9s/internal/dao"
 	"github.com/derailed/k9s/internal/session"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
@@ -286,13 +287,13 @@ func TestDebugWriteGuardCannotBeBypassedByPluginDangerousDeclaration(t *testing.
 	}
 }
 
-func TestForwardFailureNotesKeepDeniedAbsentAndReplacedDistinctWithoutRawErrors(t *testing.T) {
+func TestForwardFailureNotesKeepDeniedUnavailableAndReplacedDistinctWithoutRawErrors(t *testing.T) {
 	denied := apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, localSessionTestName, errors.New("SECRET raw error"))
 	absent := apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, localSessionTestName)
 	for _, item := range []struct {
 		err  error
 		word string
-	}{{denied, "denied"}, {absent, "absent"}, {context.DeadlineExceeded, "deadline"}} {
+	}{{denied, "denied"}, {absent, "unverified"}, {dao.ErrForwardIdentityChanged, "replaced"}, {context.DeadlineExceeded, "deadline"}} {
 		note := localForwardSetupNote(item.err)
 		if !strings.Contains(note, item.word) || strings.Contains(note, "SECRET") {
 			t.Fatal("failure meaning or secret exclusion lost", note)
