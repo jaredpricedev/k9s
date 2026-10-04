@@ -31,9 +31,10 @@ const (
 
 // Config tracks a kubernetes configuration.
 type Config struct {
-	flags *genericclioptions.ConfigFlags
-	mx    sync.RWMutex
-	proxy func(*http.Request) (*url.URL, error)
+	flags        *genericclioptions.ConfigFlags
+	mx           sync.RWMutex
+	proxy        func(*http.Request) (*url.URL, error)
+	preparedREST *restclient.Config
 }
 
 // NewConfig returns a new k8s config or an error if the flags are invalid.
@@ -57,6 +58,12 @@ func (c *Config) CallTimeout() time.Duration {
 }
 
 func (c *Config) RESTConfig() (*restclient.Config, error) {
+	c.mx.RLock()
+	prepared := c.preparedREST
+	c.mx.RUnlock()
+	if prepared != nil {
+		return restclient.CopyConfig(prepared), nil
+	}
 	cfg, err := c.clientConfig().ClientConfig()
 	if err != nil {
 		return nil, err
@@ -85,7 +92,20 @@ func (c *Config) clientConfig() clientcmd.ClientConfig {
 	return c.flags.ToRawKubeConfigLoader()
 }
 
-func (*Config) reset() {}
+func (c *Config) reset() {
+	c.mx.Lock()
+	c.preparedREST = nil
+	c.mx.Unlock()
+}
+
+// PrepareSessionREST freezes the freshly loaded named actor's transport for a
+// browsing session. Diagnostic copies still reload flags independently. Only
+// the private replacement config is prepared, never the active config.
+func (c *Config) PrepareSessionREST(cfg *restclient.Config) {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+	c.preparedREST = restclient.CopyConfig(cfg)
+}
 
 // SwitchContext changes the kubeconfig context to a new cluster.
 func (c *Config) SwitchContext(name string) error {
@@ -106,6 +126,7 @@ func (c *Config) SwitchContext(name string) error {
 	flags.BearerToken = c.flags.BearerToken
 
 	c.flags = flags
+	c.reset()
 
 	return nil
 }

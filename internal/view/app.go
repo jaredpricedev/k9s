@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -40,6 +41,7 @@ const (
 type App struct {
 	version   string
 	lifecycle appLifecycle
+	sessionMu sync.RWMutex
 	*ui.App
 	Content            *PageStack
 	command            *Command
@@ -389,7 +391,10 @@ func (a *App) Resume() {
 }
 
 func (a *App) clusterUpdater(ctx context.Context) {
-	if a.Conn() == nil || !a.Conn().ConnectionOK() || a.factory == nil || a.clusterModel == nil {
+	a.sessionMu.RLock()
+	conn, factory, clusterModel := a.Conn(), a.factory, a.clusterModel
+	a.sessionMu.RUnlock()
+	if ctx.Err() != nil || conn == nil || !conn.ConnectionOK() || factory == nil || clusterModel == nil {
 		slog.Debug("Skipping cluster updater - no valid connection")
 		return
 	}
@@ -421,13 +426,20 @@ func (a *App) clusterUpdater(ctx context.Context) {
 	}
 }
 
-func (a *App) refreshCluster(context.Context) error {
-	if a.Conn() == nil || a.factory == nil || a.clusterModel == nil {
+func (a *App) refreshCluster(ctx context.Context) error {
+	a.sessionMu.RLock()
+	conn, factory, command, revision := a.Conn(), a.factory, a.command, a.Config.DestinationRevision()
+	a.sessionMu.RUnlock()
+	if conn == nil || factory == nil || a.clusterModel == nil || ctx.Err() != nil {
 		return nil
 	}
 
 	c := a.Content.Top()
-	if ok := a.Conn().CheckConnectivity(); ok {
+	ok := conn.CheckConnectivity()
+	if ctx.Err() != nil || a.Config.DestinationRevision() != revision {
+		return nil
+	}
+	if ok {
 		if atomic.LoadInt32(&a.conRetry) > 0 {
 			atomic.StoreInt32(&a.conRetry, 0)
 			a.Status(model.FlashInfo, "K8s connectivity OK")
@@ -437,7 +449,7 @@ func (a *App) refreshCluster(context.Context) error {
 		} else {
 			a.ClearStatus(true)
 		}
-		a.factory.ValidatePortForwards()
+		factory.ValidatePortForwards()
 	} else if c != nil {
 		atomic.AddInt32(&a.conRetry, 1)
 		a.connectivityComponent(c, false)
@@ -464,14 +476,22 @@ func (a *App) refreshCluster(context.Context) error {
 	}
 
 	// Reload alias
-	go func() {
-		if err := a.command.Reset(a.Config.ContextAliasesPath(), false); err != nil {
-			slog.Warn("Command reset failed", slogs.Error, err)
-			a.QueueUpdateDraw(func() {
-				a.Logo().Warn("Aliases load failed!")
-			})
-		}
-	}()
+	if command != nil {
+		go func() {
+			if ctx.Err() != nil || a.Config.DestinationRevision() != revision {
+				return
+			}
+			if err := command.Reset(a.Config.ContextAliasesPath(), false); err != nil {
+				slog.Warn("Command reset failed", slogs.Error, err)
+				a.QueueUpdateDraw(func() {
+					if ctx.Err() != nil || a.Config.DestinationRevision() != revision {
+						return
+					}
+					a.Logo().Warn("Aliases load failed!")
+				})
+			}
+		}()
+	}
 	// Update cluster info
 	a.clusterModel.Refresh()
 
@@ -868,7 +888,7 @@ func (a *App) connectivityComponent(c model.Component, connected bool) {
 func retainedDisconnectedWorkspace(c model.Component) bool {
 	switch c.(type) {
 	case *connectionHealthDetails, *dailyWorkspace, *desiredReviewView, *rolloutReviewView,
-		*capacityView, *configurationView, *gitopsView, *jobReviewView, *maintenanceView,
+		*capacityView, *configurationView, *storageView, *gitopsView, *jobReviewView, *maintenanceView,
 		*accessView, *taskbookView, *changeSetView:
 		return true
 	default:

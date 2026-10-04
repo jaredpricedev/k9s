@@ -417,12 +417,32 @@ func (t *Table) Filter(text string) {
 	if text != "" {
 		t.TouchFilterDraft()
 	}
-	data := t.GetModel().Peek()
-	cdata := t.filterQuery(data, text)
+	cdata, data := t.filterModel(text)
 	if t.FilterError() == nil && !t.sameFilterRows(cdata) {
 		t.UpdateUI(t.doUpdate(cdata), data)
 	}
 	t.UpdateTitle()
+}
+
+// Native models can copy only the matching rows from a locked current source.
+// Other table providers retain their existing detached Peek contract.
+func (t *Table) filterModel(query string) (projection, source *model1.TableData) {
+	reader, ok := t.GetModel().(interface {
+		PeekFiltered(model1.FilterOpts) (*model1.TableData, int, error)
+	})
+	if !ok {
+		data := t.GetModel().Peek()
+		return t.filterQuery(data, query), data
+	}
+	query = t.filterQueryText(query)
+	filtered, total, err := reader.PeekFiltered(model1.FilterOpts{Toast: t.toast, Filter: query})
+	filtered = t.commitFilterQuery(query, filtered, total, err, func() (*model1.TableData, int) {
+		data := t.GetModel().Peek()
+		return data.Filter(model1.FilterOpts{Toast: t.toast}), data.RowCount()
+	})
+	// The detached result retains each matching row's raw fields and deltas.
+	// UpdateUI needs no unmatched original rows when constructing those cells.
+	return filtered, filtered
 }
 
 // Query edits often retain the same rows. Reuse their cells only when the full
@@ -594,7 +614,9 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 	selectedID, _ := t.GetRowID(t.GetSelectedRowIndex())
 	_, selectedCol := t.GetSelection()
 	selectedRow := -1
-	t.fitColumns(cdata)
+	pads := make(MaxyPad, cdata.HeaderCount())
+	computeMaxColumns(pads, t.getSortCol().Name, cdata, t.getLiteralFields())
+	t.fitColumns(cdata, pads)
 	t.Clear()
 	fg := t.styles.Table().Header.FgColor.Color()
 	bg := t.styles.Table().Header.BgColor.Color()
@@ -612,8 +634,6 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 	}
 	cdata.Sort(t.getSortCol())
 
-	pads := make(MaxyPad, cdata.HeaderCount())
-	computeMaxColumns(pads, t.getSortCol().Name, cdata, t.getLiteralFields())
 	cdata.RowsRange(func(row int, re model1.RowEvent) bool {
 		ore, ok := data.FindRow(re.Row.ID)
 		if !ok {
@@ -674,7 +694,7 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 
 		original := field
 		if literalFields {
-			field = tview.Escape(field)
+			field = escapeTableField(field)
 		}
 
 		if !re.Deltas.IsBlank() && !h.IsTimeCol(c) {
@@ -724,7 +744,7 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 				if col == 0 && t.semanticSelection {
 					width = max(1, width-2)
 				}
-				cell.SetText(tview.Escape(Truncate(original, width)))
+				cell.SetText(escapeTableField(Truncate(original, width)))
 			}
 		}
 		if col == 0 {
@@ -849,15 +869,23 @@ func (t *Table) filtered(data *model1.TableData) *model1.TableData {
 }
 
 func (t *Table) filterQuery(data *model1.TableData, query string) *model1.TableData {
+	query = t.filterQueryText(query)
+	filtered, err := data.FilterChecked(model1.FilterOpts{Toast: t.toast, Filter: query})
+	return t.commitFilterQuery(query, filtered, data.RowCount(), err, func() (*model1.TableData, int) {
+		return data.Filter(model1.FilterOpts{Toast: t.toast}), data.RowCount()
+	})
+}
+
+func (t *Table) filterQueryText(query string) string {
 	t.mx.RLock()
+	defer t.mx.RUnlock()
 	if t.filterEditing && !t.filterDraftTouched && query == "" {
 		query = t.committedFilter
 	}
-	t.mx.RUnlock()
-	filtered, err := data.FilterChecked(model1.FilterOpts{
-		Toast:  t.toast,
-		Filter: query,
-	})
+	return query
+}
+
+func (t *Table) commitFilterQuery(query string, filtered *model1.TableData, total int, err error, initial func() (*model1.TableData, int)) *model1.TableData {
 	t.mx.Lock()
 	defer t.mx.Unlock()
 	t.filterError = err
@@ -866,11 +894,10 @@ func (t *Table) filterQuery(data *model1.TableData, query string) *model1.TableD
 			return t.lastFiltered
 		}
 		// The first malformed query still keeps the initial unfiltered state.
-		t.lastFiltered = data.Filter(model1.FilterOpts{Toast: t.toast})
-		t.filterTotal = data.RowCount()
+		t.lastFiltered, t.filterTotal = initial()
 		return t.lastFiltered
 	}
-	t.committedFilter, t.lastFiltered, t.filterTotal = query, filtered, data.RowCount()
+	t.committedFilter, t.lastFiltered, t.filterTotal = query, filtered, total
 	return filtered
 }
 

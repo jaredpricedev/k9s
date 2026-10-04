@@ -111,8 +111,8 @@ func (c *Command) suggestionAliases() []string {
 func (c *Command) updateSuggestionAliases() {
 	aliases := []string{
 		providersCommand, capacityCommandToken, "operations", "ops", configurationCommand,
-		gitopsCommandToken, jobReviewCommandToken, maintenanceCommandToken, accessCommandName,
-		taskbookCommandName, changeSetCommandToken,
+		storageCommandToken, gitopsCommandToken, jobReviewCommandToken, maintenanceCommandToken,
+		accessCommandName, taskbookCommandName, changeSetCommandToken,
 	}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
@@ -352,6 +352,8 @@ func (c *Command) specialCmd(p *cmd.Interpreter, pushCmd bool) bool {
 		c.comparisonCommand()
 	case p.Cmd() == "pressure":
 		c.pressureCommand()
+	case p.Cmd() == storageCommandToken:
+		c.storageCommand()
 	case p.Cmd() == capacityCommandToken:
 		c.capacityCommand()
 	case p.Cmd() == "evidence" || p.Cmd() == "evidence-open":
