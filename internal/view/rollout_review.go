@@ -27,7 +27,7 @@ const (
 var rolloutReviewTabs = []string{"Overview", "Revisions", "Pods", "Recovery", "Evidence"}
 
 // rolloutReviewView retains one explicitly obtained native controller observation.
-// Its recovery view compares retained templates and never submits a write.
+// Deployment recovery requires a server preview and a separate guarded confirmation.
 type rolloutReviewView struct {
 	*Details
 	target               SelectedResourceTarget
@@ -53,6 +53,13 @@ type rolloutReviewView struct {
 	followCancel         context.CancelFunc
 	followGeneration     uint64
 	following            bool
+	recoveryPlan         *review.RolloutRecoveryPlan
+	recoveryNotice       string
+	recoveryCancel       context.CancelFunc
+	recoveryGeneration   uint64
+	recoveryModal        *ui.ModalForm
+	recoveryForm         *tview.Form
+	recoverySession      func() (*operationSession, error)
 }
 
 func (c *Command) rolloutReviewCommand() {
@@ -87,6 +94,21 @@ func (a *App) openRolloutReview(target SelectedResourceTarget) {
 	v.follower = func(ctx context.Context, request *review.RolloutOutcomeRequest, update func(*review.RolloutOutcome)) *review.RolloutOutcome {
 		dyn, _ := connection.DynDial()
 		return review.FollowRollout(ctx, dyn, request, update)
+	}
+	v.recoverySession = func() (*operationSession, error) {
+		if a.Config.IsReadOnly() {
+			return nil, fmt.Errorf("Recovery execution unavailable in read-only mode")
+		}
+		dyn, err := connection.DynDial()
+		if err != nil {
+			return nil, err
+		}
+		typed, err := connection.Dial()
+		if err != nil {
+			return nil, err
+		}
+		return &operationSession{app: a, context: target.Context, namespace: target.Namespace, revision: v.destinationRevision, timeout: 30 * time.Second,
+			dynamic: dyn, typed: typed, stillCurrent: func() bool { return v.active && a.Content.Top() == v && v.destinationCurrent() }}, nil
 	}
 	v.Update("Loading read-only controller rollout evidence...")
 	if err := a.inject(v, false); err != nil {
@@ -141,6 +163,10 @@ func (v *rolloutReviewView) Init(ctx context.Context) error {
 	v.actions.Add(tcell.KeyTab, ui.NewKeyAction("Next rollout tab", v.nextTab, true))
 	v.actions.Add(tcell.KeyBacktab, ui.NewKeyAction("Previous rollout tab", v.previousTab, true))
 	v.actions.Add(ui.KeyW, ui.NewKeyAction("Follow/stop captured rollout outcome", v.toggleOutcome, true))
+	if rolloutTargetKind(v.target) == rolloutDeployKind {
+		v.actions.Add(ui.KeyX, ui.NewKeyAction("Prepare selected recovery server preview", v.prepareRecoveryCmd, true))
+		v.actions.Add(ui.KeyA, ui.NewKeyAction("Apply reviewed recovery plan", v.applyRecoveryCmd, true))
+	}
 	v.actions.Add(ui.KeyR, ui.NewKeyAction("Refresh rollout evidence", func(event *tcell.EventKey) *tcell.EventKey {
 		if v.cmdBuff.IsActive() {
 			return event
@@ -193,6 +219,8 @@ func (v *rolloutReviewView) Start() {
 }
 
 func (v *rolloutReviewView) Stop() {
+	v.stopRecoveryPreview()
+	v.dismissRecoveryForm()
 	v.stopOutcome()
 	v.active = false
 	v.loading = false
@@ -211,7 +239,9 @@ func (v *rolloutReviewView) StylesChanged(styles *config.Styles) {
 }
 
 func (v *rolloutReviewView) Draw(screen tcell.Screen) {
-	if v.following && !v.destinationCurrent() {
+	if !v.destinationCurrent() && (v.following || v.recoveryCancel != nil || v.recoveryModal != nil) {
+		v.stopRecoveryPreview()
+		v.dismissRecoveryForm()
 		v.stopOutcome()
 		v.render()
 	}
@@ -317,12 +347,15 @@ func (v *rolloutReviewView) reviewSelectedRevision(event *tcell.EventKey) *tcell
 		return nil
 	}
 	v.recoveryRevisionUID = v.snapshot.Revisions[index].Identity.UID
+	v.recoveryPlan = nil
 	v.selectTab(rolloutRecoveryTab)
 	v.render()
 	return nil
 }
 
 func (v *rolloutReviewView) refresh() {
+	v.stopRecoveryPreview()
+	v.recoveryPlan = nil
 	v.stopOutcome()
 	if !v.destinationCurrent() {
 		v.refreshFailure = "Destination changed; reopen rollout review"
@@ -399,6 +432,15 @@ func (v *rolloutReviewView) render() {
 	if v.snapshot != nil {
 		v.retainedText = rolloutEvidence(v.snapshot)
 		text = rolloutTabText(v.snapshot, v.activeTab, width, v.selectedRevisionUID, v.recoveryRevisionUID)
+		if v.activeTab == rolloutRecoveryTab && v.recoveryPlan != nil {
+			text = rolloutPreparedRecovery(v.recoveryPlan, width)
+		}
+		if v.activeTab == rolloutRecoveryTab && v.recoveryNotice != "" {
+			text = "[~] " + v.recoveryNotice + "\n" + text
+		}
+		if v.activeTab == rolloutEvidenceTab && v.recoveryPlan != nil {
+			text = rolloutPreparedEvidence(v.recoveryPlan) + "\n" + text
+		}
 		if v.outcome != nil {
 			if v.activeTab == 0 {
 				text = rolloutOutcomeText(v.outcome, width) + "\n" + strings.Replace(text, "ROLLOUT OBSERVATION", "ORIGINAL RETAINED OBSERVATION", 1)
@@ -484,6 +526,12 @@ func (v *rolloutReviewView) renderChrome() {
 		footer = "READ ONLY · j/k choose · Enter review · Esc back"
 		if width < 48 {
 			footer = "j/k choose · Enter review · Esc back"
+		}
+	}
+	if v.activeTab == rolloutRecoveryTab && rolloutTargetKind(v.target) == rolloutDeployKind && v.recoverySession != nil && !v.app.Config.IsReadOnly() {
+		footer = "j/k choose · Enter review · x preview · a apply · Esc back"
+		if width < 60 {
+			footer = "x preview · a apply · Esc back"
 		}
 	}
 	v.footer.SetText(detailStyled(p.Muted.String(), "", fitInvestigation(footer, width)))

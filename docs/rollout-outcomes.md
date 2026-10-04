@@ -35,8 +35,10 @@ bodies and referenced configuration bodies are never fetched by this review.
 The five tabs retain overview, revisions, Pods, recovery comparison and source
 evidence. `j`/`k`, arrows and Page keys select exact revision UIDs; Enter explicitly
 updates the recovery comparison. Refresh preserves a surviving selection and
-invalidates a removed one until another revision is explicitly chosen. Recovery
-comparison remains read-only; no rollback or server dry-run is submitted.
+invalidates a removed one until another revision is explicitly chosen. Recovery comparison remains read-only until a separate native Deployment
+server-preview action is invoked. StatefulSet/DaemonSet recovery stays a retained
+comparison; their controller revision data is not treated as an executable
+rollback plan.
 
 ## Explicit bounded following
 
@@ -64,8 +66,9 @@ coverage statement. Retained outcomes stay separate from later refreshes.
 The monitor contract supports an accepted-operation receipt containing operation
 identity, acceptance time and the accepted controller generation/template. Such
 a receipt changes the elapsed-time origin and clearly separates accepted writes
-from observed controller completion. This increment exposes read-only following;
-guarded recovery execution is a subsequent operation-runner integration.
+from observed controller completion. Read-only following is explicit. Native Deployment recovery also supplies the
+actual operation receipt to the same observer after a persistent response is
+acknowledged.
 
 At 80×24 and 60 columns the view keeps one primary pane and exact identity in the
 header/Evidence. The minimum task viewport is 40×12, excluding application chrome.
@@ -77,3 +80,49 @@ controller strategy/partition semantics, denied children, source continuity,
 removed revision selection, timeout and cancellation after acceptance. These
 checks establish request and rendering behavior; they do not constitute a live
 production-controller or operator-usability trial.
+
+## Guarded selected Deployment recovery
+
+In Recovery, explicitly choose the retained revision with `j`/`k`, then Enter to
+preview that exact UID. `x` opens a Cancel-first confirmation for server admission
+preview. It reads the named captured Deployment and ReplicaSet and verifies both
+UIDs, resource versions and template fingerprints, controlling ownership and the
+captured Deployment generation. No namespace-wide inventory or Secret read is
+made. Native StatefulSet/DaemonSet execution remains unsupported.
+
+The server preview uses a bounded JSON patch with `dryRun=All`, strict field
+validation and tests for target UID, resource version and generation. Its only
+replacement is the entire selected Pod template, excluding the ReplicaSet's
+`pod-template-hash` label. Deployment annotations and external configuration
+contents are not historical recovery data and are not restored. Full safe
+before/after values, source fingerprints and preconditions remain in Evidence;
+raw template/patch bytes stay private. Admission acceptance applies to this
+particular dry-run, and does not guarantee a future persistent request.
+
+`a` opens a separate persistent-write confirmation with Cancel focused. If
+commands or sensitive values were excluded from the safe comparison, a separate
+checkbox must acknowledge those unreviewed fields. Visible managed-by, Helm,
+Flux or Argo CD metadata adds a warning that reconciliation may restore the
+previous template. These bounded markers are unverified metadata, not a composed
+ownership claim, and remain in Evidence. Historical Secret references do not
+restore Secret values. Read-only mode, changed
+selection, abandoned/replaced forms or a changed viewing destination cannot
+submit. After confirmation, the shared operation runner checks permission and
+both sources again, then submits one exact pinned patch. Version/UID/generation,
+ownership or source-template changes fail closed. There is no automatic retry.
+A status-only resource-version update also requires refresh and a new preview.
+
+`:operations` retains the accepted write and observed controller verdict after
+navigation. Its receipt records target UID, accepted generation/template hash,
+acceptance time, named observation count and final controller state. Monitoring
+is bounded to two minutes/120 reads within a three-minute operation deadline.
+No child evidence is relabeled as current. API acknowledgment and observed
+controller completion remain distinct facts. Cancellation, timeout, denied
+monitoring or superseding updates retain an unknown outcome; accepted writes are
+not rolled back. An acknowledged response with identity/generation or template
+differing from the preview is unknown and requires inspection before retrying.
+
+Fake API and native-widget checks validate request scope, exact source/version
+rejection, one-time submission, dry-run isolation, redaction, confirmation,
+abandoned forms, read-only policy and separate accepted/controller receipts.
+These are not a production-cluster recovery trial.
