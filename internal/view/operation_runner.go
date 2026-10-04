@@ -327,7 +327,7 @@ func retryOperationConflict(ctx context.Context, work func() error) error {
 	var conflict error
 	err := wait.ExponentialBackoffWithContext(ctx, retry.DefaultBackoff, func(context.Context) (bool, error) {
 		err := work()
-		if apierrors.IsConflict(err) {
+		if apierrors.IsConflict(err) && !apierrors.IsUnexpectedServerError(err) {
 			conflict = err
 			return false, nil
 		}
