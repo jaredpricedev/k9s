@@ -344,13 +344,9 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 		w.setMode(dailyWorkspaceModes[(w.tabIndex()+1)%len(dailyWorkspaceModes)])
 		return nil
 	case e.Rune() == 'v':
-		w.showRowDetails()
-		return nil
+		return w.showRowDetailsKey()
 	case e.Rune() == '/':
-		w.prompting = true
-		w.prompt.SetText(w.query)
-		w.AddItem(w.prompt, 1, 0, true)
-		w.app.SetFocus(w.prompt)
+		w.openQueryPrompt()
 		return nil
 	case e.Rune() == 'n':
 		w.scopeForm(false)
@@ -378,10 +374,7 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 		}
 		return nil
 	case strings.ContainsRune("1234567", e.Rune()) && e.Rune() != 0:
-		w.setMode(map[rune]string{
-			'1': dailyWorkspaceQueueMode, '2': inventoryCommand, '3': dailyWorkspaceCoverageMode,
-			'4': dailyWorkspacePinsMode, '5': dailyWorkspaceScopesMode, '6': dailyWorkspaceHistoryMode, '7': dailyWorkspaceActivityMode,
-		}[e.Rune()])
+		w.setMode(dailyWorkspaceModeForDigit(e.Rune()))
 		return nil
 	}
 	return e
@@ -400,6 +393,24 @@ func (w *dailyWorkspace) activateSelection() {
 		return
 	}
 	w.app.openTargetInspection(w.SelectedResource(), troubleshootCommand)
+}
+func (w *dailyWorkspace) showRowDetailsKey() *tcell.EventKey {
+	w.showRowDetails()
+	return nil
+}
+
+func dailyWorkspaceModeForDigit(key rune) string {
+	return map[rune]string{
+		'1': dailyWorkspaceQueueMode, '2': inventoryCommand, '3': dailyWorkspaceCoverageMode,
+		'4': dailyWorkspacePinsMode, '5': dailyWorkspaceScopesMode, '6': dailyWorkspaceHistoryMode, '7': dailyWorkspaceActivityMode,
+	}[key]
+}
+
+func (w *dailyWorkspace) openQueryPrompt() {
+	w.prompting = true
+	w.prompt.SetText(w.query)
+	w.AddItem(w.prompt, 1, 0, true)
+	w.app.SetFocus(w.prompt)
 }
 func (w *dailyWorkspace) setMode(mode string) {
 	if w.tabQueries == nil {

@@ -182,7 +182,9 @@ func (w *logWorkbench) start() {
 	w.stopped.Store(false)
 	w.collectorState.Store(logCollectorConnecting)
 	w.owner.app.registerLogWorkbench(w)
-	w.unsubscribe = w.owner.model.SubscribeEntries(w.ingest)
+	if !w.owner.sessionStale {
+		w.unsubscribe = w.owner.model.SubscribeEntries(w.ingest)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	w.cancel = cancel
 	go func() {

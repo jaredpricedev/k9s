@@ -46,6 +46,7 @@ func resourceMeta(gvr *client.GVR) ResourceMeta {
 			Renderer: new(render.Table),
 		}
 	}
+	meta = meta.instantiate()
 	if meta.DAO == nil {
 		meta.DAO = new(dao.Resource)
 	}

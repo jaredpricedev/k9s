@@ -305,8 +305,8 @@ func (v *gitopsView) renderChrome() {
 		item.SetTextColor(styles.Text.Color())
 	}
 	identity := "ctx " + v.target.Context + " · " + v.target.Path()
-	source := "Captured observation: pending"
-	state := "Read only | waiting for independent API reads"
+	source := retainedObservationPending
+	state := retainedWaitingForReads
 	if v.snapshot != nil {
 		source = "UID " + string(v.target.UID)[:min(12, len(v.target.UID))] + " · captured " + v.snapshot.CapturedAt.UTC().Format("15:04:05Z")
 		state = "Read only | independent named observations"
@@ -315,7 +315,7 @@ func (v *gitopsView) renderChrome() {
 		}
 	}
 	if v.loading {
-		state = "Read only | refreshing; prior evidence retained"
+		state = retainedRefreshing
 	} else if v.refreshFailure != "" {
 		state = "Unavailable | r retry | " + v.refreshFailure
 		if v.snapshot != nil {
@@ -323,7 +323,7 @@ func (v *gitopsView) renderChrome() {
 		}
 	}
 	if !v.destinationCurrent() {
-		state = "Retained | destination changed; reopen"
+		state = retainedDestinationChanged
 	}
 	lines := []string{identity, source, state}
 	for index, line := range lines {

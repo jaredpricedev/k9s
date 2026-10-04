@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,6 +54,7 @@ type APIClient struct {
 	cache             *cache.LRUExpireCache
 	connOK            bool
 	log               *slog.Logger
+	sessionHTTP       *http.Client
 }
 
 // NewTestAPIClient for testing ONLY!!
@@ -315,11 +317,11 @@ func (a *APIClient) CheckConnectivity() bool {
 		}
 	}()
 
-	cfg, err := a.config.RESTConfig()
+	cfg, err := a.RestConfig()
 	if err != nil {
 		slog.Error("RestConfig load failed", slogs.Error, err)
 		a.setConnOK(false)
-		return a.getConnOK()
+		return false
 	}
 	cfg.Timeout = a.config.CallTimeout()
 	client, err := kubernetes.NewForConfig(cfg)
@@ -596,7 +598,6 @@ func (a *APIClient) SwitchContext(name string) error {
 }
 
 func (a *APIClient) reset() {
-	a.config.reset()
 	a.cache = cache.NewLRUExpireCache(cacheSize)
 	a.nsClient = nil
 

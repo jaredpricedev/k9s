@@ -46,13 +46,19 @@ type Browser struct {
 	updating              bool
 	firstView             atomic.Int32
 	filterSelectorChanged bool
+	watchGeneration       atomic.Uint64
+	watchListener         *browserWatchListener
+	sessionSelection      *SelectedResourceTarget
+	instance              string
 }
 
 // NewBrowser returns a new browser.
 func NewBrowser(gvr *client.GVR) ResourceViewer {
-	return &Browser{
+	b := &Browser{
 		Table: NewTable(gvr),
 	}
+	b.Table.browser = b
+	return b
 }
 
 func (b *Browser) setUpdating(f bool) {
@@ -160,6 +166,7 @@ func (b *Browser) bindKeys(aa *ui.KeyActions) {
 
 // SetInstance sets a single instance view.
 func (b *Browser) SetInstance(path string) {
+	b.instance = path
 	b.GetModel().SetInstance(path)
 }
 
@@ -175,13 +182,21 @@ func (b *Browser) Start() {
 
 	b.Stop()
 	b.firstView.Store(0) // Reset first view counter on each start
-	b.GetModel().AddListener(b)
+	listener := &browserWatchListener{browser: b, model: b.GetModel(), generation: b.watchGeneration.Load()}
+	b.mx.Lock()
+	b.watchListener = listener
+	b.mx.Unlock()
+	listener.model.AddListener(listener)
 	b.Table.Start()
 	b.CmdBuff().AddListener(b)
-	if err := b.GetModel().Watch(b.prepareContext()); err != nil {
+	generation, source := listener.generation, listener.model
+	if err := source.Watch(b.prepareContext()); err != nil {
 		go func() {
 			time.Sleep(500 * time.Millisecond)
 			b.app.QueueUpdateDraw(func() {
+				if !b.watchCurrent(generation, source) {
+					return
+				}
 				b.App().Flash().Errf("Watcher failed for %s -- %s", b.GVR(), err)
 			})
 		}()
@@ -190,13 +205,18 @@ func (b *Browser) Start() {
 
 // Stop terminates browser updates.
 func (b *Browser) Stop() {
+	b.watchGeneration.Add(1)
 	b.mx.Lock()
 	if b.cancelFn != nil {
 		b.cancelFn()
 		b.cancelFn = nil
 	}
+	listener := b.watchListener
+	b.watchListener = nil
 	b.mx.Unlock()
-	b.GetModel().RemoveListener(b)
+	if listener != nil {
+		listener.model.RemoveListener(listener)
+	}
 	b.CmdBuff().RemoveListener(b)
 	b.Table.Stop()
 }
@@ -332,12 +352,16 @@ func (b *Browser) Aliases() sets.Set[string] {
 
 // TableNoData notifies view no data is available.
 func (b *Browser) TableNoData(mdata *model1.TableData) {
+	b.tableNoData(mdata, b.watchGeneration.Load(), b.GetModel())
+}
+
+func (b *Browser) tableNoData(mdata *model1.TableData, generation uint64, source ui.Tabular) {
 	var cancel context.CancelFunc
 	b.mx.RLock()
 	cancel = b.cancelFn
 	b.mx.RUnlock()
 
-	if !b.app.ConOK() || cancel == nil || !b.app.IsRunning() {
+	if cancel == nil || !b.app.IsRunning() {
 		return
 	}
 	// Skip warning on first view (likely during initialization)
@@ -346,21 +370,21 @@ func (b *Browser) TableNoData(mdata *model1.TableData) {
 		return
 	}
 
-	// While the informer cache hasn't synced yet, show a neutral status
-	// instead of a misleading "no resources found" warning.
-	if synced, err := b.cacheSynced(); !synced {
-		b.app.QueueUpdateDraw(func() {
+	hasMetrics := b.app.Conn().HasMetrics()
+	b.app.QueueUpdateDraw(func() {
+		if !b.watchCurrent(generation, source) || !b.app.ConOK() {
+			return
+		}
+		// Read the current factory only on the dispatcher, after validating the
+		// captured subscription. A reconnect may have replaced the old cache.
+		if synced, err := b.cacheSynced(); !synced {
 			if err != nil {
 				b.app.Flash().Warnf("Unable to sync %s: %s", b.GVR(), err)
 				return
 			}
 			b.app.Flash().Infof("Synchronizing %s in %q namespace...", b.GVR(), client.PrintNamespace(b.GetNamespace()))
-		})
-		return
-	}
-
-	hasMetrics := b.app.Conn().HasMetrics()
-	b.app.QueueUpdateDraw(func() {
+			return
+		}
 		if b.getUpdating() {
 			return
 		}
@@ -372,11 +396,16 @@ func (b *Browser) TableNoData(mdata *model1.TableData) {
 		b.refreshActions()
 		cdata := b.Update(mdata, hasMetrics)
 		b.UpdateUI(cdata, mdata)
+		b.restoreSessionSelection()
 	})
 }
 
 // TableDataChanged notifies view new data is available.
 func (b *Browser) TableDataChanged(mdata *model1.TableData) {
+	b.tableDataChanged(mdata, b.watchGeneration.Load(), b.GetModel())
+}
+
+func (b *Browser) tableDataChanged(mdata *model1.TableData, generation uint64, source ui.Tabular) {
 	var cancel context.CancelFunc
 	b.mx.RLock()
 	cancel = b.cancelFn
@@ -388,6 +417,9 @@ func (b *Browser) TableDataChanged(mdata *model1.TableData) {
 
 	hasMetrics := b.app.Conn().HasMetrics()
 	b.app.QueueUpdateDraw(func() {
+		if !b.watchCurrent(generation, source) {
+			return
+		}
 		if b.getUpdating() {
 			return
 		}
@@ -403,12 +435,20 @@ func (b *Browser) TableDataChanged(mdata *model1.TableData) {
 		b.refreshActions()
 		cdata := b.Update(mdata, hasMetrics)
 		b.UpdateUI(cdata, mdata)
+		b.restoreSessionSelection()
 	})
 }
 
 // TableLoadFailed notifies view something went south.
 func (b *Browser) TableLoadFailed(err error) {
+	b.tableLoadFailed(err, b.watchGeneration.Load(), b.GetModel())
+}
+
+func (b *Browser) tableLoadFailed(err error, generation uint64, source ui.Tabular) {
 	b.app.QueueUpdateDraw(func() {
+		if !b.watchCurrent(generation, source) {
+			return
+		}
 		b.app.Flash().Err(err)
 		b.App().ClearStatus(false)
 	})

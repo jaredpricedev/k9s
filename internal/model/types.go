@@ -146,7 +146,25 @@ type TreeRenderer interface {
 
 // ResourceMeta represents model info about a resource.
 type ResourceMeta struct {
-	DAO          dao.Accessor
-	Renderer     model1.Renderer
-	TreeRenderer TreeRenderer
+	DAO             dao.Accessor
+	Renderer        model1.Renderer
+	TreeRenderer    TreeRenderer
+	NewDAO          func() dao.Accessor
+	NewRenderer     func() model1.Renderer
+	NewTreeRenderer func() TreeRenderer
+}
+
+// Each collector owns its actors and renderer state. Registry entries are
+// descriptors; old work cannot reinitialize a new session's client factory.
+func (m ResourceMeta) instantiate() ResourceMeta {
+	if m.NewDAO != nil {
+		m.DAO = m.NewDAO()
+	}
+	if m.NewRenderer != nil {
+		m.Renderer = m.NewRenderer()
+	}
+	if m.NewTreeRenderer != nil {
+		m.TreeRenderer = m.NewTreeRenderer()
+	}
+	return m
 }

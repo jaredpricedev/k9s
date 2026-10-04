@@ -109,7 +109,11 @@ func (c *Command) suggestionAliases() []string {
 }
 
 func (c *Command) updateSuggestionAliases() {
-	aliases := []string{providersCommand, capacityCommandToken, "operations", "ops", configurationCommand, jobReviewCommandToken, maintenanceCommandToken, accessCommandName, taskbookCommandName, activityCommand, storageCommandToken, gitopsCommandToken}
+	aliases := []string{
+		providersCommand, capacityCommandToken, "operations", "ops",
+		configurationCommand, storageCommandToken, gitopsCommandToken, jobReviewCommandToken,
+		maintenanceCommandToken, accessCommandName, taskbookCommandName, activityCommand,
+	}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
 		return

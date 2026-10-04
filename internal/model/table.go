@@ -102,6 +102,8 @@ func (t *Table) AddListener(l TableListener) {
 
 // RemoveListener delete a listener from the list.
 func (t *Table) RemoveListener(l TableListener) {
+	t.mx.Lock()
+	defer t.mx.Unlock()
 	victim := -1
 	for i, lis := range t.listeners {
 		if lis == l {
@@ -111,9 +113,7 @@ func (t *Table) RemoveListener(l TableListener) {
 	}
 
 	if victim >= 0 {
-		t.mx.Lock()
 		t.listeners = append(t.listeners[:victim], t.listeners[victim+1:]...)
-		t.mx.Unlock()
 	}
 }
 
@@ -293,7 +293,7 @@ func (t *Table) reconcile(ctx context.Context) error {
 func (t *Table) fireTableChanged(data *model1.TableData) {
 	var ll []TableListener
 	t.mx.RLock()
-	ll = t.listeners
+	ll = append([]TableListener(nil), t.listeners...)
 	t.mx.RUnlock()
 
 	for _, l := range ll {
@@ -304,7 +304,7 @@ func (t *Table) fireTableChanged(data *model1.TableData) {
 func (t *Table) fireNoData(data *model1.TableData) {
 	var ll []TableListener
 	t.mx.RLock()
-	ll = t.listeners
+	ll = append([]TableListener(nil), t.listeners...)
 	t.mx.RUnlock()
 
 	for _, l := range ll {
@@ -315,7 +315,7 @@ func (t *Table) fireNoData(data *model1.TableData) {
 func (t *Table) fireTableLoadFailed(err error) {
 	var ll []TableListener
 	t.mx.RLock()
-	ll = t.listeners
+	ll = append([]TableListener(nil), t.listeners...)
 	t.mx.RUnlock()
 
 	for _, l := range ll {
