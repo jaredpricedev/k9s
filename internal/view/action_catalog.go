@@ -193,7 +193,18 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).capabilityCommand("diagnostics"); return nil }}, ui.ActionDescriptor{
 		ID: "command.providers", Label: "Provider checks", Category: ui.ActionInspect,
 		Shortcut: ":providers", Discoverable: true,
-		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).providerCommand("providers"); return nil }})
+		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).providerCommand("providers"); return nil }}, ui.ActionDescriptor{
+		ID: "command.upgrade-readiness", Label: "Upgrade readiness evidence", Category: ui.ActionInspect, Shortcut: ":upgrade-readiness", Discoverable: true,
+		UnavailableReason: func() string {
+			if client.IsClusterWide(app.Config.ActiveNamespace()) {
+				return "Select one current namespace before collecting upgrade evidence"
+			}
+			return ""
+		}(),
+		Handler: func(*tcell.EventKey) *tcell.EventKey {
+			NewCommand(app).upgradeReadinessCommand("upgrade-readiness")
+			return nil
+		}})
 	return result
 }
 
