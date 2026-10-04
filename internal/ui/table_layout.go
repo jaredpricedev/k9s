@@ -60,7 +60,7 @@ func (t *Table) selectedForeground(color tcell.Color) tcell.Color {
 
 // fitColumns reserves complete Pod diagnostics before optional columns. It
 // changes only presentation; original fields and references stay in the model.
-func (t *Table) fitColumns(data *model1.TableData) {
+func (t *Table) fitColumns(data *model1.TableData, pads MaxyPad) {
 	t.columnWidths = nil
 	_, _, width, _ := t.GetInnerRect()
 	t.layoutWidth = width
@@ -69,12 +69,10 @@ func (t *Table) fitColumns(data *model1.TableData) {
 	}
 	if t.gvr.GVR().Resource != "pods" {
 		if width < 96 {
-			t.fitStatusColumns(data, width)
+			t.fitStatusColumns(data, pads, width)
 		}
 		return
 	}
-	pads := make(MaxyPad, data.HeaderCount())
-	computeMaxColumns(pads, t.getSortCol().Name, data, t.getLiteralFields())
 	available := make(map[string]int)
 	for i, h := range data.Header() {
 		if !t.shouldExcludeColumn(h) {
@@ -128,9 +126,7 @@ func (t *Table) fitColumns(data *model1.TableData) {
 // fitStatusColumns keeps native/provider status facts readable in a split.
 // Secondary columns are omitted only when their complete values cannot fit;
 // source rows remain intact for Describe, YAML, filter and export.
-func (t *Table) fitStatusColumns(data *model1.TableData, width int) {
-	pads := make(MaxyPad, data.HeaderCount())
-	computeMaxColumns(pads, t.getSortCol().Name, data, t.getLiteralFields())
+func (t *Table) fitStatusColumns(data *model1.TableData, pads MaxyPad, width int) {
 	available := make(map[string]int)
 	for index, column := range data.Header() {
 		if !t.shouldExcludeColumn(column) {
