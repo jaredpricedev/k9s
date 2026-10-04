@@ -213,46 +213,76 @@ func (*actionDispatchAcceptanceBrowser) Start()  {}
 func (b *actionDispatchAcceptanceBrowser) Stop() { b.Table.Stop() }
 
 func TestActionDispatchAcceptanceWorkspaceKeysAndPrompt(t *testing.T) {
-	app := actionDispatchAcceptanceApp(t)
-	store := workspace.Store{Version: 1, Active: "application", Scopes: []workspace.Scope{{Name: "application", Context: app.Config.ActiveContextName(), Namespaces: []string{uiAcceptanceNamespace}, Kinds: []string{"pods"}}}}
-	path := filepath.Join(t.TempDir(), "workspaces.yaml")
-	require.NoError(t, workspace.SaveStore(path, store))
-	w := newDailyWorkspace(app, store, inventoryCommand, "")
-	w.path = path
-	w.snapshot = workspace.Snapshot{ObservedAt: time.Now(), Resources: []workspace.Resource{{Ref: workspace.ResourceRef{GVR: "v1/pods", Namespace: uiAcceptanceNamespace, Name: "api", UID: "api-uid"}, Kind: "Pod", Summary: "Ready"}}, Coverage: []workspace.Coverage{{GVR: "v1/pods", Namespace: uiAcceptanceNamespace, State: "denied", Detail: "list permission unavailable"}}}
-	w.coverage = w.snapshot.Coverage
-	require.NoError(t, app.inject(w, false))
-	t.Cleanup(w.Stop)
-	actionDispatchAcceptanceAgreement(t, app, tcell.KeyTab, "Next workspace tab", true)
-	screen := investigationAcceptanceScreen(t, app)
-	investigationAcceptanceRun(t, app)
-	actionDispatchAcceptanceKey(app, tcell.KeyTab, 0)
-	investigationAcceptanceAwait(t, app, func() bool { return w.mode == dailyWorkspaceCoverageMode })
-	// Discovery is reconstructed only on the UI thread after the mode change.
-	var label string
-	investigationAcceptanceUpdate(t, app, func() {
-		for _, descriptor := range actionCatalog(w, app) {
-			if descriptor.Key == tcell.KeyEnter {
-				label = descriptor.Label
+	for _, size := range []struct {
+		name          string
+		width, height int
+	}{{"80x24", 80, 24}, {"120x34", 120, 34}} {
+		t.Run(size.name, func(t *testing.T) {
+			app := actionDispatchAcceptanceApp(t)
+			store := workspace.Store{Version: 1, Active: "application", Scopes: []workspace.Scope{{Name: "application", Context: app.Config.ActiveContextName(), Namespaces: []string{uiAcceptanceNamespace}, Kinds: []string{"pods"}}}}
+			path := filepath.Join(t.TempDir(), "workspaces.yaml")
+			require.NoError(t, workspace.SaveStore(path, store))
+			w := newDailyWorkspace(app, store, inventoryCommand, "")
+			w.path = path
+			w.snapshot = workspace.Snapshot{ObservedAt: time.Now(), Resources: []workspace.Resource{{Ref: workspace.ResourceRef{GVR: "v1/pods", Namespace: uiAcceptanceNamespace, Name: "api", UID: "api-uid"}, Kind: "Pod", Summary: "Ready"}}, Coverage: []workspace.Coverage{{GVR: "v1/pods", Namespace: uiAcceptanceNamespace, State: "denied", Detail: "list permission unavailable"}}}
+			w.coverage = w.snapshot.Coverage
+			require.NoError(t, app.inject(w, false))
+			t.Cleanup(w.Stop)
+			actionDispatchAcceptanceAgreement(t, app, tcell.KeyTab, "Next workspace tab", true)
+			screen := investigationAcceptanceScreen(t, app)
+			screen.SetSize(size.width, size.height)
+			investigationAcceptanceRun(t, app)
+			actionDispatchAcceptanceKey(app, tcell.KeyTab, 0)
+			investigationAcceptanceAwait(t, app, func() bool { return w.mode == dailyWorkspaceCoverageMode })
+			// Discovery is reconstructed only on the UI thread after the mode change.
+			var label string
+			investigationAcceptanceUpdate(t, app, func() {
+				for _, descriptor := range actionCatalog(w, app) {
+					if descriptor.Key == tcell.KeyEnter {
+						label = descriptor.Label
+					}
+				}
+			})
+			require.Equal(t, "Retained evidence", label)
+			var first string
+			investigationAcceptanceUpdate(t, app, func() { first = investigationAcceptanceFrame(screen) })
+			for _, text := range []string{"Actions", "Help", "Retained evidence", "denied"} {
+				require.Contains(t, first, text, "first Coverage viewport:\n%s", first)
 			}
-		}
-	})
-	require.Equal(t, "Retained evidence", label)
-	var first string
-	investigationAcceptanceUpdate(t, app, func() { first = investigationAcceptanceFrame(screen) })
-	for _, text := range []string{"Actions", "Help", "Retained evidence", "denied"} {
-		require.Contains(t, first, text, "first Coverage viewport:\n%s", first)
+			header := strings.Join(strings.Split(first, "\n")[:2], "\n")
+			availableHints := []string{"Retained evidence"}
+			if size.width == 120 {
+				availableHints = append(availableHints, "Search", "Refresh")
+			}
+			for _, text := range availableHints {
+				require.Contains(t, header, text, "available actions must fit the Coverage header:\n%s", header)
+			}
+			for _, text := range []string{"Pod logs", "Investigate"} {
+				require.NotContains(t, header, text, "unavailable actions must not consume primary hints:\n%s", header)
+			}
+			investigationAcceptanceUpdate(t, app, func() {
+				actionDispatchAcceptanceAgreement(t, app, ui.KeyL, "Pod logs", false)
+				actionDispatchAcceptanceAgreement(t, app, ui.KeySlash, "Search", true)
+				actionDispatchAcceptanceAgreement(t, app, ui.KeyR, "Refresh", true)
+			})
+			actionDispatchAcceptanceKey(app, tcell.KeyRune, 'l')
+			investigationAcceptanceUpdate(t, app, func() {
+				require.Same(t, w, app.Content.Top(), "unavailable logs key must preserve the Coverage owner")
+				require.False(t, app.Content.IsTopDialog())
+				require.Equal(t, dailyWorkspaceCoverageMode, w.mode)
+			})
+			actionDispatchAcceptanceKey(app, tcell.KeyEnter, 0)
+			investigationAcceptanceAwait(t, app, func() bool { return app.Content.IsTopDialog() })
+			actionDispatchAcceptanceKey(app, tcell.KeyEscape, 0)
+			investigationAcceptanceAwait(t, app, func() bool { return !app.Content.IsTopDialog() && app.Content.Top() == w })
+			for _, character := range "/api?" {
+				actionDispatchAcceptanceKey(app, tcell.KeyRune, character)
+			}
+			investigationAcceptanceAwait(t, app, func() bool { return w.prompting && w.prompt.GetText() == "api?" })
+			actionDispatchAcceptanceKey(app, tcell.KeyEscape, 0)
+			investigationAcceptanceAwait(t, app, func() bool { return !w.prompting && w.query == "" && w.mode == dailyWorkspaceCoverageMode })
+		})
 	}
-	actionDispatchAcceptanceKey(app, tcell.KeyEnter, 0)
-	investigationAcceptanceAwait(t, app, func() bool { return app.Content.IsTopDialog() })
-	actionDispatchAcceptanceKey(app, tcell.KeyEscape, 0)
-	investigationAcceptanceAwait(t, app, func() bool { return !app.Content.IsTopDialog() && app.Content.Top() == w })
-	for _, character := range "/api?" {
-		actionDispatchAcceptanceKey(app, tcell.KeyRune, character)
-	}
-	investigationAcceptanceAwait(t, app, func() bool { return w.prompting && w.prompt.GetText() == "api?" })
-	actionDispatchAcceptanceKey(app, tcell.KeyEscape, 0)
-	investigationAcceptanceAwait(t, app, func() bool { return !w.prompting && w.query == "" && w.mode == dailyWorkspaceCoverageMode })
 }
 
 func TestActionDispatchAcceptanceDesiredReviewKeys(t *testing.T) {
