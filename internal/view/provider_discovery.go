@@ -17,7 +17,12 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-const providersCommand = "providers"
+const (
+	providersCommand       = "providers"
+	providerVersionCommand = "version"
+	providerClientFlag     = "--client"
+	providerFluxCommand    = "flux"
+)
 
 func (c *Command) providerCommand(line string) {
 	words := strings.Fields(line)
@@ -68,9 +73,9 @@ func (c *Command) providerCommand(line string) {
 //nolint:gocritic // Each adapter retains its own immutable selected-resource request.
 func explicitProviderSpecs(names []string, cfg *client.Config, request capabilityRequest) ([]provider.Spec, error) {
 	versions := map[string][]string{
-		"git": {"--version"}, "helm": {"version", "--short"}, "kustomize": {"version"},
-		"kubectl": {"version", "--client", "-o", "json"}, "flux": {"version", "--client"},
-		"cilium": {"version", "--client"}, "hubble": {"version"},
+		"git": {"--version"}, "helm": {providerVersionCommand, "--short"}, "kustomize": {providerVersionCommand},
+		"kubectl": {providerVersionCommand, providerClientFlag, "-o", "json"}, providerFluxCommand: {providerVersionCommand, providerClientFlag},
+		"cilium": {providerVersionCommand, providerClientFlag}, "hubble": {providerVersionCommand},
 	}
 	seen := map[string]bool{}
 	var specs []provider.Spec

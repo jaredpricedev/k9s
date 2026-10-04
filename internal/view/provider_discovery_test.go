@@ -20,17 +20,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	providerTestContext   = "captured"
+	providerTestPrivateNS = "private"
+	providerTestNamespace = "apps"
+	providerTestSelected  = "selected"
+)
+
 func TestProviderDiscoveryHelpAndSpecsDoNotExecuteOrScan(t *testing.T) {
 	app := NewApp(mock.NewMockConfig(t))
 	c := NewCommand(app)
 	c.providerCommand("providers")
 	assert.IsType(t, &Details{}, app.Content.Top())
 	assert.Contains(t, app.Content.Top().(*Details).model.Peek(), "Provider checks")
-	specs, err := explicitProviderSpecs([]string{"git", "git", "helm", "api:metrics"}, nil, capabilityRequest{Context: "captured", Namespace: "selected"})
+	specs, err := explicitProviderSpecs([]string{"git", "git", "helm", "api:metrics"}, nil, capabilityRequest{Context: providerTestContext, Namespace: providerTestSelected})
 	require.NoError(t, err)
 	require.Len(t, specs, 3)
 	assert.Equal(t, []string{"--version"}, specs[0].VersionArgs)
-	assert.Equal(t, []string{"version", "--short"}, specs[1].VersionArgs)
+	assert.Equal(t, []string{providerVersionCommand, "--short"}, specs[1].VersionArgs)
 	assert.NotNil(t, specs[2].Probe)
 	_, err = explicitProviderSpecs([]string{"login", "kubectl;touch injected"}, nil, capabilityRequest{})
 	require.Error(t, err)
@@ -39,11 +46,11 @@ func TestProviderDiscoveryHelpAndSpecsDoNotExecuteOrScan(t *testing.T) {
 }
 
 func TestProviderAPICheckExcludesSecretContentsAndRetainsCapturedScope(t *testing.T) {
-	request := capabilityRequest{Task: capabilityTaskResource, Context: "captured", Namespace: "private", Target: SelectedResourceTarget{GVR: client.NewGVR(client.SecGVR.String()), Name: "sensitive"}}
+	request := capabilityRequest{Task: capabilityTaskResource, Context: providerTestContext, Namespace: providerTestPrivateNS, Target: SelectedResourceTarget{GVR: client.NewGVR(client.SecGVR.String()), Name: "sensitive"}}
 	// Nil config proves Secret checks stop before even creating a reader.
 	_, err := providerAPIProbe(nil, request)(context.Background(), provider.Scope{Context: request.Context, Namespace: request.Namespace})
 	require.ErrorContains(t, err, "Secret content excluded")
-	result := provider.Discover(context.Background(), provider.Scope{Context: "captured", Namespace: "private", Revision: 9}, provider.Spec{ID: "api:resource", Probe: providerAPIProbe(nil, request)})
+	result := provider.Discover(context.Background(), provider.Scope{Context: providerTestContext, Namespace: providerTestPrivateNS, Revision: 9}, provider.Spec{ID: "api:resource", Probe: providerAPIProbe(nil, request)})
 	require.Len(t, result, 1)
 	assert.Equal(t, provider.Unavailable, result[0].State)
 	assert.Equal(t, uint64(9), result[0].Scope.Revision)
@@ -51,7 +58,7 @@ func TestProviderAPICheckExcludesSecretContentsAndRetainsCapturedScope(t *testin
 }
 
 func TestProviderChecksRenderDistinctStatesAndSafeUnicode(t *testing.T) {
-	scope := provider.Scope{Context: "long-context", Namespace: "apps"}
+	scope := provider.Scope{Context: "long-context", Namespace: providerTestNamespace}
 	checks := []provider.Capability{}
 	for _, state := range []provider.CapabilityState{provider.Ready, provider.Absent, provider.Denied, provider.Incompatible, provider.Unavailable} {
 		checks = append(checks, provider.Capability{ID: string(state), Scope: scope, State: state, Version: "v2.3.4", ObservedAt: time.Unix(0, 0), Limits: provider.Limits{Timeout: 3 * time.Second}})
