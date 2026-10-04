@@ -224,3 +224,34 @@ func TestSecurityScalarProjectionRejectsUnexpectedStructuredValues(t *testing.T)
 	require.Equal(t, securityNotDeclared, effectiveDeclaredScalar(spec, nil, "runAsUser"))
 	require.Equal(t, "Default forged heading", effectiveDeclaredScalar(spec, nil, "procMount"))
 }
+
+func TestSecurityReviewRejectsMismatchedNamedReplyEvenWhenUIDMatches(t *testing.T) {
+	target := SelectedResourceTarget{Context: "captured", GVR: client.PodGVR, Namespace: "apps", Name: "api-0", UID: types.UID("pod-uid")}
+	for _, mismatch := range []string{"name", "wrong namespace", "kind", "apiVersion"} {
+		t.Run(mismatch, func(t *testing.T) {
+			object := &unstructured.Unstructured{Object: map[string]any{
+				"apiVersion": "v1", "kind": "Pod",
+				"metadata": map[string]any{"name": target.Name, "namespace": target.Namespace, "uid": string(target.UID)},
+				"spec":     map[string]any{"containers": []any{map[string]any{"name": "unverified", "image": "must-not-retain"}}},
+			}}
+			switch mismatch {
+			case "name":
+				object.SetName("other")
+			case "wrong namespace":
+				object.SetNamespace("other")
+			case "kind":
+				object.SetKind("Secret")
+			case "apiVersion":
+				object.SetAPIVersion("other/v1")
+			}
+			dyn := fake.NewSimpleDynamicClient(runtime.NewScheme())
+			dyn.PrependReactor("get", "pods", func(ktesting.Action) (bool, runtime.Object, error) {
+				return true, object, nil
+			})
+			snapshot, err := loadSecurityDeclarations(t.Context(), dyn, target, time.Now())
+			require.ErrorIs(t, err, errSecurityIdentityChanged)
+			require.Empty(t, snapshot.Containers)
+			require.Len(t, dyn.Actions(), 1)
+		})
+	}
+}

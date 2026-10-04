@@ -108,7 +108,7 @@ func securityReviewTargetError(target SelectedResourceTarget) error {
 	if !client.IsNamespaced(target.Namespace) {
 		return fmt.Errorf("select a namespaced Pod or workload")
 	}
-	if target.UID == "" {
+	if target.UID == "" || len(target.UID) > 128 {
 		return fmt.Errorf("resource UID unavailable; refresh the list and select it again")
 	}
 	switch target.GVR.String() {
@@ -267,6 +267,10 @@ func (v *securityReviewView) render() {
 	if s.Identity.UID == "" {
 		s.Identity = securityReviewIdentity{Context: v.target.Context, Namespace: v.target.Namespace, Name: v.target.Name, UID: string(v.target.UID)}
 	}
+	capturedAt := "pending"
+	if !s.Identity.CapturedAt.IsZero() {
+		capturedAt = s.Identity.CapturedAt.UTC().Format(time.RFC3339)
+	}
 	var b strings.Builder
 	if v.status != "" {
 		fmt.Fprintf(&b, "%s\n", v.status)
@@ -276,7 +280,7 @@ func (v *securityReviewView) render() {
 			"Context %s · captured %s\n\n",
 		securityReviewTabs[v.activeTab], s.Identity.Namespace, s.Identity.Name,
 		s.Identity.UID, s.Identity.ResourceVersion, s.Identity.Context,
-		s.Identity.CapturedAt.Format(time.RFC3339))
+		capturedAt)
 	switch v.activeTab {
 	case 0:
 		fmt.Fprintf(&b,
@@ -321,7 +325,7 @@ func (v *securityReviewView) render() {
 				"This screen presents authored declarations and selected status image IDs as bounded evidence. "+
 				"Human demand validation and a configured scanner/admission provider remain open.\n",
 			s.Identity.GVR, s.Identity.Namespace, s.Identity.Name, s.Identity.UID,
-			s.Identity.ResourceVersion, s.Identity.CapturedAt.Format(time.RFC3339))
+			s.Identity.ResourceVersion, capturedAt)
 	}
 	v.Update(b.String())
 }
@@ -359,7 +363,13 @@ func loadSecurityDeclarations(ctx context.Context, dyn dynamic.Interface, target
 	if err != nil {
 		return securityDeclarationSnapshot{}, err
 	}
-	if string(obj.GetUID()) != string(target.UID) {
+	expectedKind := map[string]string{
+		client.PodGVR.String(): "Pod", client.DpGVR.String(): "Deployment",
+		client.StsGVR.String(): "StatefulSet", client.DsGVR.String(): "DaemonSet",
+		client.JobGVR.String(): "Job", client.CjGVR.String(): "CronJob",
+	}[target.GVR.String()]
+	if obj == nil || obj.GetUID() != target.UID || obj.GetName() != target.Name || obj.GetNamespace() != target.Namespace ||
+		obj.GetAPIVersion() != target.GVR.GV().String() || obj.GetKind() != expectedKind {
 		return securityDeclarationSnapshot{}, errSecurityIdentityChanged
 	}
 	return projectSecurityDeclarations(target, obj, captured), nil
