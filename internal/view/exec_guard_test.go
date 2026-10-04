@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -170,7 +171,7 @@ func assertGuardedDescendantStopped(t *testing.T, pid int) {
 	path := filepath.Join(string(filepath.Separator), "proc", strconv.Itoa(pid), "stat")
 	for {
 		data, err := os.ReadFile(path)
-		if os.IsNotExist(err) {
+		if os.IsNotExist(err) || errors.Is(err, syscall.ESRCH) {
 			return
 		}
 		if err != nil {
