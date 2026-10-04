@@ -869,7 +869,7 @@ func (a *App) statusIndicator() *ui.StatusIndicator {
 // poller is not; ignore queued work if navigation has changed the top component.
 func (a *App) connectivityComponent(c model.Component, connected bool) {
 	switch c.(type) {
-	case *HubbleView, *Pulse, *inspectionDetails, *comparisonView:
+	case *HubbleView, *Pulse, *inspectionDetails, *comparisonView, *capabilityDetails:
 		a.QueueUpdateDraw(func() {
 			if a.Content.Top() != c {
 				return

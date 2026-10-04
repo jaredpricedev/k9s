@@ -94,12 +94,22 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 			Handler: func(*tcell.EventKey) *tcell.EventKey { app.openResourceComparison(target); return nil },
 		})
 	}
+	result = append(result, investigationActions(owner, app)...)
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Category != result[j].Category {
 			return ui.ActionCategoryOrder(result[i].Category) < ui.ActionCategoryOrder(result[j].Category)
 		}
 		return result[i].Label < result[j].Label
 	})
+	return result
+}
+
+func investigationActions(_ actionOwner, app *App) []ui.ActionDescriptor {
+	var result []ui.ActionDescriptor
+	result = append(result, ui.ActionDescriptor{
+		ID: "command.diagnostics", Label: "Capability diagnostics", Category: ui.ActionInspect,
+		Shortcut: ":diagnostics", Discoverable: true,
+		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).capabilityCommand("diagnostics"); return nil }})
 	return result
 }
 
