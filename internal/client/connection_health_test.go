@@ -75,6 +75,7 @@ func TestPinnedDiagnosticConfigPreservesOverridesWithoutSharedPointers(t *testin
 	flags.ImpersonateGroup, flags.ImpersonateUserExtra = &groups, &extras
 	pinned, err := NewConfig(flags).PinnedDiagnosticConfig(actor)
 	require.NoError(t, err)
+	//nolint:gosec // Mutating a synthetic fixture token verifies that a previously captured diagnostic config keeps its own value.
 	token, server, actor = diagnosticFixtureMutation, "https://other.example", diagnosticFixtureOther
 	groups[0], extras[0] = diagnosticFixtureMutation, diagnosticFixtureMutation
 	require.Equal(t, "explicit-token", *pinned.flags.BearerToken)

@@ -418,7 +418,7 @@ func renderConnectionHealth(snapshot, previous connectionHealthSnapshot, now tim
 
 func connectionHealthAge(now, at time.Time) string {
 	if at.IsZero() {
-		return "unknown"
+		return workspaceUnknown
 	}
 	age := now.Sub(at)
 	if age < 0 {

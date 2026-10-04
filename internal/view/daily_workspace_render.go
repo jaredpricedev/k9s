@@ -93,7 +93,7 @@ func (w *dailyWorkspace) makeRows(terms []dailyWorkspaceTerm) ([]string, []daily
 	headers := []string{"PRIORITY", dailyWorkspaceKindCol, "NAMESPACE", "NAME", "FINDING"}
 	add := func(row dailyWorkspaceRow) { rows = append(rows, row) }
 	switch w.mode {
-	case "scopes":
+	case dailyWorkspaceScopesMode:
 		headers = []string{"", "SCOPE", "CONTEXT", "NAMESPACES", "SELECTOR"}
 		for i := range w.store.Scopes {
 			scope := &w.store.Scopes[i]
@@ -114,7 +114,7 @@ func (w *dailyWorkspace) makeRows(terms []dailyWorkspaceTerm) ([]string, []daily
 					"n creates; e edits the selected scope; d removes local metadata.",
 			})
 		}
-	case "inventory":
+	case inventoryCommand:
 		headers = []string{dailyWorkspaceKindCol, "NAMESPACE", "NAME", statusCol, "AGE"}
 		for _, resource := range w.snapshot.Resources {
 			if !dailyWorkspaceMatch(terms, resource.Kind, resource.Ref.Namespace, resource.Ref.Name, resource.Summary) {
@@ -141,7 +141,7 @@ func (w *dailyWorkspace) makeRows(terms []dailyWorkspaceTerm) ([]string, []daily
 			}
 			add(dailyWorkspaceRow{cells: []string{coverage.State, coverage.GVR, coverage.Namespace, coverage.Detail}, detail: coverage.Detail})
 		}
-	case "pins":
+	case dailyWorkspacePinsMode:
 		headers = []string{"KIND / API", "NAMESPACE", "NAME", statusCol}
 		for _, pin := range w.scope.Pins {
 			status := "Not observed in snapshot"
@@ -196,7 +196,7 @@ func (w *dailyWorkspace) render() {
 	for i, row := range rows {
 		for col, value := range row.cells {
 			cell := tview.NewTableCell(tview.Escape(value)).SetTextColor(text).SetBackgroundColor(canvas)
-			if col == 0 && w.mode == "queue" {
+			if col == 0 && w.mode == dailyWorkspaceQueueMode {
 				switch value {
 				case "CRITICAL":
 					cell.SetTextColor(palette.Failure.Color())
@@ -226,16 +226,16 @@ func (w *dailyWorkspace) render() {
 		message := "No rows match this search. / changes or clears it."
 		if w.query == "" {
 			switch w.mode {
-			case "scopes":
+			case dailyWorkspaceScopesMode:
 				message = "No saved scopes. Press n to create your daily workspace."
-			case "queue":
+			case dailyWorkspaceQueueMode:
 				message = "No findings observed. Coverage shows checks and unknowns."
 				if w.snapshot.ObservedAt.IsZero() {
 					message = "No observation yet. Press r to read this scope."
 				}
-			case "inventory":
+			case inventoryCommand:
 				message = "No resources observed. r refreshes; Coverage shows gaps."
-			case "pins":
+			case dailyWorkspacePinsMode:
 				message = "No pins. Select a resource in Daily or Inventory and press p."
 			case dailyWorkspaceCoverageMode:
 				message = "No observation yet. r reads the saved namespaces."
@@ -331,13 +331,13 @@ func (w *dailyWorkspace) constrainColumns(width int) {
 	}
 	var caps []int
 	switch w.mode {
-	case "inventory":
+	case inventoryCommand:
 		caps = []int{max(8, min(16, width/9)), max(10, min(22, width/7)), max(14, min(32, width/5)), 0, 6}
 	case dailyWorkspaceCoverageMode:
 		caps = []int{12, max(16, min(40, width/3)), max(10, min(22, width/6)), 0}
-	case "pins":
+	case dailyWorkspacePinsMode:
 		caps = []int{max(16, min(36, width/4)), max(10, min(22, width/6)), max(14, min(32, width/5)), 0}
-	case "scopes":
+	case dailyWorkspaceScopesMode:
 		caps = []int{1, max(14, min(24, width/5)), max(14, min(32, width/5)), max(14, min(28, width/5)), 0}
 	default:
 		caps = []int{8, max(8, min(16, width/9)), max(10, min(22, width/7)), max(14, min(32, width/5)), 0}

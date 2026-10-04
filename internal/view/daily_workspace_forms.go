@@ -62,7 +62,7 @@ func (m *dailyWorkspaceModal) Draw(screen tcell.Screen) {
 }
 
 func (w *dailyWorkspace) editingScope() workspace.Scope {
-	if w.mode == "scopes" {
+	if w.mode == dailyWorkspaceScopesMode {
 		row, _ := w.table.GetSelection()
 		if row > 0 && row <= len(w.rows) {
 			for i := range w.store.Scopes {
@@ -76,7 +76,7 @@ func (w *dailyWorkspace) editingScope() workspace.Scope {
 	return w.scope
 }
 func (w *dailyWorkspace) scopeForm(edit bool) {
-	scope := workspace.Scope{Context: w.app.Config.ActiveContextName(), Layout: "queue"}
+	scope := workspace.Scope{Context: w.app.Config.ActiveContextName(), Layout: dailyWorkspaceQueueMode}
 	title := "Create workspace"
 	if edit {
 		scope = w.editingScope()
@@ -224,7 +224,7 @@ func (w *dailyWorkspace) savedSearchForm() {
 				return
 			}
 			dismiss()
-			w.setMode("inventory")
+			w.setMode(inventoryCommand)
 			w.applyQuery(query)
 		})
 	})
@@ -269,7 +269,7 @@ func (w *dailyWorkspace) deleteScopeForm() {
 				w.coverage = nil
 			}
 			dismiss()
-			w.mode = "scopes"
+			w.mode = dailyWorkspaceScopesMode
 			w.render()
 		})
 	})

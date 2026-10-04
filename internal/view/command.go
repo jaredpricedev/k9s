@@ -30,6 +30,8 @@ const (
 	ctxCmd            = "ctx"
 	dailyCommand      = "daily"
 	connectionCommand = "connection"
+	inventoryCommand  = "inventory"
+	workspaceUnknown  = "unknown"
 )
 
 var (
@@ -273,7 +275,22 @@ func (c *Command) defaultCmd(isRoot bool) error {
 	return nil
 }
 
+func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
+	switch p.Cmd() {
+	case "workspace", dailyCommand, inventoryCommand:
+		c.dailyWorkspaceCommand(p.GetLine())
+	case connectionCommand, "connection-health":
+		c.connectionHealthCommand(p.GetLine())
+	default:
+		return false
+	}
+	return true
+}
+
 func (c *Command) specialCmd(p *cmd.Interpreter, pushCmd bool) bool {
+	if c.toolkitCmd(p) {
+		return true
+	}
 	switch {
 	case p.Cmd() == "ts":
 		c.investigationCommand(troubleshootCommand)
@@ -287,10 +304,6 @@ func (c *Command) specialCmd(p *cmd.Interpreter, pushCmd bool) bool {
 		c.evidenceCommand(p.GetLine())
 	case p.Cmd() == "diagnostics":
 		c.capabilityCommand(p.GetLine())
-	case p.Cmd() == "workspace" || p.Cmd() == dailyCommand || p.Cmd() == "inventory":
-		c.dailyWorkspaceCommand(p.GetLine())
-	case p.Cmd() == connectionCommand || p.Cmd() == "connection-health":
-		c.connectionHealthCommand(p.GetLine())
 	case p.Cmd() == actionsCommand || p.Cmd() == troubleshootCommand || p.Cmd() == tlsCommand:
 		c.investigationCommand(p.Cmd())
 	case p.Cmd() == "cilium" || p.Cmd() == "hubble":

@@ -27,7 +27,8 @@ const (
 	maxPressurePods   = 20
 	maxPressureEvents = 20
 	pressureNA        = "N/A"
-	pressureUnknown   = "unknown"
+	pressureUnknown   = workspaceUnknown
+	pressureUnset     = "N/A (unset)"
 )
 
 // pressureCommand uses the inspection lifetime, cancellation and destination
@@ -127,7 +128,7 @@ func loadResourcePressureSnapshot(ctx context.Context, conn client.Connection, t
 		"CPU throttling: unknown — metrics-server supplies no throttling counters.\n")
 	var pods []*unstructured.Unstructured
 	notice := ""
-	if obj.GetKind() == "Pod" {
+	if obj.GetKind() == inspectionPodKind {
 		pods = []*unstructured.Unstructured{obj}
 	} else {
 		switch obj.GetKind() {
@@ -164,7 +165,7 @@ func loadResourcePressureSnapshot(ctx context.Context, conn client.Connection, t
 			continue
 		}
 		podInvestigation := inspect.NewInvestigation(obj, target.Context, client.PodGVR.String(), now)
-		if investigation.Kind != "Pod" {
+		if investigation.Kind != inspectionPodKind {
 			investigation.Containers = append(investigation.Containers, podInvestigation.Containers...)
 			for _, condition := range podInvestigation.Conditions {
 				condition.Type = pod.Name + " / " + condition.Type
@@ -193,7 +194,7 @@ func loadResourcePressureSnapshot(ctx context.Context, conn client.Connection, t
 		})
 	}
 	investigation.Coverage = append(investigation.Coverage,
-		inspect.InvestigationCoverage{Source: "CPU throttling", State: "unknown", Detail: "metrics-server supplies no throttling counters"},
+		inspect.InvestigationCoverage{Source: "CPU throttling", State: workspaceUnknown, Detail: "metrics-server supplies no throttling counters"},
 		inspect.InvestigationCoverage{Source: "usage", State: "sample only", Detail: "Current sample over its reported window; no usage history or causal diagnosis"},
 	)
 	b.WriteString("\n" +
@@ -212,7 +213,7 @@ func newPressureInvestigation(obj *unstructured.Unstructured, contextName, gvr s
 	// replace the generic placeholder before collecting from that same snapshot.
 	coverage := investigation.Coverage[:0]
 	for _, source := range investigation.Coverage {
-		if source.Source != "metrics" {
+		if source.Source != capabilityTaskMetrics {
 			coverage = append(coverage, source)
 		}
 	}
@@ -337,7 +338,7 @@ func pressureBudgets(pod *corev1.Pod, metrics *pressureMetrics) []inspect.Resour
 	add := func(name, role string, resources corev1.ResourceRequirements) {
 		budget := inspect.ResourceBudget{Pod: pod.Name, UID: string(pod.UID), Container: name, Role: role,
 			MetricsState: string(metrics.sample.State), MetricsReason: metrics.sample.Reason,
-			ObservedAt: metrics.sample.ObservedAt, Window: metrics.window, CurrentState: "unknown"}
+			ObservedAt: metrics.sample.ObservedAt, Window: metrics.window, CurrentState: workspaceUnknown}
 		budget.CPURequest, budget.CPULimit, budget.CPUUsage, budget.CPURequestRatio, budget.CPULimitRatio = pressureResourceValues(
 			resources, metrics.containers[name], corev1.ResourceCPU, metrics.sample.Fresh(), pressureBudgetQuantity,
 		)
@@ -352,7 +353,7 @@ func pressureBudgets(pod *corev1.Pod, metrics *pressureMetrics) []inspect.Resour
 				budget.CurrentState = fmt.Sprintf("%s · exit %d", status.State.Terminated.Reason, status.State.Terminated.ExitCode)
 			case status.State.Running != nil:
 				budget.CurrentState = "running"
-				if role == "app" && !status.Ready {
+				if role == investigationAppRole && !status.Ready {
 					budget.CurrentState += " / not ready"
 				}
 			}
@@ -369,7 +370,7 @@ func pressureBudgets(pod *corev1.Pod, metrics *pressureMetrics) []inspect.Resour
 	}
 	for index := range pod.Spec.Containers {
 		container := &pod.Spec.Containers[index]
-		add(container.Name, "app", container.Resources)
+		add(container.Name, investigationAppRole, container.Resources)
 	}
 	for index := range pod.Spec.EphemeralContainers {
 		container := &pod.Spec.EphemeralContainers[index]
@@ -437,7 +438,7 @@ func renderContainerPressure(b *strings.Builder, name, phase string, resources c
 func pressureQuantity(values corev1.ResourceList, resource corev1.ResourceName) string {
 	q, ok := values[resource]
 	if !ok {
-		return "N/A (unset)"
+		return pressureUnset
 	}
 	if resource == corev1.ResourceCPU {
 		return fmt.Sprintf("%gm", 1000*q.AsApproximateFloat64())
@@ -450,7 +451,7 @@ func pressureQuantity(values corev1.ResourceList, resource corev1.ResourceName) 
 func pressureBudgetQuantity(values corev1.ResourceList, resource corev1.ResourceName) string {
 	q, ok := values[resource]
 	if !ok {
-		return "N/A (unset)"
+		return pressureUnset
 	}
 	if resource == corev1.ResourceCPU {
 		return fmt.Sprintf("%gm", 1000*q.AsApproximateFloat64())

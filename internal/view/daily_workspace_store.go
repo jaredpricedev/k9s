@@ -63,7 +63,7 @@ func (w *dailyWorkspace) invalidateScope(scope workspace.Scope, message string) 
 	w.tabSelections = make(map[string]string)
 	w.table.Clear()
 	w.table.Select(1, 0)
-	w.mode = "scopes"
+	w.mode = dailyWorkspaceScopesMode
 	w.notice = message
 }
 

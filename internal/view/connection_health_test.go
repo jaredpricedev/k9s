@@ -42,8 +42,7 @@ func connectionHealthConfigFixture(t *testing.T, server string, ca []byte) *clie
 		CurrentContext: connectionHealthFixtureActor,
 		Contexts:       map[string]*api.Context{connectionHealthFixtureActor: {Cluster: "cluster", AuthInfo: "user"}},
 		Clusters:       map[string]*api.Cluster{"cluster": {Server: server, CertificateAuthorityData: ca}},
-		//nolint:gosec // Synthetic token tests that transport errors cannot disclose credentials.
-		AuthInfos: map[string]*api.AuthInfo{"user": {Token: "configured-secret-token"}},
+		AuthInfos:      map[string]*api.AuthInfo{"user": {Token: "configured-secret-token"}},
 	}
 	require.NoError(t, clientcmd.WriteToFile(raw, path))
 	flags := genericclioptions.NewConfigFlags(true)

@@ -39,16 +39,16 @@ func (c *Command) dailyWorkspaceCommand(line string) {
 			c.app.Flash().Warn("Use :daily")
 			return
 		}
-		open("queue", "")
+		open(dailyWorkspaceQueueMode, "")
 		return
-	case "inventory":
-		open("inventory", strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), words[0])))
+	case inventoryCommand:
+		open(inventoryCommand, strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), words[0])))
 		return
 	}
 	if len(words) == 1 {
-		mode := "scopes"
+		mode := dailyWorkspaceScopesMode
 		if store.Active != "" {
-			mode = "queue"
+			mode = dailyWorkspaceQueueMode
 			for i := range store.Scopes {
 				scope := &store.Scopes[i]
 				if scope.Name == store.Active && scope.Layout != "" {
@@ -64,7 +64,7 @@ func (c *Command) dailyWorkspaceCommand(line string) {
 		c.dailyWorkspaceSave(&store, words, open)
 	case "use":
 		c.dailyWorkspaceUse(&store, words, open)
-	case "delete":
+	case dailyWorkspaceDeleteToken:
 		c.dailyWorkspaceDelete(&store, words, open)
 	case "pin":
 		c.dailyWorkspacePin(&store, words)
@@ -80,7 +80,7 @@ func (c *Command) dailyWorkspaceSave(store *workspace.Store, words []string, ope
 		c.app.Flash().Warn("Use :workspace save NAME ns1,ns2 [--selector=app=example] [--kinds=pods,deployments]")
 		return
 	}
-	scope := workspace.Scope{Name: words[2], Context: c.app.Config.ActiveContextName(), Namespaces: strings.Split(words[3], ","), Layout: "queue"}
+	scope := workspace.Scope{Name: words[2], Context: c.app.Config.ActiveContextName(), Namespaces: strings.Split(words[3], ","), Layout: dailyWorkspaceQueueMode}
 	for _, flag := range words[4:] {
 		switch {
 		case strings.HasPrefix(flag, "--selector="):
@@ -117,7 +117,7 @@ func (c *Command) dailyWorkspaceSave(store *workspace.Store, words []string, ope
 		c.app.Flash().Err(err)
 		return
 	}
-	open("queue", "")
+	open(dailyWorkspaceQueueMode, "")
 }
 
 func (c *Command) dailyWorkspaceUse(store *workspace.Store, words []string, open func(string, string)) {
@@ -141,7 +141,7 @@ func (c *Command) dailyWorkspaceUse(store *workspace.Store, words []string, open
 		}
 		mode := scope.Layout
 		if mode == "" {
-			mode = "queue"
+			mode = dailyWorkspaceQueueMode
 		}
 		open(mode, "")
 		return
@@ -167,7 +167,7 @@ func (c *Command) dailyWorkspaceDelete(store *workspace.Store, words []string, o
 		c.app.Flash().Err(err)
 		return
 	}
-	open("scopes", "")
+	open(dailyWorkspaceScopesMode, "")
 }
 
 func (c *Command) dailyWorkspacePin(store *workspace.Store, words []string) {

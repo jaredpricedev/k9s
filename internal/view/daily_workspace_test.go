@@ -21,10 +21,14 @@ import (
 )
 
 const (
-	testWorkspaceName            = "application"
-	testWorkspaceNamespace       = "backend"
-	testWorkspaceCrashLoopReason = "CrashLoopBackOff"
-	testWorkspaceAPIName         = "api"
+	testWorkspaceCoverageDenied    = "denied"
+	testWorkspaceWorkerName        = "worker"
+	testWorkspacePriorContext      = "prior-context"
+	testWorkspaceProductionContext = "production-context"
+	testWorkspaceName              = "application"
+	testWorkspaceNamespace         = "backend"
+	testWorkspaceCrashLoopReason   = "CrashLoopBackOff"
+	testWorkspaceAPIName           = "api"
 )
 
 func dailyWorkspaceFixture() *dailyWorkspace {
@@ -36,7 +40,7 @@ func dailyWorkspaceFixture() *dailyWorkspace {
 		footer: tview.NewTextView().SetDynamicColors(true), prompt: tview.NewInputField(),
 		store:       workspace.Store{Version: 1, Active: testWorkspaceName},
 		scope:       workspace.Scope{Name: testWorkspaceName, Context: "development", Namespaces: []string{"frontend", testWorkspaceNamespace}, Kinds: []string{"pods"}},
-		contextName: "development", mode: "inventory",
+		contextName: "development", mode: inventoryCommand,
 	}
 }
 func workspaceFixtureRef(name string) workspace.ResourceRef {
@@ -45,7 +49,7 @@ func workspaceFixtureRef(name string) workspace.ResourceRef {
 
 func TestDailyWorkspaceSearchStaysLocalAndRejectsInvalidFields(t *testing.T) {
 	w := dailyWorkspaceFixture()
-	w.snapshot = workspace.Snapshot{ObservedAt: time.Now(), Resources: []workspace.Resource{{Ref: workspaceFixtureRef(testWorkspaceAPIName), Kind: "Pod", Summary: testWorkspaceCrashLoopReason}, {Ref: workspaceFixtureRef("worker"), Kind: "Pod", Summary: "Ready"}}}
+	w.snapshot = workspace.Snapshot{ObservedAt: time.Now(), Resources: []workspace.Resource{{Ref: workspaceFixtureRef(testWorkspaceAPIName), Kind: "Pod", Summary: testWorkspaceCrashLoopReason}, {Ref: workspaceFixtureRef(testWorkspaceWorkerName), Kind: "Pod", Summary: "Ready"}}}
 	if !w.applyQuery("kind:POD ns:backend status:crash") || len(w.rows) != 1 || w.rows[0].ref.Name != testWorkspaceAPIName {
 		t.Fatalf("search: %#v", w.rows)
 	}
@@ -68,11 +72,11 @@ func TestDailyWorkspaceRefreshRetainsObservationAndTimestampOnFailure(t *testing
 	w := dailyWorkspaceFixture()
 	observed := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
 	w.snapshot = workspace.Snapshot{ObservedAt: observed, Resources: []workspace.Resource{{Ref: workspaceFixtureRef(testWorkspaceAPIName), Kind: "Pod", Summary: "Ready"}}}
-	w.acceptSnapshot(workspace.Snapshot{ObservedAt: observed.Add(time.Minute), Coverage: []workspace.Coverage{{GVR: "v1/pods", Namespace: testWorkspaceNamespace, State: "denied", Detail: "list forbidden"}}}, nil)
+	w.acceptSnapshot(workspace.Snapshot{ObservedAt: observed.Add(time.Minute), Coverage: []workspace.Coverage{{GVR: "v1/pods", Namespace: testWorkspaceNamespace, State: testWorkspaceCoverageDenied, Detail: "list forbidden"}}}, nil)
 	if !w.snapshot.ObservedAt.Equal(observed) || len(w.snapshot.Resources) != 1 {
 		t.Fatal("failed refresh replaced retained observation")
 	}
-	if len(w.coverage) != 1 || w.coverage[0].State != "denied" || !strings.Contains(w.notice, "retained") {
+	if len(w.coverage) != 1 || w.coverage[0].State != testWorkspaceCoverageDenied || !strings.Contains(w.notice, "retained") {
 		t.Fatal("latest coverage failure was hidden")
 	}
 	w.acceptSnapshot(workspace.Snapshot{ObservedAt: observed.Add(2 * time.Minute)}, errors.New("deadline exceeded"))
@@ -88,12 +92,12 @@ func TestDailyWorkspacePartialRefreshUpdatesSuccessfulReadsWithPersistentRBACGap
 	w := dailyWorkspaceFixture()
 	observed := time.Date(2026, 10, 3, 12, 0, 0, 0, time.UTC)
 	w.snapshot = workspace.Snapshot{ObservedAt: observed, Resources: []workspace.Resource{{Ref: workspaceFixtureRef(testWorkspaceAPIName), Kind: "Pod", Summary: testWorkspaceCrashLoopReason}}}
-	fresh := workspace.Snapshot{ObservedAt: observed.Add(time.Minute), Resources: []workspace.Resource{{Ref: workspaceFixtureRef(testWorkspaceAPIName), Kind: "Pod", Summary: "Ready"}}, Coverage: []workspace.Coverage{{GVR: "v1/pods", Namespace: testWorkspaceNamespace, State: dailyWorkspaceCoverageComplete}, {GVR: "networking.k8s.io/v1/ingresses", Namespace: testWorkspaceNamespace, State: "denied"}}}
+	fresh := workspace.Snapshot{ObservedAt: observed.Add(time.Minute), Resources: []workspace.Resource{{Ref: workspaceFixtureRef(testWorkspaceAPIName), Kind: "Pod", Summary: "Ready"}}, Coverage: []workspace.Coverage{{GVR: "v1/pods", Namespace: testWorkspaceNamespace, State: dailyWorkspaceCoverageComplete}, {GVR: "networking.k8s.io/v1/ingresses", Namespace: testWorkspaceNamespace, State: testWorkspaceCoverageDenied}}}
 	w.acceptSnapshot(fresh, nil)
 	if !w.snapshot.ObservedAt.Equal(fresh.ObservedAt) || w.snapshot.Resources[0].Summary != "Ready" || !strings.Contains(w.notice, "Partial observation") {
 		t.Fatal("successful reads stayed stale behind unrelated denial")
 	}
-	if len(w.coverage) != 2 || w.coverage[1].State != "denied" {
+	if len(w.coverage) != 2 || w.coverage[1].State != testWorkspaceCoverageDenied {
 		t.Fatal("coverage gap disappeared")
 	}
 }
@@ -117,28 +121,28 @@ func TestDailyWorkspaceLifecycleRejectsLateAndWrongContextUpdates(t *testing.T) 
 }
 func TestDailyWorkspaceSelectionRetainsCapturedIdentityAcrossRefresh(t *testing.T) {
 	w := dailyWorkspaceFixture()
-	w.snapshot = workspace.Snapshot{ObservedAt: time.Now(), Resources: []workspace.Resource{{Ref: workspaceFixtureRef(testWorkspaceAPIName), Kind: "Pod", Summary: "Ready"}, {Ref: workspaceFixtureRef("worker"), Kind: "Pod", Summary: "Ready"}}}
+	w.snapshot = workspace.Snapshot{ObservedAt: time.Now(), Resources: []workspace.Resource{{Ref: workspaceFixtureRef(testWorkspaceAPIName), Kind: "Pod", Summary: "Ready"}, {Ref: workspaceFixtureRef(testWorkspaceWorkerName), Kind: "Pod", Summary: "Ready"}}}
 	w.render()
 	w.table.Select(2, 0)
 	// A reordered observation and changed status preserve the identity selected by
 	// the engineer, rather than preserving its old row number.
-	w.snapshot.Resources = []workspace.Resource{{Ref: workspaceFixtureRef("worker"), Kind: "Pod", Summary: "Unready"}, {Ref: workspaceFixtureRef(testWorkspaceAPIName), Kind: "Pod", Summary: "Ready"}}
+	w.snapshot.Resources = []workspace.Resource{{Ref: workspaceFixtureRef(testWorkspaceWorkerName), Kind: "Pod", Summary: "Unready"}, {Ref: workspaceFixtureRef(testWorkspaceAPIName), Kind: "Pod", Summary: "Ready"}}
 	w.render()
 	target := w.SelectedResource()
-	if target.Name != "worker" || target.UID != types.UID("worker-uid") || target.Context != "development" || target.Namespace != testWorkspaceNamespace {
+	if target.Name != testWorkspaceWorkerName || target.UID != types.UID("worker-uid") || target.Context != "development" || target.Namespace != testWorkspaceNamespace {
 		t.Fatalf("selected identity changed: %+v", target)
 	}
 	// Selection captures the scope's context, even when the surrounding app is
 	// changed later. The caller must reject it rather than retargeting its request.
-	w.scope.Context = "prior-context"
-	if w.SelectedResource().Context != "prior-context" {
+	w.scope.Context = testWorkspacePriorContext
+	if w.SelectedResource().Context != testWorkspacePriorContext {
 		t.Fatal("selected resource was silently retargeted")
 	}
 }
 func TestDailyWorkspacePinsKeepPriorUIDAndCoverageIsNotAnObject(t *testing.T) {
 	w := dailyWorkspaceFixture()
 	w.scope.Pins = []workspace.ResourceRef{workspaceFixtureRef(testWorkspaceAPIName)}
-	w.mode = "pins"
+	w.mode = dailyWorkspacePinsMode
 	replacement := workspaceFixtureRef(testWorkspaceAPIName)
 	replacement.UID = "replacement-uid"
 	w.snapshot = workspace.Snapshot{ObservedAt: time.Now(), Resources: []workspace.Resource{{Ref: replacement, Kind: "Pod", Summary: "Ready"}}}
@@ -147,7 +151,7 @@ func TestDailyWorkspacePinsKeepPriorUIDAndCoverageIsNotAnObject(t *testing.T) {
 		t.Fatal("pin silently followed replacement")
 	}
 	w.mode = dailyWorkspaceCoverageMode
-	w.coverage = []workspace.Coverage{{GVR: "v1/pods", Namespace: testWorkspaceNamespace, State: "denied", Detail: "forbidden"}}
+	w.coverage = []workspace.Coverage{{GVR: "v1/pods", Namespace: testWorkspaceNamespace, State: testWorkspaceCoverageDenied, Detail: "forbidden"}}
 	w.render()
 	if w.SelectedResource().Err() == nil {
 		t.Fatal("coverage row was exposed as API object")
@@ -181,9 +185,9 @@ func TestDailyWorkspaceScopeMutationWritesOnlyLocalStore(t *testing.T) {
 }
 func TestDailyWorkspaceDrawEscapesReportedMarkupAndShowsUnknownCoverage(t *testing.T) {
 	w := dailyWorkspaceFixture()
-	w.mode = "queue"
+	w.mode = dailyWorkspaceQueueMode
 	w.snapshot = workspace.Snapshot{ObservedAt: time.Now(), Findings: []workspace.Finding{{Ref: workspaceFixtureRef(testWorkspaceAPIName), Kind: "Pod", Severity: "warning", Reason: "[red]reported reason", Detail: "[blue]reported detail"}}}
-	w.coverage = []workspace.Coverage{{GVR: "v1/pods", Namespace: "frontend", State: "denied"}}
+	w.coverage = []workspace.Coverage{{GVR: "v1/pods", Namespace: "frontend", State: testWorkspaceCoverageDenied}}
 	w.render()
 	header := drawnText(t, w.header, 140, 5)
 	if !strings.Contains(header, "1 coverage gaps") {
@@ -198,7 +202,7 @@ func TestDailyWorkspaceDrawEscapesReportedMarkupAndShowsUnknownCoverage(t *testi
 func TestDailyWorkspaceContextMismatchDoesNotActivateOrReplaceScope(t *testing.T) {
 	w := dailyWorkspaceFixture()
 	w.app.Config = &config.Config{K9s: &config.K9s{}}
-	other := workspace.Scope{Name: "production", Context: "production-context", Namespaces: []string{"prod"}, Kinds: []string{"pods"}}
+	other := workspace.Scope{Name: "production", Context: testWorkspaceProductionContext, Namespaces: []string{"prod"}, Kinds: []string{"pods"}}
 	w.store.Scopes = []workspace.Scope{w.scope, other}
 	w.path = filepath.Join(t.TempDir(), "workspaces.yaml")
 	if err := workspace.SaveStore(w.path, w.store); err != nil {
@@ -248,21 +252,21 @@ func TestDailyWorkspaceActiveContextEditInvalidatesPriorObservationBeforeRejecti
 	ctx, cancel := context.WithCancel(context.Background())
 	w.cancel = cancel
 	edited := w.scope
-	edited.Context = "production-context"
+	edited.Context = testWorkspaceProductionContext
 	w.store.Scopes = []workspace.Scope{edited}
 	if err := workspace.SaveStore(w.path, w.store); err != nil {
 		t.Fatal(err)
 	}
 	w.acceptEditedScope(edited)
-	if ctx.Err() != context.Canceled || w.scope.Context != "production-context" || !w.snapshot.ObservedAt.IsZero() || w.SelectedResource().Err() == nil {
+	if ctx.Err() != context.Canceled || w.scope.Context != testWorkspaceProductionContext || !w.snapshot.ObservedAt.IsZero() || w.SelectedResource().Err() == nil {
 		t.Fatal("edited scope retained old destination/target")
 	}
-	w.setMode("inventory")
+	w.setMode(inventoryCommand)
 	if w.SelectedResource().Err() == nil {
 		t.Fatal("tab change reused old context target")
 	}
 	saved, err := workspace.LoadStore(w.path)
-	if err != nil || saved.Scopes[0].Context != "production-context" {
+	if err != nil || saved.Scopes[0].Context != testWorkspaceProductionContext {
 		t.Fatalf("layout saved obsolete scope: %+v %v", saved, err)
 	}
 	scope := w.scope
@@ -271,7 +275,7 @@ func TestDailyWorkspaceActiveContextEditInvalidatesPriorObservationBeforeRejecti
 		t.Fatal(err)
 	}
 	saved, _ = workspace.LoadStore(w.path)
-	if saved.Scopes[0].Context != "production-context" {
+	if saved.Scopes[0].Context != testWorkspaceProductionContext {
 		t.Fatal("search update overwrote accepted context edit")
 	}
 }
@@ -283,16 +287,16 @@ func TestDailyWorkspaceInventorySearchDoesNotHideCoverageAndReturnsWithSelection
 	if err := workspace.SaveStore(w.path, w.store); err != nil {
 		t.Fatal(err)
 	}
-	w.snapshot = workspace.Snapshot{ObservedAt: time.Now(), Resources: []workspace.Resource{{Ref: workspaceFixtureRef(testWorkspaceAPIName), Kind: "Pod", Summary: testWorkspaceCrashLoopReason}, {Ref: workspaceFixtureRef("worker"), Kind: "Pod", Summary: testWorkspaceCrashLoopReason}}}
-	w.coverage = []workspace.Coverage{{GVR: "v1/pods", Namespace: "frontend", State: "denied", Detail: "forbidden"}}
+	w.snapshot = workspace.Snapshot{ObservedAt: time.Now(), Resources: []workspace.Resource{{Ref: workspaceFixtureRef(testWorkspaceAPIName), Kind: "Pod", Summary: testWorkspaceCrashLoopReason}, {Ref: workspaceFixtureRef(testWorkspaceWorkerName), Kind: "Pod", Summary: testWorkspaceCrashLoopReason}}}
+	w.coverage = []workspace.Coverage{{GVR: "v1/pods", Namespace: "frontend", State: testWorkspaceCoverageDenied, Detail: "forbidden"}}
 	w.applyQuery("status:crash")
 	w.table.Select(2, 0)
 	w.setMode(dailyWorkspaceCoverageMode)
-	if w.query != "" || len(w.rows) != 1 || w.rows[0].cells[0] != "denied" {
+	if w.query != "" || len(w.rows) != 1 || w.rows[0].cells[0] != testWorkspaceCoverageDenied {
 		t.Fatal("inventory search hid coverage gap")
 	}
-	w.setMode("inventory")
-	if w.query != "status:crash" || w.SelectedResource().Name != "worker" {
+	w.setMode(inventoryCommand)
+	if w.query != "status:crash" || w.SelectedResource().Name != testWorkspaceWorkerName {
 		t.Fatal("returning to inventory lost search or selected identity")
 	}
 }
@@ -306,7 +310,7 @@ func TestDailyWorkspacePaletteRequiresCapturedSelectionForResourceActions(t *tes
 			t.Fatalf("workspace resource action lost captured selection guard: %v", key)
 		}
 	}
-	w.mode = "scopes"
+	w.mode = dailyWorkspaceScopesMode
 	action, _ := w.Actions().Get(tcell.KeyEnter)
 	if action.Opts.RequiresSelection {
 		t.Fatal("scope navigation incorrectly requires API resource")
@@ -328,8 +332,8 @@ func TestDailyWorkspaceOldViewMetadataPatchPreservesNewerScopesPinsAndSearches(t
 	// Old A was covered by B. A patches its tab and another pin against the latest
 	// store rather than saving the stale complete Store it retained before B.
 	if err := w.updateScope(func(scope *workspace.Scope) error {
-		scope.Layout = "pins"
-		scope.Pins = append(scope.Pins, workspaceFixtureRef("worker"))
+		scope.Layout = dailyWorkspacePinsMode
+		scope.Pins = append(scope.Pins, workspaceFixtureRef(testWorkspaceWorkerName))
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -344,7 +348,7 @@ func TestDailyWorkspaceOldViewMetadataPatchPreservesNewerScopesPinsAndSearches(t
 	if err := workspace.SaveStore(w.path, saved); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.updateScope(func(scope *workspace.Scope) error { scope.Layout = "inventory"; return nil }); err == nil {
+	if err := w.updateScope(func(scope *workspace.Scope) error { scope.Layout = inventoryCommand; return nil }); err == nil {
 		t.Fatal("old view edited changed scope identity")
 	}
 	retained, _ := workspace.LoadStore(w.path)
@@ -355,7 +359,7 @@ func TestDailyWorkspaceOldViewMetadataPatchPreservesNewerScopesPinsAndSearches(t
 	if err := workspace.SaveStore(w.path, retained); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.updateScope(func(scope *workspace.Scope) error { scope.Layout = "inventory"; return nil }); err == nil {
+	if err := w.updateScope(func(scope *workspace.Scope) error { scope.Layout = inventoryCommand; return nil }); err == nil {
 		t.Fatal("old view recreated removed scope")
 	}
 	final, _ := workspace.LoadStore(w.path)
@@ -366,10 +370,10 @@ func TestDailyWorkspaceOldViewMetadataPatchPreservesNewerScopesPinsAndSearches(t
 
 func TestDailyWorkspaceEmptyStatePaintUsesFullWidthInEveryTab(t *testing.T) {
 	messages := map[string]string{
-		"scopes":                   "No saved scopes. Press n to create your daily workspace.",
-		"queue":                    "No findings observed. Coverage shows checks and unknowns.",
-		"inventory":                "No resources observed. r refreshes; Coverage shows gaps.",
-		"pins":                     "No pins. Select a resource in Daily or Inventory and press p.",
+		dailyWorkspaceScopesMode:   "No saved scopes. Press n to create your daily workspace.",
+		dailyWorkspaceQueueMode:    "No findings observed. Coverage shows checks and unknowns.",
+		inventoryCommand:           "No resources observed. r refreshes; Coverage shows gaps.",
+		dailyWorkspacePinsMode:     "No pins. Select a resource in Daily or Inventory and press p.",
 		dailyWorkspaceCoverageMode: "No observation yet. r reads the saved namespaces.",
 	}
 	for _, width := range []int{80, 120} {

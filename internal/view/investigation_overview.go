@@ -145,7 +145,7 @@ func (d *inspectionDetails) renderInvestigationChrome() {
 	} else {
 		uid := i.Identity.UID
 		if uid == "" {
-			uid = "unknown"
+			uid = workspaceUnknown
 		}
 		if len(uid) > 20 {
 			uid = uid[:8] + "…" + uid[len(uid)-8:]
@@ -464,7 +464,7 @@ func fitInvestigation(s string, width int) string {
 }
 func investigationAge(at, now time.Time) string {
 	if at.IsZero() {
-		return "unknown"
+		return workspaceUnknown
 	}
 	if now.Before(at) {
 		return "future observation"
@@ -482,7 +482,7 @@ func relativeAt(at, captured time.Time) string {
 }
 func fullAt(at time.Time) string {
 	if at.IsZero() {
-		return "unknown"
+		return workspaceUnknown
 	}
 	return at.UTC().Format(time.RFC3339)
 }
@@ -494,7 +494,7 @@ func orNA(s string) string {
 }
 func windowLabel(window time.Duration) string {
 	if window <= 0 {
-		return "unknown"
+		return workspaceUnknown
 	}
 	return window.String()
 }

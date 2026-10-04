@@ -422,7 +422,7 @@ func resourceSummaryAt(o *unstructured.Unstructured, captured time.Time) string 
 	var b strings.Builder
 	uid := string(o.GetUID())
 	if uid == "" {
-		uid = "unknown"
+		uid = workspaceUnknown
 	}
 	fmt.Fprintf(&b, "READ-ONLY SNAPSHOT\n%s %s\nUID: %s\nCaptured: %s\nSource: Kubernetes API; bounded observation, not a health verdict\n",
 		o.GetKind(), client.FQN(o.GetNamespace(), o.GetName()), uid, captured.UTC().Format(time.RFC3339))

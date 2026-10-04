@@ -31,6 +31,7 @@ const (
 	capabilityTaskCertManager = "cert-manager"
 	capabilityTaskResource    = "resource"
 	capabilityTaskHubble      = "hubble"
+	capabilityTaskMetrics     = "metrics"
 )
 
 type capabilityState string
@@ -141,7 +142,7 @@ func (c *Command) capabilityCommand(line string) {
 
 func validCapabilityTask(task string) bool {
 	switch task {
-	case "metrics", "flux", capabilityTaskCertManager, capabilityTaskHubble, capabilityTaskResource:
+	case capabilityTaskMetrics, "flux", capabilityTaskCertManager, capabilityTaskHubble, capabilityTaskResource:
 		return true
 	}
 	return false
@@ -268,7 +269,7 @@ func collectCapabilities(ctx context.Context, reader dynamic.Interface, request 
 		namespace = ""
 	}
 	switch request.Task {
-	case "metrics":
+	case capabilityTaskMetrics:
 		snapshot.Checks = append(snapshot.Checks, checkMetricsPrerequisite(ctx, reader))
 	case "flux":
 		for _, gvr := range []schema.GroupVersionResource{

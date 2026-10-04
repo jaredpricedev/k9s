@@ -159,7 +159,7 @@ func workspaceActions(app *App) []ui.ActionDescriptor {
 	for _, item := range []struct{ id, label, command string }{
 		{"command.workspace", "Saved workspaces", "workspace"},
 		{"command.daily", "Daily findings queue", dailyCommand},
-		{"command.inventory", "Scoped inventory", "inventory"},
+		{"command.inventory", "Scoped inventory", inventoryCommand},
 		{"command.connection", "Connection health", connectionCommand},
 	} {
 		command := item.command

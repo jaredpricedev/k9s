@@ -26,7 +26,10 @@ import (
 	ktesting "k8s.io/client-go/testing"
 )
 
-const retainedEvidenceUID = "observed"
+const (
+	retainedEvidenceUID = "observed"
+	evidenceBaselineUID = "old"
+)
 
 func TestEvidenceCaptureScopesEventsAndKeepsSources(t *testing.T) {
 	obj := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"namespace": "app", "name": "api", "uid": "pod-a"}, "spec": map[string]any{"containers": []any{map[string]any{"name": "api", "env": []any{map[string]any{"name": "API_TOKEN", "value": "private-value"}}}}}}}
@@ -194,7 +197,7 @@ func TestEvidenceRetainsComparisonBaselineAndCapturedBWithoutReload(t *testing.T
 		t.Fatal("uncaptured baseline became exportable evidence")
 	}
 	at := time.Date(2026, 10, 4, 1, 2, 3, 0, time.UTC)
-	baseline := inspect.NewObservation(inspect.ResourceIdentity{Context: "captured", GVR: "v1/pods", Name: "api", UID: "old"},
+	baseline := inspect.NewObservation(inspect.ResourceIdentity{Context: "captured", GVR: "v1/pods", Name: "api", UID: evidenceBaselineUID},
 		"original baseline GET", at, map[string]any{"kind": "Pod", "spec": map[string]any{"replicas": int64(1)}})
 	v.baseline = &baseline
 	bundle, err := retainedEvidenceBundle(v)
@@ -204,7 +207,7 @@ func TestEvidenceRetainsComparisonBaselineAndCapturedBWithoutReload(t *testing.T
 	v.other = inspect.NewObservation(inspect.ResourceIdentity{Context: "captured", GVR: "v1/pods", Name: "api", UID: "new"},
 		"original comparison GET", at.Add(time.Minute), map[string]any{"kind": "Pod", "spec": map[string]any{"replicas": int64(2)}})
 	bundle, err = retainedEvidenceBundle(v)
-	if err != nil || len(bundle.Observations) != 2 || bundle.Observations[0].Identity.UID != "old" || bundle.Observations[1].Identity.UID != "new" {
+	if err != nil || len(bundle.Observations) != 2 || bundle.Observations[0].Identity.UID != evidenceBaselineUID || bundle.Observations[1].Identity.UID != "new" {
 		t.Fatal("comparison export lost distinct retained identities", bundle, err)
 	}
 	bundle.Observations[0].Object["spec"].(map[string]any)["replicas"] = int64(99)

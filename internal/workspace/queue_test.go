@@ -11,6 +11,8 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
+const categoryPaused = "paused"
+
 func setStatus(object *unstructured.Unstructured, status map[string]any) {
 	object.Object["status"] = status
 }
@@ -117,7 +119,7 @@ func TestQueueFluxStalledFalseIsHealthyAndSuspendIsExplicit(t *testing.T) {
 		t.Fatalf("Flux normal False conditions treated as faults: %#v", findings)
 	}
 	object.Object["spec"] = map[string]any{"suspend": true}
-	if findings := Classify(ResourceRef{}, kindKustomization, &object, testNow); len(findings) != 1 || findings[0].Category != "paused" {
+	if findings := Classify(ResourceRef{}, kindKustomization, &object, testNow); len(findings) != 1 || findings[0].Category != categoryPaused {
 		t.Fatalf("Flux suspension missed: %#v", findings)
 	}
 	object.Object["status"].(map[string]any)[conditionsField] = []any{cond("Stalled", "True", "ReconciliationFailed", 4)}
@@ -173,7 +175,7 @@ func TestQueueCronJobSuspensionDoesNotInventMissedRuns(t *testing.T) {
 		t.Fatalf("invented overdue run from old schedule timestamp: %#v", findings)
 	}
 	object.Object["spec"].(map[string]any)["suspend"] = true
-	if findings := Classify(ResourceRef{}, kindCronJob, &object, testNow); len(findings) != 1 || findings[0].Category != "paused" {
+	if findings := Classify(ResourceRef{}, kindCronJob, &object, testNow); len(findings) != 1 || findings[0].Category != categoryPaused {
 		t.Fatalf("cronjob suspension missed: %#v", findings)
 	}
 }

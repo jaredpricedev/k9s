@@ -24,6 +24,10 @@ import (
 )
 
 const (
+	dailyWorkspaceScopesMode       = "scopes"
+	dailyWorkspaceQueueMode        = "queue"
+	dailyWorkspacePinsMode         = "pins"
+	dailyWorkspaceDeleteToken      = "delete"
 	dailyWorkspaceFormPage         = "daily-workspace-form"
 	dailyWorkspaceSearchLabel      = "Search"
 	dailyWorkspaceBackLabel        = "Back"
@@ -83,7 +87,7 @@ func newDailyWorkspace(a *App, store workspace.Store, mode, query string) *daily
 		}
 	}
 	if w.scope.Name == "" {
-		w.mode = "scopes"
+		w.mode = dailyWorkspaceScopesMode
 		w.query = ""
 	}
 	w.tabQueries = map[string]string{w.mode: w.query}
@@ -119,7 +123,7 @@ func (w *dailyWorkspace) SetFilter(query string, _ bool)       { w.applyQuery(qu
 func (w *dailyWorkspace) InCmdMode() bool                      { return w.prompting }
 func (w *dailyWorkspace) Actions() *ui.KeyActions {
 	if action, ok := w.actions.Get(tcell.KeyEnter); ok {
-		action.Opts.RequiresSelection = w.mode != "scopes"
+		action.Opts.RequiresSelection = w.mode != dailyWorkspaceScopesMode
 		w.actions.Add(tcell.KeyEnter, action)
 	}
 	return w.actions
@@ -157,7 +161,7 @@ func (w *dailyWorkspace) Start() {
 		}
 		return e
 	})
-	if w.snapshot.ObservedAt.IsZero() && w.scope.Name != "" && w.mode != "scopes" {
+	if w.snapshot.ObservedAt.IsZero() && w.scope.Name != "" && w.mode != dailyWorkspaceScopesMode {
 		w.refresh()
 	} else {
 		w.render()
@@ -234,9 +238,9 @@ func (w *dailyWorkspace) makeActions() *ui.KeyActions {
 		action.ID = "workspace." + strings.ReplaceAll(strings.ToLower(item.label), " ", "-")
 		action.Category = ui.ActionNavigate
 		if key == ui.KeyP || key == ui.KeyL || key == tcell.KeyEnter {
-			action.Opts.RequiresSelection = key != tcell.KeyEnter || w.mode != "scopes"
+			action.Opts.RequiresSelection = key != tcell.KeyEnter || w.mode != dailyWorkspaceScopesMode
 			action.Availability = func() string {
-				if key == tcell.KeyEnter && w.mode == "scopes" {
+				if key == tcell.KeyEnter && w.mode == dailyWorkspaceScopesMode {
 					row, _ := w.table.GetSelection()
 					if row > 0 && row <= len(w.rows) && w.rows[row-1].scopeName != "" {
 						return ""
@@ -250,7 +254,7 @@ func (w *dailyWorkspace) makeActions() *ui.KeyActions {
 				if target.Context != w.app.Config.ActiveContextName() {
 					return "Context changed; reopen workspace"
 				}
-				if key == ui.KeyL && (target.GVR == nil || target.GVR.R() != "pods") {
+				if key == ui.KeyL && (target.GVR == nil || target.GVR.R() != client.PodGVR.R()) {
 					return "Select a Pod to open logs"
 				}
 				return ""
@@ -269,7 +273,7 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 	case e.Key() == tcell.KeyEscape:
 		return w.app.PrevCmd(e)
 	case e.Key() == tcell.KeyEnter:
-		if w.mode == "scopes" {
+		if w.mode == dailyWorkspaceScopesMode {
 			row, _ := w.table.GetSelection()
 			if row > 0 && row <= len(w.rows) {
 				w.useScope(w.rows[row-1].scopeName)
@@ -306,7 +310,7 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 		w.savedSearchForm()
 		return nil
 	case e.Rune() == 'd':
-		if w.mode == "scopes" {
+		if w.mode == dailyWorkspaceScopesMode {
 			w.deleteScopeForm()
 			return nil
 		}
@@ -316,7 +320,7 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 		}
 		return nil
 	case strings.ContainsRune("12345", e.Rune()) && e.Rune() != 0:
-		w.setMode(map[rune]string{'1': "queue", '2': "inventory", '3': dailyWorkspaceCoverageMode, '4': "pins", '5': "scopes"}[e.Rune()])
+		w.setMode(map[rune]string{'1': dailyWorkspaceQueueMode, '2': inventoryCommand, '3': dailyWorkspaceCoverageMode, '4': dailyWorkspacePinsMode, '5': dailyWorkspaceScopesMode}[e.Rune()])
 		return nil
 	}
 	return e
@@ -332,7 +336,7 @@ func (w *dailyWorkspace) setMode(mode string) {
 	w.tabSelections[w.mode] = w.selectedKey()
 	w.mode = mode
 	w.query = w.tabQueries[mode]
-	if mode != "scopes" && w.scope.Name != "" {
+	if mode != dailyWorkspaceScopesMode && w.scope.Name != "" {
 		if err := w.updateScope(func(scope *workspace.Scope) error { scope.Layout = mode; return nil }); err != nil {
 			w.app.Flash().Err(err)
 		}
@@ -348,7 +352,7 @@ func (w *dailyWorkspace) setMode(mode string) {
 			}
 		}
 	}
-	if w.snapshot.ObservedAt.IsZero() && mode != "scopes" && w.scope.Name != "" {
+	if w.snapshot.ObservedAt.IsZero() && mode != dailyWorkspaceScopesMode && w.scope.Name != "" {
 		w.refresh()
 	}
 }
@@ -485,7 +489,7 @@ func (w *dailyWorkspace) useScope(name string) {
 		w.tabSelections = make(map[string]string)
 		w.mode = scope.Layout
 		if w.mode == "" {
-			w.mode = "queue"
+			w.mode = dailyWorkspaceQueueMode
 		}
 		w.table.Select(1, 0)
 		w.refresh()
@@ -522,7 +526,7 @@ func (w *dailyWorkspace) acceptEditedScope(scope workspace.Scope) {
 	w.table.Clear()
 	w.table.Select(1, 0)
 	if scope.Context != w.app.Config.ActiveContextName() {
-		w.mode = "scopes"
+		w.mode = dailyWorkspaceScopesMode
 		w.notice = "Scope " + scope.Name + " belongs to context " + scope.Context + ". Use :ctx to switch explicitly, then reopen :workspace."
 		w.render()
 		return
@@ -530,7 +534,7 @@ func (w *dailyWorkspace) acceptEditedScope(scope workspace.Scope) {
 	w.contextName = scope.Context
 	w.mode = scope.Layout
 	if w.mode == "" {
-		w.mode = "queue"
+		w.mode = dailyWorkspaceQueueMode
 	}
 	w.refresh()
 }

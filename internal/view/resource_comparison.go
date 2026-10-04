@@ -292,7 +292,7 @@ func comparisonValues(before, after any) (beforePreview, afterPreview string) {
 
 func comparisonObserved(at time.Time) string {
 	if at.IsZero() {
-		return "unknown"
+		return workspaceUnknown
 	}
 	return at.UTC().Format(time.RFC3339Nano)
 }
@@ -308,7 +308,7 @@ func comparisonPreview(text string, limit int) string {
 
 func comparisonUnknown(text string) string {
 	if text == "" {
-		return "unknown"
+		return workspaceUnknown
 	}
 	return text
 }
