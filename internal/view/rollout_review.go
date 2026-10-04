@@ -245,6 +245,9 @@ func (v *rolloutReviewView) Draw(screen tcell.Screen) {
 		if v.recoveryModal != nil {
 			v.recoveryModal.SetText(v.recoveryNotice)
 		}
+		if v.recoveryForm != nil && v.recoveryForm.GetButtonCount() > 1 {
+			v.recoveryForm.GetButton(1).SetLabel(rolloutRecoveryUnavailable)
+		}
 		v.stopOutcome()
 		v.render()
 	}

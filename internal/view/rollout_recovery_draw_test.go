@@ -14,6 +14,7 @@ import (
 
 func TestRecoveryForceDrawCancelsStaleConfirmationWithoutFocusDeadlock(t *testing.T) {
 	v, dyn := recoveryViewFixture(t)
+	v.recoveryPlan.Unreviewed = true
 	v.applyRecoveryCmd(tcell.NewEventKey(tcell.KeyRune, 'a', 0))
 	require.NotNil(t, v.recoveryModal)
 	oldForm := v.recoveryForm
@@ -41,6 +42,7 @@ func TestRecoveryForceDrawCancelsStaleConfirmationWithoutFocusDeadlock(t *testin
 	require.NotNil(t, v.recoveryModal)
 	require.Same(t, oldForm, v.recoveryForm)
 	require.Contains(t, v.recoveryNotice, "Destination changed")
+	require.Equal(t, rolloutRecoveryUnavailable, oldForm.GetButton(1).GetLabel())
 	// A retained Apply callback still checks captured eligibility and cannot write.
 	oldForm.GetButton(1).InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, 0), func(tview.Primitive) {})
 	require.Zero(t, persistentRecoveryRequests(dyn))
