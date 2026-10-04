@@ -1055,10 +1055,6 @@ func TestPrepareLogSessionWaitsForCrossProcessRootLease(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	awaitLogSessionHelperResult(t, result+".ready")
-	if err := os.WriteFile(start, []byte("start"), 0600); err != nil {
-		t.Fatal(err)
-	}
 	t.Cleanup(func() {
 		_ = os.WriteFile(release, []byte("release"), 0600)
 		_ = rootLock.Unlock()
@@ -1067,6 +1063,11 @@ func TestPrepareLogSessionWaitsForCrossProcessRootLease(t *testing.T) {
 		}
 		_ = cmd.Wait()
 	})
+	awaitLogSessionHelperResult(t, result+".ready")
+	if err := os.WriteFile(start, []byte("start"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
 	time.Sleep(150 * time.Millisecond)
 	if data, err := os.ReadFile(result); err == nil {
 		t.Fatalf("session preparation ignored cross-process root lease: %s", data)
@@ -1097,14 +1098,6 @@ func TestConcurrentProcessesPublishOnlyOneLeasedSessionAtCap(t *testing.T) {
 		logSessionHelperCommand(root, results[0], start, release),
 		logSessionHelperCommand(root, results[1], start, release),
 	}
-	for _, cmd := range commands {
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, result := range results {
-		awaitLogSessionHelperResult(t, result+".ready")
-	}
 	t.Cleanup(func() {
 		_ = os.WriteFile(release, []byte("release"), 0600)
 		for _, cmd := range commands {
@@ -1114,6 +1107,15 @@ func TestConcurrentProcessesPublishOnlyOneLeasedSessionAtCap(t *testing.T) {
 			_ = cmd.Wait()
 		}
 	})
+	for _, cmd := range commands {
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, result := range results {
+		awaitLogSessionHelperResult(t, result+".ready")
+	}
+
 	if err := os.WriteFile(start, []byte("start"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -1234,7 +1236,11 @@ func logSessionHelperCommand(root, result, start, release string) *exec.Cmd {
 
 func awaitLogSessionHelperResult(t *testing.T, path string) string {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	timeout := 3 * time.Second
+	if strings.HasSuffix(path, ".ready") {
+		timeout = 10 * time.Second
+	} // Race-instrumented process startup can exceed 3s on shared hosts.
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		if data, err := os.ReadFile(path); err == nil {
 			return string(data)

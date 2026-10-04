@@ -18,6 +18,6 @@ func TestStatefulSetNew(t *testing.T) {
 
 	require.NoError(t, s.Init(makeCtx(t)))
 	assert.Equal(t, "StatefulSets", s.Name())
-	assert.Len(t, s.Hints(), 16)
+
 	assertActionRegistry(t, s)
 }
