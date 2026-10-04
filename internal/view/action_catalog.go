@@ -106,6 +106,7 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 	result = append(result, investigationActions(owner, app)...)
 	result = append(result, changeReviewActions(owner, app)...)
 	result = append(result, maintenanceReviewActions(owner, app)...)
+	result = append(result, configurationActions(owner, app)...)
 	result = append(result, workspaceActions(app)...)
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Category != result[j].Category {
@@ -283,4 +284,17 @@ func (p *actionPalette) close() {
 	if top := p.app.Content.Top(); top != nil {
 		p.app.SetFocus(top)
 	}
+}
+
+func configurationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
+	target := actionTarget(owner, app.Config.ActiveContextName())
+	reason := ""
+	if _, err := configurationScope(target); err != nil {
+		reason = err.Error()
+	}
+	return []ui.ActionDescriptor{{
+		ID: "resource.configuration-review", Label: "Declared configuration references", Category: ui.ActionInspect,
+		Shortcut: ":" + configurationCommand, Discoverable: true, RequiresSelection: true, UnavailableReason: reason,
+		Handler: func(*tcell.EventKey) *tcell.EventKey { app.openConfigurationReview(target); return nil },
+	}}
 }
