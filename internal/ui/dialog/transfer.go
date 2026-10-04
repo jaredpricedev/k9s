@@ -45,7 +45,7 @@ func ShowUploads(styles *config.Dialog, pages *ui.Pages, opts *TransferDialogOpt
 		opts.Cancel()
 	})
 
-	modal := tview.NewModalForm("<"+opts.Title+">", f)
+	modal := ui.NewModalForm("<"+opts.Title+">", f)
 
 	args := TransferArgs{
 		From:    opts.Pod,

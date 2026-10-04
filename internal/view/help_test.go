@@ -66,3 +66,36 @@ func helpAction(t *testing.T, help *view.Help, shortcut, label string) string {
 	t.Fatalf("help omitted discoverable action %s %s", shortcut, label)
 	return ""
 }
+
+func TestContextHelpPairsKeysAndDescriptionsAtNarrowWidths(t *testing.T) {
+	ctx := makeCtx(t)
+	app := ctx.Value(internal.KeyApp).(*view.App)
+	po := view.NewPod(client.PodGVR)
+	require.NoError(t, po.Init(ctx))
+	app.Content.Push(po)
+	help := view.NewHelp(app)
+	require.NoError(t, help.Init(ctx))
+	screen := tcell.NewSimulationScreen("")
+	require.NoError(t, screen.Init())
+	defer screen.Fini()
+	for _, width := range []int{120, 80, 60, 40} {
+		screen.SetSize(width, 24)
+		screen.Clear()
+		help.SetRect(0, 0, width, 24)
+		help.Draw(screen)
+		paired := 0
+		for y := 1; y < 23; y++ {
+			var line strings.Builder
+			for x := range width {
+				r, _, _, _ := screen.GetContent(x, y)
+				line.WriteRune(r)
+			}
+			text := line.String()
+			if strings.Contains(text, "<") && strings.Contains(text, "> ") {
+				paired++
+			}
+		}
+		require.Greater(t, paired, 2, "key/action pairs remain in first help viewport at width %d", width)
+		require.Greater(t, help.GetRowCount(), 24, "all actions and full reasons remain scrollable")
+	}
+}

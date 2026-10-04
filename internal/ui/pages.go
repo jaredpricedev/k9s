@@ -91,8 +91,11 @@ func NewPages() *Pages {
 // IsTopDialog checks if front page is a dialog.
 func (p *Pages) IsTopDialog() bool {
 	_, pa := p.GetFrontPage()
+	if _, ok := pa.(interface{ IsDialog() bool }); ok {
+		return pa.(interface{ IsDialog() bool }).IsDialog()
+	}
 	switch pa.(type) {
-	case *tview.ModalForm, *ModalList, *MessageModal:
+	case *tview.ModalForm, *ModalForm, *ModalList, *MessageModal:
 		return true
 	default:
 		return false

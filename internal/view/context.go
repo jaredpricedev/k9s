@@ -114,7 +114,7 @@ func (c *Context) showRenameModal(name string, ok func(form *tview.Form, context
 			app.Content.RemovePage(renamePage)
 		})
 
-	m := tview.NewModalForm("<Rename>", f)
+	m := ui.NewModalForm("<Rename>", f)
 	m.SetText(fmt.Sprintf("Rename context %q?", name))
 	m.SetDoneFunc(func(int, string) {
 		app.Content.RemovePage(renamePage)

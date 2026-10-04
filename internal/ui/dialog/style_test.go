@@ -20,7 +20,7 @@ func TestFormSkinUpdatesPreserveEditingAndFocus(t *testing.T) {
 	styles := config.NewStyles()
 	form := tview.NewForm().AddInputField("Destination", "payments/api", 16, nil, nil).
 		AddButton("Cancel", nil).AddButton("Save", nil)
-	modal := tview.NewModalForm("Evidence", form)
+	modal := ui.NewModalForm("Evidence", form)
 	cleanup := BindFormStyles(styles, form, modal)
 	defer cleanup()
 	form.GetButton(0).Focus(func(tview.Primitive) {})
@@ -62,7 +62,7 @@ func TestGenericDialogSkinBindingDismissalAndReplacement(t *testing.T) {
 	pages := ui.NewPages()
 	dialogStyle := styles.Dialog()
 	ShowConfirm(&dialogStyle, pages, "Destination", "Context: production", func() {}, func() {})
-	modal := pages.GetPrimitive(dialogKey).(*tview.ModalForm)
+	modal := pages.GetPrimitive(dialogKey).(*ui.ModalForm)
 	var form *tview.Form
 	modal.Focus(func(p tview.Primitive) { form = p.(*tview.Form) })
 	require.NotNil(t, form)
@@ -78,7 +78,7 @@ func TestGenericDialogSkinBindingDismissalAndReplacement(t *testing.T) {
 	styles.Reset(false)
 	styles.Update()
 	assert.Equal(t, oldBackground, form.GetButton(1).GetBackgroundColor())
-	errorModal := pages.GetPrimitive(dialogKey).(*tview.ModalForm)
+	errorModal := pages.GetPrimitive(dialogKey).(*ui.ModalForm)
 	var errorForm *tview.Form
 	errorModal.Focus(func(p tview.Primitive) { errorForm = p.(*tview.Form) })
 	errorBackground := errorForm.GetButton(0).GetBackgroundColor()
@@ -94,7 +94,7 @@ func TestGenericDeleteDialogRetainsEditedChoicesOnSkinReload(t *testing.T) {
 	pages := ui.NewPages()
 	dialogStyle := styles.Dialog()
 	ShowDelete(&dialogStyle, pages, "Delete fixture?", func(*metav1.DeletionPropagation, bool) {}, func() {})
-	modal := pages.GetPrimitive(dialogKey).(*tview.ModalForm)
+	modal := pages.GetPrimitive(dialogKey).(*ui.ModalForm)
 	var form *tview.Form
 	modal.Focus(func(p tview.Primitive) { form = p.(*tview.Form) })
 	dropdown := form.GetFormItem(0).(*tview.DropDown)
