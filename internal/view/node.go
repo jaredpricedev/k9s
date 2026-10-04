@@ -96,42 +96,32 @@ func (n *Node) drainCmd(evt *tcell.EventKey) *tcell.EventKey {
 	if len(sels) == 0 {
 		return evt
 	}
+	session, err := captureOperation(n)
+	if err != nil {
+		n.App().Flash().Err(err)
+		return nil
+	}
+	targets, err := captureOperationTargets(n, session.context, sels)
+	if err != nil {
+		n.App().Flash().Err(err)
+		return nil
+	}
 
 	opts := dao.DrainOptions{
 		GracePeriodSeconds: -1,
 		Timeout:            5 * time.Second,
 	}
-	ShowDrain(n, sels, opts, drainNode)
+	ShowDrain(n, sels, opts, func(_ ResourceViewer, _ []string, options dao.DrainOptions) {
+		session.timeout = maxOperationDeadline
+		if options.Timeout > 0 {
+			session.timeout = boundedOperationTimeout(options.Timeout)
+		}
+		session.submit("Drain", targets, func(ctx context.Context, target SelectedResourceTarget) error {
+			return session.drain(ctx, target, options)
+		}, nil)
+	})
 
 	return nil
-}
-
-func drainNode(v ResourceViewer, sels []string, opts dao.DrainOptions) {
-	res, err := dao.AccessorFor(v.App().factory, v.GVR())
-	if err != nil {
-		v.App().Flash().Err(err)
-		return
-	}
-	m, ok := res.(dao.NodeMaintainer)
-	if !ok {
-		v.App().Flash().Err(fmt.Errorf("expecting a maintainer for %q", v.GVR()))
-		return
-	}
-
-	v.Stop()
-	defer v.Start()
-	{
-		d := NewDetails(v.App(), "Drain Progress", "nodes", contentYAML, true)
-		if err := v.App().inject(d, false); err != nil {
-			v.App().Flash().Err(err)
-		}
-		for _, sel := range sels {
-			if err := m.Drain(sel, opts, d.GetWriter()); err != nil {
-				v.App().Flash().Err(err)
-			}
-		}
-		v.Refresh()
-	}
 }
 
 func (n *Node) toggleCordonCmd(cordon bool) func(evt *tcell.EventKey) *tcell.EventKey {
@@ -139,6 +129,16 @@ func (n *Node) toggleCordonCmd(cordon bool) func(evt *tcell.EventKey) *tcell.Eve
 		sels := n.GetTable().GetSelectedItems()
 		if len(sels) == 0 {
 			return evt
+		}
+		session, err := captureOperation(n)
+		if err != nil {
+			n.App().Flash().Err(err)
+			return nil
+		}
+		targets, err := captureOperationTargets(n, session.context, sels)
+		if err != nil {
+			n.App().Flash().Err(err)
+			return nil
 		}
 
 		title, msg := "Confirm ", ""
@@ -153,23 +153,11 @@ func (n *Node) toggleCordonCmd(cordon bool) func(evt *tcell.EventKey) *tcell.Eve
 			msg += fmt.Sprintf("(%d) marked %s?", len(sels), n.GVR().R())
 		}
 		d := n.App().Styles.Dialog()
+		msg += "\nContext: " + session.context + "\n" + operationDestination(targets)
 		dialog.ShowConfirm(&d, n.App().Content.Pages, title, msg, func() {
-			res, err := dao.AccessorFor(n.App().factory, n.GVR())
-			if err != nil {
-				n.App().Flash().Err(err)
-				return
-			}
-			m, ok := res.(dao.NodeMaintainer)
-			if !ok {
-				n.App().Flash().Err(fmt.Errorf("expecting a maintainer for %q", n.GVR()))
-				return
-			}
-			for _, s := range sels {
-				if err := m.ToggleCordon(s, cordon); err != nil {
-					n.App().Flash().Err(err)
-				}
-			}
-			n.Refresh()
+			session.submit(title, targets, func(ctx context.Context, target SelectedResourceTarget) error {
+				return session.cordon(ctx, target, cordon)
+			}, nil)
 		}, func() {})
 
 		return nil
