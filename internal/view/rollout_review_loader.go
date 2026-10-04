@@ -26,6 +26,7 @@ const (
 	rolloutMaxPods      = 64
 	rolloutRSKind       = "ReplicaSet"
 	rolloutDeployKind   = "Deployment"
+	rolloutPodAPI       = "v1"
 )
 
 //nolint:gocritic // The loader preserves the captured target across asynchronous reads.
@@ -38,7 +39,7 @@ func loadRolloutReview(ctx context.Context, connection client.Connection, target
 		return nil, err
 	}
 	if dyn == nil {
-		return nil, fmt.Errorf("Deployment client unavailable")
+		return nil, fmt.Errorf("Rollout client unavailable")
 	}
 	deployment, err := dyn.Resource(target.GVR.GVR()).Namespace(target.Namespace).Get(ctx, target.Name, metav1.GetOptions{})
 	if err != nil {
@@ -47,22 +48,25 @@ func loadRolloutReview(ctx context.Context, connection client.Connection, target
 	if err := verifySelectedIdentity(target, deployment); err != nil {
 		return nil, err
 	}
-	if deployment.GetKind() != rolloutDeployKind || deployment.GetAPIVersion() != "apps/v1" {
-		return nil, fmt.Errorf("The selected source is not a native apps/v1 Deployment")
+	if deployment.GetKind() != rolloutTargetKind(target) || deployment.GetAPIVersion() != "apps/v1" {
+		return nil, fmt.Errorf("The selected source is not the captured native apps/v1 controller")
 	}
 	at := time.Now().UTC()
 	coverage := []review.RolloutCoverage{{
-		Source: rolloutDeployKind, State: inspect.ObservationComplete,
-		Detail: "Selected Deployment GET; counts and conditions are API observations",
+		Source: deployment.GetKind(), State: inspect.ObservationComplete,
+		Detail: "Selected controller GET; counts and conditions are API observations",
 	}}
 	selector, reason := rolloutSelector(deployment)
 	if deployment.GetUID() == "" {
-		reason = "Deployment UID unavailable; no name-only ownership lookup"
+		reason = "Workload UID unavailable; no name-only ownership lookup"
 	}
 	if reason != "" {
-		coverage = append(coverage, review.RolloutCoverage{Source: "ReplicaSets", State: inspect.ObservationUnknown, Detail: reason},
-			review.RolloutCoverage{Source: "Pods", State: inspect.ObservationUnknown, Detail: "Owned ReplicaSet identities unavailable"})
+		coverage = append(coverage, review.RolloutCoverage{Source: rolloutRevisionSource(deployment.GetKind()), State: inspect.ObservationUnknown, Detail: reason},
+			review.RolloutCoverage{Source: "Pods", State: inspect.ObservationUnknown, Detail: "Controller selector or identity unavailable; no unscoped list"})
 		return review.NewRolloutSnapshot(deployment, nil, nil, coverage, target.Context, at), nil
+	}
+	if deployment.GetKind() != rolloutDeployKind {
+		return loadControllerChildren(ctx, dyn, target, deployment, selector, coverage, at), ctx.Err()
 	}
 	revisions, rsCoverage := collectRolloutObjects(ctx, dyn, client.RsGVR.GVR(), target.Namespace, selector, "ReplicaSets", rolloutMaxRevisions,
 		func(object *unstructured.Unstructured) bool {
@@ -97,15 +101,15 @@ func loadRolloutReview(ctx context.Context, connection client.Connection, target
 func rolloutSelector(deployment *unstructured.Unstructured) (value, reason string) {
 	raw, found, err := unstructured.NestedMap(deployment.Object, "spec", "selector")
 	if err != nil || !found {
-		return "", "Deployment selector unavailable"
+		return "", "Controller selector unavailable"
 	}
 	var selector metav1.LabelSelector
 	if convertErr := runtime.DefaultUnstructuredConverter.FromUnstructured(raw, &selector); convertErr != nil {
-		return "", "Deployment selector invalid"
+		return "", "Controller selector invalid"
 	}
 	parsed, err := metav1.LabelSelectorAsSelector(&selector)
 	if err != nil || parsed.Empty() {
-		return "", "Deployment selector empty or invalid; no unscoped workload list"
+		return "", "Controller selector empty or invalid; no unscoped workload list"
 	}
 	return parsed.String(), ""
 }
@@ -139,7 +143,7 @@ func collectRolloutObjects(ctx context.Context, dyn dynamic.Interface, gvr schem
 			if apierrors.IsForbidden(err) || apierrors.IsUnauthorized(err) {
 				coverage.State = inspect.ObservationDenied
 			}
-			coverage.Detail = fmt.Sprintf("%d retained; list unavailable: %s", len(objects), err)
+			coverage.Detail = fmt.Sprintf("%d retained; named namespace/selector list unavailable", len(objects))
 			return objects, coverage
 		}
 		for index := range list.Items {
@@ -177,4 +181,27 @@ func collectRolloutObjects(ctx context.Context, dyn dynamic.Interface, gvr schem
 		coverage.Detail += fmt.Sprintf("; %d candidates missing UID excluded", missingUID)
 	}
 	return objects, coverage
+}
+
+//nolint:gocritic // Target is retained across child reads, independently of navigation.
+func loadControllerChildren(ctx context.Context, dyn dynamic.Interface, target SelectedResourceTarget, workload *unstructured.Unstructured,
+	selector string, coverage []review.RolloutCoverage, at time.Time) *review.RolloutSnapshot {
+	revisions, revisionCoverage := collectRolloutObjects(ctx, dyn, schema.GroupVersionResource{Group: "apps", Version: rolloutPodAPI, Resource: "controllerrevisions"},
+		target.Namespace, selector, "ControllerRevisions", rolloutMaxRevisions, func(o *unstructured.Unstructured) bool {
+			return o.GetAPIVersion() == "apps/v1" && o.GetKind() == "ControllerRevision" && rolloutOwnedBy(o, workload.GetKind(), workload.GetUID())
+		})
+	pods, podCoverage := collectRolloutObjects(ctx, dyn, client.PodGVR.GVR(), target.Namespace, selector, "Pods", rolloutMaxPods,
+		func(o *unstructured.Unstructured) bool {
+			return o.GetAPIVersion() == rolloutPodAPI && o.GetKind() == "Pod" && rolloutOwnedBy(o, workload.GetKind(), workload.GetUID())
+		})
+	// Direct controlling ownership does not depend on revision visibility.
+	coverage = append(coverage, revisionCoverage, podCoverage)
+	return review.NewRolloutSnapshot(workload, revisions, pods, coverage, target.Context, at)
+}
+
+func rolloutRevisionSource(kind string) string {
+	if kind == rolloutDeployKind {
+		return "ReplicaSets"
+	}
+	return "ControllerRevisions"
 }

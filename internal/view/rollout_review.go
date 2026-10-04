@@ -26,7 +26,7 @@ const (
 
 var rolloutReviewTabs = []string{"Overview", "Revisions", "Pods", "Recovery", "Evidence"}
 
-// rolloutReviewView retains one explicitly obtained Deployment observation.
+// rolloutReviewView retains one explicitly obtained native controller observation.
 // Its recovery view compares retained templates and never submits a write.
 type rolloutReviewView struct {
 	*Details
@@ -48,12 +48,17 @@ type rolloutReviewView struct {
 	ensureSelection      bool
 	refreshFailure       string
 	retainedText         string
+	outcome              *review.RolloutOutcome
+	follower             func(context.Context, *review.RolloutOutcomeRequest, func(*review.RolloutOutcome)) *review.RolloutOutcome
+	followCancel         context.CancelFunc
+	followGeneration     uint64
+	following            bool
 }
 
 func (c *Command) rolloutReviewCommand() {
 	owner, ok := c.app.Content.Top().(actionOwner)
 	if !ok {
-		c.app.Flash().Warn("Select a native Deployment to review its rollout")
+		c.app.Flash().Warn("Select a native Deployment, StatefulSet or DaemonSet to review its rollout")
 		return
 	}
 	c.app.openRolloutReview(actionTarget(owner, c.app.Config.ActiveContextName()))
@@ -79,7 +84,11 @@ func (a *App) openRolloutReview(target SelectedResourceTarget) {
 	v.loader = func(ctx context.Context, target SelectedResourceTarget) (*review.RolloutSnapshot, error) {
 		return loadRolloutReview(ctx, connection, target)
 	}
-	v.Update("Loading read-only Deployment rollout evidence...")
+	v.follower = func(ctx context.Context, request *review.RolloutOutcomeRequest, update func(*review.RolloutOutcome)) *review.RolloutOutcome {
+		dyn, _ := connection.DynDial()
+		return review.FollowRollout(ctx, dyn, request, update)
+	}
+	v.Update("Loading read-only controller rollout evidence...")
 	if err := a.inject(v, false); err != nil {
 		a.Flash().Err(err)
 	}
@@ -90,14 +99,14 @@ func rolloutTargetError(target SelectedResourceTarget) error {
 	if err := target.Err(); err != nil {
 		return err
 	}
-	if target.GVR.String() != client.DpGVR.String() {
-		return fmt.Errorf("Select a native apps/v1 Deployment; other rollout kinds are not supported by this review")
+	if rolloutTargetKind(target) == "" {
+		return fmt.Errorf("Select a native apps/v1 Deployment, StatefulSet or DaemonSet")
 	}
 	if !client.IsNamespaced(target.Namespace) {
-		return fmt.Errorf("Select a namespaced Deployment")
+		return fmt.Errorf("Select a namespaced rollout controller")
 	}
 	if target.UID == "" {
-		return fmt.Errorf("Deployment UID unavailable; refresh the source list and select the resource again")
+		return fmt.Errorf("Workload UID unavailable; refresh the source list and select the resource again")
 	}
 	return nil
 }
@@ -131,6 +140,7 @@ func (v *rolloutReviewView) Init(ctx context.Context) error {
 	}
 	v.actions.Add(tcell.KeyTab, ui.NewKeyAction("Next rollout tab", v.nextTab, true))
 	v.actions.Add(tcell.KeyBacktab, ui.NewKeyAction("Previous rollout tab", v.previousTab, true))
+	v.actions.Add(ui.KeyW, ui.NewKeyAction("Follow/stop captured rollout outcome", v.toggleOutcome, true))
 	v.actions.Add(ui.KeyR, ui.NewKeyAction("Refresh rollout evidence", func(event *tcell.EventKey) *tcell.EventKey {
 		if v.cmdBuff.IsActive() {
 			return event
@@ -183,6 +193,7 @@ func (v *rolloutReviewView) Start() {
 }
 
 func (v *rolloutReviewView) Stop() {
+	v.stopOutcome()
 	v.active = false
 	v.loading = false
 	v.generation++
@@ -200,6 +211,10 @@ func (v *rolloutReviewView) StylesChanged(styles *config.Styles) {
 }
 
 func (v *rolloutReviewView) Draw(screen tcell.Screen) {
+	if v.following && !v.destinationCurrent() {
+		v.stopOutcome()
+		v.render()
+	}
 	_, _, width, height := v.GetInnerRect()
 	if ui.DrawTaskSizeNotice(screen, v.Box) {
 		return
@@ -308,6 +323,7 @@ func (v *rolloutReviewView) reviewSelectedRevision(event *tcell.EventKey) *tcell
 }
 
 func (v *rolloutReviewView) refresh() {
+	v.stopOutcome()
 	if !v.destinationCurrent() {
 		v.refreshFailure = "Destination changed; reopen rollout review"
 		v.render()
@@ -379,10 +395,18 @@ func (v *rolloutReviewView) render() {
 	if v.width == 0 {
 		width = 76
 	}
-	text := "Loading read-only Deployment rollout evidence..."
+	text := "Loading read-only controller rollout evidence..."
 	if v.snapshot != nil {
 		v.retainedText = rolloutEvidence(v.snapshot)
 		text = rolloutTabText(v.snapshot, v.activeTab, width, v.selectedRevisionUID, v.recoveryRevisionUID)
+		if v.outcome != nil {
+			if v.activeTab == 0 {
+				text = rolloutOutcomeText(v.outcome, width) + "\n" + strings.Replace(text, "ROLLOUT OBSERVATION", "ORIGINAL RETAINED OBSERVATION", 1)
+			}
+			if v.activeTab == rolloutEvidenceTab {
+				text = rolloutOutcomeEvidence(v.outcome) + "\n" + text
+			}
+		}
 	} else if v.refreshFailure != "" {
 		text = "[?] Rollout evidence unavailable: " + v.refreshFailure
 	}
@@ -413,9 +437,9 @@ func (v *rolloutReviewView) renderChrome() {
 	if width <= 0 {
 		width = 76
 	}
-	first := "Deployment " + v.target.Path() + " · " + v.target.Context
+	first := rolloutTargetKind(v.target) + " " + v.target.Path() + " · " + v.target.Context
 	second := "Kubernetes API · observation not yet obtained"
-	third := "READ ONLY · native Deployment review"
+	third := "READ ONLY · native controller review"
 	if v.snapshot != nil {
 		s := v.snapshot
 		uid := s.Identity.UID
@@ -449,7 +473,13 @@ func (v *rolloutReviewView) renderChrome() {
 		detailStyled(p.Muted.String(), "", fitInvestigation(second, width)) + "\n" +
 		detailStyled(p.Warning.String(), "", fitInvestigation(third, width)))
 	v.tabsBar.SetText(ui.TaskTabs(rolloutReviewTabs, v.activeTab, width))
-	footer := "READ ONLY · r refresh · / search · Esc back"
+	footer := "READ ONLY · w follow · r refresh · / search · Esc back"
+	if width < 60 {
+		footer = "w follow · r refresh · Esc back"
+	}
+	if v.following {
+		footer = "w stop following · Esc back"
+	}
 	if v.activeTab == 1 || v.activeTab == rolloutRecoveryTab {
 		footer = "READ ONLY · j/k choose · Enter review · Esc back"
 		if width < 48 {
@@ -493,7 +523,25 @@ func (v *rolloutReviewView) keepRevisionVisible() {
 
 func (*rolloutReviewView) ExtraHints() map[string]string {
 	return map[string]string{
+		"Following": "w explicitly starts/stops bounded named GETs for the captured generation/template. Esc and refresh stop observing; accepted changes are not rolled back.",
 		"Revisions": "j/k or arrows choose UID; Page keys move selection. Enter reviews the exact visible choice. Refresh removal requires a new choice.",
 		"Search":    "Case-insensitive regex; -f text for fuzzy search. n/N move matches without choosing a revision; j/k returns to the chosen row.",
+	}
+}
+
+//nolint:gocritic // Captured identities are validated without mutation.
+func rolloutTargetKind(target SelectedResourceTarget) string {
+	if target.GVR == nil {
+		return ""
+	}
+	switch target.GVR.String() {
+	case client.DpGVR.String():
+		return "Deployment"
+	case client.StsGVR.String():
+		return inspectionStatefulSetKind
+	case client.DsGVR.String():
+		return "DaemonSet"
+	default:
+		return ""
 	}
 }
