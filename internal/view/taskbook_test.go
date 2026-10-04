@@ -6,14 +6,18 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config/mock"
 	"github.com/derailed/k9s/internal/inspect"
+	"github.com/derailed/k9s/internal/model"
 	"github.com/derailed/k9s/internal/taskbook"
+	"github.com/derailed/k9s/internal/watch"
 	"github.com/derailed/k9s/internal/workspace"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
@@ -181,6 +185,56 @@ func TestTaskbookWorkspaceEvidenceOmitsRawObject(t *testing.T) {
 	preview, err := taskbook.Preview(a)
 	if err != nil || strings.Contains(preview, "raw-must-not-export") {
 		t.Fatal(preview, err)
+	}
+}
+
+func TestTaskbookDisconnectRetainsArtifactAndNativeControlsBeyondRetryBudget(t *testing.T) {
+	v := taskbookViewFixture(t)
+	a := v.app
+	if err := v.Init(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	v.renderTask()
+	v.Start()
+	conn := &disconnectedWorkspaceConnection{Connection: mock.NewMockConnection()}
+	a.Config.SetConnection(conn)
+	a.factory = watch.NewFactory(conn)
+	a.clusterModel = model.NewClusterInfo(a.factory, "test", a.Config.K9s)
+	a.Config.K9s.MaxConnRetry = 1
+	artifact := v.artifact
+	v.BufferCompleted("Investigate", "")
+	v.text.ScrollTo(1, 0)
+	pending, cancel := context.WithCancel(t.Context())
+	v.cancel, v.generation = cancel, 9
+	defer cancel()
+	for range 3 {
+		if err := a.refreshCluster(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if atomic.LoadInt32(&a.conRetry) <= a.Config.K9s.MaxConnRetry || a.Content.Top() != v ||
+		!reflect.DeepEqual(v.artifact, artifact) || !v.ready || v.generation != 9 || pending.Err() != nil || v.inspectionQuery != "Investigate" {
+		t.Fatal("disconnect changed retained task handoff state")
+	}
+	row, col := v.text.GetScrollOffset()
+	if row != 1 || col != 0 {
+		t.Fatalf("scroll offset changed: %d,%d", row, col)
+	}
+	a.connectivityComponent(v, true)
+	if v.generation != 9 || pending.Err() != nil {
+		t.Fatal("recovery canceled pending task handoff work")
+	}
+	event := tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModNone)
+	v.InputHandler()(event, func(p tview.Primitive) { a.SetFocus(p) })
+	if v.form == nil {
+		t.Fatal("native task handoff save control unavailable after disconnect")
+	}
+	taskbookFormForTest(t, v).GetButton(0).InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, 0), func(p tview.Primitive) { a.SetFocus(p) })
+	v.renderTask()
+	v.text.ScrollTo(0, 0)
+	frame := drawnText(t, v, 80, 24)
+	if !strings.Contains(frame, "TASK HANDOFF") || !strings.Contains(frame, "s: save") {
+		t.Fatal("retained artifact or task controls missing", frame)
 	}
 }
 func TestTaskbookCanceledWorkerDoesNotAcceptLateResult(t *testing.T) {
