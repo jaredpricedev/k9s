@@ -24,6 +24,13 @@ func TestDisplayWidthASCIIHasNoAllocations(t *testing.T) {
 	assert.Zero(t, testing.AllocsPerRun(100, func() { _ = displayWidth("deployment-12345") }))
 }
 
+func TestTableEscapePreservesLiteralMarkup(t *testing.T) {
+	for _, text := range []string{"Running", "日本語 👩‍💻", "[red::b]name[-::]", "[red[]literal", "[broken", "[]", `["region"]`, "a\tb\nc"} {
+		assert.Equal(t, tview.Escape(text), escapeTableField(text), "%q", text)
+	}
+	assert.Zero(t, testing.AllocsPerRun(100, func() { _ = escapeTableField("deployment-12345") }))
+}
+
 func TestTableComputesColorOncePerRow(t *testing.T) {
 	table := NewTable(client.NewGVR("test"))
 	header := model1.Header{{Name: "A"}, {Name: "B"}, {Name: "C"}}
