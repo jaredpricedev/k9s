@@ -1,0 +1,2 @@
+ok  	github.com/derailed/k9s/internal/inspect	0.149s
+ok  	github.com/derailed/k9s/internal/view	0.074s

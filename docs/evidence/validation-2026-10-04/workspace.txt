@@ -1,0 +1,12 @@
+ok  	github.com/derailed/k9s/internal/client	0.058s
+ok  	github.com/derailed/k9s/internal/config	0.445s
+ok  	github.com/derailed/k9s/internal/config/data	0.024s
+ok  	github.com/derailed/k9s/internal/config/json	0.484s
+?   	github.com/derailed/k9s/internal/config/mock	[no test files]
+ok  	github.com/derailed/k9s/internal/model	0.115s
+ok  	github.com/derailed/k9s/internal/model1	0.032s
+ok  	github.com/derailed/k9s/internal/dao	3.631s
+ok  	github.com/derailed/k9s/internal/render	0.119s
+ok  	github.com/derailed/k9s/internal/ui	0.113s
+ok  	github.com/derailed/k9s/internal/ui/dialog	0.565s
+ok  	github.com/derailed/k9s/internal/view	1.647s

@@ -1,3 +1,4 @@
+// Modified for k9+; see NOTICE.
 package hubble
 
 import (
@@ -32,6 +33,33 @@ func TestSnapshotSurvivesEviction(t *testing.T) {
 	now, evicted := s.Snapshot()
 	if len(now) != 2 || evicted != 100000 || frozen[0].ID != 1 || frozen[1].Verdict != "DROPPED" {
 		t.Fatal("snapshot or capacity changed")
+	}
+}
+
+func TestStoreRevisionAndCheapCounters(t *testing.T) {
+	s := NewStore(2)
+	if got := s.Stats(); got != (StoreStats{}) {
+		t.Fatalf("empty stats: %+v", got)
+	}
+	s.Add(Event{Verdict: "FORWARDED"})
+	events, stats, changed := s.SnapshotIfChanged(0)
+	if !changed || len(events) != 1 || stats != (StoreStats{Revision: 1, Count: 1}) {
+		t.Fatalf("first snapshot: %v %+v %v", events, stats, changed)
+	}
+	if unchanged, got, updated := s.SnapshotIfChanged(stats.Revision); updated || unchanged != nil || got != stats {
+		t.Fatalf("unchanged dataset copied: %v %+v %v", unchanged, got, updated)
+	}
+	s.Add(Event{})
+	s.Add(Event{})
+	current, stats, changed := s.SnapshotIfChanged(stats.Revision)
+	if !changed || len(current) != 2 || current[0].ID != 2 || current[1].ID != 3 || stats != (StoreStats{Revision: 3, Evicted: 1, Count: 2}) {
+		t.Fatalf("ring revision: %v %+v %v", current, stats, changed)
+	}
+	if events[0].ID != 1 {
+		t.Fatal("later ingestion mutated immutable snapshot")
+	}
+	if n := testing.AllocsPerRun(100, func() { s.Stats(); s.SnapshotIfChanged(stats.Revision) }); n != 0 {
+		t.Fatalf("unchanged stats/snapshot check allocated: %v", n)
 	}
 }
 func TestSafeProjectionAndExternalPeers(t *testing.T) {

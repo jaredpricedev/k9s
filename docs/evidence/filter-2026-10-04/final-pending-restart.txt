@@ -1,0 +1,24 @@
+[RW] CONNECTED ctx:demo-dev ns:apps  metrics:unavailable  F2:destination        
+ <d> Describe  <l> Logs  <ctrl+o> Actions  <?> Help                             
+┌───── deployments(apps)[0] </no-such-workload>  No matches · regex · 0/1 ─────┐
+│ NAME↑                READY         UP-TO-DATE         AVAILABLE AGE          │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+  <deployment>                                                                  
+      😎 INFO: Submitting Restart for 1 resource(s) in context demo-dev...      
