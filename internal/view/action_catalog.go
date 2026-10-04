@@ -104,8 +104,31 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 	return result
 }
 
-func investigationActions(_ actionOwner, app *App) []ui.ActionDescriptor {
+func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
+	target := actionTarget(owner, app.Config.ActiveContextName())
 	var result []ui.ActionDescriptor
+	for _, item := range []struct {
+		id, label, shortcut, category string
+		run                           func()
+	}{
+		{"resource.pressure", "Resource pressure", ":pressure", ui.ActionInspect, func() { NewCommand(app).pressureCommand() }},
+	} {
+		reason := target.UnavailableReason
+		if _, ok := owner.(ResourceViewer); !ok {
+			reason = "Open a resource list and select an API object first"
+		}
+		if item.id == "resource.pressure" && reason == "" {
+			switch target.GVR.R() {
+			case "pods", "deployments", "daemonsets", "statefulsets", "replicasets", "jobs":
+			default:
+				reason = "Select a Pod, Deployment, DaemonSet, StatefulSet, ReplicaSet or Job to inspect pressure"
+			}
+		}
+		run := item.run
+		result = append(result, ui.ActionDescriptor{ID: item.id, Label: item.label, Category: item.category, Shortcut: item.shortcut,
+			Discoverable: true, RequiresSelection: true, UnavailableReason: reason,
+			Handler: func(*tcell.EventKey) *tcell.EventKey { run(); return nil }})
+	}
 	result = append(result, ui.ActionDescriptor{
 		ID: "command.diagnostics", Label: "Capability diagnostics", Category: ui.ActionInspect,
 		Shortcut: ":diagnostics", Discoverable: true,
