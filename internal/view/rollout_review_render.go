@@ -35,7 +35,7 @@ func rolloutOverview(snapshot *review.RolloutSnapshot, width int) string {
 		marker = "[+]"
 	case review.RolloutBlocked:
 		marker = "[!]"
-	case review.RolloutProgressing, review.RolloutPaused:
+	case review.RolloutProgressing, review.RolloutPaused, review.RolloutManual:
 		marker = "[~]"
 	}
 	b.WriteString("ROLLOUT OBSERVATION\n")
@@ -44,7 +44,7 @@ func rolloutOverview(snapshot *review.RolloutSnapshot, width int) string {
 		fmt.Fprintln(&b, fitInvestigation(reason, width))
 	}
 	fmt.Fprintf(&b, "Generation %s · observed %s\n", rolloutCount(snapshot.Generation), rolloutCount(snapshot.ObservedGeneration))
-	b.WriteString("\nREPLICA COUNTS · retained Deployment status\n")
+	fmt.Fprintf(&b, "\nREPLICA COUNTS · retained %s status\n", rolloutSnapshotKind(snapshot))
 	if width < 60 {
 		fmt.Fprintf(&b, "Desired %s · Updated %s\nReady %s · Available %s · Total %s\n",
 			rolloutCount(snapshot.Desired), rolloutCount(snapshot.Updated),
@@ -55,6 +55,23 @@ func rolloutOverview(snapshot *review.RolloutSnapshot, width int) string {
 			rolloutCount(snapshot.Ready), rolloutCount(snapshot.Available), rolloutCount(snapshot.Replicas)}
 		fmt.Fprintln(&b, tableRow([]string{"DESIRED", "UPDATED", "READY", "AVAILABLE", "TOTAL"}, columns))
 		fmt.Fprintln(&b, tableRow(counts, columns))
+	}
+	if snapshot.Strategy != "" {
+		fmt.Fprintf(&b, "Strategy %s", snapshot.Strategy)
+		if snapshot.Partition != nil {
+			fmt.Fprintf(&b, " · partition %d", *snapshot.Partition)
+			if snapshot.StartOrdinal != nil {
+				fmt.Fprintf(&b, " · first ordinal %d", *snapshot.StartOrdinal)
+			}
+		}
+		b.WriteByte('\n')
+	}
+	if snapshot.CurrentRevision != "" || snapshot.UpdateRevision != "" {
+		fmt.Fprintln(&b, fitInvestigation("Current "+rolloutKnown(snapshot.CurrentRevision)+" · update "+rolloutKnown(snapshot.UpdateRevision), width))
+	}
+	if snapshot.TemplateSHA256 != "" {
+		fmt.Fprintf(&b, "Template SHA256 %s · %d declared config references/checksums\n",
+			snapshot.TemplateSHA256[:min(12, len(snapshot.TemplateSHA256))], len(snapshot.Configuration))
 	}
 	b.WriteString("\nCONTROLLER CONDITIONS\n")
 	if len(snapshot.Conditions) == 0 {
@@ -67,7 +84,7 @@ func rolloutOverview(snapshot *review.RolloutSnapshot, width int) string {
 		}
 	}
 	b.WriteString("\nRETAINED WORKLOAD EVIDENCE\n")
-	fmt.Fprintf(&b, "%d UID-owned ReplicaSets · %d UID-owned Pods\n", len(snapshot.Revisions), len(snapshot.Pods))
+	fmt.Fprintf(&b, "%d UID-owned %s · %d UID-owned Pods\n", len(snapshot.Revisions), rolloutRevisionSource(rolloutSnapshotKind(snapshot)), len(snapshot.Pods))
 	b.WriteString("2 revisions: exact templates · 3 Pods: declared image / imageID\n")
 	b.WriteString("4 recovery: selected template comparison; nothing executed\n")
 	b.WriteString("\nVISIBILITY\n")
@@ -80,13 +97,17 @@ func rolloutOverview(snapshot *review.RolloutSnapshot, width int) string {
 
 func rolloutRevisions(snapshot *review.RolloutSnapshot, width int, selectedUID string) string {
 	var b strings.Builder
-	b.WriteString("REPLICA SET REVISIONS · UID-owned\nRetained subset; full identity in 5 Evidence\n\n")
+	heading, revisionKind := "REPLICA SET REVISIONS", "REPLICA SET"
+	if rolloutSnapshotKind(snapshot) != rolloutDeployKind {
+		heading, revisionKind = "CONTROLLER REVISIONS", "CONTROLLER REV"
+	}
+	b.WriteString(heading + " · UID-owned\nRetained subset; full identity in 5 Evidence\n\n")
 	nameWidth := max(8, width-42)
 	columns := []int{1, 5, nameWidth, 6, 6, 13}
-	labels := []string{"", "REV", "REPLICA SET", "TOTAL", "READY", "TEMPLATE"}
-	if width < 70 {
+	labels := []string{"", "REV", revisionKind, "TOTAL", "READY", "TEMPLATE"}
+	if width < 70 || rolloutSnapshotKind(snapshot) != rolloutDeployKind {
 		columns = []int{1, 5, max(8, width-22), 13}
-		labels = []string{"", "REV", "REPLICA SET", "TEMPLATE"}
+		labels = []string{"", "REV", revisionKind, "TEMPLATE"}
 	}
 	fmt.Fprintln(&b, tableRow(labels, columns))
 	for index := range snapshot.Revisions {
@@ -102,7 +123,7 @@ func rolloutRevisions(snapshot *review.RolloutSnapshot, width int, selectedUID s
 			match = "matches spec"
 		}
 		values := []string{marker, rolloutKnown(r.Revision), r.Identity.Name, rolloutCount(r.Replicas), rolloutCount(r.Ready), match}
-		if width < 70 {
+		if width < 70 || rolloutSnapshotKind(snapshot) != rolloutDeployKind {
 			values = []string{marker, rolloutKnown(r.Revision), r.Identity.Name, match}
 		}
 		fmt.Fprintln(&b, tableRow(values, columns))
@@ -110,8 +131,8 @@ func rolloutRevisions(snapshot *review.RolloutSnapshot, width int, selectedUID s
 	if len(snapshot.Revisions) == 0 {
 		b.WriteString("[?] No UID-owned revision obtained; inspect collection coverage.\n")
 	}
-	b.WriteString("\nj/k selects a retained ReplicaSet; Enter compares its exact template.\n" +
-		"Matching the current template does not prove the controller's chosen RS.\n" +
+	b.WriteString("\nj/k selects a retained revision; Enter compares its exact template.\n" +
+		"Matching the current template does not prove the controller's chosen revision.\n" +
 		"Revision number and creation age do not choose a recovery target.\n" +
 		"Retained revisions can be pruned by revisionHistoryLimit.\n")
 	return b.String()
@@ -119,7 +140,12 @@ func rolloutRevisions(snapshot *review.RolloutSnapshot, width int, selectedUID s
 
 func rolloutPods(snapshot *review.RolloutSnapshot, width int) string {
 	var b strings.Builder
-	b.WriteString("POD IMAGE EVIDENCE\nDeployment → controlling ReplicaSet UID → controlling Pod UID\n\n")
+	b.WriteString("POD IMAGE EVIDENCE\n")
+	if rolloutSnapshotKind(snapshot) == rolloutDeployKind {
+		b.WriteString("Deployment → controlling ReplicaSet UID → controlling Pod UID\n\n")
+	} else {
+		b.WriteString(rolloutSnapshotKind(snapshot) + " UID → directly controlling Pod UID\n\n")
+	}
 	if len(snapshot.Pods) == 0 {
 		b.WriteString("[?] No owned Pod image records obtained; absence is not health.\n")
 	}
@@ -155,11 +181,15 @@ func rolloutRecovery(snapshot *review.RolloutSnapshot, revisionUID string, width
 	preview := review.RolloutRecoveryPreview(snapshot, revisionUID)
 	if preview.RevisionIdentity.UID == "" {
 		fmt.Fprintln(&b, "[?] "+preview.Reason)
-		b.WriteString("2 revisions · j/k choose ReplicaSet · Enter reviews its template.\n")
+		b.WriteString("2 revisions · j/k choose revision · Enter reviews its template.\n")
 	} else {
-		fmt.Fprintln(&b, fitInvestigation("Preview RS "+preview.RevisionIdentity.Name+" · revision "+rolloutKnown(preview.Revision), width))
+		label := "Preview RS "
+		if rolloutSnapshotKind(snapshot) != rolloutDeployKind {
+			label = "Preview revision "
+		}
+		fmt.Fprintln(&b, fitInvestigation(label+preview.RevisionIdentity.Name+" · revision "+rolloutKnown(preview.Revision), width))
 		fmt.Fprintln(&b, fitInvestigation("UID "+preview.RevisionIdentity.UID+" · context "+preview.RevisionIdentity.Context, width))
-		b.WriteString("A: current Deployment template · B: selected retained RS template\n")
+		fmt.Fprintf(&b, "A: current %s template · B: selected retained revision template\n", rolloutSnapshotKind(snapshot))
 		if preview.Comparison.Comparable {
 			fmt.Fprintf(&b, "\n%d changed retained template fields\n", len(preview.Comparison.Changes))
 			if len(preview.Comparison.Changes) == 0 {
@@ -245,6 +275,7 @@ func rolloutMarkup(app *App, text string) string {
 			lines[index] = detailStyled(p.Focus.String(), "b", line)
 		case line == "ROLLOUT OBSERVATION" || strings.HasPrefix(line, "REPLICA COUNTS") || line == "CONTROLLER CONDITIONS" ||
 			line == "RETAINED WORKLOAD EVIDENCE" || line == "VISIBILITY" || line == "REPLICA SET REVISIONS" ||
+			line == "CONTROLLER REVISIONS" || line == "OUTCOME FOLLOW-UP" || line == "OUTCOME FOLLOW-UP EVIDENCE" ||
 			line == "POD IMAGE EVIDENCE" || line == "RECOVERY CANDIDATE · NOT EXECUTED" || line == "PREVIEW LIMITS" || line == "ROLLOUT SOURCE EVIDENCE":
 			lines[index] = detailStyled(p.Focus.String(), "b", line)
 		default:
@@ -252,4 +283,11 @@ func rolloutMarkup(app *App, text string) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func rolloutSnapshotKind(snapshot *review.RolloutSnapshot) string {
+	if snapshot.Kind == "" {
+		return rolloutDeployKind
+	}
+	return snapshot.Kind
 }

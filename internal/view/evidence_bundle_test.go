@@ -34,7 +34,7 @@ const (
 func TestEvidenceCaptureScopesEventsAndKeepsSources(t *testing.T) {
 	obj := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"namespace": "app", "name": "api", "uid": "pod-a"}, "spec": map[string]any{"containers": []any{map[string]any{"name": "api", "env": []any{map[string]any{"name": "API_TOKEN", "value": "private-value"}}}}}}}
 	typed := kubefake.NewSimpleClientset()
-	typed.PrependReactor("list", "events", func(a ktesting.Action) (bool, runtime.Object, error) {
+	typed.PrependReactor(client.ListVerb, "events", func(a ktesting.Action) (bool, runtime.Object, error) {
 		if a.GetNamespace() != "app" || a.(ktesting.ListAction).GetListRestrictions().Fields.String() != "involvedObject.uid=pod-a" {
 			t.Fatal("event scope widened", a)
 		}
@@ -88,7 +88,7 @@ func TestEvidenceCaptureRedactsCredentialAcrossEventMessages(t *testing.T) {
 		"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"namespace": "app", "name": "api", "uid": "pod-a"},
 	}}
 	typed := kubefake.NewSimpleClientset()
-	typed.PrependReactor("list", "events", func(ktesting.Action) (bool, runtime.Object, error) {
+	typed.PrependReactor(client.ListVerb, "events", func(ktesting.Action) (bool, runtime.Object, error) {
 		return true, &corev1.EventList{Items: []corev1.Event{
 			{InvolvedObject: corev1.ObjectReference{UID: "pod-a"}, Message: "-----BEGIN PRIVATE KEY-----"},
 			{InvolvedObject: corev1.ObjectReference{UID: "pod-a"}, Message: "private-key-continuation"},
@@ -107,7 +107,7 @@ func TestEvidenceCaptureRedactsCredentialAcrossEventMessages(t *testing.T) {
 		t.Fatal("event aggregation lost credential boundary", string(encoded), err)
 	}
 	for _, action := range append(conn.dynamic.(*fake.FakeDynamicClient).Actions(), typed.Actions()...) {
-		if action.GetVerb() != "get" && action.GetVerb() != "list" {
+		if action.GetVerb() != "get" && action.GetVerb() != client.ListVerb {
 			t.Fatal("capture issued an API write", action)
 		}
 	}
