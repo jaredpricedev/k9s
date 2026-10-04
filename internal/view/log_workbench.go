@@ -32,22 +32,24 @@ const (
 	modeSources  = "sources"
 	modeSessions = "sessions"
 	modeLanes    = "lanes"
+	modeStatus   = "status-detail"
 	scopeLive    = "live"
 )
 
 // Presentation state belongs to the draw goroutine. Ingestion/recording alone
 // use captureMu; it is never held while queuing or executing a draw callback.
 type logWorkbench struct {
-	recordStart                      *logRecordingStart
-	timelineScope, detailReturnMode  string
-	timelineEntries, timelineVisible []logstream.Entry
-	patternKey                       string
-	patternSafe                      bool
-	selectionScope                   string
-	showTime, columnLock             bool
-	timelineBuckets                  []logstream.Bucket
-	patternLevel                     string
-	owner                            *Log
+	recordStart                        *logRecordingStart
+	timelineScope, detailReturnMode    string
+	statusReturnMode, statusReturnText string
+	timelineEntries, timelineVisible   []logstream.Entry
+	patternKey                         string
+	patternSafe                        bool
+	selectionScope                     string
+	showTime, columnLock               bool
+	timelineBuckets                    []logstream.Bucket
+	patternLevel                       string
+	owner                              *Log
 	*tview.Flex
 	table                                       *tview.Table
 	detail                                      *tview.TextView
@@ -78,6 +80,10 @@ type logWorkbench struct {
 	profileLoaded                               string
 	sources                                     []logstream.Source
 	laneA, laneB                                string
+	focusedLane                                 int
+	laneEntries                                 []logstream.Entry
+	statusFull, statusCompact                   string
+	statusWidth                                 int
 	patterns                                    []logstream.Pattern
 	buckets                                     []logstream.Bucket
 	sessions                                    []string
@@ -281,7 +287,7 @@ func (w *logWorkbench) snippet() string {
 func (w *logWorkbench) showText(mode, text string) {
 	w.mode = mode
 	w.detail.SetText(wbText(text)).ScrollToBeginning()
-	w.pages.SwitchToPage(modeDetail)
+	switchStreamPage(w.pages, modeDetail)
 	w.focus(w.detail)
 }
 
@@ -437,7 +443,7 @@ func (w *logWorkbench) showDetail(e *logstream.Entry) {
 	w.mode = modeDetail
 	palette := w.logDetailPalette()
 	w.detail.SetText(renderLogDetail(e, &palette)).ScrollToBeginning()
-	w.pages.SwitchToPage(modeDetail)
+	switchStreamPage(w.pages, modeDetail)
 	w.focus(w.detail)
 }
 func (w *logWorkbench) focus(p tview.Primitive) {
@@ -446,8 +452,30 @@ func (w *logWorkbench) focus(p tview.Primitive) {
 	}
 }
 func (w *logWorkbench) expand() {
-	row, _ := w.table.GetSelection()
+	row, column := w.table.GetSelection()
 	switch w.mode {
+	case modeLanes:
+		_, _, width, _ := w.GetInnerRect()
+		if width >= 40 && width < 80 {
+			column = w.focusedLane
+		}
+		lane := w.laneA
+		if column == 1 {
+			lane = w.laneB
+		}
+		var entries []logstream.Entry
+		for index := range w.laneEntries {
+			entry := &w.laneEntries[index]
+			if entry.Source.Key() == lane {
+				entries = append(entries, *entry)
+			}
+		}
+		if row > 0 && row <= len(entries) {
+			w.detailReturnMode = modeLanes
+			entry := w.shown(entries[row-1])
+			w.showDetail(&entry)
+		}
+		return
 	case modePatterns:
 		if row > 0 && row <= len(w.patterns) {
 			w.pattern = w.patterns[row-1].Template
@@ -506,7 +534,7 @@ func (w *logWorkbench) showPatterns() {
 		w.table.SetCell(i+1, 2, w.newCell(wbText(p.Template)).SetExpansion(1))
 	}
 	w.table.Select(1, 0)
-	w.pages.SwitchToPage("table")
+	switchStreamPage(w.pages, "table")
 	w.focus(w.table)
 }
 func (w *logWorkbench) showSources() {
@@ -540,7 +568,7 @@ func (w *logWorkbench) showSources() {
 		w.table.SetCell(i+1, 1, w.newCell(lane))
 	}
 	w.table.Select(1, 0)
-	w.pages.SwitchToPage("table")
+	switchStreamPage(w.pages, "table")
 	w.focus(w.table)
 }
 func (w *logWorkbench) chooseLane(row int) {
@@ -563,8 +591,17 @@ func (w *logWorkbench) chooseLane(row int) {
 	w.showLanes()
 }
 func (w *logWorkbench) showLanes() {
+	w.focusedLane = 0
+	w.laneEntries = w.visible(w.liveSnapshot())
+	w.table.Select(1, 0)
+	w.paintLanes()
+	w.focus(w.table)
+	w.notice = "Two retained source lanes; rows are not simultaneous. Tab switches narrow lane; g refreshes; v chooses sources"
+}
+func (w *logWorkbench) paintLanes() {
 	var a, b []logstream.Entry
-	entries := w.visible(w.liveSnapshot())
+	row, selectedColumn := w.table.GetSelection()
+	entries := w.laneEntries
 	for i := range entries {
 		e := &entries[i]
 		if e.Source.Key() == w.laneA {
@@ -575,25 +612,38 @@ func (w *logWorkbench) showLanes() {
 		}
 	}
 	w.mode = modeLanes
-	w.headers("Lane A · chronological retained entries", "Lane B · independent node clock")
 	_, _, width, _ := w.GetInnerRect()
 	if width <= 0 {
 		width = 100
 	}
+	narrow := width >= 40 && width < 80
+	if narrow {
+		w.headers(fmt.Sprintf("Lane %s · Tab switches · Enter detail", []string{"A", "B"}[w.focusedLane]))
+	} else {
+		w.headers("Lane A · chronological retained entries", "Lane B · independent node clock")
+	}
 	for i := range max(len(a), len(b)) {
 		for col, entries := range [][]logstream.Entry{a, b} {
+			if narrow && col != w.focusedLane {
+				continue
+			}
 			if i >= len(entries) {
 				continue
 			}
 			e := w.shown(entries[i])
 			cell := w.newCell(wbText(e.RuntimeTime.Format("15:04:05") + " " + sourceName(e.Source) + " " + e.Message))
-			w.table.SetCell(i+1, col, cell.SetMaxWidth(max(10, width/2-2)).SetExpansion(1))
+			maxWidth := max(10, width/2-2)
+			if narrow {
+				col, maxWidth = 0, max(1, width-1)
+			}
+			w.table.SetCell(i+1, col, cell.SetMaxWidth(maxWidth).SetExpansion(1))
 		}
 	}
-	w.table.Select(1, 0)
-	w.pages.SwitchToPage("table")
-	w.focus(w.table)
-	w.notice = "Two source lanes; row alignment does not imply simultaneous events. g refreshes; v chooses sources"
+	if narrow {
+		selectedColumn = 0
+	}
+	w.table.Select(max(1, min(row, w.table.GetRowCount()-1)), selectedColumn)
+	switchStreamPage(w.pages, "table")
 }
 func (w *logWorkbench) showTimeline() {
 	if w.mode != modeTimeline {
@@ -624,7 +674,7 @@ func (w *logWorkbench) showTimeline() {
 		w.table.SetCell(i+1, 3, w.newCell(fmt.Sprint(b.Severity)))
 	}
 	w.table.Select(60, 0)
-	w.pages.SwitchToPage("table")
+	switchStreamPage(w.pages, "table")
 	w.focus(w.table)
 	w.notice = "60 one-second buckets of retained observed data; J jumps to largest spike"
 }
@@ -685,6 +735,8 @@ v      choose lane A then a different lane B with Enter; g refreshes frozen lane
 h      retained 60-second severity histogram; Enter jumps to selected bucket
 J      jump to largest retained spike
 n      inspect active query, team and local noise expressions
+S      full stream status, collection/loss, filters and recording durability
+Tab    switch focused source lane at narrow widths
 N      save local noise profile for context/namespace/app label
 X      clear and save local noise rules; team annotation remains
 R      start/stop a NEW bounded SAFE recording; R/Esc cancels preparation
@@ -736,7 +788,10 @@ func (w *logWorkbench) key(evt *tcell.EventKey) *tcell.EventKey {
 		if w.mode != modeEntries {
 			previous := w.mode
 			w.mode = modeEntries
-			if previous == modeDetail && w.detailReturnMode != "" {
+			if previous == modeStatus && w.statusReturnMode != "" {
+				w.mode = w.statusReturnMode
+				w.detail.SetText(strings.TrimSuffix(w.statusReturnText, "\n"))
+			} else if previous == modeDetail && w.detailReturnMode != "" {
 				w.mode = w.detailReturnMode
 			} else if previous == modeTimeline && w.timelineScope != scopeLive {
 				w.mode = modeHistory
@@ -746,7 +801,15 @@ func (w *logWorkbench) key(evt *tcell.EventKey) *tcell.EventKey {
 				w.historyPath = ""
 			}
 			w.render()
-			w.focus(w.table)
+			if w.mode == modeLanes {
+				w.paintLanes()
+			}
+			if !w.entryMode() && w.mode != modeLanes {
+				switchStreamPage(w.pages, modeDetail)
+				w.focus(w.detail)
+			} else {
+				w.focus(w.table)
+			}
 			return nil
 		}
 		if w.owner != nil {
@@ -756,6 +819,11 @@ func (w *logWorkbench) key(evt *tcell.EventKey) *tcell.EventKey {
 	}
 	if evt.Key() == tcell.KeyEnter {
 		w.expand()
+		return nil
+	}
+	if evt.Key() == tcell.KeyTAB && w.mode == modeLanes {
+		w.focusedLane = 1 - w.focusedLane
+		w.paintLanes()
 		return nil
 	}
 	if evt.Key() == tcell.KeyCtrlR {
@@ -771,6 +839,12 @@ func (w *logWorkbench) key(evt *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 	switch key {
+	case 'S':
+		if w.mode != modeStatus {
+			w.statusReturnMode, w.statusReturnText = w.mode, w.detail.GetText(false)
+		}
+		text := tview.NewTextView().SetDynamicColors(true).SetText(w.statusFull).GetText(true)
+		w.showText(modeStatus, text+"\n\n"+w.streamStatusContext())
 	case '?':
 		w.freeze()
 		text := logWorkbenchHelp
@@ -919,6 +993,9 @@ func (w *logWorkbench) key(evt *tcell.EventKey) *tcell.EventKey {
 	return nil
 }
 func (w *logWorkbench) showRules() {
+	w.showText("rules", w.streamStatusContext())
+}
+func (w *logWorkbench) streamStatusContext() string {
 	state := w.writerState()
 	text := fmt.Sprintf(
 		"Active query: %s\nScope: %+v\n\nTeam rules (annotation k9plus.io/log-noise):\n%s\n\n"+
@@ -931,7 +1008,7 @@ func (w *logWorkbench) showRules() {
 		strings.Join(w.activeRules(), "\n"), state.path, state.info.Raw, state.info.Bytes, state.info.LastID,
 		w.recordingLossContext(w.historyDir()), state.err, w.historyPath,
 	)
-	w.showText("rules", logstream.SafeText(text))
+	return logstream.SafeText(text)
 }
 func (w *logWorkbench) saveProfile(reset bool) {
 	if reset {
@@ -1110,6 +1187,7 @@ func (w *logWorkbench) register() {
 		{'N', "Save Noise Profile"}, {'X', "Reset Noise Profile"}, {'R', "Safe Recording"}, {'O', "Resume Recording"},
 		{'D', "Disk Search"}, {'E', "Safe Disk Export"}, {'G', "Server Timestamp"}, {'[', "Older History"},
 		{']', "Latest History"},
+		{'S', "Full Stream Status"},
 	}
 	for _, item := range actions {
 		r := item.r
@@ -1242,4 +1320,13 @@ func (w *logWorkbench) recordingLossContext(dir string) string {
 		return "recording counters unavailable for this read-only historical session; retention may have removed segments"
 	}
 	return "no recording selected"
+}
+
+// Repainting an already visible page must not call the application focus setter:
+// Application.Draw owns its lock while resizing stream tables.
+func switchStreamPage(pages *tview.Pages, name string) {
+	current, _ := pages.GetFrontPage()
+	if current != name {
+		pages.SwitchToPage(name)
+	}
 }

@@ -142,6 +142,8 @@ func (a *KeyActions) snapshot() KeyMap {
 func (a *KeyActions) Snapshot() KeyMap { return a.snapshot() }
 
 // Add adds a new key action.
+//
+//nolint:gocritic // Store an owned action value; callers retain their binding without shared mutation.
 func (a *KeyActions) Add(k tcell.Key, ka KeyAction) {
 	a.mx.Lock()
 	defer a.mx.Unlock()

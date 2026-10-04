@@ -42,6 +42,7 @@ func relatedSelectionReason(source *Table, gvr *client.GVR, path string) (matche
 	return true, ""
 }
 
+//nolint:gocritic // Decorate an owned action value without mutating the caller's shared binding.
 func (b *Browser) nativeRelationshipAction(action ui.KeyAction, edit bool) ui.KeyAction {
 	action.Availability = func() string {
 		return nativeRelationshipReason(b.GetTable(), b.GVR(), b.GetSelectedItem(), edit)
