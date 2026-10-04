@@ -1,9 +1,21 @@
+<!-- Modified for k9+; see NOTICE. -->
 # Workload relationships
 
 From a resource list, run `:troubleshoot` (or `:ts`), then press `g` for related resources.
 Choose a row and press Enter to jump. Esc returns to the captured inspector;
 `r` refreshes the inspection. Reopening `g` takes a new relationship snapshot.
 The ordinary lists gain no additional polling or shortcuts.
+
+Known ownerReference and EndpointSlice targetRef UIDs are retained separately
+from name-only configuration references. Selector-discovered objects also retain
+their observed UID. Picker rows state the UID or explicitly mark it unknown.
+References with different UIDs stay separate when evidence is deduplicated.
+The source snapshot's observed UID is checked when collecting relationships.
+Enter checks the target on the original pinned connection before navigating;
+same-name replacements stay in the picker with an identity-change message.
+The destination resource list carries that expected UID into subsequent
+inspection. Closing the picker cancels a pending jump, and responses after a
+context change or deadline cannot navigate another view.
 
 | Starting resource | Related resources and evidence |
 | --- | --- |
@@ -37,7 +49,14 @@ API semantics follow the official [EndpointSlice documentation](https://kubernet
 [HTTPRoute documentation](https://gateway-api.sigs.k8s.io/reference/api-types/httproute/)
 and [cross-namespace reference rules](https://gateway-api.sigs.k8s.io/reference/api-types/referencegrant/).
 
-Validation: focused view tests exercise exact/partial/empty Service selectors,
+Current validation uses view fixtures for source/target UID replacement, unknown
+UIDs, ownership and endpoint identity, deduplication provenance, cancellation,
+deadline, permission denial and API-group collisions through the complete loader.
+Inspection fixtures also cover retained query/scroll/snapshot navigation and
+problem-first CrashLoop/OOM/event evidence. No live cluster was used to revalidate
+this identity and lifecycle review.
+
+Historical validation from the original PR: focused view tests exercise exact/partial/empty Service selectors,
 namespace boundaries, default/rule Ingress backends, explicit EndpointSlice
 Pod targets, cross-namespace HTTPRoute references, permission/truncation notices,
 and Istio/Gateway API kind collisions. The iximiuz Hubble lab verified Service →
@@ -45,3 +64,9 @@ EndpointSlice → Pod jumps, Pod → Service lookup, and Ingress → Service loo
 HTTPRoute CRDs are absent in that lab: missing-API visibility is smoke-tested;
 Gateway/HTTPRoute references are fixture-tested. Browser rendering and large
 cluster performance were not revalidated in this increment.
+
+The UID/lifecycle update passes `go test -p 2 ./internal/view ./cmd`, focused
+relationship and retained-inspection tests under `go test -race -p 2`, and
+`go build -buildvcs=false -p 2`. VCS stamping was disabled for the managed
+worktree build because automatic Git status collection failed; compilation and
+linking completed successfully. The existing PR remains unmerged pending review.

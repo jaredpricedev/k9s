@@ -41,7 +41,7 @@ func tlsSecretReferences(o *unstructured.Unstructured) []certmanager.Reference {
 			refs = append(refs, certmanager.Reference{Kind: inspectionSecretKind, Name: name, Namespace: ns})
 		}
 	}
-	switch o.GetKind() {
+	switch inspectionKind(o) {
 	case inspectionCertificateKind:
 		add(nestedText(o.Object, "spec", "secretName"), "")
 	case "Ingress":
@@ -200,7 +200,7 @@ func tlsConsumers(ctx context.Context, conn client.Connection, o *unstructured.U
 			item.SetKind(typ.kind)
 			for _, ref := range tlsSecretReferences(item) {
 				if ref.Name == o.GetName() && ref.Namespace == o.GetNamespace() {
-					refs = append(refs, inspectionReference{ref: certmanager.Reference{Group: typ.gvr.Group, Kind: typ.kind, Name: item.GetName(), Namespace: item.GetNamespace()}})
+					refs = append(refs, inspectionReference{ref: certmanager.Reference{Group: typ.gvr.Group, Kind: typ.kind, Name: item.GetName(), Namespace: item.GetNamespace()}, uid: item.GetUID(), reason: "same-namespace TLS configuration reference"})
 					break
 				}
 			}

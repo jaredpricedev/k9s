@@ -77,6 +77,12 @@ func tableResourceForPath(t *Table, contextName, path string) SelectedResourceTa
 			}
 		}
 	}
+	if expected := t.expectedTarget; expected != nil && expected.Context == contextName && expected.GVR == target.GVR && expected.Path() == target.Path() && expected.UID != "" {
+		if target.UID != "" && target.UID != expected.UID {
+			target.UnavailableReason = fmt.Sprintf("Identity changed for %s: related UID %s, current UID %s; reopen the relationship", target.Path(), expected.UID, target.UID)
+		}
+		target.UID = expected.UID
+	}
 	return target
 }
 

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// Modified for k9+; see NOTICE.
 package view
 
 import (
@@ -13,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 const (
@@ -77,7 +79,9 @@ func networkReferences(o *unstructured.Unstructured) []inspectionReference {
 			}
 			api := nestedText(target, "apiVersion")
 			if nestedText(target, "kind") == "Pod" && nestedText(target, "name") != "" && (api == "" || api == "v1") {
-				refs = append(refs, relationshipRef("", "Pod", targetNS, nestedText(target, "name"), "targetRef; "+evidence))
+				ref := relationshipRef("", "Pod", targetNS, nestedText(target, "name"), "targetRef; "+evidence)
+				ref.uid = types.UID(nestedText(target, "uid"))
+				refs = append(refs, ref)
 			} else {
 				refs = append(refs, inspectionReference{notice: evidence + "; no supported Pod targetRef"})
 			}
@@ -146,7 +150,9 @@ func networkRelationships(ctx context.Context, conn client.Connection, o *unstru
 		return result
 	}
 	add := func(obj *unstructured.Unstructured, group, kind, reason string) {
-		refs = append(refs, relationshipRef(group, kind, obj.GetNamespace(), obj.GetName(), reason))
+		ref := relationshipRef(group, kind, obj.GetNamespace(), obj.GetName(), reason)
+		ref.uid = obj.GetUID()
+		refs = append(refs, ref)
 	}
 	switch relationshipKind(o) {
 	case "Pod", "Deployment", "DaemonSet", "StatefulSet", "ReplicaSet", "Job":
@@ -205,7 +211,11 @@ func referencesObject(refs []inspectionReference, o *unstructured.Unstructured, 
 }
 func stableRelationships(refs []inspectionReference) []inspectionReference {
 	seen := map[inspectionReference]bool{}
-	targets := map[certmanager.Reference]int{}
+	type identity struct {
+		ref certmanager.Reference
+		uid types.UID
+	}
+	targets := map[identity]int{}
 	result := make([]inspectionReference, 0, len(refs))
 	for _, r := range refs {
 		if seen[r] {
@@ -213,7 +223,8 @@ func stableRelationships(refs []inspectionReference) []inspectionReference {
 		}
 		seen[r] = true
 		if r.notice == "" {
-			if index, ok := targets[r.ref]; ok {
+			key := identity{r.ref, r.uid}
+			if index, ok := targets[key]; ok {
 				if r.reason != "" {
 					if result[index].reason != "" {
 						result[index].reason += " | "
@@ -222,7 +233,7 @@ func stableRelationships(refs []inspectionReference) []inspectionReference {
 				}
 				continue
 			}
-			targets[r.ref] = len(result)
+			targets[key] = len(result)
 		}
 		result = append(result, r)
 	}
@@ -231,7 +242,7 @@ func stableRelationships(refs []inspectionReference) []inspectionReference {
 		if (a.notice == "") != (b.notice == "") {
 			return a.notice == ""
 		}
-		return a.ref.Kind+a.ref.Namespace+a.ref.Name+a.reason+a.notice < b.ref.Kind+b.ref.Namespace+b.ref.Name+b.reason+b.notice
+		return a.ref.Group+a.ref.Kind+a.ref.Namespace+a.ref.Name+string(a.uid)+a.reason+a.notice < b.ref.Group+b.ref.Kind+b.ref.Namespace+b.ref.Name+string(b.uid)+b.reason+b.notice
 	})
 	return result
 }

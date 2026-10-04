@@ -25,11 +25,12 @@ import (
 type Table struct {
 	*ui.Table
 
-	app        *App
-	enterFn    EnterFunc
-	envFn      EnvFunc
-	bindKeysFn []BindKeysFunc
-	command    *cmd.Interpreter
+	app            *App
+	enterFn        EnterFunc
+	envFn          EnvFunc
+	bindKeysFn     []BindKeysFunc
+	command        *cmd.Interpreter
+	expectedTarget *SelectedResourceTarget
 }
 
 // NewTable returns a new viewer.

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// Modified for k9+; see NOTICE.
 package view
 
 import (
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/derailed/k9s/internal/client"
+	"github.com/derailed/k9s/internal/dao"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -58,6 +60,9 @@ func TestEndpointSliceUsesExplicitTargetsNotAddressGuessing(t *testing.T) {
 	}
 }
 func TestServiceRelationshipsScopeListsAndSurfaceGaps(t *testing.T) {
+	metas := dao.MetaAccess
+	dao.MetaAccess = dao.NewMeta()
+	t.Cleanup(func() { dao.MetaAccess = metas })
 	svc := relationshipObject(t, `{"apiVersion":"v1","kind":"Service","metadata":{"namespace":"app","name":"api"},"spec":{"selector":{"app":"api"}}}`)
 	dyn := fake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
 		{Version: "v1", Resource: "pods"}:                                           "PodList",

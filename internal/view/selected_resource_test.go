@@ -9,6 +9,7 @@ import (
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config/mock"
+	"github.com/derailed/k9s/internal/dao"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -103,6 +104,9 @@ func TestCombinedFluxSelectionMatchesNativeIdentity(t *testing.T) {
 }
 
 func TestInspectionRejectsSameNameReplacementBeforeReadingEvidence(t *testing.T) {
+	metas := dao.MetaAccess
+	dao.MetaAccess = dao.NewMeta()
+	t.Cleanup(func() { dao.MetaAccess = metas })
 	obj := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "v1", "kind": "Pod",
 		"metadata": map[string]any{"namespace": "team", "name": "app", "uid": "replacement"},

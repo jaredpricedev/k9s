@@ -16,12 +16,14 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 type inspectionReference struct {
 	ref    certmanager.Reference
 	notice string
 	reason string
+	uid    types.UID
 }
 
 func (d *inspectionDetails) openRelated() {
@@ -32,6 +34,10 @@ func (d *inspectionDetails) openRelated() {
 	if d.related == nil {
 		return
 	}
+	if d.snapshot.Text == "" {
+		d.app.Flash().Info("Wait for the source snapshot before opening related resources")
+		return
+	}
 	if d.cancel != nil {
 		d.cancel()
 	}
@@ -40,9 +46,13 @@ func (d *inspectionDetails) openRelated() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	d.cancel = cancel
 	d.app.Flash().Info("Loading related resources...")
+	target := d.target
 	go func() {
 		defer cancel()
-		refs, err := d.related(ctx)
+		refs, err := d.related(ctx, target)
+		if ctx.Err() != nil {
+			err = ctx.Err()
+		}
 		d.app.QueueUpdateDraw(func() {
 			if d.app.Content.Top() != d || generation != d.generation || d.contextName != d.app.Config.ActiveContextName() {
 				return
@@ -55,7 +65,7 @@ func (d *inspectionDetails) openRelated() {
 				d.app.Flash().Info("No related resources reported")
 				return
 			}
-			p := NewPicker()
+			p := &relatedPicker{Picker: NewPicker()}
 			contextName := d.contextName
 			if err := d.app.inject(p, false); err != nil {
 				d.app.Flash().Err(err)
@@ -68,6 +78,11 @@ func (d *inspectionDetails) openRelated() {
 					text = item.ref.Kind + " " + client.FQN(item.ref.Namespace, item.ref.Name)
 					if item.reason != "" {
 						text += " | " + item.reason
+					}
+					if item.uid != "" {
+						text += " | UID " + string(item.uid)
+					} else {
+						text += " | UID unknown (name reference)"
 					}
 				}
 				p.AddItem(tview.Escape(text), "", 0, nil)
@@ -100,11 +115,88 @@ func (d *inspectionDetails) openRelated() {
 					}
 					command += " " + ns
 				}
-				d.app.PrevCmd(nil)
-				d.app.gotoResource(command, client.FQN(ns, item.ref.Name), false, true)
+				target := SelectedResourceTarget{Context: contextName, GVR: gvr, Namespace: item.ref.Namespace, Name: item.ref.Name, UID: item.uid}
+				if !namespaced {
+					target.Namespace = ""
+				}
+				d.followRelated(p, target, command, client.FQN(ns, item.ref.Name))
 			})
 		})
 	}()
+}
+
+// A relationship jump is another bounded read of the pinned context. Closing
+// the picker cancels it, and a delayed reply cannot navigate a different page.
+type relatedPicker struct {
+	*Picker
+	cancel     context.CancelFunc
+	generation uint64
+}
+
+func (p *relatedPicker) Stop() {
+	p.generation++
+	if p.cancel != nil {
+		p.cancel()
+		p.cancel = nil
+	}
+}
+
+func (d *inspectionDetails) followRelated(p *relatedPicker, target SelectedResourceTarget, command, path string) {
+	if d.connection == nil {
+		d.app.Flash().Warn("Related target visibility unavailable; reopen the source inspection")
+		return
+	}
+	if p.cancel != nil {
+		p.cancel()
+	}
+	p.generation++
+	generation := p.generation
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	p.cancel = cancel
+	d.app.Flash().Info("Checking related resource identity...")
+	go func() {
+		defer cancel()
+		observed, err := loadRelatedTarget(ctx, d.connection, target)
+		d.app.QueueUpdateDraw(func() {
+			if d.app.Content.Top() != p || p.generation != generation || d.app.Config.ActiveContextName() != target.Context {
+				return
+			}
+			if err != nil {
+				d.app.Flash().Err(err)
+				return
+			}
+			d.app.PrevCmd(nil)
+			d.app.gotoResource(command, path, false, true)
+			if v, ok := d.app.Content.Top().(ResourceViewer); ok && v.GetTable() != nil && v.GVR() == observed.GVR {
+				v.GetTable().expectedTarget = &observed
+			}
+			if observed.UID == "" {
+				d.app.Flash().Warn("Related resource UID unknown; continuity cannot be verified")
+			}
+		})
+	}()
+}
+
+func loadRelatedTarget(ctx context.Context, conn client.Connection, target SelectedResourceTarget) (SelectedResourceTarget, error) {
+	if err := target.Err(); err != nil {
+		return target, err
+	}
+	dyn, err := conn.DynDial()
+	if err != nil {
+		return target, err
+	}
+	obj, err := dyn.Resource(target.GVR.GVR()).Namespace(target.Namespace).Get(ctx, target.Name, metav1.GetOptions{})
+	if err != nil {
+		return target, err
+	}
+	if err := ctx.Err(); err != nil {
+		return target, err
+	}
+	if err := verifySelectedIdentity(target, obj); err != nil {
+		return target, err
+	}
+	target.UID = obj.GetUID()
+	return target, nil
 }
 
 func loadInspectionReferences(ctx context.Context, conn client.Connection, gvr *client.GVR, path, name string) ([]inspectionReference, error) {
@@ -115,6 +207,9 @@ func loadTargetInspectionReferences(ctx context.Context, conn client.Connection,
 	if err := target.Err(); err != nil {
 		return nil, err
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	dyn, err := conn.DynDial()
 	if err != nil {
 		return nil, err
@@ -123,23 +218,32 @@ func loadTargetInspectionReferences(ctx context.Context, conn client.Connection,
 	if err != nil {
 		return nil, err
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := verifySelectedIdentity(target, obj); err != nil {
 		return nil, err
 	}
 	refs := objectReferences(obj)
-	if name == tlsCommand && obj.GetKind() == inspectionSecretKind {
+	if target.UID == "" {
+		refs = append(refs, inspectionReference{notice: "Source UID unknown; continuity with the captured source cannot be verified"})
+	}
+	if name == tlsCommand && inspectionKind(obj) == inspectionSecretKind {
 		refs = append(refs, tlsConsumers(ctx, conn, obj)...)
 	}
 	if name == troubleshootCommand {
 		pods, notice := workloadPods(ctx, conn, obj)
 		for _, pod := range pods {
-			refs = append(refs, inspectionReference{ref: certmanager.Reference{Kind: "Pod", Namespace: pod.GetNamespace(), Name: pod.GetName()}})
+			refs = append(refs, inspectionReference{ref: certmanager.Reference{Kind: "Pod", Namespace: pod.GetNamespace(), Name: pod.GetName()}, uid: pod.GetUID(), reason: "workload selector match; current API identity"})
 		}
 		if notice != "" {
 			refs = append(refs, inspectionReference{notice: notice})
 		}
 	}
 	refs = append(refs, networkRelationships(ctx, conn, obj)...)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	return stableRelationships(refs), nil
 }
 
@@ -148,10 +252,12 @@ func objectReferences(o *unstructured.Unstructured) []inspectionReference {
 	for _, owner := range o.GetOwnerReferences() {
 		gv, err := schema.ParseGroupVersion(owner.APIVersion)
 		if err == nil {
-			refs = append(refs, relationshipRef(gv.Group, owner.Kind, o.GetNamespace(), owner.Name, "ownerReference"))
+			ref := relationshipRef(gv.Group, owner.Kind, o.GetNamespace(), owner.Name, "ownerReference")
+			ref.uid = owner.UID
+			refs = append(refs, ref)
 		}
 	}
-	if o.GetKind() == inspectionCertificateKind {
+	if inspectionKind(o) == inspectionCertificateKind {
 		for _, ref := range certmanager.References(o) {
 			if ref.Kind != "" {
 				refs = append(refs, inspectionReference{ref: ref})
@@ -174,7 +280,7 @@ func objectReferences(o *unstructured.Unstructured) []inspectionReference {
 }
 
 func workloadPods(ctx context.Context, conn client.Connection, o *unstructured.Unstructured) (pods []*unstructured.Unstructured, notice string) {
-	switch o.GetKind() {
+	switch inspectionKind(o) {
 	case "Deployment", "DaemonSet", "StatefulSet", "ReplicaSet", "Job":
 	default:
 		return nil, ""
@@ -213,6 +319,21 @@ func workloadPods(ctx context.Context, conn client.Connection, o *unstructured.U
 		notice = "Pod results truncated at 100; narrow the workload scope"
 	}
 	return pods, notice
+}
+
+// APIVersion is always present on API reads. Empty versions are accepted only
+// for older in-memory summary fixtures; explicit group collisions are rejected.
+func inspectionKind(o *unstructured.Unstructured) string {
+	expected := map[string]string{
+		"Pod": "", inspectionSecretKind: "", inspectionCertificateKind: "cert-manager.io",
+		"Deployment": "apps", "DaemonSet": "apps", "StatefulSet": "apps", "ReplicaSet": "apps", "Job": "batch",
+		"Ingress": "networking.k8s.io", "Gateway": "gateway.networking.k8s.io",
+	}
+	group, supported := expected[o.GetKind()]
+	if !supported || (o.GetAPIVersion() != "" && o.GroupVersionKind().Group != group) {
+		return ""
+	}
+	return o.GetKind()
 }
 func workloadDiagnostics(ctx context.Context, conn client.Connection, o *unstructured.Unstructured) string {
 	pods, notice := workloadPods(ctx, conn, o)
