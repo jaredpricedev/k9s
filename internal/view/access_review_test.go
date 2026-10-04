@@ -5,11 +5,15 @@ package view
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/derailed/k9s/internal/access"
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config/mock"
+	"github.com/derailed/k9s/internal/model"
+	"github.com/derailed/k9s/internal/watch"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
 )
@@ -102,6 +106,59 @@ func TestAccessNativeFormAndDecisionAtSupportedSizes(t *testing.T) {
 		}
 		v.dismissAccessForm(false)
 		screen.Fini()
+	}
+}
+
+func TestAccessDisconnectRetainsCaptureAndNativeControlsBeyondRetryBudget(t *testing.T) {
+	v := accessViewFixture(t)
+	a := v.app
+	if err := v.Init(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	conn := &disconnectedWorkspaceConnection{Connection: mock.NewMockConnection()}
+	a.Config.SetConnection(conn)
+	a.factory = watch.NewFactory(conn)
+	a.clusterModel = model.NewClusterInfo(a.factory, "test", a.Config.K9s)
+	a.Config.K9s.MaxConnRetry = 1
+	snapshot := &access.Snapshot{Question: v.question, Decision: "unknown", At: time.Now()}
+	v.snapshot = snapshot
+	v.Update(snapshot.Text() + "\nNo questioned resource was read or changed.\ne: edit · r: explicit review · Esc: return")
+	v.BufferCompleted("Subject", "")
+	v.text.ScrollTo(2, 1)
+	pending, cancel := context.WithCancel(t.Context())
+	v.cancel, v.generation = cancel, 7
+	defer cancel()
+	for range 3 {
+		if err := a.refreshCluster(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if atomic.LoadInt32(&a.conRetry) <= a.Config.K9s.MaxConnRetry || a.Content.Top() != v ||
+		v.snapshot != snapshot || v.generation != 7 || pending.Err() != nil || v.inspectionQuery != "Subject" {
+		t.Fatal("disconnect changed retained access review state")
+	}
+	row, col := v.text.GetScrollOffset()
+	if row != 2 || col != 1 {
+		t.Fatalf("scroll offset changed: %d,%d", row, col)
+	}
+	a.connectivityComponent(v, true)
+	if v.generation != 7 || pending.Err() != nil {
+		t.Fatal("recovery canceled explicit access review")
+	}
+	event := tcell.NewEventKey(tcell.KeyRune, 'e', tcell.ModNone)
+	v.InputHandler()(event, func(p tview.Primitive) { a.SetFocus(p) })
+	if v.modal == nil {
+		t.Fatal("native access question control unavailable after disconnect")
+	}
+	form := accessFormForTest(t, v)
+	modalFrame := drawnText(t, v.modal, 80, 24)
+	if !strings.Contains(modalFrame, "Explicit access question") || !strings.Contains(modalFrame, "Cancel") || !strings.Contains(modalFrame, "Review") {
+		t.Fatal("native access controls missing after disconnect", modalFrame)
+	}
+	form.GetButton(0).InputHandler()(tcell.NewEventKey(tcell.KeyEnter, 0, 0), func(p tview.Primitive) { a.SetFocus(p) })
+	frame := drawnText(t, v, 80, 24)
+	if !strings.Contains(frame, "ACCESS DECISION") || !strings.Contains(frame, "Subject: self") {
+		t.Fatal("retained access evidence or controls missing", frame)
 	}
 }
 func accessScreenText(screen tcell.Screen) string {
