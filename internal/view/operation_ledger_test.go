@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -93,6 +94,11 @@ func TestGuardedOperationDeniedPartialAndUnknownOutcomes(t *testing.T) {
 	}{
 		{testWorkspaceCoverageDenied, true, apierrors.NewForbidden(schema.GroupResource{Resource: guardedTestNodes}, testWorkspaceWorkerName, errors.New(testWorkspaceCoverageDenied)), operationFailed},
 		{"transport", true, io.ErrUnexpectedEOF, operationUnknown},
+		{"server-error-after-write", true, apierrors.NewInternalError(errors.New("fixture server failure")), operationUnknown},
+		{"unavailable-after-write", true, apierrors.NewServiceUnavailable("fixture unavailable"), operationUnknown},
+		{"gateway-after-write", true, apierrors.NewGenericServerResponse(http.StatusBadGateway, client.CreateVerb, schema.GroupResource{Resource: guardedTestNodes}, testWorkspaceWorkerName, "fixture gateway failure", 0, false), operationUnknown},
+		{"server-error-before-write", false, apierrors.NewInternalError(errors.New("fixture read failure")), operationFailed},
+		{"unavailable-before-write", false, apierrors.NewServiceUnavailable("fixture unavailable"), operationFailed},
 		{"cancel-before-write", false, context.Canceled, operationCancelled},
 		{"cancel-after-write", true, context.Canceled, operationUnknown},
 		{"accepted", true, nil, operationAccepted},
