@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/ui"
@@ -54,6 +55,7 @@ type securityReviewView struct {
 	connection           client.Connection
 	loader               func(context.Context, SelectedResourceTarget) (securityDeclarationSnapshot, error)
 	snapshot             securityDeclarationSnapshot
+	status               string
 	activeTab            int
 	cancel               context.CancelFunc
 	generation, revision uint64
@@ -201,12 +203,18 @@ func (v *securityReviewView) refresh() {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	v.cancel = cancel
 	loader := v.loader
+	if loader == nil {
+		return
+	}
+	v.status = "Reading captured declarations..."
+	v.render()
 	target := v.target
 	go func() {
 		snapshot, err := loader(ctx, target)
+		contextErr := ctx.Err()
 		cancel()
-		if ctx.Err() != nil && err == nil {
-			return
+		if contextErr != nil && err == nil {
+			err = contextErr
 		}
 		if !v.app.IsRunning() {
 			return
@@ -216,18 +224,21 @@ func (v *securityReviewView) refresh() {
 				return
 			}
 			if errors.Is(err, errSecurityIdentityChanged) {
-				v.Update("Selected UID was replaced. Refresh the source list and select the new object before reviewing.")
+				v.status = "Selected UID was replaced; retained declarations describe the previous UID. Reopen the source list."
+				v.render()
 				return
 			}
 			if err != nil {
-				v.Update("Unable to read the captured object: " + safeSecurityError(err))
+				v.status = "Refresh failed: " + safeSecurityError(err) + "; retained declarations were not refreshed."
+				v.render()
 				return
 			}
 			if snapshot.Identity.UID != string(target.UID) {
-				v.Update("Selected UID was replaced. Refresh the source list and select the new object before reviewing.")
+				v.status = "Selected UID was replaced; retained declarations describe the previous UID. Reopen the source list."
+				v.render()
 				return
 			}
-			v.snapshot = snapshot
+			v.snapshot, v.status = snapshot, ""
 			v.render()
 		})
 	}()
@@ -243,7 +254,7 @@ func safeSecurityError(err error) string {
 		return "read denied (Forbidden)"
 	}
 	if apierrors.IsNotFound(err) {
-		return "object no longer exists (NotFound)"
+		return "requested read unavailable (404); object absence unverified"
 	}
 	if apierrors.IsTimeout(err) {
 		return "read timed out"
@@ -253,7 +264,13 @@ func safeSecurityError(err error) string {
 
 func (v *securityReviewView) render() {
 	s := v.snapshot
+	if s.Identity.UID == "" {
+		s.Identity = securityReviewIdentity{Context: v.target.Context, Namespace: v.target.Namespace, Name: v.target.Name, UID: string(v.target.UID)}
+	}
 	var b strings.Builder
+	if v.status != "" {
+		fmt.Fprintf(&b, "%s\n", v.status)
+	}
 	fmt.Fprintf(&b,
 		"%s · %s/%s · UID %s · RV %s\n"+
 			"Context %s · captured %s\n\n",
@@ -492,7 +509,14 @@ func effectiveDeclaredBool(spec, c map[string]any, key string) string {
 }
 func effectiveDeclaredScalar(spec, c map[string]any, key string) string {
 	if v, ok := declaredSecurityField(spec, c, key); ok {
-		return fmt.Sprint(v)
+		switch value := v.(type) {
+		case int64:
+			return fmt.Sprint(value)
+		case string:
+			if key == "procMount" {
+				return boundedSecurityValue(value)
+			}
+		}
 	}
 	return securityNotDeclared
 }
@@ -511,9 +535,9 @@ func effectiveProfile(spec, c map[string]any, key string) string {
 	}
 	path, _, _ := unstructured.NestedString(firstDeclaredSecurity(spec, c, key), "localhostProfile")
 	if path != "" {
-		return v + " (profile path omitted)"
+		return boundedSecurityValue(v) + " (profile path omitted)"
 	}
-	return v
+	return boundedSecurityValue(v)
 }
 func effectiveCapabilities(c map[string]any) (add, drop []string, addDeclared, dropDeclared bool) {
 	_, addDeclared, _ = unstructured.NestedFieldNoCopy(c, "securityContext", "capabilities", "add")
@@ -543,6 +567,12 @@ func firstDeclaredSecurity(spec, c map[string]any, key string) map[string]any {
 }
 func boundedSecurityValue(value string) string {
 	const limit = 512
+	value = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, value)
 	runes := []rune(value)
 	if len(runes) > limit {
 		return string(runes[:limit]) + "…"

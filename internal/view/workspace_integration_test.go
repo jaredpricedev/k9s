@@ -25,7 +25,7 @@ type disconnectedWorkspaceConnection struct{ client.Connection }
 func (*disconnectedWorkspaceConnection) CheckConnectivity() bool { return false }
 
 func TestDisconnectedWorkspaceRemainsUsableBeyondBackgroundRetryBudget(t *testing.T) {
-	for _, mode := range []string{"workspace", "connection"} {
+	for _, mode := range []string{"workspace", "connection", "security"} {
 		t.Run(mode, func(t *testing.T) {
 			a := NewApp(mock.NewMockConfig(t))
 			conn := &disconnectedWorkspaceConnection{Connection: mock.NewMockConnection()}
@@ -35,6 +35,8 @@ func TestDisconnectedWorkspaceRemainsUsableBeyondBackgroundRetryBudget(t *testin
 			a.Config.K9s.MaxConnRetry = 1
 			if mode == "workspace" {
 				a.Content.Push(newDailyWorkspace(a, workspace.Store{Version: 1}, "scopes", ""))
+			} else if mode == "security" {
+				a.Content.Push(&securityReviewView{Details: NewDetails(a, "Security", "", contentInspection, true)})
 			} else {
 				a.Content.Push(&connectionHealthDetails{Details: NewDetails(a, "Connection", "", contentInspection, true)})
 			}

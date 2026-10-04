@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config/mock"
 	"github.com/derailed/k9s/internal/ui"
@@ -162,4 +163,64 @@ func TestSecurityReviewNativeTabsSearchSafetyAndResponsiveFrames(t *testing.T) {
 		require.Contains(t, frame.String(), "Facts", "%dx%d", size.width, size.height)
 		require.Contains(t, frame.String(), "hostNetwork", "%dx%d", size.width, size.height)
 	}
+}
+
+func TestSecurityRefreshPublishesSuccessfulReadAndRetainsEvidenceAfterFailure(t *testing.T) {
+	app := NewApp(mock.NewMockConfig(t))
+	_, err := app.Config.ActivateContext("ct-1-1")
+	require.NoError(t, err)
+	app.App.Init()
+	require.NoError(t, app.Content.Init(context.WithValue(t.Context(), internal.KeyApp, app)))
+	target := SelectedResourceTarget{Context: app.Config.ActiveContextName(), GVR: client.PodGVR, Namespace: "apps", Name: "api-0", UID: "uid"}
+	v := &securityReviewView{Details: NewDetails(app, securityReviewTitle, target.Path(), contentInspection, true), target: target, revision: app.Config.DestinationRevision()}
+	v.snapshot.Identity = securityReviewIdentity{Context: target.Context, Namespace: target.Namespace, Name: target.Name, UID: "uid", ResourceVersion: "retained", CapturedAt: time.Now()}
+	v.loader = func(context.Context, SelectedResourceTarget) (securityDeclarationSnapshot, error) {
+		return securityDeclarationSnapshot{Identity: securityReviewIdentity{Context: target.Context, Namespace: target.Namespace, Name: target.Name, UID: "uid", ResourceVersion: "fresh", CapturedAt: time.Now()}, HostNetwork: "false"}, nil
+	}
+	require.NoError(t, app.inject(v, false))
+	screen := tcell.NewSimulationScreen("UTF-8")
+	require.NoError(t, screen.Init())
+	screen.SetSize(80, 24)
+	app.SetScreen(screen).SetRoot(app.Content, true)
+	app.SetRunning(true)
+	finished := make(chan error, 1)
+	go func() { finished <- app.Application.Run() }()
+	t.Cleanup(func() { app.SetRunning(false); app.Application.Stop(); <-finished; v.Stop() })
+	app.Application.QueueUpdateDraw(v.refresh)
+	waitSecurityUpdate(t, app, func() bool { return v.snapshot.Identity.ResourceVersion == "fresh" })
+	var rendered string
+	app.Application.QueueUpdateDraw(func() { rendered = v.text.GetText(true) })
+	require.Contains(t, rendered, "RV fresh")
+	require.Contains(t, rendered, "hostNetwork: false")
+	app.Application.QueueUpdateDraw(func() {
+		v.loader = func(context.Context, SelectedResourceTarget) (securityDeclarationSnapshot, error) {
+			return securityDeclarationSnapshot{}, apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, "api-0")
+		}
+		v.refresh()
+	})
+	waitSecurityUpdate(t, app, func() bool { return strings.Contains(v.status, "Refresh failed") })
+	app.Application.QueueUpdateDraw(func() { rendered = v.text.GetText(true) })
+	require.Contains(t, rendered, "RV fresh")
+	require.Contains(t, rendered, "absence unverified")
+	require.Contains(t, rendered, "not refreshed")
+}
+
+func waitSecurityUpdate(t *testing.T, app *App, ready func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		done := false
+		app.Application.QueueUpdateDraw(func() { done = ready() })
+		if done {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("security read never reached the native UI dispatcher")
+}
+
+func TestSecurityScalarProjectionRejectsUnexpectedStructuredValues(t *testing.T) {
+	spec := map[string]any{"securityContext": map[string]any{"runAsUser": map[string]any{"secret": "never-retain"}, "procMount": "Default\nforged heading"}}
+	require.Equal(t, securityNotDeclared, effectiveDeclaredScalar(spec, nil, "runAsUser"))
+	require.Equal(t, "Default forged heading", effectiveDeclaredScalar(spec, nil, "procMount"))
 }
