@@ -1,18 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 // Native Cilium/Hubble integration for k9+.
+// Modified for k9+; see NOTICE.
 package view
 
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/derailed/k9s/internal/client"
+	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/hubble"
 	"github.com/derailed/k9s/internal/model"
+	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/k9s/internal/view/cmd"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
@@ -24,11 +28,18 @@ const (
 	hubblePeersMode        = "peers"
 	hubbleConversationMode = "conversation"
 	hubbleHelpMode         = "help"
+	hubbleUnknown          = "unknown"
+	hubbleForwarded        = "FORWARDED"
 )
 
 type hubblePeerRow struct {
 	Peer  hubble.Peer
 	Count int
+}
+
+type hubbleTableState struct {
+	mode, expression, peer string
+	revision, style        uint64
 }
 
 // All view fields belong to the draw goroutine. Only Session ingests concurrently.
@@ -38,7 +49,7 @@ type HubbleView struct {
 	helpReturn string
 	*tview.Flex
 	app                      *App
-	table                    *tview.Table
+	table                    *hubbleTable
 	detail, status           *tview.TextView
 	prompt                   *tview.InputField
 	pages                    *tview.Pages
@@ -59,6 +70,15 @@ type HubbleView struct {
 	originalCapture          func(*tcell.EventKey) *tcell.EventKey
 	prompting                bool
 	peerRow, flowRow         int
+	displayedRevision        uint64
+	renderedTable            bool
+	tableState               hubbleTableState
+	nodeRows                 []hubble.Node
+	nodeVersion, nodeError   string
+	styleGeneration          uint64
+	contextName              string
+	palette                  config.SemanticPalette
+	rowColors                hubbleRowColors
 }
 
 var _ model.Component = (*HubbleView)(nil)
@@ -66,8 +86,10 @@ var _ model.Component = (*HubbleView)(nil)
 func newHubbleView(scope hubble.Scope, statusOnly bool) *HubbleView {
 	w := &HubbleView{
 		statusOnly: statusOnly, Flex: tview.NewFlex().SetDirection(tview.FlexRow), scope: scope, mode: hubblePeersMode,
-		table: tview.NewTable(), detail: tview.NewTextView(), status: tview.NewTextView(), prompt: tview.NewInputField(), pages: tview.NewPages(),
+		table: &hubbleTable{Table: tview.NewTable()}, detail: tview.NewTextView(), status: tview.NewTextView(), prompt: tview.NewInputField(), pages: tview.NewPages(),
 	}
+	w.table.palette = w.semanticPalette
+	w.StylesChanged(nil)
 	if statusOnly {
 		w.mode = hubbleStatusMode
 	}
@@ -102,16 +124,7 @@ func (*HubbleView) SetLabelSelector(labels.Selector, bool) {}
 func (w *HubbleView) SetFilter(s string, _ bool)           { w.applyFilter(s) }
 func (w *HubbleView) InCmdMode() bool                      { return w.prompting }
 func (*HubbleView) ExtraHints() map[string]string          { return nil }
-func (*HubbleView) Hints() model.MenuHints {
-	return model.MenuHints{
-		{Mnemonic: "enter", Description: "Inspect", Visible: true},
-		{Mnemonic: "s", Description: "Freeze/Resume", Visible: true},
-		{Mnemonic: "/", Description: "Filter", Visible: true},
-		{Mnemonic: "1/2", Description: "Source/Dest pod", Visible: true},
-		{Mnemonic: "r", Description: "Reconnect", Visible: true},
-		{Mnemonic: "esc", Description: "Back", Visible: true},
-	}
-}
+func (w *HubbleView) Hints() model.MenuHints               { return w.Actions().Hints() }
 func (w *HubbleView) Init(ctx context.Context) error {
 	var err error
 	w.app, err = extractApp(ctx)
@@ -123,11 +136,8 @@ func (w *HubbleView) Init(ctx context.Context) error {
 		return err
 	}
 	w.config = ct.Hubble
-	bg := w.app.Styles.BgColor()
-	w.SetBackgroundColor(bg)
-	w.table.SetBackgroundColor(bg)
-	w.status.SetBackgroundColor(bg)
-	w.detail.SetBackgroundColor(bg)
+	w.contextName = w.app.Config.ActiveContextName()
+	w.StylesChanged(w.app.Styles)
 	w.SetTitle(" Cilium / Hubble " + w.app.Config.ActiveContextName() + " ")
 	return nil
 }
@@ -136,6 +146,9 @@ func (w *HubbleView) Start() {
 		return
 	}
 	w.started = true
+	w.app.Styles.RemoveListener(w)
+	w.app.Styles.AddListener(w)
+	w.StylesChanged(w.app.Styles)
 	w.originalCapture = w.app.GetInputCapture()
 	w.app.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
 		if w.prompting {
@@ -168,11 +181,17 @@ func (w *HubbleView) Stop() {
 	}
 	w.freeze()
 	if w.app != nil && wasStarted {
+		w.app.Styles.RemoveListener(w)
 		w.app.SetInputCapture(w.originalCapture)
 	}
 }
 func (w *HubbleView) restart() {
 	if w.app == nil {
+		return
+	}
+	if w.contextName != w.app.Config.ActiveContextName() {
+		w.notice = "Context changed; reopen Hubble for this context"
+		w.render()
 		return
 	}
 	if w.cancel != nil {
@@ -197,7 +216,7 @@ func (w *HubbleView) restart() {
 			return
 		}
 		w.app.QueueUpdateDraw(func() {
-			if generation != w.generation {
+			if ctx.Err() != nil || generation != w.generation || !w.started || w.contextName != w.app.Config.ActiveContextName() {
 				return
 			}
 			if err != nil {
@@ -209,6 +228,8 @@ func (w *HubbleView) restart() {
 			w.scope = scope
 			w.session = hubble.NewSession(cfg, scope, q, 10000)
 			w.displayed = nil
+			w.displayedRevision = 0
+			w.renderedTable = false
 			w.frozen = false
 			w.peer = hubble.Peer{}
 			w.rows = nil
@@ -238,7 +259,7 @@ func (w *HubbleView) refreshLoop(ctx context.Context, generation uint64) {
 			}
 			w.app.QueueUpdateDraw(func() {
 				defer queued.Store(false)
-				if generation == w.generation {
+				if generation == w.generation && w.started && w.contextName == w.app.Config.ActiveContextName() {
 					w.render()
 				}
 			})
@@ -376,17 +397,21 @@ func (w *HubbleView) render() {
 	var evicted uint64
 	if w.session != nil {
 		st = w.session.Status()
-		if !w.frozen {
-			w.displayed, evicted = w.session.Store.Snapshot()
-		} else {
-			_, evicted = w.session.Store.Snapshot()
+		stats := w.session.Store.Stats()
+		evicted = stats.Evicted
+		if !w.frozen && !w.statusOnly && stats.Revision != w.displayedRevision {
+			if events, snapshotStats, changed := w.session.Store.SnapshotIfChanged(w.displayedRevision); changed {
+				w.displayed = events
+				w.displayedRevision = snapshotStats.Revision
+				evicted = snapshotStats.Evicted
+			}
 		}
 	}
 	state := st.Phase
 	if w.frozen {
 		state = "FROZEN snapshot | collector: " + st.Phase
 	}
-	coverage := "unknown"
+	coverage := hubbleUnknown
 	if st.CoverageKnown {
 		coverage = fmt.Sprintf("%d connected / %d unavailable", st.Connected, st.Unavailable)
 	}
@@ -402,8 +427,9 @@ func (w *HubbleView) render() {
 	}
 	if w.mode == hubbleHelpMode {
 		w.pages.SwitchToPage(modeDetail)
-		w.setDetail("Hubble network inspection\n" +
+		w.setDetail(sharedActionHelp(w.Actions(), ui.ActionContext{}) + "\nHubble network inspection\n" +
 			"\n" +
+			":diagnostics hubble checks configured Relay readiness before observation.\n" +
 			"Peers count observed events in the retained dataset, not connections or requests.\n" +
 			"Enter freezes peers, opens both directions, then event detail. Navigation also freezes.\n" +
 			"s explicitly resumes. Incoming traffic cannot evict the frozen snapshot.\n" +
@@ -423,8 +449,19 @@ func (w *HubbleView) render() {
 	w.renderTable(&st)
 }
 
+//nolint:funlen // These layouts share selection and viewport preservation.
 func (w *HubbleView) renderTable(st *hubble.Status) {
 	w.pages.SwitchToPage("table")
+	state := hubbleTableState{mode: w.mode, expression: w.expression, peer: w.peer.Key(), revision: w.displayedRevision, style: w.styleGeneration}
+	nodesChanged := w.mode == hubbleStatusMode && (w.nodeVersion != st.Version || w.nodeError != st.CoverageError || !slices.Equal(w.nodeRows, st.Nodes))
+	if w.renderedTable && state == w.tableState && !nodesChanged {
+		return
+	}
+	w.renderedTable, w.tableState = true, state
+	if w.mode == hubbleStatusMode {
+		w.nodeRows = append(w.nodeRows[:0], st.Nodes...)
+		w.nodeVersion, w.nodeError = st.Version, st.CoverageError
+	}
 	row, col := w.table.GetSelection()
 	offR, offC := w.table.GetOffset()
 	var selectedKey string
@@ -461,9 +498,13 @@ func (w *HubbleView) renderTable(st *hubble.Status) {
 			v.Count++
 			counts[p.Key()] = v
 		}
-		w.peers = nil
+		oldPeers := w.peers
+		w.peers = w.peers[:0]
 		for _, p := range counts {
 			w.peers = append(w.peers, p)
+		}
+		if len(w.peers) < len(oldPeers) {
+			clear(oldPeers[len(w.peers):])
 		}
 		sort.Slice(w.peers, func(i, j int) bool { return w.peers[i].Peer.Key() < w.peers[j].Peer.Key() })
 		for i, p := range w.peers {
@@ -474,12 +515,16 @@ func (w *HubbleView) renderTable(st *hubble.Status) {
 		}
 	case hubbleConversationMode:
 		put(0, "TIME", "SOURCE", "DESTINATION", "PROTOCOL", "VERDICT", "ORIGIN")
-		w.rows = nil
+		oldRows := w.rows
+		w.rows = w.rows[:0]
 		for i := range w.displayed {
 			e := &w.displayed[i]
 			if (e.Source.Key() == w.peer.Key() || e.Destination.Key() == w.peer.Key()) && w.query.Match(e) {
 				w.rows = append(w.rows, *e)
 			}
+		}
+		if len(w.rows) < len(oldRows) {
+			clear(oldRows[len(w.rows):])
 		}
 		for i := range w.rows {
 			e := &w.rows[i]
@@ -573,11 +618,36 @@ func (w *HubbleView) inspect() *tcell.EventKey {
 }
 
 func (w *HubbleView) putRow(r int, values ...string) {
+	p := w.rowColors
 	for c, v := range values {
-		cell := tview.NewTableCell(tview.Escape(hubble.Clean(v)))
-		if r == 0 {
-			cell.SetSelectable(false).SetTextColor(tcell.ColorAqua)
+		if c == 0 && r > 0 {
+			v = "  " + v
 		}
+		cell := tview.NewTableCell(tview.Escape(hubble.Clean(v)))
+		color := p.text
+		if r == 0 {
+			cell.SetSelectable(false).SetAttributes(tcell.AttrBold)
+			color = p.category
+		} else if w.mode == hubbleConversationMode && c == 4 {
+			switch v {
+			case "DROPPED", "ERROR":
+				color = p.failure
+			case hubbleForwarded:
+				color = p.healthy
+			default:
+				color = p.unknown
+			}
+		} else if w.mode == hubbleStatusMode && c == 1 {
+			switch strings.ToLower(v) {
+			case "node_connected", "connected":
+				color = p.healthy
+			case "node_unavailable", "unavailable", "node_error", "error":
+				color = p.failure
+			default:
+				color = p.unknown
+			}
+		}
+		cell.SetBackgroundColor(p.canvas).SetTextColor(color)
 		w.table.SetCell(r, c, cell)
 	}
 }

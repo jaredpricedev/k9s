@@ -1,0 +1,13 @@
+/workspace/k9plus-evidence/hubble/before-refinements.test: go1.25.8
+	path	github.com/derailed/k9s/internal/view.test
+	mod	github.com/derailed/k9s	(devel)	
+	build	-buildmode=exe
+	build	-compiler=gc
+	build	CGO_ENABLED=1
+	build	CGO_CFLAGS=
+	build	CGO_CPPFLAGS=
+	build	CGO_CXXFLAGS=
+	build	CGO_LDFLAGS=
+	build	GOARCH=amd64
+	build	GOOS=linux
+	build	GOAMD64=v1

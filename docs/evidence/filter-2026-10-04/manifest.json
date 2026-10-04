@@ -1,0 +1,45 @@
+{
+  "artifacts": [
+    {
+      "file": "before.json",
+      "bytes": 10567,
+      "sha256": "30a1bc648e9a58084fa7a073aa96e3a91678845e035d1e3b204c17360ef6bf98"
+    },
+    {
+      "file": "final.json",
+      "bytes": 47555,
+      "sha256": "0060e942cb2c9104155c293d8606cec4a89725d43a801afe971809fcc26bde46"
+    },
+    {
+      "file": "before-pods-10000.png",
+      "bytes": 66405,
+      "sha256": "d4e259d898f28107066260435e674edc5df72901ad1728af78cf879a066d9d3d"
+    },
+    {
+      "file": "final-pods-10000.png",
+      "bytes": 68045,
+      "sha256": "e40dd80340a9c92db8bc3a8c6980c7eac3384cc5ec1278f2096ba98683d7f20c"
+    },
+    {
+      "file": "final-pending-restart.png",
+      "bytes": 32149,
+      "sha256": "2f8f35fafd8dd3346865326010135cb324327d88fb9ba27ca858d03663cafd10"
+    },
+    {
+      "file": "before-pods-10000.txt",
+      "bytes": 4591,
+      "sha256": "1b532bfa65a870da55cc9c0bd3b3cb0a4af8bdebdbe6492167aa9f034beccbf8"
+    },
+    {
+      "file": "final-pods-10000.txt",
+      "bytes": 4591,
+      "sha256": "340f101bb8b53773b10338f5b93a6021f6fa12e94a1a8e989539903fcae026dd"
+    },
+    {
+      "file": "final-pending-restart.txt",
+      "bytes": 2206,
+      "sha256": "fafc8daaa11fa0dac3daaff653805055f14346ffecad62ae5df801e4dd092230"
+    }
+  ],
+  "note": "Original measured JSON and emitted-screen PNG/TXT artifacts copied byte-for-byte. No binaries or raw PTY byte streams."
+}

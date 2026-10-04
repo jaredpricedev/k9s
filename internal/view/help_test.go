@@ -35,6 +35,8 @@ func TestHelp(t *testing.T) {
 	require.False(t, hidden.Opts.Visible, "fixture shortcut is omitted from the compact menu")
 	assert.Equal(t, hidden.Description, helpAction(t, v, "<ctrl-z>", hidden.Description),
 		"help must discover bindings hidden from the compact menu")
+	assert.Contains(t, helpAction(t, v, "<:compare>", "Compare observations"), "Compare observations")
+	assert.Contains(t, helpAction(t, v, "<:evidence>", "Capture evidence preview"), "Capture evidence preview")
 }
 
 func TestHelpExplainsDisabledActionsFromSharedRegistry(t *testing.T) {

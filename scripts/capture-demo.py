@@ -272,12 +272,19 @@ def rasterize(screen, target):
 
 
 class Terminal:
-    def __init__(self, binary, directory, port, app="k9plus"):
+    def __init__(self, binary, directory, port, app="k9plus", command="flux all", flags=None, ui_config="", color_mode="true-color"):
+        # Explicit capabilities prevent host terminal settings changing captures.
+        if color_mode not in ("true-color", "256"):
+            raise ValueError(f"Unknown terminal color mode: {color_mode}")
         root = Path(directory)
         kubeconfig = root / "kubeconfig"
-        env = isolated_runtime(root, app, kubeconfig, {"TERM": "xterm-256color", "COLORTERM": "truecolor"})
+        env = isolated_runtime(root, app, kubeconfig, {
+            "TERM": "xterm-256color", "COLORTERM": "truecolor" if color_mode == "true-color" else "",
+            "TCELL_TRUECOLOR": "" if color_mode == "true-color" else "disable",
+            "COLUMNS": str(COLS), "LINES": str(ROWS), "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"})
+        self.color_mode = color_mode
         # k9+ retains the k9s YAML root for explicit config-copy compatibility.
-        (root / "config" / app / "config.yaml").write_text("k9s:\n  skipLatestRevCheck: true\n  refreshRate: 2\n  ui:\n    splashless: true\n")
+        (root / "config" / app / "config.yaml").write_text("k9s:\n  skipLatestRevCheck: true\n  refreshRate: 2\n  ui:\n    splashless: true\n" + ui_config)
         self.app = app
         self.captures = []
         kubeconfig.write_text(f"""apiVersion: v1
@@ -304,7 +311,7 @@ users:
             os.setsid()
             fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
-        self.process = subprocess.Popen([str(binary), "--kubeconfig", str(kubeconfig), "--command", "flux all"],
+        self.process = subprocess.Popen([str(binary), "--kubeconfig", str(kubeconfig), "--command", command] + (flags or []),
             stdin=slave, stdout=slave, stderr=slave, env=env, preexec_fn=control_terminal)
         os.close(slave)
         self.screen = pyte.Screen(COLS, ROWS)
@@ -340,6 +347,8 @@ users:
         rasterize(self.screen, output / (name + ".png"))
         (output / (name + ".txt")).write_text("\n".join(line.rstrip() for line in self.screen.display).rstrip() + "\n")
         self.captures.append({"file": name + ".png", "expected": expected,
+                              "source": "actual PTY terminal cells; disposable local API fixture",
+                              "color_mode": self.color_mode, "width": COLS, "height": ROWS,
                               "captured_at": datetime.now(timezone.utc).isoformat()})
         print(name + ".png", flush=True)
 

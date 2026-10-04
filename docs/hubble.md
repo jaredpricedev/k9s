@@ -83,6 +83,14 @@ subscribe to flows and labels loss as not observed. Zero reported loss does not
 prove complete visibility. Node coverage is Relay-reported, not a separate audit
 of all Kubernetes nodes; unavailable or unimplemented coverage is labeled unknown.
 
+Unchanged live revisions and frozen status ticks retain their existing rows.
+Loss and collector status can still update while the exact inspected event IDs
+remain frozen. Workload membership is resolved with namespace-scoped selector
+pages of at most 250 pods, stopping at the 1,001st match to enforce the 1,000-pod
+scope cap. Empty workload selectors are refused. The final cap-check request
+asks for one pod, and original Kubernetes handles stay pinned across context
+switches. Cancelled or replaced resolutions cannot deliver stale UI results.
+
 L7 payloads, URLs, headers, raw summaries and arbitrary extensions are discarded
 before retention. Only safe protocol/status metadata is shown. No L7 record means
 **visibility unknown**. DNS success is not interpreted as policy authorization.
@@ -107,3 +115,4 @@ not been tested.
 - [Hubble observability](https://docs.cilium.io/en/stable/observability/hubble/)
 - [TLS configuration](https://docs.cilium.io/en/stable/observability/hubble/configuration/tls/)
 - [Reproducible lab checks](../scripts/hubble/README.md)
+- [Frozen/live allocation and native terminal latency evidence](hubble-performance-2026-10-04.md)
