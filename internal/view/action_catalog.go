@@ -112,10 +112,21 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		run                           func()
 	}{
 		{"resource.pressure", "Resource pressure", ":pressure", ui.ActionInspect, func() { NewCommand(app).pressureCommand() }},
+		{"resource.evidence", "Capture evidence preview", ":evidence", ui.ActionExport, func() { NewCommand(app).evidenceCommand("evidence") }},
 	} {
 		reason := target.UnavailableReason
 		if _, ok := owner.(ResourceViewer); !ok {
 			reason = "Open a resource list and select an API object first"
+		}
+		if item.id == "resource.evidence" {
+			switch owner.(type) {
+			case *comparisonView, *inspectionDetails:
+				_, err := retainedEvidenceBundle(owner)
+				reason = ""
+				if err != nil {
+					reason = err.Error()
+				}
+			}
 		}
 		if item.id == "resource.pressure" && reason == "" {
 			switch target.GVR.R() {

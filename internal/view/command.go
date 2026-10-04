@@ -279,6 +279,8 @@ func (c *Command) specialCmd(p *cmd.Interpreter, pushCmd bool) bool {
 		c.comparisonCommand()
 	case p.Cmd() == "pressure":
 		c.pressureCommand()
+	case p.Cmd() == "evidence" || p.Cmd() == "evidence-open":
+		c.evidenceCommand(p.GetLine())
 	case p.Cmd() == "diagnostics":
 		c.capabilityCommand(p.GetLine())
 	case p.Cmd() == actionsCommand || p.Cmd() == troubleshootCommand || p.Cmd() == tlsCommand:
