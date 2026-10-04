@@ -4,8 +4,11 @@ package view
 
 import (
 	"testing"
+	"time"
 
+	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config/mock"
+	"github.com/derailed/k9s/internal/inspect"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
 	"github.com/stretchr/testify/assert"
@@ -72,4 +75,52 @@ func TestDisabledActionStaysSearchableAndCannotExecute(t *testing.T) {
 			assert.Contains(t, hint.Description, "Read-only")
 		}
 	}
+}
+
+type discoveryResourceOwner struct {
+	*Browser
+	target SelectedResourceTarget
+}
+
+func (v *discoveryResourceOwner) SelectedResource() SelectedResourceTarget { return v.target }
+
+func TestInvestigationActionsReflectResourceAndRetainedEvidenceAvailability(t *testing.T) {
+	app := NewApp(mock.NewMockConfig(t))
+	target := SelectedResourceTarget{Context: app.Config.ActiveContextName(), GVR: client.PodGVR,
+		Namespace: "apps", Name: "api", UID: "fixture-pod"}
+	action := func(owner actionOwner, id string) ui.ActionDescriptor {
+		for _, descriptor := range actionCatalog(owner, app) {
+			if descriptor.ID == id {
+				return descriptor
+			}
+		}
+		t.Fatalf("missing discoverable action %s", id)
+		return ui.ActionDescriptor{}
+	}
+	resource := &discoveryResourceOwner{Browser: &Browser{Table: NewTable(client.PodGVR)}, target: target}
+	descriptor := action(resource, "resource.pressure")
+	assert.True(t, descriptor.Available())
+	resource.target.GVR = client.NewGVR("v1/secrets")
+	descriptor = action(resource, "resource.pressure")
+	assert.False(t, descriptor.Available())
+	assert.Contains(t, descriptor.UnavailableReason, "Select a Pod")
+	assert.True(t, descriptor.Discoverable)
+
+	comparison := &comparisonView{Details: NewDetails(app, "Resource comparison", target.Path(), contentInspection, true), target: target}
+	descriptor = action(comparison, "resource.evidence")
+	assert.False(t, descriptor.Available())
+	assert.Contains(t, descriptor.UnavailableReason, "wait for retained comparison baseline A")
+	a := inspect.NewObservation(inspect.ResourceIdentity{Context: target.Context, GVR: target.GVR.String(),
+		Namespace: target.Namespace, Name: target.Name, UID: string(target.UID)}, "Fixture API", time.Now(), map[string]any{"kind": "Pod"})
+	comparison.baseline = &a
+	descriptor = action(comparison, "resource.evidence")
+	assert.True(t, descriptor.Available())
+
+	inspector := &inspectionDetails{Details: NewDetails(app, "pressure", target.Path(), contentInspection, true), target: target}
+	descriptor = action(inspector, "resource.evidence")
+	assert.False(t, descriptor.Available())
+	assert.Contains(t, descriptor.UnavailableReason, "wait for a retained inspection snapshot")
+	inspector.snapshot = inspectionSnapshot{Text: "Fixture retained pressure evidence", UID: target.UID, CapturedAt: time.Now()}
+	descriptor = action(inspector, "resource.evidence")
+	assert.True(t, descriptor.Available())
 }

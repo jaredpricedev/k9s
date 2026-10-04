@@ -84,7 +84,7 @@ func TestResourceFilterStopAndRestartRejectPreviousDispatch(t *testing.T) {
 	}
 }
 
-func TestResourceFilterConcurrentDraftCancellation(t *testing.T) {
+func TestResourceFilterConcurrentDraftCancellation(_ *testing.T) {
 	var requests resourceFilterRequests
 	requests.start()
 	var workers sync.WaitGroup

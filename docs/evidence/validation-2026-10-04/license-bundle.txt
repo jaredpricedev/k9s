@@ -1,0 +1,12 @@
+Collecting dependencies for darwin/amd64
+Collecting dependencies for darwin/arm64
+Collecting dependencies for freebsd/amd64
+Collecting dependencies for freebsd/arm64
+Collecting dependencies for linux/amd64
+Collecting dependencies for linux/arm
+Collecting dependencies for linux/arm64
+Collecting dependencies for linux/ppc64le
+Collecting dependencies for linux/s390x
+Collecting dependencies for windows/amd64
+Collecting dependencies for windows/arm64
+Saved 379 dependency modules to /workspace/k9s/THIRD_PARTY_LICENSES

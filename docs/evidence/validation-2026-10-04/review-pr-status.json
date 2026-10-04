@@ -1,0 +1,536 @@
+{
+  "repository": "jaredpricedev/k9s",
+  "captured_at_utc": "2026-10-04T01:40:10Z",
+  "scope": "PR #7 and #28–39 at #39 creation; #7/#28–38 carried from the dated pre39 snapshot",
+  "method": "Read-only GitHub REST via installed GitHub connector; PR metadata, combined status and all-event workflow runs queried using each exact head SHA with per_page=100.",
+  "ci_interpretation": "PR #7 and #28–38 had zero workflow runs and zero statuses in the pre39 snapshot. PR #39's exact commit C has two in-progress GitHub Actions workflows with null conclusions; its combined status has state pending with total_count=0. CI is not yet established as passing. Mergeable=true reports Git mergeability, not successful validation.",
+  "discrepancies": [],
+  "prs": [
+    {
+      "number": 7,
+      "url": "https://github.com/jaredpricedev/k9s/pull/7",
+      "title": "Navigate workload relationships with UID-checked source and destination identities",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": {
+        "ref": "codex/workload-relationships",
+        "sha": "c39fe730ce0bcd9c6c9b631d9fbb8f3cbed471eb"
+      },
+      "base": {
+        "ref": "master",
+        "sha": "c060d6cd440c8460480a3165eb933cc4d7679954"
+      },
+      "mergeable": true,
+      "mergeable_state": "clean",
+      "rebaseable": true,
+      "updated_at": "2026-10-04T00:26:33Z",
+      "combined_status": {
+        "state": "pending",
+        "total_count": 0,
+        "statuses": [],
+        "error": null
+      },
+      "workflow_runs": {
+        "total_count": 0,
+        "runs": [],
+        "pagination_complete": true,
+        "error": null
+      },
+      "ci_verified_passing": false,
+      "checked_at_utc": "2026-10-04T01:35:51Z"
+    },
+    {
+      "number": 28,
+      "url": "https://github.com/jaredpricedev/k9s/pull/28",
+      "title": "Resolve selected resource identity safely across resource and synthetic views",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": {
+        "ref": "codex/selected-identity-fix",
+        "sha": "a6292c266005367cd12acc15f8922dbe800b8ee2"
+      },
+      "base": {
+        "ref": "master",
+        "sha": "c060d6cd440c8460480a3165eb933cc4d7679954"
+      },
+      "mergeable": true,
+      "mergeable_state": "clean",
+      "rebaseable": true,
+      "updated_at": "2026-10-04T00:46:22Z",
+      "combined_status": {
+        "state": "pending",
+        "total_count": 0,
+        "statuses": [],
+        "error": null
+      },
+      "workflow_runs": {
+        "total_count": 0,
+        "runs": [],
+        "pagination_complete": true,
+        "error": null
+      },
+      "ci_verified_passing": false,
+      "checked_at_utc": "2026-10-04T01:35:51Z"
+    },
+    {
+      "number": 29,
+      "url": "https://github.com/jaredpricedev/k9s/pull/29",
+      "title": "Snapshot key bindings under their owning locks",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": {
+        "ref": "codex/keyactions-snapshots",
+        "sha": "35fcc972a3794c44431091760c9c6f94b9a79a26"
+      },
+      "base": {
+        "ref": "master",
+        "sha": "c060d6cd440c8460480a3165eb933cc4d7679954"
+      },
+      "mergeable": true,
+      "mergeable_state": "clean",
+      "rebaseable": true,
+      "updated_at": "2026-10-04T00:36:39Z",
+      "combined_status": {
+        "state": "pending",
+        "total_count": 0,
+        "statuses": [],
+        "error": null
+      },
+      "workflow_runs": {
+        "total_count": 0,
+        "runs": [],
+        "pagination_complete": true,
+        "error": null
+      },
+      "ci_verified_passing": false,
+      "checked_at_utc": "2026-10-04T01:35:51Z"
+    },
+    {
+      "number": 30,
+      "url": "https://github.com/jaredpricedev/k9s/pull/30",
+      "title": "Retain committed resource filters while replacement queries are invalid",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": {
+        "ref": "codex/resource-filter-validation",
+        "sha": "c78bdd1078a3d2b929eba4e329afda24be40e990"
+      },
+      "base": {
+        "ref": "master",
+        "sha": "c060d6cd440c8460480a3165eb933cc4d7679954"
+      },
+      "mergeable": true,
+      "mergeable_state": "clean",
+      "rebaseable": true,
+      "updated_at": "2026-10-04T01:05:27Z",
+      "combined_status": {
+        "state": "pending",
+        "total_count": 0,
+        "statuses": [],
+        "error": null
+      },
+      "workflow_runs": {
+        "total_count": 0,
+        "runs": [],
+        "pagination_complete": true,
+        "error": null
+      },
+      "ci_verified_passing": false,
+      "checked_at_utc": "2026-10-04T01:35:51Z"
+    },
+    {
+      "number": 31,
+      "url": "https://github.com/jaredpricedev/k9s/pull/31",
+      "title": "Make resource health readable across semantic skins and compact terminals",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": {
+        "ref": "codex/daily-semantic-foundation",
+        "sha": "4be90d992e080c8e7775b028afae9d78423e50bb"
+      },
+      "base": {
+        "ref": "master",
+        "sha": "c060d6cd440c8460480a3165eb933cc4d7679954"
+      },
+      "mergeable": true,
+      "mergeable_state": "clean",
+      "rebaseable": true,
+      "updated_at": "2026-10-04T01:00:21Z",
+      "combined_status": {
+        "state": "pending",
+        "total_count": 0,
+        "statuses": [],
+        "error": null
+      },
+      "workflow_runs": {
+        "total_count": 0,
+        "runs": [],
+        "pagination_complete": true,
+        "error": null
+      },
+      "ci_verified_passing": false,
+      "checked_at_utc": "2026-10-04T01:35:51Z"
+    },
+    {
+      "number": 32,
+      "url": "https://github.com/jaredpricedev/k9s/pull/32",
+      "title": "Make metrics, destination identity, actions, and investigations consistent",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": {
+        "ref": "codex/daily-workspace",
+        "sha": "2836a9672ec0fd18f352de1ff06cb8adcc586645"
+      },
+      "base": {
+        "ref": "codex/daily-semantic-foundation",
+        "sha": "4be90d992e080c8e7775b028afae9d78423e50bb"
+      },
+      "mergeable": true,
+      "mergeable_state": "clean",
+      "rebaseable": true,
+      "updated_at": "2026-10-04T01:19:24Z",
+      "combined_status": {
+        "state": "pending",
+        "total_count": 0,
+        "statuses": [],
+        "error": null
+      },
+      "workflow_runs": {
+        "total_count": 0,
+        "runs": [],
+        "pagination_complete": true,
+        "error": null
+      },
+      "ci_verified_passing": false,
+      "expected": {
+        "head_prefix": "2836a967",
+        "base_ref": "codex/daily-semantic-foundation"
+      },
+      "checked_at_utc": "2026-10-04T01:35:51Z"
+    },
+    {
+      "number": 33,
+      "url": "https://github.com/jaredpricedev/k9s/pull/33",
+      "title": "Keep restart, scale, and delete responsive and bound to confirmed resource identity",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": {
+        "ref": "codex/async-resource-operations",
+        "sha": "2a583a012401d5068e064cc02d27f15093e83939"
+      },
+      "base": {
+        "ref": "codex/daily-workspace",
+        "sha": "2836a9672ec0fd18f352de1ff06cb8adcc586645"
+      },
+      "mergeable": true,
+      "mergeable_state": "clean",
+      "rebaseable": true,
+      "updated_at": "2026-10-04T01:23:25Z",
+      "combined_status": {
+        "state": "pending",
+        "total_count": 0,
+        "statuses": [],
+        "error": null
+      },
+      "workflow_runs": {
+        "total_count": 0,
+        "runs": [],
+        "pagination_complete": true,
+        "error": null
+      },
+      "ci_verified_passing": false,
+      "expected": {
+        "base_ref": "codex/daily-workspace"
+      },
+      "stack_metadata": {
+        "base_ref_matches_previous_head": true,
+        "base_sha_matches_previous_head": true
+      },
+      "checked_at_utc": "2026-10-04T01:35:51Z"
+    },
+    {
+      "number": 34,
+      "url": "https://github.com/jaredpricedev/k9s/pull/34",
+      "title": "Retain frozen Hubble evidence and paginate bounded workload scope",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": {
+        "ref": "codex/hubble-retained-scope",
+        "sha": "f76f5f3a3c35d1b5d70e0785fcc6d4b23bc72672"
+      },
+      "base": {
+        "ref": "codex/async-resource-operations",
+        "sha": "2a583a012401d5068e064cc02d27f15093e83939"
+      },
+      "mergeable": true,
+      "mergeable_state": "clean",
+      "rebaseable": true,
+      "updated_at": "2026-10-04T01:24:19Z",
+      "combined_status": {
+        "state": "pending",
+        "total_count": 0,
+        "statuses": [],
+        "error": null
+      },
+      "workflow_runs": {
+        "total_count": 0,
+        "runs": [],
+        "pagination_complete": true,
+        "error": null
+      },
+      "ci_verified_passing": false,
+      "expected": {
+        "base_ref": "codex/async-resource-operations"
+      },
+      "stack_metadata": {
+        "base_ref_matches_previous_head": true,
+        "base_sha_matches_previous_head": true
+      },
+      "checked_at_utc": "2026-10-04T01:35:51Z"
+    },
+    {
+      "number": 35,
+      "url": "https://github.com/jaredpricedev/k9s/pull/35",
+      "title": "Compare explicit resource observations without moving the chosen baseline",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": {
+        "ref": "codex/resource-observation-comparison",
+        "sha": "c6d018dac1a9ac7cfb25bcca25a9f4194ad581b3"
+      },
+      "base": {
+        "ref": "codex/hubble-retained-scope",
+        "sha": "f76f5f3a3c35d1b5d70e0785fcc6d4b23bc72672"
+      },
+      "mergeable": true,
+      "mergeable_state": "clean",
+      "rebaseable": true,
+      "updated_at": "2026-10-04T01:24:40Z",
+      "combined_status": {
+        "state": "pending",
+        "total_count": 0,
+        "statuses": [],
+        "error": null
+      },
+      "workflow_runs": {
+        "total_count": 0,
+        "runs": [],
+        "pagination_complete": true,
+        "error": null
+      },
+      "ci_verified_passing": false,
+      "expected": {
+        "base_ref": "codex/hubble-retained-scope"
+      },
+      "stack_metadata": {
+        "base_ref_matches_previous_head": true,
+        "base_sha_matches_previous_head": true
+      },
+      "checked_at_utc": "2026-10-04T01:35:51Z"
+    },
+    {
+      "number": 36,
+      "url": "https://github.com/jaredpricedev/k9s/pull/36",
+      "title": "Run selected capability diagnostics with explicit visibility and verified Relay readiness",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": {
+        "ref": "codex/capability-diagnostics",
+        "sha": "ca5a189ed3783b9233299f5a2f50ae2526403513"
+      },
+      "base": {
+        "ref": "codex/resource-observation-comparison",
+        "sha": "c6d018dac1a9ac7cfb25bcca25a9f4194ad581b3"
+      },
+      "mergeable": true,
+      "mergeable_state": "clean",
+      "rebaseable": true,
+      "updated_at": "2026-10-04T01:27:36Z",
+      "combined_status": {
+        "state": "pending",
+        "total_count": 0,
+        "statuses": [],
+        "error": null
+      },
+      "workflow_runs": {
+        "total_count": 0,
+        "runs": [],
+        "pagination_complete": true,
+        "error": null
+      },
+      "ci_verified_passing": false,
+      "expected": {
+        "base_ref": "codex/resource-observation-comparison"
+      },
+      "stack_metadata": {
+        "base_ref_matches_previous_head": true,
+        "base_sha_matches_previous_head": true
+      },
+      "checked_at_utc": "2026-10-04T01:35:51Z"
+    },
+    {
+      "number": 37,
+      "url": "https://github.com/jaredpricedev/k9s/pull/37",
+      "title": "Inspect resource pressure with honest budgets, usage, and termination evidence",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": {
+        "ref": "codex/workload-pressure",
+        "sha": "c37e471c47d4a1237f53622b30d1f9b788dfd015"
+      },
+      "base": {
+        "ref": "codex/capability-diagnostics",
+        "sha": "ca5a189ed3783b9233299f5a2f50ae2526403513"
+      },
+      "mergeable": true,
+      "mergeable_state": "clean",
+      "rebaseable": true,
+      "updated_at": "2026-10-04T01:27:40Z",
+      "combined_status": {
+        "state": "pending",
+        "total_count": 0,
+        "statuses": [],
+        "error": null
+      },
+      "workflow_runs": {
+        "total_count": 0,
+        "runs": [],
+        "pagination_complete": true,
+        "error": null
+      },
+      "ci_verified_passing": false,
+      "expected": {
+        "base_ref": "codex/capability-diagnostics"
+      },
+      "stack_metadata": {
+        "base_ref_matches_previous_head": true,
+        "base_sha_matches_previous_head": true
+      },
+      "checked_at_utc": "2026-10-04T01:35:51Z"
+    },
+    {
+      "number": 38,
+      "url": "https://github.com/jaredpricedev/k9s/pull/38",
+      "title": "Preview portable investigation evidence and review it offline",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": {
+        "ref": "codex/portable-investigation-evidence",
+        "sha": "a35c095ca143fffca9a6a4fb05bdec07f470b1a8"
+      },
+      "base": {
+        "ref": "codex/workload-pressure",
+        "sha": "c37e471c47d4a1237f53622b30d1f9b788dfd015"
+      },
+      "mergeable": true,
+      "mergeable_state": "clean",
+      "rebaseable": true,
+      "updated_at": "2026-10-04T01:27:46Z",
+      "combined_status": {
+        "state": "pending",
+        "total_count": 0,
+        "statuses": [],
+        "error": null
+      },
+      "workflow_runs": {
+        "total_count": 0,
+        "runs": [],
+        "pagination_complete": true,
+        "error": null
+      },
+      "ci_verified_passing": false,
+      "expected": {
+        "base_ref": "codex/workload-pressure"
+      },
+      "stack_metadata": {
+        "base_ref_matches_previous_head": true,
+        "base_sha_matches_previous_head": true
+      },
+      "checked_at_utc": "2026-10-04T01:35:51Z"
+    },
+    {
+      "number": 39,
+      "url": "https://github.com/jaredpricedev/k9s/pull/39",
+      "title": "Validate and document the complete daily Kubernetes workspace",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "head": {
+        "ref": "codex/daily-kubernetes-trust",
+        "sha": "76ac522ff90ce3ddf25d320e911c55c7720b818a"
+      },
+      "base": {
+        "ref": "codex/portable-investigation-evidence",
+        "sha": "a35c095ca143fffca9a6a4fb05bdec07f470b1a8"
+      },
+      "mergeable": true,
+      "mergeable_state": "unstable",
+      "rebaseable": true,
+      "updated_at": "2026-10-04T01:39:29Z",
+      "checked_at_utc": "2026-10-04T01:40:10Z",
+      "combined_status": {
+        "state": "pending",
+        "total_count": 0,
+        "statuses": [],
+        "error": null
+      },
+      "workflow_runs": {
+        "total_count": 2,
+        "runs": [
+          {
+            "id": 37168676976,
+            "name": "k9+ Lint",
+            "event": "pull_request",
+            "status": "in_progress",
+            "conclusion": null,
+            "head_sha": "76ac522ff90ce3ddf25d320e911c55c7720b818a",
+            "url": "https://github.com/jaredpricedev/k9s/actions/runs/37168676976",
+            "created_at": "2026-10-04T01:39:32Z",
+            "updated_at": "2026-10-04T01:39:36Z"
+          },
+          {
+            "id": 37168677016,
+            "name": "k9+ Test",
+            "event": "pull_request",
+            "status": "in_progress",
+            "conclusion": null,
+            "head_sha": "76ac522ff90ce3ddf25d320e911c55c7720b818a",
+            "url": "https://github.com/jaredpricedev/k9s/actions/runs/37168677016",
+            "created_at": "2026-10-04T01:39:32Z",
+            "updated_at": "2026-10-04T01:39:44Z"
+          }
+        ],
+        "pagination_complete": true,
+        "error": null
+      },
+      "ci_verified_passing": false,
+      "expected": {
+        "head_sha": "76ac522ff90ce3ddf25d320e911c55c7720b818a",
+        "base_ref": "codex/portable-investigation-evidence"
+      },
+      "stack_metadata": {
+        "base_ref_matches_previous_head": true,
+        "base_sha_matches_previous_head": true
+      }
+    }
+  ],
+  "prior_pr_snapshot_at_utc": "2026-10-04T01:35:51Z",
+  "as_of": {
+    "validation_commit": "C",
+    "head_sha": "76ac522ff90ce3ddf25d320e911c55c7720b818a",
+    "final_docs_only_capture_commit": "pending",
+    "note": "This is an immutable creation-time CI observation, not a claim about the later capture commit or later workflow conclusions."
+  }
+}
