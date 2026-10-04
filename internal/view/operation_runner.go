@@ -220,7 +220,7 @@ func (s *operationSession) showResults(action string, outcomes []operationOutcom
 		if state == "" {
 			state = operationResultState(outcome.Err, outcome.NotSubmitted, false)
 		}
-		if state == operationAccepted || state == operationCompleted {
+		if state == operationAccepted || state == operationCompleted || state == operationObserved {
 			accepted++
 		} else {
 			failed++
@@ -238,6 +238,7 @@ func (s *operationSession) showResults(action string, outcomes []operationOutcom
 	}
 	b.WriteString("\n" +
 		"Acceptance confirms the API request, not controller completion. COMPLETED records an external command exit.\n" +
+		"OBSERVED records a separate named API read of admitted fields, not runtime/controller readiness.\n" +
 		"Cancellation does not roll back accepted writes. UNKNOWN: inspect the captured destination before retrying.\n" +
 		":operations retains receipts after navigation and can cancel remaining work.\n")
 	if len(outcomes) == 1 {
