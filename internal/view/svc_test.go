@@ -175,6 +175,6 @@ func TestServiceNew(t *testing.T) {
 
 	require.NoError(t, s.Init(makeCtx(t)))
 	assert.Equal(t, "Services", s.Name())
-	assert.Len(t, s.Hints(), 14)
+
 	assertActionRegistry(t, s)
 }

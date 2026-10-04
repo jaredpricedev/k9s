@@ -5,6 +5,7 @@ package view
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -40,7 +41,10 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 	// Selection is a resource capability. Stream entry selection has its own
 	// availability callbacks and never substitutes a pod name for an API target.
 	actionContext := ui.ActionContext{ReadOnly: app.Config.IsReadOnly(), SelectionReason: target.UnavailableReason}
-	actions := owner.Actions().Snapshot()
+	// View and mode bindings own their labels and override the application
+	// snapshot (Enter is delegated by the app; workbench help routes locally).
+	actions := app.GetActions().Snapshot()
+	maps.Copy(actions, owner.Actions().Snapshot())
 	if resource, ok := owner.(ResourceViewer); ok && resource.GetTable() != nil {
 		for key, action := range actions {
 			switch strings.ToLower(action.Description) {
@@ -216,7 +220,7 @@ func actionCatalogHints(owner actionOwner, app *App) model.MenuHints {
 		if item.UnavailableReason != "" {
 			label += " · " + item.UnavailableReason
 		}
-		hints = append(hints, model.MenuHint{Mnemonic: item.Shortcut, Description: label, Visible: item.Visible})
+		hints = append(hints, model.MenuHint{Mnemonic: item.Shortcut, Description: label, Visible: item.Visible, Priority: item.Priority})
 	}
 	return hints
 }

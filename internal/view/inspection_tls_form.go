@@ -5,6 +5,7 @@ package view
 import (
 	"strings"
 
+	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tview"
 )
 
@@ -57,7 +58,7 @@ func (d *inspectionDetails) tlsForm(probe bool) {
 		c := &Command{app: d.app}
 		c.tlsCheckCommand(command)
 	})
-	modal := tview.NewModalForm(title, form)
+	modal := ui.NewModalForm(title, form)
 	modal.SetText(message)
 	modal.SetTextColor(styles.FgColor.Color())
 	modal.SetDoneFunc(func(int, string) { dismiss() })

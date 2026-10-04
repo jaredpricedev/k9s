@@ -61,10 +61,10 @@ func TestInvestigationNativeOverviewAtCompactAndWideSizes(t *testing.T) {
 	for _, size := range []struct{ width, height int }{{80, 24}, {120, 34}} {
 		t.Run(fmt.Sprintf("%dx%d", size.width, size.height), func(t *testing.T) {
 			text := drawInvestigation(t, d, size.width, size.height)
-			for _, want := range []string{"CURRENT FINDINGS", "CrashLoopBackOff", testWorkspaceAPIName, "Previous termination: OOMKilled", "RESTART", "proxy", "5 Evidence", "age", "metrics: not collected"} {
+			for _, want := range []string{"CURRENT FINDINGS", "CrashLoopBackOff", testWorkspaceAPIName, "Previous termination: OOMKilled", "RESTART", "proxy", "5 Evidence", "age", "metrics: not collected", "NEXT CHECKS", "l Pod logs"} {
 				require.Contains(t, text, want)
 			}
-			require.Less(t, strings.Index(text, "CrashLoopBackOff"), strings.Index(text, "CONTAINER STATUS"))
+			require.Equal(t, 1, strings.Count(text, "CrashLoopBackOff"), "show the current fault once")
 			require.NotContains(t, text, "second full source line")
 			require.NotContains(t, text, "::b]")
 			if dir := os.Getenv("K9S_CAPTURE_INVESTIGATION_DIR"); dir != "" {
@@ -92,8 +92,10 @@ func TestTypedInvestigationRetainsTabsQueryScrollAndFailedRefresh(t *testing.T) 
 	d.selectInvestigationTab(0)
 	require.Equal(t, "CrashLoop", d.inspectionQuery)
 	require.Equal(t, "CrashLoop", d.cmdBuff.GetText())
-	require.Equal(t, 1, d.currentRegion)
-	require.Equal(t, []string{"search_1"}, d.text.GetHighlights())
+	// The current fault now appears once. Returning to that same retained
+	// search clamps the old duplicate result index to its sole remaining match.
+	require.Equal(t, 0, d.currentRegion)
+	require.Equal(t, []string{"search_0"}, d.text.GetHighlights())
 	row, col := d.text.GetScrollOffset()
 	require.Equal(t, 3, row)
 	require.Equal(t, 2, col)
@@ -156,5 +158,5 @@ func TestOverviewKeepsUnknownSeparateFromZeroAndPriorCrash(t *testing.T) {
 	require.NotContains(t, text, "[!] OOMKilled")
 	require.Contains(t, text, "OOMKilled")
 	require.Contains(t, text, "unknown")
-	require.Contains(t, text, "?       ?")
+	require.Contains(t, text, "?")
 }

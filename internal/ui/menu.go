@@ -131,14 +131,13 @@ func (m *Menu) buildCompact() {
 	p := m.styles.Semantic()
 	reserve := []model.MenuHint{{Mnemonic: "ctrl+o", Description: "Actions", Visible: true}, {Mnemonic: "?", Description: "Help", Visible: true}}
 	var primary model.MenuHints
-	for _, description := range []string{"describe", "logs", "filter", "back"} {
-		for _, hint := range m.hints {
-			if hint.Visible && strings.EqualFold(hint.Description, description) {
-				primary = append(primary, hint)
-				break
-			}
+	for _, hint := range m.hints {
+		if hint.Priority > 0 {
+			primary = append(primary, hint)
 		}
 	}
+	sort.SliceStable(primary, func(i, j int) bool { return primary[i].Priority < primary[j].Priority })
+	primary = primary[:min(5, len(primary))]
 	width := m.width
 	if width == 0 {
 		width = 80

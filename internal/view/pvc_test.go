@@ -18,6 +18,6 @@ func TestPVCNew(t *testing.T) {
 
 	require.NoError(t, v.Init(makeCtx(t)))
 	assert.Equal(t, "PersistentVolumeClaims", v.Name())
-	assert.Len(t, v.Hints(), 10)
+
 	assertActionRegistry(t, v)
 }

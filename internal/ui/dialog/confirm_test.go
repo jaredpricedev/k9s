@@ -18,7 +18,7 @@ func TestConfirmDialog(t *testing.T) {
 	a.SetRoot(p, false)
 	ShowConfirm(new(config.Dialog), p, "Blee", "Yo", func() {}, func() {})
 
-	d := p.GetPrimitive(dialogKey).(*tview.ModalForm)
+	d := p.GetPrimitive(dialogKey).(*ui.ModalForm)
 	assert.NotNil(t, d)
 
 	dismiss(p)

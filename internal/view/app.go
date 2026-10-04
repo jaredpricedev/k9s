@@ -795,8 +795,21 @@ func (a *App) gotoResource(c, path string, clearStack, pushCmd bool) {
 	err := a.command.run(cmd.NewInterpreter(c), path, clearStack, pushCmd)
 	if err != nil {
 		d := a.Styles.Dialog()
-		dialog.ShowError(&d, a.Content.Pages, err.Error())
+		dialog.ShowErrorRecovery(&d, a.Content.Pages, err.Error(), dialog.ErrorRecovery{
+			Title:       "Command failed",
+			Instruction: "Your prior view is retained. Edit the command before submitting it again; ? lists contextual actions.",
+			ActionLabel: "Edit command",
+			Action:      func() { a.restoreFailedCommand(c) },
+		})
 	}
+}
+
+func (a *App) restoreFailedCommand(command string) {
+	if top := a.Content.Top(); top != nil {
+		a.SetFocus(top)
+	}
+	a.CmdBuff().SetActive(true)
+	a.CmdBuff().SetText(command, "", true)
 }
 
 func (a *App) inject(c model.Component, clearStack bool) error {

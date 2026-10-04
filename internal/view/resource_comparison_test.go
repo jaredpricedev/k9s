@@ -21,6 +21,9 @@ import (
 )
 
 const comparisonReplacementUID = "new"
+const comparisonRunningPhase = "Running"
+const comparisonPhaseKey = "phase"
+const comparisonStatusKey = "status"
 
 func TestComparisonViewKeepsExplicitBaseline(t *testing.T) {
 	v := &comparisonView{normalize: true}
@@ -159,5 +162,18 @@ func TestComparisonOverviewLongValuesShowChangedPortion(t *testing.T) {
 	before, after := comparisonValues(container("128Mi"), container("192Mi"))
 	if !strings.Contains(before, "128Mi") || !strings.Contains(after, "192Mi") || before == after {
 		t.Fatal("long values hid their actual difference", before, after)
+	}
+}
+
+func TestComparisonFirstStageShowsSuccessfulCaptureAndExplicitNextAction(t *testing.T) {
+	v := &comparisonView{normalize: true}
+	a := inspect.NewObservation(inspect.ResourceIdentity{Context: "lab", GVR: "v1/pods", Namespace: "team", Name: testWorkspaceAPIName, UID: "retained-a"}, "API", time.Now(), map[string]any{comparisonStatusKey: map[string]any{comparisonPhaseKey: comparisonRunningPhase}})
+	v.acceptObservation(a, true)
+	text := comparisonOverview(inspect.Compare(*v.baseline, v.other, true), true)
+	if !strings.Contains(text, "A captured; r capture B") || strings.Contains(text, "Comparison unavailable") {
+		t.Fatal(text)
+	}
+	if !strings.Contains(text, "team/api") || v.other.Source != "not captured" || !v.other.ObservedAt.IsZero() || v.baseline.Identity.UID != "retained-a" {
+		t.Fatal("first stage implied new observations", text)
 	}
 }

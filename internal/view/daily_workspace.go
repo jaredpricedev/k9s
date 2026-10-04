@@ -41,6 +41,7 @@ type dailyWorkspaceRow struct {
 	ref       *workspace.ResourceRef
 	detail    string
 	scopeName string
+	key       string
 }
 
 // dailyWorkspace owns a retained, explicitly refreshed observation. It neither
@@ -66,6 +67,8 @@ type dailyWorkspace struct {
 	reader                                 dynamic.Interface
 	collect                                func(context.Context, dynamic.Interface, workspace.Scope, time.Time) workspace.Snapshot
 	originalCapture                        func(*tcell.EventKey) *tcell.EventKey
+	viewportWidth                          int
+	displayColumns                         []int
 }
 
 var _ model.Component = (*dailyWorkspace)(nil)
@@ -123,7 +126,17 @@ func (w *dailyWorkspace) SetFilter(query string, _ bool)       { w.applyQuery(qu
 func (w *dailyWorkspace) InCmdMode() bool                      { return w.prompting }
 func (w *dailyWorkspace) Actions() *ui.KeyActions {
 	if action, ok := w.actions.Get(tcell.KeyEnter); ok {
+		action.Description = "Investigate"
+		if w.mode == dailyWorkspaceScopesMode {
+			action.Description = "Open scope"
+		}
+		if w.mode == dailyWorkspaceCoverageMode {
+			action.Description = "Coverage details"
+		}
 		action.Opts.RequiresSelection = w.mode != dailyWorkspaceScopesMode
+		if w.mode == dailyWorkspaceCoverageMode {
+			action.Opts.RequiresSelection = false
+		}
 		w.actions.Add(tcell.KeyEnter, action)
 	}
 	return w.actions
@@ -150,7 +163,7 @@ func (w *dailyWorkspace) Start() {
 	w.StylesChanged(w.app.Styles)
 	w.originalCapture = w.app.GetInputCapture()
 	w.app.SetInputCapture(func(e *tcell.EventKey) *tcell.EventKey {
-		if w.prompting || w.formOpen {
+		if w.prompting || w.formOpen || w.app.Content.IsTopDialog() {
 			return e
 		}
 		if !w.app.Prompt().InCmdMode() && (e.Rune() == '/' || e.Key() == tcell.KeyEscape) {
@@ -231,15 +244,27 @@ func (w *dailyWorkspace) makeActions() *ui.KeyActions {
 		{ui.Key3, "Coverage", false},
 		{ui.Key4, "Pins", false},
 		{ui.Key5, "Scopes", true},
+		{ui.KeyV, "Selected row details", true},
+		{tcell.KeyTab, "Next workspace tab", true},
 		{tcell.KeyEscape, dailyWorkspaceBackLabel, false},
 	} {
 		key := item.key
 		action := ui.NewKeyAction(item.label, func(*tcell.EventKey) *tcell.EventKey { return w.key(actionEvent(key)) }, item.visible)
 		action.ID = "workspace." + strings.ReplaceAll(strings.ToLower(item.label), " ", "-")
 		action.Category = ui.ActionNavigate
+		if key == ui.KeyD {
+			action.Opts.Priority = -1
+		}
 		if key == ui.KeyP || key == ui.KeyL || key == tcell.KeyEnter {
 			action.Opts.RequiresSelection = key != tcell.KeyEnter || w.mode != dailyWorkspaceScopesMode
 			action.Availability = func() string {
+				if key == tcell.KeyEnter && w.mode == dailyWorkspaceCoverageMode {
+					row, _ := w.table.GetSelection()
+					if row > 0 && row <= len(w.rows) {
+						return ""
+					}
+					return "Select a coverage source first"
+				}
 				if key == tcell.KeyEnter && w.mode == dailyWorkspaceScopesMode {
 					row, _ := w.table.GetSelection()
 					if row > 0 && row <= len(w.rows) && w.rows[row-1].scopeName != "" {
@@ -281,12 +306,19 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 			return nil
 		}
 		if w.mode == dailyWorkspaceCoverageMode {
+			w.showRowDetails()
 			return nil
 		}
 		w.app.openTargetInspection(w.SelectedResource(), troubleshootCommand)
 		return nil
 	case e.Rune() == 'r':
 		w.refresh()
+		return nil
+	case e.Key() == tcell.KeyTab:
+		w.setMode(dailyWorkspaceModes[(w.tabIndex()+1)%len(dailyWorkspaceModes)])
+		return nil
+	case e.Rune() == 'v':
+		w.showRowDetails()
 		return nil
 	case e.Rune() == '/':
 		w.prompting = true
@@ -348,7 +380,7 @@ func (w *dailyWorkspace) setMode(mode string) {
 	w.render()
 	if selected := w.tabSelections[mode]; selected != "" {
 		for i, row := range w.rows {
-			if dailyWorkspaceRowKey(row) == selected {
+			if dailyWorkspaceRowKey(&row) == selected {
 				w.table.Select(i+1, 0)
 				w.renderDetail()
 				break

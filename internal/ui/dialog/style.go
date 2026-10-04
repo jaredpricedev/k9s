@@ -38,7 +38,7 @@ func StyleForm(styles *config.Dialog, form *tview.Form) {
 
 type formStyleListener struct {
 	form  *tview.Form
-	modal *tview.ModalForm
+	modal any
 }
 
 type listStyleListener struct {
@@ -69,15 +69,12 @@ func bindPageList(styles *config.Dialog, pages *ui.Pages, key string, list *tvie
 func (l *formStyleListener) StylesChanged(styles *config.Styles) {
 	d := styles.Dialog()
 	StyleForm(&d, l.form)
-	if l.modal != nil {
-		l.modal.SetBackgroundColor(d.BgColor.Color())
-		l.modal.SetTextColor(d.FgColor.Color())
-	}
+	styleModal(l.modal, &d)
 }
 
 // BindFormStyles follows runtime skins until the returned idempotent cleanup is
 // called. Call cleanup on dismissal and when the owning view stops.
-func BindFormStyles(styles *config.Styles, form *tview.Form, modal *tview.ModalForm) func() {
+func BindFormStyles(styles *config.Styles, form *tview.Form, modal any) func() {
 	listener := &formStyleListener{form, modal}
 	listener.StylesChanged(styles)
 	styles.AddListener(listener)
@@ -91,11 +88,25 @@ func BindFormStyles(styles *config.Styles, form *tview.Form, modal *tview.ModalF
 
 // bindPageForm preserves the native ModalForm type and button contracts while
 // following live skins until dismissal, replacement, or the owning view stops.
-func bindPageForm(styles *config.Dialog, pages *ui.Pages, key string, form *tview.Form, modal *tview.ModalForm) {
+func bindPageForm(styles *config.Dialog, pages *ui.Pages, key string, form *tview.Form, modal any) {
 	StyleForm(styles, form)
-	modal.SetBackgroundColor(styles.BgColor.Color())
-	modal.SetTextColor(styles.FgColor.Color())
+	styleModal(modal, styles)
 	if source := styles.StyleSource(); source != nil {
 		pages.SetPageCleanup(key, BindFormStyles(source, form, modal))
+	}
+}
+
+// Native forms still supported during incremental migration of callers.
+func styleModal(modal any, colors *config.Dialog) {
+	switch m := modal.(type) {
+	case *ui.ModalForm:
+		if m != nil {
+			m.SetDialogColors(colors)
+		}
+	case *tview.ModalForm:
+		if m != nil {
+			m.SetBackgroundColor(colors.BgColor.Color())
+			m.SetTextColor(colors.FgColor.Color())
+		}
 	}
 }

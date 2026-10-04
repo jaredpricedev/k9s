@@ -271,7 +271,7 @@ func (t *Table) bindKeys() {
 	t.Actions().Add(tcell.KeyCtrlO, ui.NewKeyAction("Actions", t.app.actionsCmd, true))
 	t.Actions().Bulk(ui.KeyMap{
 		ui.KeyHelp:             ui.NewKeyAction("Help", t.App().helpCmd, true),
-		ui.KeySpace:            ui.NewSharedKeyAction("Mark", t.markCmd, false),
+		ui.KeySpace:            ui.NewKeyActionWithOpts("Mark", t.markCmd, ui.ActionOpts{Shared: true, Priority: -1}),
 		tcell.KeyCtrlSpace:     ui.NewSharedKeyAction("Mark Range", t.markSpanCmd, false),
 		tcell.KeyCtrlBackslash: ui.NewSharedKeyAction("Marks Clear", t.clearMarksCmd, false),
 		tcell.KeyCtrlS:         ui.NewSharedKeyAction("Save", t.saveCmd, false),

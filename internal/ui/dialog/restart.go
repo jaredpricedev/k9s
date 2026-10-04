@@ -33,7 +33,7 @@ func ShowRestart(styles *config.Dialog, pages *ui.Pages, opts *RestartDialogOpts
 		opts.Cancel()
 	})
 
-	modal := tview.NewModalForm("<"+opts.Title+">", f)
+	modal := ui.NewModalForm("<"+opts.Title+">", f)
 
 	args := metav1.PatchOptions{
 		FieldManager: opts.FieldManager,
