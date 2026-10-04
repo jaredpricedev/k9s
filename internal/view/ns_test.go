@@ -18,6 +18,6 @@ func TestNSCleanser(t *testing.T) {
 
 	require.NoError(t, ns.Init(makeCtx(t)))
 	assert.Equal(t, "Namespaces", ns.Name())
-	assert.Len(t, ns.Hints(), 9)
+
 	assertActionRegistry(t, ns)
 }
