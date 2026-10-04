@@ -12,6 +12,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/derailed/k9s/internal/certmanager"
 	"github.com/derailed/k9s/internal/client"
@@ -41,9 +42,10 @@ var (
 
 // Command represents a user command.
 type Command struct {
-	app   *App
-	alias *dao.Alias
-	mx    sync.Mutex
+	app               *App
+	alias             *dao.Alias
+	mx                sync.Mutex
+	suggestionCatalog atomic.Pointer[[]string]
 }
 
 // NewCommand returns a new command.
@@ -71,6 +73,7 @@ func (c *Command) Init(path string) error {
 		}
 	}
 	customViewers = loadCustomViewers()
+	c.updateSuggestionAliases()
 
 	return nil
 }
@@ -90,8 +93,29 @@ func (c *Command) Reset(path string, nuke bool) error {
 	if _, err := c.alias.Ensure(path); err != nil {
 		return err
 	}
+	c.updateSuggestionAliases()
 
 	return nil
+}
+
+// suggestionAliases reads the last complete local catalog without waiting for
+// a periodic alias refresh, which can perform disk and discovery work.
+func (c *Command) suggestionAliases() []string {
+	if aliases := c.suggestionCatalog.Load(); aliases != nil {
+		return *aliases
+	}
+	return nil
+}
+
+func (c *Command) updateSuggestionAliases() {
+	if c.alias == nil {
+		return
+	}
+	aliases := make([]string, 0, len(c.alias.Alias))
+	for alias := range c.alias.Alias {
+		aliases = append(aliases, alias)
+	}
+	c.suggestionCatalog.Store(&aliases)
 }
 
 var allowedCmds = sets.New[*client.GVR](

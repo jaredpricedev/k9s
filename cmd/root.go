@@ -110,6 +110,7 @@ func run(*cobra.Command, []string) (runErr error) {
 		}
 	}
 	app := view.NewApp(cfg)
+	defer app.Shutdown()
 	if app.Config.K9s.DefaultView != "" {
 		app.Config.SetActiveView(app.Config.K9s.DefaultView)
 	}
