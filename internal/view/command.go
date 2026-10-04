@@ -302,7 +302,7 @@ func (c *Command) defaultCmd(isRoot bool) error {
 
 func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 	switch p.Cmd() {
-	case "workspace", dailyCommand, inventoryCommand:
+	case "workspace", dailyCommand, inventoryCommand, activityCommand:
 		c.dailyWorkspaceCommand(p.GetLine())
 	case connectionCommand, "connection-health":
 		c.connectionHealthCommand(p.GetLine())

@@ -145,6 +145,8 @@ func (w *dailyWorkspace) makeRows(terms []dailyWorkspaceTerm) ([]string, []daily
 		}
 	case dailyWorkspaceHistoryMode:
 		headers, rows = w.historyRows(terms)
+	case dailyWorkspaceActivityMode:
+		headers, rows = w.activityRows(terms)
 	case dailyWorkspacePinsMode:
 		headers = []string{"KIND / API", "NAMESPACE", "NAME", statusCol}
 		for _, pin := range w.scope.Pins {
@@ -184,6 +186,30 @@ func (w *dailyWorkspace) makeRows(terms []dailyWorkspaceTerm) ([]string, []daily
 	return headers, rows
 }
 
+func (w *dailyWorkspace) scopeRows(terms []dailyWorkspaceTerm) ([]string, []dailyWorkspaceRow) {
+	headers := []string{"", "SCOPE", "CONTEXT", "NAMESPACES", "SELECTOR"}
+	rows := make([]dailyWorkspaceRow, 0)
+	for i := range w.store.Scopes {
+		scope := &w.store.Scopes[i]
+		if !dailyWorkspaceMatch(terms, "scope", strings.Join(scope.Namespaces, ","), scope.Name, scope.Context+" "+scope.LabelSelector) {
+			continue
+		}
+		marker := " "
+		if scope.Name == w.store.Active {
+			marker = "*"
+		}
+		if scope.Context != w.contextName {
+			marker = "↗"
+		}
+		rows = append(rows, dailyWorkspaceRow{
+			cells: []string{marker, scope.Name, scope.Context, strings.Join(scope.Namespaces, ", "), scope.LabelSelector}, scopeName: scope.Name,
+			detail: "Enter opens this saved scope. Context changes are explicit with :ctx. " +
+				"n creates; e edits the selected scope; d removes local metadata.",
+		})
+	}
+	return headers, rows
+}
+
 func (w *dailyWorkspace) render() {
 	selected := w.selectedKey()
 	terms, _ := parseDailyWorkspaceQuery(w.query)
@@ -199,7 +225,7 @@ func (w *dailyWorkspace) render() {
 			w.displayColumns = []int{2, 3}
 		case dailyWorkspaceCoverageMode:
 			w.displayColumns = []int{0, 1, 3}
-		case dailyWorkspaceHistoryMode:
+		case dailyWorkspaceHistoryMode, dailyWorkspaceActivityMode:
 			w.displayColumns = []int{0, 2, 3}
 		case dailyWorkspacePinsMode:
 			w.displayColumns = []int{2, 3}
@@ -253,7 +279,8 @@ func (w *dailyWorkspace) render() {
 		// An empty-state message occupies one full-width row, rather than the
 		// resource table's narrow identity column.
 		w.table.Clear()
-		w.table.SetCell(0, 0, tview.NewTableCell(tview.Escape(w.emptyRowsMessage())).SetSelectable(false).SetTextColor(palette.Unknown.Color()).SetExpansion(1))
+		w.table.SetCell(0, 0, tview.NewTableCell(tview.Escape(w.emptyRowsMessage())).SetSelectable(false).
+			SetTextColor(palette.Unknown.Color()).SetExpansion(1))
 		selectRow = 0
 	}
 	w.table.Select(selectRow, 0)
@@ -262,10 +289,35 @@ func (w *dailyWorkspace) render() {
 	w.renderFooter()
 }
 
-var dailyWorkspaceModes = []string{
-	dailyWorkspaceQueueMode, inventoryCommand, dailyWorkspaceCoverageMode, dailyWorkspacePinsMode, dailyWorkspaceScopesMode, dailyWorkspaceHistoryMode,
+func (w *dailyWorkspace) emptyRowsMessage() string {
+	if w.query != "" {
+		return "No rows match this search. / changes or clears it."
+	}
+	switch w.mode {
+	case dailyWorkspaceScopesMode:
+		return "No saved scopes. Press n to create your daily workspace."
+	case dailyWorkspaceQueueMode:
+		if w.snapshot.ObservedAt.IsZero() {
+			return "No observation yet. Press r to read this scope."
+		}
+		return "No findings observed. Coverage shows checks and unknowns."
+	case dailyWorkspaceHistoryMode, dailyWorkspaceActivityMode:
+		return "No retained history. r observes; reopening begins a new window."
+	case inventoryCommand:
+		return "No resources observed. r refreshes; Coverage shows gaps."
+	case dailyWorkspacePinsMode:
+		return "No pins. Select a resource in Daily or Inventory and press p."
+	case dailyWorkspaceCoverageMode:
+		return "No observation yet. r reads the saved namespaces."
+	}
+	return "No rows match this search. / changes or clears it."
 }
-var dailyWorkspaceLabels = []string{"Daily", "Inventory", "Coverage", "Pins", "Scopes", "History"}
+
+var dailyWorkspaceModes = []string{
+	dailyWorkspaceQueueMode, inventoryCommand, dailyWorkspaceCoverageMode, dailyWorkspacePinsMode,
+	dailyWorkspaceScopesMode, dailyWorkspaceHistoryMode, dailyWorkspaceActivityMode,
+}
+var dailyWorkspaceLabels = []string{"Daily", "Inventory", "Coverage", "Pins", "Scopes", "History", "Activity"}
 
 func (w *dailyWorkspace) tabIndex() int {
 	for index, mode := range dailyWorkspaceModes {
@@ -302,6 +354,9 @@ func (w *dailyWorkspace) renderHeader() {
 	if w.mode == dailyWorkspaceHistoryMode {
 		status = w.historyStatus(width)
 	}
+	if w.mode == dailyWorkspaceActivityMode {
+		status = w.activityStatus(width)
+	}
 	notice := w.notice
 	if notice == "" && gaps > 0 {
 		notice = "Partial coverage · 3 opens gaps; quiet is not health"
@@ -323,7 +378,7 @@ func (w *dailyWorkspace) renderFooter() {
 		width = 76
 	}
 	action := "Enter investigate"
-	if w.mode == dailyWorkspaceCoverageMode || w.mode == dailyWorkspaceHistoryMode {
+	if w.localEvidenceMode() {
 		action = "Enter evidence"
 	}
 	if w.mode == dailyWorkspaceScopesMode {
@@ -378,7 +433,7 @@ func (w *dailyWorkspace) renderDetail() {
 		w.detail.SetText(tview.Escape(identity + selected.detail))
 		return
 	}
-	if w.mode == dailyWorkspaceHistoryMode {
+	if w.mode == dailyWorkspaceHistoryMode || w.mode == dailyWorkspaceActivityMode {
 		w.detail.SetText("No retained observations yet. r reads this explicit scope; reopening starts a new window. Prior history is unavailable.")
 		return
 	}
@@ -427,7 +482,7 @@ func (w *dailyWorkspace) constrainColumns(width int) {
 		caps = []int{max(8, min(16, width/9)), max(10, min(22, width/7)), max(14, min(32, width/5)), 0, 6}
 	case dailyWorkspaceCoverageMode:
 		caps = []int{12, max(16, min(40, width/3)), max(10, min(22, width/6)), 0}
-	case dailyWorkspaceHistoryMode:
+	case dailyWorkspaceHistoryMode, dailyWorkspaceActivityMode:
 		caps = []int{16, 8, max(12, min(28, width/4)), 0}
 	case dailyWorkspacePinsMode:
 		caps = []int{max(16, min(36, width/4)), max(10, min(22, width/6)), max(14, min(32, width/5)), 0}
@@ -440,7 +495,7 @@ func (w *dailyWorkspace) constrainColumns(width int) {
 		switch w.mode {
 		case dailyWorkspaceCoverageMode:
 			caps = []int{10, min(18, width/3), 0}
-		case dailyWorkspaceHistoryMode:
+		case dailyWorkspaceHistoryMode, dailyWorkspaceActivityMode:
 			caps = []int{12, min(14, max(6, width-30)), 0}
 			if width < 50 {
 				caps = []int{11, 6, 0}
