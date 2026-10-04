@@ -259,5 +259,5 @@ func localSessionNamedPodMissing(err error, pod *v1.Pod) bool {
 	}
 	value := status.Status()
 	return value.Reason == metav1.StatusReasonNotFound && value.Code == 404 && value.Details != nil &&
-		value.Details.Name == pod.Name && value.Details.Group == "" && value.Details.Kind == "pods"
+		value.Details.Name == pod.Name && value.Details.Group == "" && value.Details.Kind == client.PodGVR.GVR().Resource
 }
