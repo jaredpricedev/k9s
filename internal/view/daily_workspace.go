@@ -345,10 +345,7 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 		w.showRowDetails()
 		return nil
 	case e.Rune() == '/':
-		w.prompting = true
-		w.prompt.SetText(w.query)
-		w.AddItem(w.prompt, 1, 0, true)
-		w.app.SetFocus(w.prompt)
+		w.openQueryPrompt()
 		return nil
 	case e.Rune() == 'n':
 		w.scopeForm(false)
@@ -383,6 +380,12 @@ func (w *dailyWorkspace) key(e *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 	return e
+}
+func (w *dailyWorkspace) openQueryPrompt() {
+	w.prompting = true
+	w.prompt.SetText(w.query)
+	w.AddItem(w.prompt, 1, 0, true)
+	w.app.SetFocus(w.prompt)
 }
 func (w *dailyWorkspace) setMode(mode string) {
 	if w.tabQueries == nil {

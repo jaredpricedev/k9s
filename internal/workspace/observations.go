@@ -106,7 +106,7 @@ func (w *QueueWindow) Observe(snapshot *Snapshot, refreshErr error) {
 	w.checkMissing(snapshot, coverage)
 	w.LastRefreshAt = at
 	for key, c := range coverage {
-		w.queries[key] = c.State == "complete" && !c.Truncated
+		w.queries[key] = c.State == coverageComplete && !c.Truncated
 		if !w.queries[key] {
 			w.addGap(at, c)
 		}
@@ -195,7 +195,7 @@ func (w *QueueWindow) checkMissing(snapshot *Snapshot, coverage map[string]Cover
 		f := w.active[key]
 		c := coverage[queryKey(f.Finding.Ref.GVR, f.Finding.Ref.Namespace)]
 		f.CheckedAt, f.Coverage = snapshot.ObservedAt, c
-		if c.State != "complete" || c.Truncated {
+		if c.State != coverageComplete || c.Truncated {
 			f.State = QueueUnknown
 			w.active[key] = f
 			continue

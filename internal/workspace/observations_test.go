@@ -14,7 +14,7 @@ func queueHistoryFixture() (*QueueWindow, Snapshot) {
 	at := time.Date(2026, 10, 4, 9, 0, 0, 0, time.UTC)
 	w := NewQueueWindow(Scope{Name: "app", Context: "lab", Namespaces: []string{"apps"}, Kinds: []string{"pods"}, LabelSelector: "app=api"}, at)
 	f := Finding{Ref: ResourceRef{GVR: "v1/pods", Namespace: "apps", Name: "api", UID: "pod-a"}, Kind: "Pod", Category: "fault", Reason: "CrashLoopBackOff", Detail: "api: current state", ObservedAt: at}
-	return w, Snapshot{ObservedAt: at, Findings: []Finding{f}, Resources: []Resource{{Ref: f.Ref, Kind: "Pod"}}, Coverage: []Coverage{{GVR: "v1/pods", Namespace: "apps", State: "complete"}}}
+	return w, Snapshot{ObservedAt: at, Findings: []Finding{f}, Resources: []Resource{{Ref: f.Ref, Kind: "Pod"}}, Coverage: []Coverage{{GVR: "v1/pods", Namespace: "apps", State: coverageComplete}}}
 }
 
 func TestQueueWindowObservedPersistentAddedAndClearedHaveSourceIntervals(t *testing.T) {
@@ -33,7 +33,7 @@ func TestQueueWindowObservedPersistentAddedAndClearedHaveSourceIntervals(t *test
 	s.Findings = nil
 	w.Observe(&s, nil)
 	c := w.History[1]
-	if len(w.Active()) != 0 || c.State != QueueCleared || c.Ref.UID != "pod-a" || !c.LastObservedAt.Equal(w.StartedAt.Add(time.Minute)) || c.Coverage.State != "complete" || !strings.Contains(c.Detail, "not proof") {
+	if len(w.Active()) != 0 || c.State != QueueCleared || c.Ref.UID != "pod-a" || !c.LastObservedAt.Equal(w.StartedAt.Add(time.Minute)) || c.Coverage.State != coverageComplete || !strings.Contains(c.Detail, "not proof") {
 		t.Fatal(c)
 	}
 	s.Findings = []Finding{{Ref: s.Resources[0].Ref, Category: "fault", Reason: "CrashLoopBackOff"}}
@@ -90,13 +90,13 @@ func TestQueueWindowMatchingNamespaceGVRAndUIDReplacement(t *testing.T) {
 	w.Observe(&s, nil)
 	s.ObservedAt = s.ObservedAt.Add(time.Minute)
 	s.Findings = nil
-	s.Coverage = []Coverage{{GVR: "apps/v1/deployments", Namespace: "apps", State: "complete"}, {GVR: "v1/pods", Namespace: "other", State: "complete"}}
+	s.Coverage = []Coverage{{GVR: "apps/v1/deployments", Namespace: "apps", State: coverageComplete}, {GVR: "v1/pods", Namespace: "other", State: coverageComplete}}
 	w.Observe(&s, nil)
 	if len(w.Active()) != 1 || w.Active()[0].State != QueueUnknown {
 		t.Fatal(w.Active())
 	}
 	s.ObservedAt = s.ObservedAt.Add(time.Minute)
-	s.Coverage = []Coverage{{GVR: "v1/pods", Namespace: "apps", State: "complete"}}
+	s.Coverage = []Coverage{{GVR: "v1/pods", Namespace: "apps", State: coverageComplete}}
 	s.Resources[0].Ref.UID = "pod-b"
 	w.Observe(&s, nil)
 	c := w.History[len(w.History)-1]
@@ -130,7 +130,7 @@ func TestQueueWindowRetentionAndRestartAreExplicit(t *testing.T) {
 		t.Fatal(len(w.History), w.Dropped)
 	}
 	s.ObservedAt = s.ObservedAt.Add(QueueRetention + time.Minute)
-	s.Coverage[0].State = "complete"
+	s.Coverage[0].State = coverageComplete
 	w.Observe(&s, nil)
 	if len(w.History) != 1 || w.History[0].State != QueueFirstObserved {
 		t.Fatal(w.History)
