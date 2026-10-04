@@ -88,7 +88,11 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 				Handler: func(*tcell.EventKey) *tcell.EventKey { app.openTargetInspection(target, command); return nil },
 			})
 		}
-
+		result = append(result, ui.ActionDescriptor{
+			ID: "resource.compare", Label: "Compare observations", Category: ui.ActionInspect, Shortcut: ":compare",
+			Discoverable: true, RequiresSelection: true, UnavailableReason: target.UnavailableReason,
+			Handler: func(*tcell.EventKey) *tcell.EventKey { app.openResourceComparison(target); return nil },
+		})
 	}
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Category != result[j].Category {
