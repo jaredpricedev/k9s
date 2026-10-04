@@ -108,6 +108,8 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 	result = append(result, jobReviewActions(owner, app)...)
 	result = append(result, maintenanceReviewActions(owner, app)...)
 	result = append(result, configurationActions(owner, app)...)
+	result = append(result, networkReviewActions(owner, app)...)
+	result = append(result, historyActions(owner, app)...)
 	result = append(result, workspaceActions(app)...)
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Category != result[j].Category {
@@ -127,12 +129,21 @@ func changeReviewActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 	if reason == "" && target.UID == "" {
 		reason = "Reopen the workload to capture its identity before review"
 	}
+	securityReason := target.UnavailableReason
+	if securityReason == "" {
+		if err := securityReviewTargetError(target); err != nil {
+			securityReason = err.Error()
+		}
+	}
 	return []ui.ActionDescriptor{
 		{ID: "command.review", Label: "Review local manifest", Category: ui.ActionInspect, Shortcut: ":review", Discoverable: true,
 			Handler: func(*tcell.EventKey) *tcell.EventKey { app.openDesiredReview(""); return nil }},
 		{ID: "resource.rollout", Label: "Controller rollout review", Category: ui.ActionInspect, Shortcut: ":rollout",
 			Discoverable: true, RequiresSelection: true, UnavailableReason: reason,
 			Handler: func(*tcell.EventKey) *tcell.EventKey { app.openRolloutReview(target); return nil }},
+		{ID: "resource.security-review", Label: "Declared security review", Category: ui.ActionInspect, Shortcut: ":security-review",
+			Discoverable: true, RequiresSelection: true, UnavailableReason: securityReason,
+			Handler: func(*tcell.EventKey) *tcell.EventKey { app.openSecurityReview(target); return nil }},
 	}
 }
 
@@ -193,6 +204,13 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 		ID: "command.operator-review", Label: "Semantic operator review", Category: ui.ActionInspect,
 		Shortcut: ":operator-review", Discoverable: true, RequiresSelection: true, UnavailableReason: target.UnavailableReason,
 		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).operatorCommand(); return nil }}, ui.ActionDescriptor{
+		ID: "command.backup-review", Label: "Velero backup review (enter controller namespace)", Category: ui.ActionInspect,
+		Shortcut: ":backup-review <controller-namespace>", Discoverable: true,
+		Handler: func(*tcell.EventKey) *tcell.EventKey {
+			app.ResetPrompt(app.CmdBuff())
+			app.CmdBuff().SetText("backup-review ", "", true)
+			return nil
+		}}, ui.ActionDescriptor{
 		ID: "command.providers", Label: "Provider checks", Category: ui.ActionInspect,
 		Shortcut: ":providers", Discoverable: true,
 		Handler: func(*tcell.EventKey) *tcell.EventKey { NewCommand(app).providerCommand("providers"); return nil }}, ui.ActionDescriptor{
@@ -213,19 +231,27 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 func workspaceActions(app *App) []ui.ActionDescriptor {
 	var result []ui.ActionDescriptor
 	for _, item := range []struct{ id, label, command string }{
+		{"command.fleet", "Compare two explicit contexts", fleetCommandToken},
 		{"command.workspace", "Saved workspaces", "workspace"},
 		{"command.daily", "Daily findings queue", dailyCommand},
 		{"command.inventory", "Scoped inventory", inventoryCommand},
+		{"command.activity", "Scoped application activity", activityCommand},
 		{"command.connection", "Connection health", connectionCommand},
+		{"command.sessions", "Local sessions", localSessionsCommand},
 	} {
 		command := item.command
 		result = append(result, ui.ActionDescriptor{
 			ID: item.id, Label: item.label, Category: ui.ActionNavigate, Shortcut: ":" + command,
 			Discoverable: true, Handler: func(*tcell.EventKey) *tcell.EventKey {
 				c := NewCommand(app)
-				if command == connectionCommand {
+				switch command {
+				case fleetCommandToken:
+					c.fleetCommand(command)
+				case connectionCommand:
 					c.connectionHealthCommand(command)
-				} else {
+				case localSessionsCommand:
+					c.localSessionsCommand()
+				default:
 					c.dailyWorkspaceCommand(command)
 				}
 				return nil

@@ -17,20 +17,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/model"
 	"github.com/derailed/k9s/internal/slogs"
-	"github.com/derailed/k9s/internal/ui/dialog"
-	"github.com/fatih/color"
 	"github.com/google/shlex"
 	v1 "k8s.io/api/core/v1"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 const (
@@ -55,6 +48,7 @@ type shellOpts struct {
 	timeout           time.Duration
 	env               []string
 	terminalOwned     bool
+	onStart           func()
 }
 
 func runK(a *App, opts *shellOpts) error {
@@ -312,166 +306,12 @@ func clearScreen() {
 	fmt.Print("\033[H\033[2J")
 }
 
-const (
-	k9sShell           = "k9plus-shell"
-	k9sShellRetryCount = 50
-	k9sShellRetryDelay = 2 * time.Second
-)
+const k9sShell = "k9plus-shell"
 
-func launchNodeShell(v model.Igniter, a *App, node string) {
-	if err := nukeK9sShell(a); err != nil {
-		a.Flash().Errf("Cleaning node shell failed: %s", err)
-		return
+func launchNodeShell(_ model.Igniter, a *App, node string) {
+	if err := launchOwnedNodeShell(a, node); err != nil {
+		a.Flash().Err(err)
 	}
-
-	msg := fmt.Sprintf("Launching node shell on %s...", node)
-	d := a.Styles.Dialog()
-	dialog.ShowPrompt(&d, a.Content.Pages, "Launching", msg, func(ctx context.Context) {
-		err := launchShellPod(ctx, a, node)
-		if err != nil {
-			if !errors.Is(err, context.Canceled) {
-				a.Flash().Errf("Launching node shell failed: %s", err)
-			}
-			return
-		}
-
-		go launchPodShell(v, a)
-	}, func() {
-		if err := nukeK9sShell(a); err != nil {
-			a.Flash().Errf("Cleaning node shell failed: %s", err)
-			return
-		}
-	})
-}
-
-func launchPodShell(v model.Igniter, a *App) {
-	if a.Config.K9s.ShellPod == nil {
-		slog.Error("Shell pod not configured!")
-		return
-	}
-
-	defer func() {
-		if err := nukeK9sShell(a); err != nil {
-			a.Flash().Errf("Launching node shell failed: %s", err)
-			return
-		}
-	}()
-
-	v.Stop()
-	defer v.Start()
-
-	ns := a.Config.K9s.ShellPod.Namespace
-	if err := sshIn(a, client.FQN(ns, k9sShellPodName()), k9sShell); err != nil {
-		a.Flash().Errf("Launching node shell failed: %s", err)
-	}
-}
-
-func sshIn(a *App, fqn, co string) error {
-	cfg := a.Config.K9s.ShellPod
-	platform, err := getPodOS(a.factory, fqn)
-	if err != nil {
-		slog.Warn("os detect failed", slogs.Error, err)
-	}
-
-	args := buildShellArgs("exec", fqn, co, a.Conn().Config().Flags())
-	args = append(args, "--")
-	if len(cfg.Command) > 0 {
-		args = append(args, cfg.Command...)
-		args = append(args, cfg.Args...)
-	} else {
-		if platform == windowsOS {
-			args = append(args, "--", "cmd", "/c", winShellCheck)
-		}
-		args = append(args, "sh", "-c", shellCheck)
-	}
-	slog.Debug("Running command with args", slogs.Args, args)
-
-	c := color.New(color.BgGreen).Add(color.FgBlack).Add(color.Bold)
-	err = runK(a, &shellOpts{
-		clear:  true,
-		banner: c.Sprintf(bannerFmt, fqn, co),
-		args:   args},
-	)
-	if err != nil {
-		return fmt.Errorf("shell exec failed: %w", err)
-	}
-
-	return nil
-}
-
-func nukeK9sShell(a *App) error {
-	ct, err := a.Config.K9s.ActiveContext()
-	if err != nil {
-		return err
-	}
-	if !ct.FeatureGates.NodeShell || a.Config.K9s.ShellPod == nil {
-		return nil
-	}
-
-	ns := a.Config.K9s.ShellPod.Namespace
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-
-	dial, err := a.Conn().Dial()
-	if err != nil {
-		return err
-	}
-
-	err = dial.CoreV1().Pods(ns).Delete(ctx, k9sShellPodName(), metav1.DeleteOptions{})
-	if kerrors.IsNotFound(err) {
-		return nil
-	}
-
-	return err
-}
-
-func launchShellPod(ctx context.Context, a *App, node string) error {
-	var (
-		spo  = a.Config.K9s.ShellPod
-		spec = k9sShellPod(node, spo)
-	)
-
-	dial, err := a.Conn().Dial()
-	if err != nil {
-		return err
-	}
-
-	conn := dial.CoreV1().Pods(spo.Namespace)
-	if _, err = conn.Create(ctx, spec, metav1.CreateOptions{}); err != nil {
-		return err
-	}
-
-	for i := range k9sShellRetryCount {
-		o, err := a.factory.Get(client.PodGVR, client.FQN(spo.Namespace, k9sShellPodName()), true, labels.Everything())
-		if err != nil {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(k9sShellRetryDelay):
-				continue
-			}
-		}
-
-		var pod v1.Pod
-		if err := runtime.DefaultUnstructuredConverter.FromUnstructured(o.(*unstructured.Unstructured).Object, &pod); err != nil {
-			return err
-		}
-		slog.Debug("Checking k9+ shell pod retries",
-			slogs.Retry, i,
-			slogs.PodPhase, pod.Status.Phase,
-		)
-		if pod.Status.Phase == v1.PodRunning {
-			return nil
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(k9sShellRetryDelay):
-		}
-	}
-
-	return fmt.Errorf("unable to launch shell pod on node %s", node)
 }
 
 func k9sShellPodName() string {
@@ -482,7 +322,6 @@ func k9sShellPod(node string, cfg *config.ShellPod) *v1.Pod {
 	var grace int64
 	var priv = true
 
-	slog.Debug("Shell pod config", slogs.ShellPodCfg, cfg)
 	c := v1.Container{
 		Name:            k9sShell,
 		Image:           cfg.Image,
@@ -627,6 +466,9 @@ func pipe(ctx context.Context, opts *shellOpts, statusChan chan<- string, cmds .
 		}
 		started = append(started, cmd)
 		operationBeginWrite(ctx)
+		if len(started) == 1 && opts.onStart != nil {
+			opts.onStart()
+		}
 	}
 	results := make(chan error, len(cmds))
 	for i, cmd := range cmds {
@@ -689,6 +531,9 @@ func pipeSingle(ctx context.Context, opts *shellOpts, statusChan chan<- string, 
 			return err
 		}
 		operationBeginWrite(ctx)
+		if opts.onStart != nil {
+			opts.onStart()
+		}
 		err := cmd.Wait()
 		if err == nil {
 			statusChan <- outputPrefix + " " + output.String()
@@ -707,6 +552,9 @@ func pipeSingle(ctx context.Context, opts *shellOpts, statusChan chan<- string, 
 		return err
 	}
 	operationBeginWrite(ctx)
+	if opts.onStart != nil {
+		opts.onStart()
+	}
 	err := cmd.Wait()
 	slog.Debug("Command exec done", slogs.Error, err)
 	if err == nil {

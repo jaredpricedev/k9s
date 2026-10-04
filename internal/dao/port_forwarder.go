@@ -27,7 +27,10 @@ import (
 	cmdutil "k8s.io/kubectl/pkg/cmd/util"
 )
 
-const defaultTimeout = 30 * time.Second
+const (
+	defaultTimeout     = 30 * time.Second
+	portForwardAPIPath = "/api"
+)
 
 // PortForwarder tracks a port forward stream.
 type PortForwarder struct {
@@ -172,8 +175,8 @@ func (p *PortForwarder) Start(path string, tt port.PortTunnel) (*portforward.Por
 		return nil, err
 	}
 	cfg.GroupVersion = &schema.GroupVersion{Group: "", Version: "v1"}
-	cfg.APIPath = "/api"
-	codec, _ := codec()
+	cfg.APIPath = portForwardAPIPath
+	codec := codec()
 	cfg.NegotiatedSerializer = codec.WithoutConversion()
 	clt, err := rest.RESTClientFor(cfg)
 	if err != nil {
@@ -193,6 +196,10 @@ func (p *PortForwarder) forwardPorts(method string, u *url.URL, addr, portMap st
 	if err != nil {
 		return nil, err
 	}
+	return p.forwardTransport(cfg, method, u, addr, portMap)
+}
+
+func (p *PortForwarder) forwardTransport(cfg *rest.Config, method string, u *url.URL, addr, portMap string) (*portforward.PortForwarder, error) {
 	transport, upgrader, err := spdy.RoundTripperFor(cfg)
 	if err != nil {
 		return nil, err
@@ -226,12 +233,12 @@ func PortForwardID(path, co, portMap string) string {
 	return path + "|" + co + "|" + portMap
 }
 
-func codec() (serializer.CodecFactory, runtime.ParameterCodec) {
+func codec() serializer.CodecFactory {
 	scheme := runtime.NewScheme()
 	gv := schema.GroupVersion{Group: "", Version: "v1"}
 	metav1.AddToGroupVersion(scheme, gv)
 	scheme.AddKnownTypes(gv, &metav1.Table{}, &metav1.TableOptions{})
 	scheme.AddKnownTypes(metav1.SchemeGroupVersion, &metav1.Table{}, &metav1.TableOptions{})
 
-	return serializer.NewCodecFactory(scheme), runtime.NewParameterCodec(scheme)
+	return serializer.NewCodecFactory(scheme)
 }

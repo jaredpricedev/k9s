@@ -18,6 +18,7 @@ import (
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/model"
+	"github.com/derailed/k9s/internal/session"
 	"github.com/derailed/k9s/internal/slogs"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/k9s/internal/ui/dialog"
@@ -54,6 +55,8 @@ type App struct {
 	fluxActions        map[fluxActionKey]struct{}
 	logRecordings      logRecordingRegistry
 	operations         operationRegistry
+	localSessions      session.Registry
+	localLaunches      localLaunchBook
 	conRetry           int32
 	showHeader         bool
 	showLogo           bool
@@ -888,8 +891,9 @@ func (a *App) connectivityComponent(c model.Component, connected bool) {
 func retainedDisconnectedWorkspace(c model.Component) bool {
 	switch c.(type) {
 	case *connectionHealthDetails, *dailyWorkspace, *desiredReviewView, *rolloutReviewView,
-		*capacityView, *configurationView, *storageView, *gitopsView, *jobReviewView,
-		*maintenanceView, *accessView, *taskbookView, *upgradeReadinessDetails, *operatorView:
+		*capacityView, *configurationView, *localSessions, *storageView, *gitopsView,
+		*jobReviewView, *networkReviewView, *maintenanceView, *accessView, *taskbookView, *changeSetView, *fleetWorkspace,
+		*upgradeReadinessDetails, *securityReviewView, *backupView, *historyView, *operatorView:
 		return true
 	default:
 		return false
