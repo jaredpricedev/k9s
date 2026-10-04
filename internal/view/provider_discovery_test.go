@@ -33,7 +33,7 @@ func TestProviderDiscoveryHelpAndSpecsDoNotExecuteOrScan(t *testing.T) {
 	assert.Equal(t, []string{"version", "--short"}, specs[1].VersionArgs)
 	assert.NotNil(t, specs[2].Probe)
 	_, err = explicitProviderSpecs([]string{"login", "kubectl;touch injected"}, nil, capabilityRequest{})
-	assert.Error(t, err)
+	require.Error(t, err)
 	_, err = explicitProviderSpecs(nil, nil, capabilityRequest{})
 	assert.NoError(t, err)
 }
@@ -93,7 +93,7 @@ func TestProviderDiscoverySimulationCancelsLateReplyAndReturnsToOwner(t *testing
 	t.Cleanup(unblock)
 	scope := provider.Scope{Context: app.Config.ActiveContextName(), Namespace: app.Config.CachedNamespace(), Revision: app.Config.DestinationRevision()}
 	d := &providerDetails{Details: NewDetails(app, "Provider checks", "", contentInspection, true), scope: scope,
-		discover: func(ctx context.Context, captured provider.Scope, specs ...provider.Spec) []provider.Capability {
+		discover: func(ctx context.Context, captured provider.Scope, _ ...provider.Spec) []provider.Capability {
 			close(started)
 			<-ctx.Done()
 			close(canceled)

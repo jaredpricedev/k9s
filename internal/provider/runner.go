@@ -40,6 +40,8 @@ func normalizedLimits(l Limits) Limits {
 // Run executes exact argv with no shell and closed stdin. The caller must run it
 // away from the event thread. Cancellation terminates the process group on Unix;
 // WaitDelay bounds inherited output pipes on every supported platform.
+//
+//nolint:gocritic // A captured request value cannot follow later caller destination changes.
 func Run(ctx context.Context, input Input) Result {
 	result := Result{Scope: input.Scope, Source: input.Executable, StartedAt: time.Now().UTC(), ExitCode: -1, State: Failed}
 	finish := func(err error) Result {
@@ -64,9 +66,9 @@ func Run(ctx context.Context, input Input) Result {
 	defer cancel()
 	path, err := exec.LookPath(input.Executable)
 	if err != nil {
-		if errors.Is(err, os.ErrPermission) {
+		if errors.Is(err, os.ErrPermission) || errors.Is(err, exec.ErrDot) {
 			err = errors.Join(ErrDenied, err)
-		} else {
+		} else if errors.Is(err, os.ErrNotExist) || errors.Is(err, exec.ErrNotFound) {
 			err = errors.Join(ErrAbsent, err)
 		}
 		return finish(err)

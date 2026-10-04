@@ -56,12 +56,16 @@ func (c *Command) providerCommand(line string) {
 		c.app.Flash().Err(err)
 		return
 	}
-	d := &providerDetails{Details: NewDetails(c.app, "Provider checks", scope.Context, contentInspection, true).Update("Checking only the requested providers..."), scope: scope, specs: specs, discover: provider.Discover}
+	d := &providerDetails{
+		Details: NewDetails(c.app, "Provider checks", scope.Context, contentInspection, true).Update("Checking only the requested providers..."),
+		scope:   scope, specs: specs, discover: provider.Discover,
+	}
 	if err := c.app.inject(d, false); err != nil {
 		c.app.Flash().Err(err)
 	}
 }
 
+//nolint:gocritic // Each adapter retains its own immutable selected-resource request.
 func explicitProviderSpecs(names []string, cfg *client.Config, request capabilityRequest) ([]provider.Spec, error) {
 	versions := map[string][]string{
 		"git": {"--version"}, "helm": {"version", "--short"}, "kustomize": {"version"},
@@ -91,9 +95,13 @@ func explicitProviderSpecs(names []string, cfg *client.Config, request capabilit
 	return specs, nil
 }
 
+//nolint:gocritic // Capture by value before any asynchronous API read.
 func providerAPIProbe(cfg *client.Config, request capabilityRequest) provider.Probe {
 	return func(ctx context.Context, scope provider.Scope) (provider.Observation, error) {
 		observation := provider.Observation{Source: "captured Kubernetes API"}
+		if scope.Context != request.Context || scope.Namespace != request.Namespace {
+			return observation, errors.New("provider destination changed")
+		}
 		if request.Task == capabilityTaskResource && request.Target.GVR != nil && request.Target.GVR.GVR() == client.SecGVR.GVR() {
 			return observation, errors.New("Secret content excluded from provider checks")
 		}
@@ -185,7 +193,9 @@ func (d *providerDetails) Stop() {
 	d.Details.Stop()
 }
 func (d *providerDetails) current(generation uint64) bool {
-	return d.started && generation == d.generation && d.app.Content.Top() == d && d.scope.Context == d.app.Config.ActiveContextName() && d.scope.Namespace == d.app.Config.CachedNamespace() && d.scope.Revision == d.app.Config.DestinationRevision()
+	return d.started && generation == d.generation && d.app.Content.Top() == d &&
+		d.scope.Context == d.app.Config.ActiveContextName() && d.scope.Namespace == d.app.Config.CachedNamespace() &&
+		d.scope.Revision == d.app.Config.DestinationRevision()
 }
 func (d *providerDetails) refresh() {
 	if d.scope.Context != d.app.Config.ActiveContextName() || d.scope.Namespace != d.app.Config.CachedNamespace() || d.scope.Revision != d.app.Config.DestinationRevision() {
@@ -215,13 +225,15 @@ func (d *providerDetails) refresh() {
 	}()
 }
 
+//nolint:gocritic // Rendering reads a retained destination snapshot.
 func renderProviderChecks(scope provider.Scope, checks []provider.Capability, retained bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Provider checks\nContext: %s\nNamespace: %s\n", scope.Context, client.PrintNamespace(scope.Namespace))
 	if retained {
 		b.WriteString("Retained observation; check again before using these capabilities.\n")
 	}
-	for _, check := range checks {
+	for i := range checks {
+		check := &checks[i]
 		fmt.Fprintf(&b, "\n%s: %s\n", safeProviderText(check.ID), check.State)
 		if check.Version != "" {
 			fmt.Fprintf(&b, "Version: %s\n", safeProviderText(check.Version))

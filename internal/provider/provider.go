@@ -95,9 +95,12 @@ type Capability struct {
 // Discover checks only the supplied adapters. Calling code decides when the
 // operator explicitly requests this bounded background work. There is no global
 // registry scan, installation, authentication or context switching.
+//
+//nolint:gocritic // Captured scope values cannot be mutated by the caller during discovery.
 func Discover(ctx context.Context, scope Scope, specs ...Spec) []Capability {
 	checks := make([]Capability, 0, len(specs))
-	for _, spec := range specs {
+	for i := range specs {
+		spec := &specs[i]
 		check := Capability{ID: spec.ID, Scope: scope, Limits: normalizedLimits(spec.Limits), ObservedAt: time.Now().UTC(), State: Unavailable}
 		if err := ctx.Err(); err != nil {
 			check.Err = err
@@ -147,13 +150,23 @@ func Discover(ctx context.Context, scope Scope, specs ...Spec) []Capability {
 	return checks
 }
 
+//nolint:gocritic // The worker receives an immutable destination snapshot.
 func boundedProbe(ctx context.Context, scope Scope, probe Probe) (Observation, error) {
 	type reply struct {
 		observation Observation
 		err         error
 	}
 	response := make(chan reply, 1)
-	go func() { observation, err := probe(ctx, scope); response <- reply{observation, err} }()
+	go func() {
+		result := reply{}
+		defer func() {
+			if recover() != nil {
+				result = reply{err: errors.New("provider probe failed")}
+			}
+			response <- result
+		}()
+		result.observation, result.err = probe(ctx, scope)
+	}()
 	select {
 	case <-ctx.Done():
 		return Observation{}, ctx.Err()

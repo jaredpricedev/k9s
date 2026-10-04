@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+const helperFailure = "failure"
+
 func helperInput(t *testing.T, mode string, args ...string) Input {
 	t.Helper()
 	bin, err := os.Executable()
@@ -28,7 +30,7 @@ func helperInput(t *testing.T, mode string, args ...string) Input {
 		Limits: Limits{Timeout: time.Second, StdoutBytes: 4096, StderrBytes: 4096}}
 }
 
-func TestProviderHelperProcess(t *testing.T) {
+func TestProviderHelperProcess(_ *testing.T) {
 	if os.Getenv("K9PLUS_PROVIDER_HELPER") != "1" {
 		return
 	}
@@ -45,7 +47,7 @@ func TestProviderHelperProcess(t *testing.T) {
 		_ = json.NewEncoder(os.Stdout).Encode(args[1:])
 	case "version":
 		fmt.Print("v2.3.4")
-	case "failure":
+	case helperFailure:
 		fmt.Fprint(os.Stderr, "private provider detail")
 		os.Exit(23)
 	case "flood":
@@ -57,7 +59,7 @@ func TestProviderHelperProcess(t *testing.T) {
 		time.Sleep(10 * time.Second)
 		fmt.Print("late output")
 	case "descendant":
-		child := exec.Command(os.Args[0], "-test.run=TestProviderHelperProcess", "--", "sleep")
+		child := exec.CommandContext(context.Background(), os.Args[0], "-test.run=TestProviderHelperProcess", "--", "sleep")
 		child.Env, child.Stdout, child.Stderr = os.Environ(), os.Stdout, os.Stderr
 		if err := child.Start(); err != nil {
 			os.Exit(2)
@@ -98,7 +100,7 @@ func TestRunBoundsOutputAndCancelsProducingProcess(t *testing.T) {
 }
 
 func TestRunDistinguishesTimeoutCancellationFailureAndMissing(t *testing.T) {
-	for _, mode := range []string{"timeout", "cancel", "failure", "absent", "denied"} {
+	for _, mode := range []string{"timeout", "cancel", helperFailure, "absent", "denied"} {
 		t.Run(mode, func(t *testing.T) {
 			in := helperInput(t, "sleep")
 			ctx, cancel := context.WithCancel(context.Background())
@@ -111,8 +113,8 @@ func TestRunDistinguishesTimeoutCancellationFailureAndMissing(t *testing.T) {
 			case "cancel":
 				go func() { time.Sleep(30 * time.Millisecond); cancel() }()
 				want = Canceled
-			case "failure":
-				in.Args[2] = "failure"
+			case helperFailure:
+				in.Args[2] = helperFailure
 			case "absent":
 				in.Executable = filepath.Join(t.TempDir(), "absent")
 			case "denied":
@@ -135,7 +137,7 @@ func TestRunDistinguishesTimeoutCancellationFailureAndMissing(t *testing.T) {
 			if mode == "denied" && !errors.Is(result.Err, ErrDenied) {
 				t.Fatal(result.Err)
 			}
-			if mode == "failure" && result.ExitCode != 23 {
+			if mode == helperFailure && result.ExitCode != 23 {
 				t.Fatalf("exit %d", result.ExitCode)
 			}
 		})
@@ -173,7 +175,7 @@ func TestDiscoverChecksOnlyExplicitSpecsAndSeparatesStates(t *testing.T) {
 }
 
 func TestDiscoverFailedVersionProbeAndCanceledLateAPIReply(t *testing.T) {
-	in := helperInput(t, "failure")
+	in := helperInput(t, helperFailure)
 	checks := Discover(context.Background(), in.Scope, Spec{ID: "version", Executable: in.Executable, VersionArgs: in.Args, Env: in.Env, Dir: in.Dir})
 	if checks[0].State != Unavailable || strings.Contains(checks[0].Detail, "private") {
 		t.Fatalf("probe failure %#v", checks[0])
@@ -198,4 +200,11 @@ func TestDiscoverFailedVersionProbeAndCanceledLateAPIReply(t *testing.T) {
 		t.Fatal("API check did not honor cancellation")
 	}
 	close(release)
+}
+
+func TestDiscoverAPIProbePanicBecomesSafeUnavailableObservation(t *testing.T) {
+	checks := Discover(context.Background(), Scope{Context: "captured"}, Spec{ID: "faulty", Probe: func(context.Context, Scope) (Observation, error) { panic("SECRET adapter detail") }})
+	if len(checks) != 1 || checks[0].State != Unavailable || checks[0].Err == nil || strings.Contains(checks[0].Err.Error(), "SECRET") {
+		t.Fatalf("unsafe adapter failure %#v", checks)
+	}
 }
