@@ -1,119 +1,119 @@
-# -----------------------------------------------------------------------------
-# Stock skin
-# -----------------------------------------------------------------------------
-
-# Skin...
+# Stock semantic presentation. Existing skin fields remain supported.
 k9s:
   body:
-    fgColor: cadetblue
-    bgColor: black
-    logoColor: orange
-    logoColorMsg: white
-    logoColorInfo: green
-    logoColorWarn: mediumvioletred
-    logoColorError: red
+    fgColor: '#e1e7e3'
+    bgColor: '#0b0e11'
+    logoColor: '#79c7d4'
+    logoColorMsg: '#e1e7e3'
+    logoColorInfo: '#91b8ec'
+    logoColorWarn: '#e7bd73'
+    logoColorError: '#ef8278'
   prompt:
-    fgColor: cadetblue
-    bgColor: black
-    suggestColor: dodgerblue
+    fgColor: '#e1e7e3'
+    bgColor: '#0b0e11'
+    suggestColor: '#a5b0aa'
     border:
-      command: aqua
-      default: seagreen
+      command: '#79c7d4'
+      default: '#79c7d4'
   help:
-    fgColor: cadetblue
-    bgColor: black
-    sectionColor: green
-    keyColor: dodgerblue
-    numKeyColor: fuchsia
+    fgColor: '#e1e7e3'
+    bgColor: '#0b0e11'
+    sectionColor: '#79c7d4'
+    keyColor: '#79c7d4'
+    numKeyColor: '#b6a3df'
   frame:
     title:
-      fgColor: aqua
-      bgColor: black
-      highlightColor: fuchsia
-      counterColor: papayawhip
-      filterColor: seagreen
+      fgColor: '#e1e7e3'
+      bgColor: '#0b0e11'
+      highlightColor: '#79c7d4'
+      counterColor: '#a5b0aa'
+      filterColor: '#79c7d4'
     border:
-      fgColor: dodgerblue
-      focusColor: lightskyblue
+      fgColor: '#a5b0aa'
+      focusColor: '#79c7d4'
     menu:
-      fgColor: white
-      keyColor: dodgerblue
-      numKeyColor: fuchsia
+      fgStyle: normal
+      fgColor: '#e1e7e3'
+      keyColor: '#79c7d4'
+      numKeyColor: '#b6a3df'
     crumbs:
-      fgColor: black
-      bgColor: aqua
-      activeColor: orange
+      fgColor: '#e1e7e3'
+      bgColor: '#131a1e'
+      activeColor: '#79c7d4'
     status:
-      newColor: lightskyblue
-      modifyColor: greenyellow
-      addColor: dodgerblue
-      pendingColor: darkorange
-      errorColor: orangered
-      highlightColor: aqua
-      killColor: mediumpurple
-      completedColor: lightslategray
+      newColor: '#e1e7e3'
+      modifyColor: '#8fce88'
+      addColor: '#91b8ec'
+      pendingColor: '#e7bd73'
+      errorColor: '#ef8278'
+      highlightColor: '#79c7d4'
+      killColor: '#a5b0aa'
+      completedColor: '#a5b0aa'
   info:
-    sectionColor: white
-    fgColor: orange
+    sectionColor: '#a5b0aa'
+    fgColor: '#e1e7e3'
+    cpuColor: '#91b8ec'
+    memColor: '#b6a3df'
+    k9sRevColor: '#79c7d4'
   views:
     table:
-      fgColor: aqua
-      bgColor: black
-      cursorFgColor: black
-      cursorBgColor: aqua
-      markColor: palegreen
+      fgColor: '#e1e7e3'
+      bgColor: '#0b0e11'
+      cursorFgColor: '#e1e7e3'
+      cursorBgColor: '#1c292f'
+      markColor: '#b6a3df'
       header:
-        fgColor: white
-        bgColor: black
-        sorterColor: aqua
-        selectedSortColumnColor: lightskyblue
+        fgColor: '#a5b0aa'
+        bgColor: '#0b0e11'
+        sorterColor: '#79c7d4'
+        selectedSortColumnColor: '#79c7d4'
     xray:
-      fgColor: aqua
-      bgColor: black
-      cursorColor: dodgerblue
-      cursorTextColor: black
-      graphicColor: cadetblue
+      fgColor: '#e1e7e3'
+      bgColor: '#0b0e11'
+      cursorColor: '#1c292f'
+      cursorTextColor: '#e1e7e3'
+      graphicColor: '#a5b0aa'
     charts:
-      bgColor: black
-      dialBgColor: black
-      chartBgColor: black
-      focusFgColor: white
-      focusBgColor: orange
+      bgColor: '#0b0e11'
+      dialBgColor: '#0b0e11'
+      chartBgColor: '#0b0e11'
+      focusFgColor: '#0b0e11'
+      focusBgColor: '#79c7d4'
       defaultDialColors:
-      - palegreen
-      - orangered
+      - '#8fce88'
+      - '#ef8278'
       defaultChartColors:
-      - palegreen
-      - orangered
+      - '#8fce88'
+      - '#ef8278'
       resourceColors:
         cpu:
-        - dodgerblue
-        - darkslateblue
+        - '#91b8ec'
+        - '#1c292f'
         mem:
-        - yellow
-        - goldenrod
+        - '#b6a3df'
+        - '#1c292f'
     yaml:
-      keyColor: steelblue
-      valueColor: papayawhip
-      colonColor: white
+      keyColor: '#b6a3df'
+      valueColor: '#e1e7e3'
+      colonColor: '#e1e7e3'
     picker:
-      mainColor: white
-      focusColor: aqua
-      shortcutColor: aqua
+      mainColor: '#e1e7e3'
+      focusColor: '#79c7d4'
+      shortcutColor: '#79c7d4'
     logs:
-      fgColor: lightskyblue
-      bgColor: black
+      fgColor: '#e1e7e3'
+      bgColor: '#0b0e11'
       indicator:
-        fgColor: dodgerblue
-        bgColor: black
-        toggleOnColor: limegreen
-        toggleOffColor: gray
+        fgColor: '#a5b0aa'
+        bgColor: '#0b0e11'
+        toggleOnColor: '#79c7d4'
+        toggleOffColor: '#a5b0aa'
   dialog:
-    fgColor: cadetblue
-    bgColor: black
-    buttonFgColor: black
-    buttonBgColor: darkslateblue
-    buttonFocusFgColor: black
-    buttonFocusBgColor: dodgerblue
-    labelFgColor: white
-    fieldFgColor: white
+    fgColor: '#e1e7e3'
+    bgColor: '#131a1e'
+    buttonFgColor: '#e1e7e3'
+    buttonBgColor: '#1c292f'
+    buttonFocusFgColor: '#0b0e11'
+    buttonFocusBgColor: '#79c7d4'
+    labelFgColor: '#e1e7e3'
+    fieldFgColor: '#e1e7e3'

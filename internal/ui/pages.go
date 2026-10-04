@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package ui
 
 import (
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/derailed/k9s/internal/model"
 	"github.com/derailed/k9s/internal/slogs"
@@ -16,6 +18,63 @@ import (
 type Pages struct {
 	*tview.Pages
 	*model.Stack
+	cleanupMu sync.Mutex
+	cleanups  map[string]func()
+}
+
+// SetPageCleanup ties transient widget resources to page replacement/removal.
+func (p *Pages) SetPageCleanup(name string, cleanup func()) {
+	p.cleanupMu.Lock()
+	previous := p.cleanups[name]
+	if p.cleanups == nil {
+		p.cleanups = make(map[string]func())
+	}
+	p.cleanups[name] = cleanup
+	p.cleanupMu.Unlock()
+	if previous != nil {
+		previous()
+	}
+}
+
+func (p *Pages) cleanupPage(name string) {
+	p.cleanupMu.Lock()
+	cleanup := p.cleanups[name]
+	delete(p.cleanups, name)
+	p.cleanupMu.Unlock()
+	if cleanup != nil {
+		cleanup()
+	}
+}
+
+// AddPage releases resources owned by a replaced transient page.
+func (p *Pages) AddPage(name string, item tview.Primitive, resize, visible bool) *tview.Pages {
+	p.cleanupPage(name)
+	return p.Pages.AddPage(name, item, resize, visible)
+}
+
+// RemovePage releases resources before removing a page.
+func (p *Pages) RemovePage(name string) *tview.Pages {
+	p.cleanupPage(name)
+	return p.Pages.RemovePage(name)
+}
+
+// ClearPageResources dismisses transient pages that own registered resources.
+func (p *Pages) ClearPageResources() {
+	p.cleanupMu.Lock()
+	names := make([]string, 0, len(p.cleanups))
+	for name := range p.cleanups {
+		names = append(names, name)
+	}
+	p.cleanupMu.Unlock()
+	for _, name := range names {
+		p.RemovePage(name)
+	}
+}
+
+// Clear releases transient resources when the component stack is cleared.
+func (p *Pages) Clear() {
+	p.ClearPageResources()
+	p.Stack.Clear()
 }
 
 // NewPages return a new view.
@@ -88,6 +147,7 @@ func (p *Pages) StackPushed(c model.Component) {
 
 // StackPopped notifies a component was removed.
 func (p *Pages) StackPopped(o, _ model.Component) {
+	p.ClearPageResources()
 	p.delete(o)
 }
 

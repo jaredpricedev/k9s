@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/derailed/k9s/internal"
@@ -66,6 +67,9 @@ type Table struct {
 	noIcon             bool
 	fullGVR            bool
 	literalFields      bool
+	layoutWidth        int
+	columnWidths       map[string]int
+	presentation       tablePresentation
 }
 
 // NewTable returns a new table view.
@@ -351,14 +355,14 @@ func (t *Table) ViewSettingsChanged(vs *config.ViewSetting) {
 
 // StylesChanged notifies the skin changed.
 func (t *Table) StylesChanged(s *config.Styles) {
-	t.SetBackgroundColor(s.Table().BgColor.Color())
+	t.styles = s
+	t.resolvePresentation(s)
+	t.SetBackgroundColor(t.presentation.canvas)
 	t.SetBorderColor(s.Frame().Border.FgColor.Color())
-	t.SetBorderFocusColor(s.Frame().Border.FocusColor.Color())
-	t.SetSelectedStyle(
-		tcell.StyleDefault.Foreground(t.styles.Table().CursorFgColor.Color()).
-			Background(t.styles.Table().CursorBgColor.Color()).Attributes(tcell.AttrBold))
-	t.selFgColor = s.Table().CursorFgColor.Color()
-	t.selBgColor = s.Table().CursorBgColor.Color()
+	t.SetBorderFocusColor(t.presentation.focus)
+	t.semanticSelection = true
+	t.selFgColor = t.presentation.text
+	t.selBgColor = t.presentation.selected
 	t.Refresh()
 }
 
@@ -549,7 +553,8 @@ func (t *Table) shouldExcludeColumn(h model1.HeaderColumn) bool {
 	return (h.Hide || (!t.wide && h.Wide)) ||
 		(h.Name == "NAMESPACE" && !t.GetModel().ClusterWide()) ||
 		(h.MX && !t.hasMetrics) ||
-		(h.VS && vul.ImgScanner == nil)
+		(h.VS && vul.ImgScanner == nil) ||
+		(t.columnWidths != nil && t.columnWidths[h.Name] == 0)
 }
 
 func (t *Table) UpdateUI(cdata, data *model1.TableData) {
@@ -562,6 +567,7 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 	selectedID, _ := t.GetRowID(t.GetSelectedRowIndex())
 	_, selectedCol := t.GetSelection()
 	selectedRow := -1
+	t.fitColumns(cdata)
 	t.Clear()
 	fg := t.styles.Table().Header.FgColor.Color()
 	bg := t.styles.Table().Header.BgColor.Color()
@@ -597,8 +603,12 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 
 	if selectedRow >= 0 {
 		t.SelectRow(selectedRow, selectedCol, true)
+	} else if t.GetRowCount() > 1 {
+		// A zero-match view may leave tview's cursor beyond the rebuilt cells.
+		// Establish a resource selection immediately, before the next draw/input.
+		t.SelectRow(1, 0, true)
 	} else {
-		t.updateSelection(true)
+		t.SelectRow(0, 0, true)
 	}
 	t.UpdateTitle()
 }
@@ -647,7 +657,15 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 			if c < len(re.Deltas) {
 				old = re.Deltas[c]
 			}
-			field += Deltas(old, original)
+			delta := Deltas(old, original)
+			if t.styles != nil && delta != "" {
+				delta = strings.ReplaceAll(strings.ReplaceAll(delta, "[red::b]", ""), "[green::b]", "")
+				if t.noIcon {
+					delta = strings.NewReplacer("↑", "+", "↓", "-", "Δ", "*").Replace(delta)
+				}
+				delta = t.presentation.deltaPrefix + delta + "[-::]"
+			}
+			field += delta
 		}
 
 		if h[c].Decorator != nil {
@@ -660,7 +678,27 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 		cell := tview.NewTableCell(field)
 		cell.SetExpansion(1)
 		cell.SetAlign(h[c].Align)
-		cell.SetTextColor(fgColor)
+		cellColor := fgColor
+		if t.styles != nil {
+			p := &t.presentation
+			cellColor = p.text
+			if statusColumn(h[c].Name) {
+				cellColor = t.statusColor(h[c].Name, original, fgColor)
+			}
+			cell.SetBackgroundColor(p.canvas)
+		}
+		cell.SetTextColor(cellColor)
+		if width := t.columnWidths[h[c].Name]; width > 0 {
+			cell.SetMaxWidth(width).SetExpansion(0)
+			if h[c].Name == "NAME" || h[c].Name == "NAMESPACE" || h[c].Name == "NODE" {
+				// Draw reserves two cells for the selection/mark marker. Keep
+				// the elision visible rather than clipping it behind the marker.
+				if col == 0 && t.semanticSelection {
+					width = max(1, width-2)
+				}
+				cell.SetText(tview.Escape(Truncate(original, width)))
+			}
+		}
 		if col == 0 {
 			cell.SetReference(re.Row.ID)
 		}
@@ -743,8 +781,15 @@ func (t *Table) AddHeaderCell(col int, h model1.HeaderColumn) {
 	sortCol := h.Name == sc.Name
 	selectedCol := col == t.getSelectedColIdx()
 	styles := t.styles.Table()
-	c := tview.NewTableCell(columnIndicator(sortCol, selectedCol, sc.ASC, &styles, h.Name))
+	text := columnIndicator(sortCol, selectedCol, sc.ASC, &styles, h.Name)
+	if t.noIcon {
+		text = strings.NewReplacer("↑", "^", "↓", "v").Replace(text)
+	}
+	c := tview.NewTableCell(text)
 	c.SetExpansion(1)
+	if width := t.columnWidths[h.Name]; width > 0 {
+		c.SetMaxWidth(width).SetExpansion(0)
+	}
 	c.SetSelectable(false)
 	c.SetAlign(h.Align)
 	t.SetCell(0, col, c)
@@ -856,14 +901,10 @@ func (t *Table) styleTitle() string {
 	return title
 }
 
-// ROIndicator returns an icon showing whether the session is in readonly mode or not.
-func ROIndicator(ro, noIC bool) string {
-	switch {
-	case noIC:
-		return ""
-	case ro:
-		return lockedIC
-	default:
-		return unlockedIC
+// ROIndicator always renders a plain mode label, including with no-icons enabled.
+func ROIndicator(ro, _ bool) string {
+	if ro {
+		return tview.Escape("[RO]")
 	}
+	return tview.Escape("[RW]")
 }

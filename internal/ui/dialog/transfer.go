@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package dialog
 
@@ -119,6 +120,7 @@ func ShowUploads(styles *config.Dialog, pages *ui.Pages, opts *TransferDialogOpt
 		opts.Cancel()
 	})
 	pages.AddPage(confirmKey, modal, false, false)
+	bindPageForm(styles, pages, confirmKey, f, modal)
 	pages.ShowPage(confirmKey)
 }
 

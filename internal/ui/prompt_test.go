@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package ui_test
 
@@ -106,10 +107,8 @@ func TestPromptColor(t *testing.T) {
 	app := ui.App{}
 
 	// Make sure to have different values to be sure that the prompt color actually changes depending on its type
-	assert.NotEqual(t,
-		styles.Prompt().Border.DefaultColor.Color(),
-		styles.Prompt().Border.CommandColor.Color(),
-	)
+	styles.K9s.Prompt.Border.DefaultColor = "#b6a3df"
+	assert.NotEqual(t, styles.Prompt().Border.DefaultColor.Color(), styles.Prompt().Border.CommandColor.Color())
 
 	testCases := []struct {
 		kind          model.BufferKind

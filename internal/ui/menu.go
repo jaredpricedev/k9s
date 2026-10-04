@@ -34,6 +34,7 @@ type Menu struct {
 	hints        model.MenuHints
 	width        int
 	naturalWidth int
+	compact      bool
 }
 
 // NewMenu returns a new menu.
@@ -78,6 +79,10 @@ func (m *Menu) StackTop(t model.Component) {
 func (m *Menu) HydrateMenu(hh model.MenuHints) {
 	m.Clear()
 	m.hints = append(m.hints[:0], hh...)
+	if m.compact {
+		m.buildCompact()
+		return
+	}
 	hh = m.hints
 	sort.Sort(hh)
 
@@ -110,6 +115,53 @@ func (m *Menu) HydrateMenu(hh model.MenuHints) {
 			m.SetCell(row, col, c)
 		}
 	}
+}
+
+// SetCompact displays a small set of complete primary actions. All actions
+// remain available through the searchable palette even when hints are omitted.
+func (m *Menu) SetCompact(compact bool) {
+	if m.compact == compact {
+		return
+	}
+	m.compact = compact
+	m.HydrateMenu(m.hints)
+}
+
+func (m *Menu) buildCompact() {
+	p := m.styles.Semantic()
+	reserve := []model.MenuHint{{Mnemonic: "ctrl+o", Description: "Actions", Visible: true}, {Mnemonic: "?", Description: "Help", Visible: true}}
+	var primary model.MenuHints
+	for _, description := range []string{"describe", "logs", "filter", "back"} {
+		for _, hint := range m.hints {
+			if hint.Visible && strings.EqualFold(hint.Description, description) {
+				primary = append(primary, hint)
+				break
+			}
+		}
+	}
+	width := m.width
+	if width == 0 {
+		width = 80
+	}
+	styles := m.styles.Frame()
+	styles.Menu.FgColor, styles.Menu.KeyColor = p.Text, p.Focus
+	var suffix string
+	for _, hint := range reserve {
+		suffix += formatPlainMenu(hint, 0, &styles)
+	}
+	budget := width - tview.TaggedStringWidth(suffix)
+	var line string
+	for _, hint := range primary {
+		item := formatPlainMenu(hint, 0, &styles)
+		size := tview.TaggedStringWidth(item)
+		if size > budget {
+			continue
+		}
+		line += item
+		budget -= size
+	}
+	line += suffix
+	m.SetCell(0, 0, tview.NewTableCell(line).SetBackgroundColor(p.Canvas.Color()))
 }
 
 // NaturalWidth reports how much space the untruncated shortcut labels need.

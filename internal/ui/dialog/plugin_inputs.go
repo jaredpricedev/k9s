@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package dialog
 
@@ -175,6 +176,7 @@ func ShowPluginInputs(
 	})
 
 	pages.AddPage(pluginInputsKey, modal, false, false)
+	bindPageForm(styles, pages, pluginInputsKey, f, modal)
 	pages.ShowPage(pluginInputsKey)
 }
 

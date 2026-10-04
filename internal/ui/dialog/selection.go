@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package dialog
 
@@ -28,5 +29,6 @@ func ShowSelection(styles *config.Dialog, pages *ui.Pages, title string, options
 	})
 
 	pages.AddPage(dialogKey, modal, false, false)
+	bindPageList(styles, pages, dialogKey, list, modal)
 	pages.ShowPage(dialogKey)
 }

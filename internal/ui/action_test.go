@@ -97,7 +97,7 @@ func TestKeyActionsConcurrentSnapshots(t *testing.T) {
 		a.Delete(ui.KeyC)
 	})
 	run(func() {
-		a.Range(func(key tcell.Key, action ui.KeyAction) { a.Get(key) })
+		a.Range(func(key tcell.Key, _ ui.KeyAction) { a.Get(key) })
 	})
 	run(func() { b.Merge(a) })
 	run(func() { a.Merge(b) })

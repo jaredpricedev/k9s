@@ -86,6 +86,13 @@ func (m *ModalList) SetDoneFunc(handler func(int, string)) *ModalList {
 	return m
 }
 
+// SetDialogColors keeps the owned frame in step with the active dialog skin.
+func (m *ModalList) SetDialogColors(background, title tcell.Color) {
+	m.frame.SetBackgroundColor(background)
+	m.frame.SetTitleColor(title)
+	m.list.SetBackgroundColor(background)
+}
+
 // Focus is called when this primitive receives focus.
 func (m *ModalList) Focus(delegate func(p tview.Primitive)) {
 	delegate(m.list)

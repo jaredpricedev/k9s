@@ -8,6 +8,24 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "semantic": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "canvas": {"type": "string"},
+            "panel": {"type": "string"},
+            "text": {"type": "string"},
+            "muted": {"type": "string"},
+            "focus": {"type": "string"},
+            "healthy": {"type": "string"},
+            "warning": {"type": "string"},
+            "failure": {"type": "string"},
+            "progress": {"type": "string"},
+            "unknown": {"type": "string"},
+            "category": {"type": "string"},
+            "selected": {"type": "string"}
+          }
+        },
         "body": {
           "type": "object",
           "properties": {

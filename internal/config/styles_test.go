@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package config_test
 
@@ -16,9 +17,9 @@ import (
 func TestNewStyle(t *testing.T) {
 	s := config.NewStyles()
 
-	assert.Equal(t, config.Color("black"), s.K9s.Body.BgColor)
-	assert.Equal(t, config.Color("cadetblue"), s.K9s.Body.FgColor)
-	assert.Equal(t, config.Color("lightskyblue"), s.K9s.Frame.Status.NewColor)
+	assert.Equal(t, config.Color("#0b0e11"), s.K9s.Body.BgColor)
+	assert.Equal(t, config.Color("#e1e7e3"), s.K9s.Body.FgColor)
+	assert.Equal(t, config.Color("#e1e7e3"), s.K9s.Frame.Status.NewColor)
 }
 
 func TestColor(t *testing.T) {
@@ -72,16 +73,17 @@ Invalid type. Expected: object, given: array`,
 		u := uu[k]
 		t.Run(k, func(t *testing.T) {
 			s := config.NewStyles()
+			s.Update()
 			err := s.Load(u.f, false)
 			if err != nil {
 				assert.Equal(t, u.err, err.Error())
 			}
-			assert.Equal(t, "#5f9ea0", s.Body().FgColor.String())
-			assert.Equal(t, "#000000", s.Body().BgColor.String())
-			assert.Equal(t, "#000000", s.Table().BgColor.String())
-			assert.Equal(t, tcell.ColorCadetBlue.TrueColor(), s.FgColor())
-			assert.Equal(t, tcell.ColorBlack.TrueColor(), s.BgColor())
-			assert.Equal(t, tcell.ColorBlack.TrueColor(), tview.Styles.PrimitiveBackgroundColor)
+			assert.Equal(t, "#e1e7e3", s.Body().FgColor.String())
+			assert.Equal(t, "#0b0e11", s.Body().BgColor.String())
+			assert.Equal(t, "#0b0e11", s.Table().BgColor.String())
+			assert.Equal(t, config.NewColor("#e1e7e3").Color(), s.FgColor())
+			assert.Equal(t, config.NewColor("#0b0e11").Color(), s.BgColor())
+			assert.Equal(t, config.NewColor("#0b0e11").Color(), tview.Styles.PrimitiveBackgroundColor)
 		})
 	}
 }
