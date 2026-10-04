@@ -113,7 +113,7 @@ func (c *Command) updateSuggestionAliases() {
 		upgradeReadinessCommand, fleetCommandToken, providersCommand, capacityCommandToken, "operations", "ops", configurationCommand,
 		localSessionsCommand, "local-sessions", storageCommandToken, gitopsCommandToken,
 		jobReviewCommandToken, maintenanceCommandToken, accessCommandName, taskbookCommandName,
-		activityCommand, networkReviewCommandToken, changeSetCommandToken,
+		activityCommand, networkReviewCommandToken, changeSetCommandToken, "security-review",
 	}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
@@ -334,6 +334,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.localSessionsCommand()
 	case maintenanceCommandToken:
 		c.maintenanceCommand()
+	case "security-review":
+		c.securityReviewCommand()
 	case upgradeReadinessCommand:
 		c.upgradeReadinessCommand(p.GetLine())
 	case providersCommand:
