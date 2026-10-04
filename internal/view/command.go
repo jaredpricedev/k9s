@@ -109,7 +109,7 @@ func (c *Command) suggestionAliases() []string {
 }
 
 func (c *Command) updateSuggestionAliases() {
-	aliases := []string{providersCommand, capacityCommandToken, "operations", "ops", configurationCommand, jobReviewCommandToken, maintenanceCommandToken, accessCommandName, taskbookCommandName}
+	aliases := []string{providersCommand, capacityCommandToken, "operations", "ops", configurationCommand, jobReviewCommandToken, maintenanceCommandToken, accessCommandName, taskbookCommandName, activityCommand}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
 		return
@@ -303,12 +303,11 @@ func (c *Command) defaultCmd(isRoot bool) error {
 
 func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 	switch p.Cmd() {
-	case "workspace", dailyCommand, inventoryCommand, activityCommand:
 	case accessCommandName:
 		c.accessCommand(p.GetLine())
 	case taskbookCommandName:
 		c.taskbookCommand(p.GetLine())
-	case "workspace", dailyCommand, inventoryCommand:
+	case "workspace", dailyCommand, inventoryCommand, activityCommand:
 		c.dailyWorkspaceCommand(p.GetLine())
 	case connectionCommand, "connection-health":
 		c.connectionHealthCommand(p.GetLine())
