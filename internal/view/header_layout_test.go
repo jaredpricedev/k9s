@@ -5,11 +5,56 @@ package view
 import (
 	"testing"
 
+	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/config/mock"
 	"github.com/derailed/k9s/internal/model"
 	"github.com/derailed/tcell/v2"
 	"github.com/stretchr/testify/require"
 )
+
+func TestAutomaticChromePreservesDestinationAndManualPreference(t *testing.T) {
+	a := NewApp(mock.NewMockConfig(t))
+	require.NoError(t, a.Init("v0.1.0", 10))
+	screen := tcell.NewSimulationScreen("")
+	require.NoError(t, screen.Init())
+	defer screen.Fini()
+	main := a.Main.GetPrimitive("main")
+	for _, size := range [][2]int{{80, 24}, {100, 30}, {120, 34}, {80, 24}} {
+		screen.SetSize(size[0], size[1])
+		main.SetRect(0, 0, size[0], size[1])
+		main.Draw(screen)
+		_, y, _, height := a.statusIndicator().GetRect()
+		require.Zero(t, y, "destination is always the first row")
+		require.Equal(t, 1, height)
+		require.Contains(t, a.statusIndicator().GetText(true), "ctx:")
+		require.Contains(t, a.statusIndicator().GetText(true), "ns:")
+		require.Equal(t, size[0] >= 120, a.showHeader)
+		if !a.showHeader {
+			require.Contains(t, a.Menu().GetCell(0, 0).Text, "Actions")
+			require.Contains(t, a.Menu().GetCell(0, 0).Text, "Help")
+		}
+	}
+	// Opening a command/filter prompt inserts it after the persistent chrome.
+	a.App.BufferActive(true, model.CommandBuffer)
+	main.Draw(screen)
+	_, y, _, _ := a.statusIndicator().GetRect()
+	require.Zero(t, y)
+	require.Contains(t, a.statusIndicator().GetText(true), "ctx:")
+	a.App.BufferActive(false, model.CommandBuffer)
+	a.Config.K9s.UI.HeaderMode = "full"
+	main.Draw(screen)
+	require.True(t, a.showHeader, "explicit full remains full even at 80×24")
+	a.toggleHeader(false, a.showLogo)
+	screen.SetSize(180, 40)
+	main.SetRect(0, 0, 180, 40)
+	main.Draw(screen)
+	require.False(t, a.showHeader, "manual compact preference survives resize")
+	styles := config.NewStyles()
+	require.NoError(t, styles.Load("../../skins/monochrome.yaml", false))
+	a.statusIndicator().StylesChanged(styles)
+	main.Draw(screen)
+	require.Contains(t, a.statusIndicator().GetText(true), "ctx:")
+}
 
 func TestHeaderReclaimsUnusedClusterInfoSpace(t *testing.T) {
 	a := NewApp(mock.NewMockConfig(t))

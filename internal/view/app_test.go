@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view_test
 
@@ -15,5 +16,6 @@ func TestAppNew(t *testing.T) {
 	a := view.NewApp(mock.NewMockConfig(t))
 	_ = a.Init("blee", 10)
 
-	assert.Equal(t, 14, a.GetActions().Len())
+	assert.Equal(t, 16, a.GetActions().Len())
+	assertAppDestinationAndRegistry(t, a)
 }

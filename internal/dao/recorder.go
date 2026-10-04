@@ -1,3 +1,4 @@
+// Modified for k9+; see NOTICE.
 package dao
 
 import (
@@ -5,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 
@@ -16,9 +18,13 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/cache"
+	mv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 )
 
-var MxRecorder *Recorder
+var (
+	MxRecorder *Recorder
+	recorderMu sync.Mutex
+)
 
 const (
 	seriesCacheSize   = 600
@@ -33,33 +39,52 @@ type MetricsChan chan TimeSeries
 type TimeSeries []Point
 
 type Point struct {
-	Time  time.Time
-	Tags  map[string]string
-	Value client.NodeMetrics
+	Time   time.Time
+	Tags   map[string]string
+	Value  client.NodeMetrics
+	Sample client.MetricSample
 }
 
 type Recorder struct {
-	conn   client.Connection
-	series *cache.LRUExpireCache
-	mxChan MetricsChan
-	mx     sync.RWMutex
+	conn        client.Connection
+	contextName string
+	series      *cache.LRUExpireCache
+	mxChan      MetricsChan
+	mx          sync.RWMutex
+	lastPoints  map[string]Point
+	watchMu     sync.Mutex
+	watchCancel context.CancelFunc
 }
 
 func DialRecorder(c client.Connection) *Recorder {
-	if MxRecorder != nil {
+	recorderMu.Lock()
+	defer recorderMu.Unlock()
+	return dialRecorder(c)
+}
+
+func dialRecorder(c client.Connection) *Recorder {
+	contextName := ""
+	if c != nil {
+		contextName = c.ActiveContext()
+	}
+	if MxRecorder != nil && MxRecorder.contextName == contextName {
 		return MxRecorder
 	}
 	MxRecorder = &Recorder{
-		conn:   c,
-		series: cache.NewLRUExpireCache(seriesCacheSize),
+		conn:        c,
+		contextName: contextName,
+		series:      cache.NewLRUExpireCache(seriesCacheSize),
+		lastPoints:  make(map[string]Point),
 	}
 
 	return MxRecorder
 }
 
 func ResetRecorder(c client.Connection) {
+	recorderMu.Lock()
+	defer recorderMu.Unlock()
 	MxRecorder = nil
-	DialRecorder(c)
+	dialRecorder(c)
 }
 
 func (r *Recorder) Clear() {
@@ -67,12 +92,15 @@ func (r *Recorder) Clear() {
 	defer r.mx.Unlock()
 
 	kk := r.series.Keys()
+	clear(r.lastPoints)
 	for _, k := range kk {
 		r.series.Remove(k)
 	}
 }
 
-func (r *Recorder) dispatchSeries(kind, ns string) {
+func (r *Recorder) dispatchSeries(ctx context.Context, kind, ns string) {
+	r.mx.RLock()
+	defer r.mx.RUnlock()
 	if r.mxChan == nil {
 		return
 	}
@@ -85,6 +113,7 @@ func (r *Recorder) dispatchSeries(kind, ns string) {
 				if pt.Tags["type"] != kind || pt.Time.Sub(hour) < 0 {
 					continue
 				}
+				pt.Sample = client.NewMetricSample(pt.Sample.Values, pt.Sample.ObservedAt, pt.Sample.Source, time.Now())
 				switch kind {
 				case nodeMetrics:
 					ts = append(ts, pt)
@@ -97,17 +126,30 @@ func (r *Recorder) dispatchSeries(kind, ns string) {
 		}
 	}
 	if len(ts) > 0 {
-		r.mxChan <- ts
+		sort.Slice(ts, func(i, j int) bool { return ts[i].Time.Before(ts[j].Time) })
+		select {
+		case r.mxChan <- ts:
+		case <-ctx.Done():
+		}
 	}
 }
 
 func (r *Recorder) Watch(ctx context.Context, ns string) MetricsChan {
+	r.watchMu.Lock()
+	defer r.watchMu.Unlock()
+	// Cancel before taking mx: a previous publisher may be waiting for its
+	// consumer while holding mx. Replacement must release that send first.
+	if r.watchCancel != nil {
+		r.watchCancel()
+	}
+	ctx, r.watchCancel = context.WithCancel(ctx)
 	r.mx.Lock()
 	if r.mxChan != nil {
 		close(r.mxChan)
 		r.mxChan = nil
 	}
 	r.mxChan = make(MetricsChan, 2)
+	channel := r.mxChan
 	r.mx.Unlock()
 
 	go func() {
@@ -115,6 +157,7 @@ func (r *Recorder) Watch(ctx context.Context, ns string) MetricsChan {
 		if client.IsAllNamespaces(ns) {
 			kind = nodeMetrics
 		}
+		r.dispatchSeries(ctx, kind, ns)
 		switch kind {
 		case podMetrics:
 			if err := r.recordPodMetrics(ctx, ns); err != nil {
@@ -123,19 +166,19 @@ func (r *Recorder) Watch(ctx context.Context, ns string) MetricsChan {
 		case nodeMetrics:
 			if err := r.recordNodeMetrics(ctx); err != nil {
 				slog.Error("Record node metrics failed", slogs.Error, err)
+				r.publishFailure(ctx, nodeMetrics, ns, client.NodeMetricsSource, err)
 			}
 		}
-		r.dispatchSeries(kind, ns)
 		<-ctx.Done()
 		r.mx.Lock()
-		if r.mxChan != nil {
-			close(r.mxChan)
+		if r.mxChan == channel {
+			close(channel)
 			r.mxChan = nil
 		}
 		r.mx.Unlock()
 	}()
 
-	return r.mxChan
+	return channel
 }
 
 func (r *Recorder) Record(ctx context.Context) error {
@@ -150,23 +193,44 @@ func (r *Recorder) recordNodeMetrics(ctx context.Context) error {
 	if !ok {
 		return errors.New("expecting factory in context")
 	}
+	go func() {
+		for {
+			if err := r.sampleNodeMetrics(ctx, f); err != nil {
+				slog.Error("Record node metrics failed", slogs.Error, err)
+				r.publishFailure(ctx, nodeMetrics, "", client.NodeMetricsSource, err)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(seriesRecordRate):
+			}
+		}
+	}()
+	return nil
+}
+
+// Recheck discovery, permissions and node capacity on every observation so
+// a missing or temporarily denied metrics API can recover in the open view.
+func (r *Recorder) sampleNodeMetrics(ctx context.Context, f Factory) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := client.MetricsAccess(r.conn, client.ClusterScope, client.NmxGVR); err != nil {
+		return err
+	}
+	authorized, err := r.conn.CanI(client.ClusterScope, client.NodeGVR, "", client.ListAccess)
+	if err != nil {
+		return err
+	}
+	if !authorized {
+		return fmt.Errorf("node list prerequisite: %w", client.ErrMetricsDenied)
+	}
 	nn, err := FetchNodes(ctx, f, "")
 	if err != nil {
 		return err
 	}
 
-	go func() {
-		r.recordClusterMetrics(ctx, nn)
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(seriesRecordRate):
-				r.recordClusterMetrics(ctx, nn)
-			}
-		}
-	}()
-
+	r.recordClusterMetrics(ctx, nn)
 	return nil
 }
 
@@ -175,6 +239,12 @@ func (r *Recorder) recordClusterMetrics(ctx context.Context, nn *v1.NodeList) {
 	nmx, err := dial.FetchNodesMetrics(ctx)
 	if err != nil {
 		slog.Error("Fetch node metrics failed", slogs.Error, err)
+		r.publishFailure(ctx, nodeMetrics, "", client.NodeMetricsSource, err)
+		return
+	}
+	var values client.ClusterMetrics
+	if err := dial.ClusterLoad(nn, nmx, &values); err != nil {
+		r.publishFailure(ctx, nodeMetrics, "", client.NodeMetricsSource, err)
 		return
 	}
 
@@ -190,26 +260,24 @@ func (r *Recorder) recordClusterMetrics(ctx context.Context, nn *v1.NodeList) {
 		cmx.TotalMEM += m.TotalMEM
 	}
 	pt := Point{
-		Time:  time.Now(),
-		Value: cmx,
+		Time:   time.Now(),
+		Value:  cmx,
+		Sample: client.NewMetricSample(values, client.NodeMetricsObservedAt(nmx), client.NodeMetricsSource, time.Now()),
 		Tags: map[string]string{
 			"type": nodeMetrics,
 		},
 	}
-	if len(nn.Items) > 0 {
-		r.series.Add(pt.Time, pt, seriesCacheExpiry)
+	if pt.Sample.HasValue() {
+		pt.Time = pt.Sample.ObservedAt
 	}
-	r.mx.Lock()
-	defer r.mx.Unlock()
-	if r.mxChan != nil {
-		r.mxChan <- TimeSeries{pt}
-	}
+	r.publishPoint(ctx, pt)
 }
 
 func (r *Recorder) recordPodMetrics(ctx context.Context, ns string) error {
 	go func() {
 		if err := r.recordPodsMetrics(ctx, ns); err != nil {
 			slog.Error("Record pod metrics failed", slogs.Error, err)
+			r.publishFailure(ctx, podMetrics, ns, client.PodMetricsSource, err)
 		}
 		for {
 			select {
@@ -219,6 +287,7 @@ func (r *Recorder) recordPodMetrics(ctx context.Context, ns string) error {
 				// case <-time.After(5 * time.Second):
 				if err := r.recordPodsMetrics(ctx, ns); err != nil {
 					slog.Error("Record pod metrics failed", slogs.Error, err)
+					r.publishFailure(ctx, podMetrics, ns, client.PodMetricsSource, err)
 				}
 			}
 		}
@@ -231,6 +300,16 @@ func (r *Recorder) recordPodsMetrics(ctx context.Context, ns string) error {
 	f, ok := ctx.Value(internal.KeyFactory).(Factory)
 	if !ok {
 		return errors.New("expecting factory in context")
+	}
+	if err := client.MetricsAccess(r.conn, ns, client.PmxGVR); err != nil {
+		return err
+	}
+	authorized, err := r.conn.CanI(ns, client.PodGVR, "", client.ListAccess)
+	if err != nil {
+		return err
+	}
+	if !authorized {
+		return fmt.Errorf("pod list prerequisite: %w", client.ErrMetricsDenied)
 	}
 	pp, err := FetchPods(ctx, f, ns)
 	if err != nil {
@@ -246,14 +325,32 @@ func (r *Recorder) recordPodsMetrics(ctx context.Context, ns string) error {
 		},
 	}
 	dial := client.DialMetrics(r.conn)
+	metrics, err := dial.FetchPodsMetrics(ctx, ns)
+	if err != nil {
+		return err
+	}
+	if len(pp.Items) == 0 || len(metrics.Items) == 0 {
+		return client.ErrMetricsEmpty
+	}
+	byName := make(map[string]*mv1beta1.PodMetrics, len(metrics.Items))
+	for i := range metrics.Items {
+		metric := &metrics.Items[i]
+		byName[client.FQN(metric.Namespace, metric.Name)] = metric
+	}
 	for i := range pp.Items {
 		p := pp.Items[i]
 		fqn := client.FQN(p.Namespace, p.Name)
-		pmx, err := dial.FetchPodMetrics(ctx, fqn)
-		if err != nil {
-			continue
+		pmx, ok := byName[fqn]
+		if !ok || len(pmx.Containers) == 0 {
+			return fmt.Errorf("%w: missing pod %s", client.ErrMetricsEmpty, fqn)
 		}
 		for _, c := range pmx.Containers {
+			if _, ok := c.Usage[v1.ResourceCPU]; !ok {
+				return client.ErrMetricsEmpty
+			}
+			if _, ok := c.Usage[v1.ResourceMemory]; !ok {
+				return client.ErrMetricsEmpty
+			}
 			pt.Value.CurrentCPU += c.Usage.Cpu().MilliValue()
 			pt.Value.CurrentMEM += client.ToMB(c.Usage.Memory().Value())
 		}
@@ -261,15 +358,65 @@ func (r *Recorder) recordPodsMetrics(ctx context.Context, ns string) error {
 	if len(pp.Items) > 0 {
 		pt.Value.AllocatableCPU = pt.Value.CurrentCPU
 		pt.Value.AllocatableMEM = pt.Value.CurrentMEM
-		r.series.Add(pt.Time, pt, seriesCacheExpiry)
-		r.mx.Lock()
-		defer r.mx.Unlock()
-		if r.mxChan != nil {
-			r.mxChan <- TimeSeries{pt}
+		pt.Sample = client.NewMetricSample(client.ClusterMetrics{
+			PercCPU: client.ToPercentage(pt.Value.CurrentCPU, pt.Value.AllocatableCPU),
+			PercMEM: client.ToPercentage(pt.Value.CurrentMEM, pt.Value.AllocatableMEM),
+		}, client.PodMetricsObservedAt(metrics), client.PodMetricsSource, time.Now())
+		if pt.Sample.HasValue() {
+			pt.Time = pt.Sample.ObservedAt
 		}
+		r.publishPoint(ctx, pt)
 	}
 
 	return nil
+}
+
+func (r *Recorder) publishFailure(ctx context.Context, kind, namespace, source string, err error) {
+	if kind == nodeMetrics {
+		namespace = ""
+	}
+	r.mx.RLock()
+	previous := r.lastPoints[kind+"|"+namespace]
+	r.mx.RUnlock()
+	point := Point{Time: time.Now(), Tags: map[string]string{"type": kind, "namespace": namespace}}
+	point.Sample = client.MetricFailure(previous.Sample, client.MetricErrorState(err), source, err.Error())
+	if point.Sample.HasValue() {
+		point.Value = previous.Value
+	}
+	r.publishPoint(ctx, point)
+}
+
+//nolint:gocritic // Keep captured observations immutable across worker and UI boundaries.
+func (r *Recorder) publishPoint(ctx context.Context, point Point) {
+	if ctx.Err() != nil {
+		return
+	}
+	r.mx.Lock()
+	defer r.mx.Unlock()
+	if ctx.Err() != nil {
+		return
+	}
+	key := point.Tags["type"] + "|" + point.Tags["namespace"]
+	if !point.Sample.HasValue() {
+		previous := r.lastPoints[key]
+		point.Sample = client.MetricFailure(previous.Sample, point.Sample.State, point.Sample.Source, point.Sample.Reason)
+		if point.Sample.HasValue() {
+			point.Value = previous.Value
+		}
+	}
+	if point.Sample.Fresh() {
+		if r.lastPoints == nil {
+			r.lastPoints = make(map[string]Point)
+		}
+		r.lastPoints[key] = point
+		r.series.Add(point.Time, point, seriesCacheExpiry)
+	}
+	if r.mxChan != nil {
+		select {
+		case r.mxChan <- TimeSeries{point}:
+		case <-ctx.Done():
+		}
+	}
 }
 
 // FetchPods retrieves all pods in a given namespace.

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view_test
 
@@ -17,5 +18,6 @@ func TestPortForwardNew(t *testing.T) {
 
 	require.NoError(t, pf.Init(makeCtx(t)))
 	assert.Equal(t, "PortForwards", pf.Name())
-	assert.Len(t, pf.Hints(), 11)
+	assert.Len(t, pf.Hints(), 12)
+	assertActionRegistry(t, pf)
 }

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view_test
 
@@ -17,5 +18,6 @@ func TestStatefulSetNew(t *testing.T) {
 
 	require.NoError(t, s.Init(makeCtx(t)))
 	assert.Equal(t, "StatefulSets", s.Name())
-	assert.Len(t, s.Hints(), 15)
+	assert.Len(t, s.Hints(), 16)
+	assertActionRegistry(t, s)
 }

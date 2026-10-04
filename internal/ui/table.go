@@ -8,6 +8,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"reflect"
+	"slices"
 	"strings"
 	"sync"
 
@@ -51,9 +53,11 @@ type Table struct {
 	committedFilter    string
 	filterError        error
 	lastFiltered       *model1.TableData
+	renderedFilter     *model1.TableData
 	filterTotal        int
 	filterEditing      bool
 	filterDraftTouched bool
+	filterDraftPending bool
 	styles             *config.Styles
 	viewSetting        *config.ViewSetting
 	colorerFn          model1.ColorerFunc
@@ -407,21 +411,44 @@ func (t *Table) FilterInput(r rune) bool {
 
 // Filter filters out table data.
 func (t *Table) Filter(text string) {
+	t.mx.Lock()
+	t.filterDraftPending = false
+	t.mx.Unlock()
 	if text != "" {
 		t.TouchFilterDraft()
 	}
 	data := t.GetModel().Peek()
 	cdata := t.filterQuery(data, text)
-	if t.FilterError() == nil {
+	if t.FilterError() == nil && !t.sameFilterRows(cdata) {
 		t.UpdateUI(t.doUpdate(cdata), data)
 	}
 	t.UpdateTitle()
 }
 
+// Query edits often retain the same rows. Reuse their cells only when the full
+// rendered projection still agrees; normal refreshes always rebuild the view.
+func (t *Table) sameFilterRows(data *model1.TableData) bool {
+	previous := t.renderedFilter
+	if previous == nil || previous.RowCount() != data.RowCount() ||
+		t.GetRowCount() != data.RowCount()+1 || !reflect.DeepEqual(previous.Header(), data.Header()) {
+		return false
+	}
+	if data.RowCount() > 0 && t.GetSelectedItem() == "" {
+		return false
+	}
+	same := true
+	data.RowsRange(func(_ int, current model1.RowEvent) bool {
+		old, found := previous.FindRow(current.Row.ID)
+		same = found && old.Kind == current.Kind && slices.Equal(old.Row.Fields, current.Row.Fields) && slices.Equal(old.Deltas, current.Deltas)
+		return same
+	})
+	return same
+}
+
 // BeginFilter opens an empty editing draft without clearing committed results.
 func (t *Table) BeginFilter() {
 	t.mx.Lock()
-	t.filterEditing, t.filterDraftTouched = true, false
+	t.filterEditing, t.filterDraftTouched, t.filterDraftPending = true, false, false
 	t.mx.Unlock()
 }
 
@@ -434,7 +461,7 @@ func (t *Table) TouchFilterDraft() {
 
 func (t *Table) EndFilter() {
 	t.mx.Lock()
-	t.filterEditing = false
+	t.filterEditing, t.filterDraftPending = false, false
 	t.mx.Unlock()
 }
 
@@ -610,6 +637,7 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 	} else {
 		t.SelectRow(0, 0, true)
 	}
+	t.renderedFilter = cdata
 	t.UpdateTitle()
 }
 
@@ -795,8 +823,29 @@ func (t *Table) AddHeaderCell(col int, h model1.HeaderColumn) {
 	t.SetCell(0, col, c)
 }
 
+// DeferFilterDraft validates edits immediately while retaining the committed
+// projection until the resource view coalesces a quiet draft or accepts Enter.
+func (t *Table) DeferFilterDraft(text string) {
+	_, err := model1.ValidateResourceFilter(text)
+	t.mx.Lock()
+	t.filterDraftPending, t.filterError = true, err
+	t.mx.Unlock()
+}
+
 func (t *Table) filtered(data *model1.TableData) *model1.TableData {
-	return t.filterQuery(data, t.cmdBuff.GetText())
+	query := t.cmdBuff.GetText()
+	t.mx.RLock()
+	pending := t.filterDraftPending
+	if pending {
+		if t.filterError != nil && t.lastFiltered != nil {
+			previous := t.lastFiltered
+			t.mx.RUnlock()
+			return previous
+		}
+		query = t.committedFilter
+	}
+	t.mx.RUnlock()
+	return t.filterQuery(data, query)
 }
 
 func (t *Table) filterQuery(data *model1.TableData, query string) *model1.TableData {
@@ -903,8 +952,5 @@ func (t *Table) styleTitle() string {
 
 // ROIndicator always renders a plain mode label, including with no-icons enabled.
 func ROIndicator(ro, _ bool) string {
-	if ro {
-		return tview.Escape("[RO]")
-	}
-	return tview.Escape("[RW]")
+	return tview.Escape(ModeLabel(ro))
 }

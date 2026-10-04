@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view_test
 
@@ -17,5 +18,6 @@ func TestScreenDumpNew(t *testing.T) {
 
 	require.NoError(t, po.Init(makeCtx(t)))
 	assert.Equal(t, "ScreenDumps", po.Name())
-	assert.Len(t, po.Hints(), 7)
+	assert.Len(t, po.Hints(), 8)
+	assertActionRegistry(t, po)
 }

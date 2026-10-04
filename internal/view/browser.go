@@ -36,14 +36,15 @@ import (
 type Browser struct {
 	*Table
 
-	namespaces map[int]string
-	meta       *metav1.APIResource
-	accessor   dao.Accessor
-	contextFn  ContextFunc
-	cancelFn   context.CancelFunc
-	mx         sync.RWMutex
-	updating   bool
-	firstView  atomic.Int32
+	namespaces            map[int]string
+	meta                  *metav1.APIResource
+	accessor              dao.Accessor
+	contextFn             ContextFunc
+	cancelFn              context.CancelFunc
+	mx                    sync.RWMutex
+	updating              bool
+	firstView             atomic.Int32
+	filterSelectorChanged bool
 }
 
 // NewBrowser returns a new browser.
@@ -215,16 +216,25 @@ func (*Browser) BufferChanged(_, _ string) {}
 
 // BufferCompleted indicates input was accepted.
 func (b *Browser) BufferCompleted(text, _ string) {
+	if b.CmdBuff().IsActive() {
+		return
+	}
 	if _, err := model1.ValidateResourceFilter(text); err != nil {
 		return
 	}
+	selector := labels.Everything()
 	if internal.IsLabelSelector(text) {
-		if sel, err := ui.ExtractLabelSelector(text); err == nil {
-			b.GetModel().SetLabelSelector(sel)
+		var err error
+		if selector, err = ui.ExtractLabelSelector(text); err != nil {
+			return
 		}
-	} else {
-		b.GetModel().SetLabelSelector(labels.Everything())
 	}
+	previous := b.GetModel().GetLabelSelector()
+	changed := previous == nil && selector.String() != "" || previous != nil && previous.String() != selector.String()
+	b.GetModel().SetLabelSelector(selector)
+	b.mx.Lock()
+	b.filterSelectorChanged = b.filterSelectorChanged || changed
+	b.mx.Unlock()
 }
 
 // BufferActive indicates the buff activity changed.
@@ -235,6 +245,25 @@ func (b *Browser) BufferActive(state bool, _ model.BufferKind) {
 	if _, err := model1.ValidateResourceFilter(b.CmdBuff().GetText()); err != nil {
 		return
 	}
+	// Regex, inverse and fuzzy queries operate on retained model data. Only a
+	// changed label selector needs to regenerate the model's resource set.
+	text := b.CmdBuff().GetText()
+	b.BufferCompleted(text, "")
+	b.mx.Lock()
+	selectorChanged := b.filterSelectorChanged
+	b.filterSelectorChanged = false
+	b.mx.Unlock()
+	if !selectorChanged {
+		b.app.QueueUpdate(func() {
+			if b.GetRowCount() > 1 {
+				b.App().filterHistory.Push(text)
+			}
+		})
+		return
+	}
+	// Watcher callbacks may run before the table's deactivation listener.
+	// They must project the accepted selector, rather than an older draft.
+	b.EndFilter()
 	if err := b.GetModel().Refresh(b.GetContext()); err != nil {
 		slog.Error("Model refresh failed",
 			slogs.GVR, b.GVR(),

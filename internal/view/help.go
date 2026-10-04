@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package view
 
@@ -39,10 +40,14 @@ type Help struct {
 
 // NewHelp returns a new help viewer.
 func NewHelp(app *App) *Help {
-	return &Help{
+	h := &Help{
 		Table: NewTable(client.HlpGVR),
 		hints: app.Content.Top().Hints,
 	}
+	if owner, ok := app.Content.Top().(actionOwner); ok {
+		h.hints = func() model.MenuHints { return actionCatalogHints(owner, app) }
+	}
+	return h
 }
 
 func (*Help) SetCommand(*cmd.Interpreter)            {}
@@ -350,12 +355,13 @@ func (h *Help) addSection(c int, title string, hh model.MenuHints) {
 }
 
 func (h *Help) updateStyle() {
+	p := h.styles.Semantic()
 	var (
-		style   = tcell.StyleDefault.Background(h.styles.K9s.Help.BgColor.Color())
-		key     = style.Foreground(h.styles.K9s.Help.KeyColor.Color()).Bold(true)
-		numKey  = style.Foreground(h.app.Styles.K9s.Help.NumKeyColor.Color()).Bold(true)
-		info    = style.Foreground(h.app.Styles.K9s.Help.FgColor.Color())
-		heading = style.Foreground(h.app.Styles.K9s.Help.SectionColor.Color())
+		style   = tcell.StyleDefault.Background(p.Canvas.Color())
+		key     = style.Foreground(config.ReadableForeground(p.Focus.Color(), p.Canvas.Color())).Bold(true)
+		numKey  = style.Foreground(config.ReadableForeground(p.Category.Color(), p.Canvas.Color())).Bold(true)
+		info    = style.Foreground(config.ReadableForeground(p.Text.Color(), p.Canvas.Color()))
+		heading = key
 	)
 	for col := range h.GetColumnCount() {
 		for row := range h.GetRowCount() {
@@ -392,7 +398,7 @@ func extractRef(c *tview.TableCell) string {
 
 func (h *Help) titleCell(title string) *tview.TableCell {
 	c := tview.NewTableCell(title)
-	c.SetTextColor(h.Styles().K9s.Help.SectionColor.Color())
+	c.SetTextColor(h.Styles().Semantic().Focus.Color())
 	c.SetAttributes(tcell.AttrBold)
 	c.SetExpansion(1)
 	c.SetAlign(tview.AlignLeft)
