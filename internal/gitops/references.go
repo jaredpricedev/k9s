@@ -15,7 +15,10 @@ import (
 type reference struct {
 	group, version, kind, namespace, name, uid string
 	relation, certainty, reason                string
+	omitted                                    bool
 }
+
+const maxObjectReferences = 8
 
 func references(object *unstructured.Unstructured, request *Request) []reference {
 	var refs []reference
@@ -26,10 +29,15 @@ func references(object *unstructured.Unstructured, request *Request) []reference
 			controlling++
 		}
 	}
-	for _, owner := range owners[:min(len(owners), 8)] {
+	retained := 0
+	for _, owner := range owners {
 		if owner.Controller == nil || !*owner.Controller {
 			continue
 		}
+		if retained >= maxObjectReferences {
+			continue
+		}
+		retained++
 		version, err := schema.ParseGroupVersion(owner.APIVersion)
 		ref := reference{group: version.Group, version: version.Version, kind: owner.Kind, namespace: object.GetNamespace(), name: owner.Name,
 			uid: string(owner.UID), relation: "controller reference", certainty: "UID verification pending"}
@@ -37,6 +45,10 @@ func references(object *unstructured.Unstructured, request *Request) []reference
 			ref.reason = "Controller reference malformed or ambiguous; no single owner inferred"
 		}
 		refs = append(refs, ref)
+	}
+	if controlling > maxObjectReferences {
+		refs = append(refs, omittedReferences("controller reference coverage", controlling-maxObjectReferences,
+			"Controlling references beyond the eight-reference limit were not retained"))
 	}
 	refs = append(refs, fluxTracking(object)...)
 	annotations := object.GetAnnotations()
@@ -53,18 +65,47 @@ func references(object *unstructured.Unstructured, request *Request) []reference
 			refs = append(refs, fluxReference(source, "declared source reference"))
 		}
 		dependencies := flux.Dependencies(object)
-		for _, dependency := range dependencies[:min(len(dependencies), 8)] {
+		for _, dependency := range dependencies[:min(len(dependencies), maxObjectReferences)] {
 			refs = append(refs, fluxReference(dependency, "declared dependency reference"))
 		}
+		if len(dependencies) > maxObjectReferences {
+			refs = append(refs, omittedReferences("dependency reference coverage", len(dependencies)-maxObjectReferences,
+				"Dependencies beyond the eight-reference limit were not observed; their states remain unknown"))
+		}
+		refs = append(refs, unresolvedDependencyCoverage(object, len(dependencies))...)
 	}
 	return refs
+}
+
+func omittedReferences(relation string, count int, reason string) reference {
+	return reference{relation: relation, omitted: true, certainty: "unobserved references", reason: fmt.Sprintf("%d omitted: %s", count, reason)}
+}
+
+func unresolvedDependencyCoverage(object *unstructured.Unstructured, resolved int) []reference {
+	field := "dependsOn"
+	switch object.GetKind() {
+	case kindKustomization, kindHelmRelease:
+	case "ResourceSet":
+		field = "inputsFrom"
+	default:
+		return nil
+	}
+	values, found, err := unstructured.NestedSlice(object.Object, fieldSpec, field)
+	if err != nil {
+		return []reference{omittedReferences("dependency reference coverage", 1, "Malformed declared dependency collection; no complete dependency verdict")}
+	}
+	if found && len(values) > resolved {
+		return []reference{omittedReferences("dependency reference coverage", len(values)-resolved,
+			"Malformed or selector-based entries cannot identify bounded named targets; dependency evidence incomplete")}
+	}
+	return nil
 }
 
 func fluxTracking(object *unstructured.Unstructured) []reference {
 	labels := object.GetLabels()
 	var refs []reference
 	for _, marker := range []struct{ group, kind string }{
-		{"kustomize.toolkit.fluxcd.io", "Kustomization"}, {"helm.toolkit.fluxcd.io", "HelmRelease"},
+		{"kustomize.toolkit.fluxcd.io", kindKustomization}, {"helm.toolkit.fluxcd.io", kindHelmRelease},
 	} {
 		name, namespace := labels[marker.group+"/name"], labels[marker.group+"/namespace"]
 		if name == "" && namespace == "" {
@@ -119,5 +160,8 @@ func validNamespace(namespace string) bool {
 	return namespace != "" && len(validation.IsDNS1123Label(namespace)) == 0
 }
 func referenceLabel(ref *reference) string {
+	if ref.omitted {
+		return "Per-object reference coverage limit or unresolved declarations"
+	}
 	return safe(fmt.Sprintf("%s/%s %s/%s", ref.group, ref.kind, ref.namespace, ref.name))
 }

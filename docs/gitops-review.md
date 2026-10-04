@@ -23,6 +23,9 @@ remain **unverified metadata**; Argo inventory lacks resource UIDs. Helm release
 metadata is shown with that limitation; Helm Secret release storage is not read.
 Malformed markers, replacement UIDs, reference cycles, permission refusals,
 missing named resources and absent controller APIs remain visible as gaps.
+Controlling owners are prioritized before the eight-reference per-object limit;
+extra controlling/dependency references and unresolved dependency selectors
+produce explicit partial coverage rather than a complete chain.
 
 Argo sync, health, automation, operation state, conditions and reconcile time are
 controller reports. A previous Healthy/Synced report cannot hide a failed current

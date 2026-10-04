@@ -201,3 +201,27 @@ func TestGitOpsDisconnectedWorkspaceRetainsActiveWorkerAndEvidence(t *testing.T)
 	require.Equal(t, 2, v.activeTab)
 	require.Contains(t, drawnText(t, v, 80, 24), "SOURCE / VERSION EVIDENCE")
 }
+
+func TestGitOpsChromeSanitizesControlSequencesBidiAndInjectedRows(t *testing.T) {
+	v := gitopsViewFixture(t)
+	original := v.target.Context
+	v.target.Context += "\x1b[31m\u202e\nINJECTED\tROW"
+	v.render()
+	header := v.identityBar.GetText(true)
+	require.Len(t, strings.Split(header, "\n"), 3)
+	for _, control := range []string{"\x1b", "\u202e", "\t"} {
+		require.NotContains(t, header, control)
+	}
+	v.target.Context = original
+	v.refreshFailure = "denied\x1b[31m\u2066\nINJECTED\tROW"
+	v.render()
+	header = v.identityBar.GetText(true)
+	require.Len(t, strings.Split(header, "\n"), 3)
+	for _, control := range []string{"\x1b", "\u2066", "\t"} {
+		require.NotContains(t, header, control)
+		if control != "\t" {
+			require.NotContains(t, v.text.GetText(true), control)
+		}
+	}
+	require.Contains(t, drawnText(t, v, 40, 16), "Esc back")
+}

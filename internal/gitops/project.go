@@ -15,13 +15,14 @@ import (
 )
 
 const (
-	fieldSpec       = "spec"
-	fieldStatus     = "status"
-	fieldName       = "name"
-	fieldKind       = "kind"
-	argoGroup       = "argoproj.io"
-	argoApplication = "Application"
-	maxText         = 512
+	fieldSpec        = "spec"
+	fieldStatus      = "status"
+	fieldName        = "name"
+	fieldKind        = "kind"
+	argoGroup        = "argoproj.io"
+	argoApplication  = "Application"
+	maxText          = 512
+	maxRepositoryURL = 8192
 )
 
 func projectNode(object *unstructured.Unstructured, identity *inspect.ResourceIdentity, now time.Time) Node {
@@ -89,7 +90,7 @@ func projectArgo(object *unstructured.Unstructured, node *Node) {
 }
 
 func projectArgoSource(source map[string]any, provenance string, node *Node) {
-	addVersion(node, "repository (credentials/query omitted)", safeRepository(text(source, "repoURL")), provenance+".repoURL")
+	addVersion(node, "repository (credentials/query omitted)", repository(source, "repoURL"), provenance+".repoURL")
 	kind := "declared source target (branch/tag/commit)"
 	if text(source, "chart") != "" {
 		kind = "declared chart version or constraint"
@@ -114,7 +115,7 @@ func projectArgoResources(object *unstructured.Unstructured, node *Node) {
 
 func projectFluxVersions(object *unstructured.Unstructured, node *Node) {
 	revisionKind := "controller source revision"
-	if object.GetKind() == "HelmRelease" {
+	if object.GetKind() == kindHelmRelease {
 		revisionKind = "controller chart revision"
 	}
 	for _, revision := range []string{"lastAppliedRevision", "lastAttemptedRevision"} {
@@ -123,7 +124,7 @@ func projectFluxVersions(object *unstructured.Unstructured, node *Node) {
 	addVersion(node, "artifact revision", text(object.Object, fieldStatus, "artifact", "revision"), "status.artifact.revision")
 	addVersion(node, "artifact digest", text(object.Object, fieldStatus, "artifact", "digest"), "status.artifact.digest")
 	addVersion(node, "declared chart version or constraint", text(object.Object, fieldSpec, "chart", fieldSpec, "version"), "spec.chart.spec.version")
-	addVersion(node, "repository (credentials/query omitted)", safeRepository(text(object.Object, fieldSpec, "url")), "spec.url")
+	addVersion(node, "repository (credentials/query omitted)", repository(object.Object, fieldSpec, "url"), "spec.url")
 	addVersion(node, "declared source ref", text(object.Object, fieldSpec, "ref", "branch"), "spec.ref.branch")
 	history, _, _ := unstructured.NestedSlice(object.Object, fieldStatus, "history")
 	for index, raw := range history[:min(len(history), MaxSources)] {
@@ -186,9 +187,18 @@ func timestamp(object map[string]any, fields ...string) string {
 	}
 	return value.UTC().Format(time.RFC3339Nano)
 }
+func repository(object map[string]any, fields ...string) string {
+	// Parse before display truncation: dropping an eventual @ boundary can turn
+	// a long user-only credential into a seemingly public hostname.
+	value, _, _ := unstructured.NestedString(object, fields...)
+	return safeRepository(value)
+}
 func safeRepository(value string) string {
 	if value == "" {
 		return ""
+	}
+	if len(value) > maxRepositoryURL {
+		return "Repository identity unavailable; oversized URL excluded"
 	}
 	parsed, err := url.Parse(value)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {

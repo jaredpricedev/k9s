@@ -90,7 +90,7 @@ func (s *Snapshot) primaryController() *Node {
 	for index := range s.Nodes {
 		node := &s.Nodes[index]
 		switch node.Kind {
-		case argoApplication, "Kustomization", "HelmRelease", "ResourceSet":
+		case argoApplication, kindKustomization, kindHelmRelease, "ResourceSet":
 			return node
 		}
 	}

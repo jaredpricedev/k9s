@@ -16,23 +16,25 @@ import (
 )
 
 const (
-	MaxNodes       = 16
-	MaxDepth       = 6
-	MaxConditions  = 16
-	MaxSources     = 16
-	MaxResources   = 100
-	CollectTimeout = 15 * time.Second
-	ReadTimeout    = 3 * time.Second
-	Complete       = "complete"
-	Partial        = "partial"
-	Unknown        = "unknown"
-	Denied         = "denied"
-	Missing        = "missing"
-	Absent         = "API absent"
-	secretResource = "secrets"
-	conditionReady = "Ready"
-	ProviderArgo   = "Argo"
-	ProviderFlux   = "Flux"
+	MaxNodes          = 16
+	MaxDepth          = 6
+	MaxConditions     = 16
+	MaxSources        = 16
+	MaxResources      = 100
+	CollectTimeout    = 15 * time.Second
+	ReadTimeout       = 3 * time.Second
+	Complete          = "complete"
+	Partial           = "partial"
+	Unknown           = "unknown"
+	Denied            = "denied"
+	Missing           = "missing"
+	Absent            = "API absent"
+	secretResource    = "secrets"
+	conditionReady    = "Ready"
+	ProviderArgo      = "Argo"
+	ProviderFlux      = "Flux"
+	kindKustomization = "Kustomization"
+	kindHelmRelease   = "HelmRelease"
 )
 
 var Tabs = []string{"Overview", "Chain", "Sources", "Evidence"}

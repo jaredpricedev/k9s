@@ -11,6 +11,7 @@ import (
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/gitops"
 	"github.com/derailed/k9s/internal/inspect"
+	"github.com/derailed/k9s/internal/logstream"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
@@ -253,7 +254,7 @@ func (v *gitopsView) refresh() {
 func (v *gitopsView) acceptSnapshot(snapshot *gitops.Snapshot, texts [4]string, err error) {
 	v.loading = false
 	if err != nil {
-		v.refreshFailure = err.Error()
+		v.refreshFailure = logstream.SafeText(err.Error())
 	} else if snapshot == nil {
 		v.refreshFailure = "No GitOps observation returned"
 	} else if snapshot.Request != v.request {
@@ -280,7 +281,7 @@ func (v *gitopsView) render() {
 	}
 	query, region := v.inspectionQuery, v.currentRegion
 	row, col := v.text.GetScrollOffset()
-	v.Update(text)
+	v.Update(logstream.SafeText(text))
 	if query != "" {
 		v.model.Filter(query)
 		if region < v.maxRegions {
@@ -326,6 +327,7 @@ func (v *gitopsView) renderChrome() {
 	}
 	lines := []string{identity, source, state}
 	for index, line := range lines {
+		line = strings.NewReplacer("\n", " ", "\t", " ").Replace(logstream.SafeText(line))
 		lines[index] = tview.Escape(ui.Truncate(line, width))
 	}
 	v.identityBar.SetText(strings.Join(lines, "\n"))

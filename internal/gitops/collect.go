@@ -96,6 +96,9 @@ func (c *collector) visit(ctx context.Context, entry *traversal) {
 		link := Link{From: entry.index, To: -1, Relation: ref.relation, Reference: referenceLabel(ref), Certainty: ref.certainty, State: Unknown}
 		if ref.reason != "" {
 			link.Reason = ref.reason
+			if ref.omitted {
+				link.State = Partial
+			}
 		} else if entry.depth >= MaxDepth || len(c.snapshot.Nodes) >= MaxNodes || c.reads >= MaxNodes {
 			link.State, link.Reason = Partial, "Depth, node or named-read budget reached; remaining reference unobserved"
 		} else {
@@ -181,7 +184,7 @@ func (c *collector) hasPath(from, to int, visited map[int]bool) bool {
 
 func (c *collector) compareSourceRevision(from, to int, ref *reference) {
 	controller, source := &c.snapshot.Nodes[from], &c.snapshot.Nodes[to]
-	if ref.relation != "declared source reference" || controller.Kind != "Kustomization" {
+	if ref.relation != "declared source reference" || controller.Kind != kindKustomization {
 		return
 	}
 	var applied, artifact string

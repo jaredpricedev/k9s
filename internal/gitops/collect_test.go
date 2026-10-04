@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/derailed/k9s/internal/inspect"
@@ -267,4 +268,63 @@ func TestGitOpsSelectedFluxSourceShowsReportedProgressInOverview(t *testing.T) {
 	require.Equal(t, ProviderFlux, snapshot.Nodes[0].Provider)
 	require.Contains(t, snapshot.Render(0), "REPORTED READY")
 	require.Contains(t, snapshot.Render(0), "GitRepository sources/repo")
+}
+
+func TestGitOpsOmittedOrUnresolvedDependenciesStayPartial(t *testing.T) {
+	for _, scenario := range []string{"ninth dependency", "selector", "malformed"} {
+		t.Run(scenario, func(t *testing.T) {
+			reader, request := graphFixture()
+			request.Target = inspect.ResourceIdentity{Context: "captured", GVR: "kustomize.toolkit.fluxcd.io/v1/kustomizations", Namespace: "ops", Name: "root", UID: "root-uid"}
+			root := graphObject("kustomize.toolkit.fluxcd.io/v1", "Kustomization", "ops", "root", "root-uid")
+			var dependencies []any
+			for index := range 9 {
+				name := fmt.Sprintf("dependency-%d", index)
+				dependencies = append(dependencies, map[string]any{"name": name})
+				reader.objects["kustomize.toolkit.fluxcd.io/v1/kustomizations:ops/"+name] = graphObject("kustomize.toolkit.fluxcd.io/v1", "Kustomization", "ops", name, name+"-uid")
+			}
+			root.Object[fieldSpec] = map[string]any{"dependsOn": dependencies}
+			if scenario == "selector" {
+				root.Object[fieldSpec] = map[string]any{"dependsOn": []any{map[string]any{"selector": map[string]any{"matchLabels": map[string]any{"team": "web"}}}}}
+			} else if scenario == "malformed" {
+				root.Object[fieldSpec] = map[string]any{"dependsOn": "not-a-reference-list"}
+			}
+			reader.objects["kustomize.toolkit.fluxcd.io/v1/kustomizations:ops/root"] = root
+			snapshot, err := Collect(t.Context(), reader, request)
+			require.NoError(t, err)
+			require.True(t, snapshot.Partial())
+			require.Contains(t, snapshot.Render(0), "dependency reference coverage")
+			if scenario == "ninth dependency" {
+				require.Len(t, snapshot.Nodes, 9)
+				require.Len(t, reader.gets, 9)
+				require.Contains(t, snapshot.Render(0), "eight-reference limit")
+				require.NotContains(t, strings.Join(reader.gets, "\n"), "dependency-8")
+			} else {
+				require.Len(t, reader.gets, 1)
+			}
+		})
+	}
+}
+
+func TestGitOpsControllingOwnerAfterNonControllingReferencesIsNotDropped(t *testing.T) {
+	reader, request := graphFixture()
+	pod := reader.objects["v1/pods:team/web-pod"]
+	controlling := pod.GetOwnerReferences()[0]
+	var owners []metav1.OwnerReference
+	for index := range maxObjectReferences {
+		owners = append(owners, metav1.OwnerReference{APIVersion: "apps/v1", Kind: "ReplicaSet", Name: fmt.Sprintf("other-%d", index), UID: types.UID(fmt.Sprintf("other-uid-%d", index))})
+	}
+	pod.SetOwnerReferences(append(owners, controlling))
+	snapshot, err := Collect(t.Context(), reader, request)
+	require.NoError(t, err)
+	require.Len(t, snapshot.Nodes, 5)
+	require.Equal(t, "controller UID verified", snapshot.Links[0].Certainty)
+	require.Equal(t, "rs-uid", snapshot.Nodes[1].Identity.UID)
+	for index := range owners {
+		owners[index].Controller = controlling.Controller
+	}
+	pod.SetOwnerReferences(append(owners, controlling))
+	snapshot, err = Collect(t.Context(), reader, request)
+	require.NoError(t, err)
+	require.True(t, snapshot.Partial())
+	require.Contains(t, snapshot.Render(0), "Controlling references beyond")
 }

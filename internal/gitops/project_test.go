@@ -4,6 +4,7 @@ package gitops
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,4 +88,33 @@ func TestFluxProjectionSeparatesStaleStatusAndDependencyWait(t *testing.T) {
 	node = projectNode(object, &inspect.ResourceIdentity{}, time.Now())
 	require.Equal(t, "suspended", node.State)
 	require.True(t, *node.Suspended)
+}
+
+func TestGitOpsLongRepositoryUserinfoIsRemovedBeforeDisplayTruncation(t *testing.T) {
+	for _, provider := range []string{ProviderArgo, ProviderFlux} {
+		for _, size := range []int{600, maxRepositoryURL + 1} {
+			t.Run(provider+"/"+strings.Repeat("x", size/600), func(t *testing.T) {
+				credential := strings.Repeat("q", size)
+				url := "https://" + credential + "@example.test/repo?token=private#fragment"
+				object := argoFixture()
+				if provider == ProviderArgo {
+					require.NoError(t, unstructured.SetNestedField(object.Object, url, fieldSpec, "source", "repoURL"))
+				} else {
+					object = graphObject("source.toolkit.fluxcd.io/v1", "GitRepository", "sources", "repo", "repo-uid")
+					require.NoError(t, unstructured.SetNestedField(object.Object, url, fieldSpec, "url"))
+				}
+				node := projectNode(object, &inspect.ResourceIdentity{}, time.Now())
+				encoded, err := json.Marshal(node)
+				require.NoError(t, err)
+				require.NotContains(t, string(encoded), strings.Repeat("q", 32))
+				require.NotContains(t, string(encoded), "token=private")
+				require.NotContains(t, string(encoded), "fragment")
+				if size <= maxRepositoryURL {
+					require.Contains(t, string(encoded), "https://example.test/repo")
+				} else {
+					require.Contains(t, string(encoded), "oversized URL excluded")
+				}
+			})
+		}
+	}
 }
