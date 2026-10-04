@@ -12,6 +12,9 @@ type MenuHint struct {
 	Mnemonic    string
 	Description string
 	Visible     bool
+	// Priority orders complete primary hints independently of their wording.
+	// Zero leaves an action discoverable without reserving compact chrome.
+	Priority int
 }
 
 // IsBlank checks if menu hint is a place holder.

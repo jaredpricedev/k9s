@@ -85,7 +85,17 @@ func (v *comparisonView) Init(ctx context.Context) error {
 	if err := v.Details.Init(ctx); err != nil {
 		return err
 	}
-	v.actions.Add(ui.KeyR, ui.NewKeyAction("Capture B (keep A)", func(*tcell.EventKey) *tcell.EventKey { v.capture(false); return nil }, true))
+	capture := ui.NewKeyAction("Capture B (keep A)", func(*tcell.EventKey) *tcell.EventKey { v.capture(false); return nil }, true)
+	capture.Availability = func() string {
+		if v.target.Context != v.app.Config.ActiveContextName() {
+			return "Context changed; choose baseline A again"
+		}
+		if v.baseline == nil {
+			return "Wait for baseline A to finish"
+		}
+		return ""
+	}
+	v.actions.Add(ui.KeyR, capture)
 	v.actions.Add(ui.KeyN, ui.NewKeyAction("Toggle API noise", func(*tcell.EventKey) *tcell.EventKey { v.normalize = !v.normalize; v.renderComparison(); return nil }, true))
 	v.actions.Add(ui.KeyO, ui.NewKeyAction("Overview / all evidence", func(*tcell.EventKey) *tcell.EventKey {
 		v.showEvidence = !v.showEvidence
@@ -189,11 +199,19 @@ func comparisonOverview(c inspect.Comparison, normalized bool) string {
 	const previewChanges = 6
 	var b strings.Builder
 	b.WriteString("RESOURCE COMPARISON · CHANGES FIRST\n")
+	if c.A.State == inspect.ObservationComplete && c.B.Source == "not captured" && c.B.ObservedAt.IsZero() {
+		b.WriteString("A captured; r capture B\nRead-only baseline stays fixed until you choose another A.\n")
+		fmt.Fprintf(&b, "\nA · %s · %s/%s\nCaptured: %s\nSource: %s\n",
+			c.A.Identity.Context, c.A.Identity.Namespace, c.A.Identity.Name, comparisonObserved(c.A.ObservedAt), c.A.Source)
+		b.WriteString("\nr capture B · o full evidence · / search · Esc back\n")
+		return b.String()
+	}
 	if c.Recreated {
 		b.WriteString("RECREATED IDENTITY · B is a replacement object (different UID).\n")
 	}
 	if !c.Comparable {
-		b.WriteString("Comparison unavailable · " + c.Notice + "\n")
+		notice := strings.TrimPrefix(c.Notice, "Comparison unavailable · ")
+		b.WriteString("Comparison unavailable · " + notice + "\n")
 	} else if len(c.Changes) == 0 {
 		b.WriteString("No differences in retained fields · this does not establish health.\n")
 	} else {

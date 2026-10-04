@@ -168,7 +168,7 @@ func ShowPluginInputs(
 
 	f.SetFocus(0)
 
-	modal := tview.NewModalForm("<"+title+">", f)
+	modal := ui.NewModalForm("<"+title+">", f)
 	modal.SetTextColor(styles.FgColor.Color())
 	modal.SetDoneFunc(func(int, string) {
 		dismissPluginInputs(pages)
