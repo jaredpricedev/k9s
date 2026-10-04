@@ -90,13 +90,13 @@ func TestAccessNativeFormAndDecisionAtSupportedSizes(t *testing.T) {
 		screen.SetSize(size[0], size[1])
 		v.SetRect(0, 0, size[0], size[1])
 		v.Draw(screen)
-		text := accessScreenText(screen, size)
+		text := accessScreenText(screen)
 		if !strings.Contains(text, "ACCESS DECISION") || !strings.Contains(text, "incomplete") {
 			t.Fatal(size, text)
 		}
 		v.editQuestion()
 		v.modal.Draw(screen)
-		text = accessScreenText(screen, size)
+		text = accessScreenText(screen)
 		if !strings.Contains(text, "Explicit access question") || !strings.Contains(text, "Cancel") || !strings.Contains(text, "Review") {
 			t.Fatal(size, text)
 		}
@@ -104,10 +104,11 @@ func TestAccessNativeFormAndDecisionAtSupportedSizes(t *testing.T) {
 		screen.Fini()
 	}
 }
-func accessScreenText(screen tcell.Screen, size [2]int) string {
+func accessScreenText(screen tcell.Screen) string {
 	var b strings.Builder
-	for y := range size[1] {
-		for x := range size[0] {
+	width, height := screen.Size()
+	for y := range height {
+		for x := range width {
 			r, _, _, _ := screen.GetContent(x, y)
 			b.WriteRune(r)
 		}
