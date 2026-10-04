@@ -163,7 +163,7 @@ func boundedCleanup(timeout time.Duration, jobs map[string]func()) {
 		go func() {
 			defer func() {
 				if p := recover(); p != nil {
-					slog.Error("Application cleanup failed", "resource", name, slogs.Error, p)
+					slog.Error("Application cleanup failed", slogs.Component, name, slogs.Error, p)
 				}
 				completed <- name
 			}()
@@ -178,7 +178,7 @@ func boundedCleanup(timeout time.Duration, jobs map[string]func()) {
 			delete(jobs, name)
 		case <-timer.C:
 			for name := range jobs {
-				slog.Error("Application cleanup deadline reached", "resource", name)
+				slog.Error("Application cleanup deadline reached", slogs.Component, name)
 			}
 			return
 		}

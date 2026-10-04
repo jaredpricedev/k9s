@@ -21,6 +21,8 @@ func lifecycleApp() *App {
 	return &App{App: ui.NewApp(config.NewConfig(nil), "")}
 }
 
+const lifecycleErrorMode = "error"
+
 func TestHaltIsTemporaryAndShutdownIsFinal(t *testing.T) {
 	a := lifecycleApp()
 	lifetime := a.sessionContext()
@@ -128,14 +130,14 @@ func TestApplicationLifecyclePTYFixture(t *testing.T) {
 			}
 		}()
 	}
-	if mode == "error" {
+	if mode == lifecycleErrorMode {
 		a.SetInputCapture(func(*tcell.EventKey) *tcell.EventKey {
 			a.BailOut(1)
 			return nil
 		})
 	}
 	err := a.runApplication()
-	if mode == "error" {
+	if mode == lifecycleErrorMode {
 		var termination *TerminationError
 		if !errors.As(err, &termination) || termination.ExitCode() != 1 {
 			t.Fatalf("runtime error status lost: %v", err)
