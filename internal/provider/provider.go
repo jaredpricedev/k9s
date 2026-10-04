@@ -14,8 +14,8 @@ import (
 )
 
 type Scope struct {
-	Context, Namespace, GVR, Name, UID string
-	Revision                           uint64
+	Context, Namespace, TargetNamespace, GVR, Name, UID string
+	Revision                                            uint64
 }
 
 type Limits struct {
