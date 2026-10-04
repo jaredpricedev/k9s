@@ -153,7 +153,6 @@ func (c *ClusterInfo) RebindFactory(f dao.Factory) {
 	c.publication.Store(c.request)
 	c.factory, c.cluster, c.data = f, NewCluster(f), NewClusterMeta()
 	c.mx.Unlock()
-
 }
 
 // Refresh fetches the latest cluster meta.
