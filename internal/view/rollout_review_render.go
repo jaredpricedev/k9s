@@ -194,7 +194,7 @@ func rolloutCoverageLine(coverage []review.RolloutCoverage, width int) string {
 			}
 		}
 	}
-	return fitInvestigation(strings.Join(parts, " · "), width)
+	return fitInvestigation("Read coverage · "+strings.Join(parts, " · "), width)
 }
 
 func rolloutCount(value *int64) string {
