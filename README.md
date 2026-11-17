@@ -92,6 +92,7 @@ and [Hubble measurements](docs/hubble-performance-2026-10-04.md).
 | Application activity / reviewed changes | `:activity` / `:review /path/to/manifest.yaml`, then `b` or `:changeset` |
 | Scheduled job review | `:job-review` |
 | What changed before it broke | Select a Pod or workload, then `:timeline` (or `:timeline <namespace>`) |
+| The Grafana dashboard for the selection, at the incident's time range | `Shift-D` on a Pod, workload, Node or namespace; `:dashboards` lists the rest |
 | Access, capacity, storage, node maintenance | `:access`, `:capacity`, `:storage`; select a Node then `:maintenance` or `o` |
 | Network path / task handoff | Select a Service then `:network-review`; `:taskbook save` / `:taskbook open` |
 | Connection checks and session reconnect | `:connection`, then `r` to retry checks or `R` to reconnect the same context while retaining workspace/navigation |
@@ -129,7 +130,11 @@ declared per context ([docs/observability-sources.md](docs/observability-sources
 `:sources` shows the declaration and probes it only on request, and nothing is
 discovered or contacted while browsing. `:graph` (or `m` on a Pod, workload or
 Node) draws usage against limits over time from the declared Prometheus source,
-read once per request ([docs/graphs.md](docs/graphs.md)). Select a cert-manager Certificate and use
+read once per request ([docs/graphs.md](docs/graphs.md)).
+With Grafana declared, `Shift-D` builds
+the dashboard link for the selection and opens or copies it, `:dashboards`
+lists dashboards after one bounded search, and `:timeline` shows annotations
+that name its scope ([docs/grafana-handoff.md](docs/grafana-handoff.md)). Select a cert-manager Certificate and use
 `:operator-review` for bounded Certificate/Issuer evidence, not independent TLS
 verification; select a Service and use `:dependency-review` or Network review's
 `d` / Edges tab to inspect retained relationships, not prove dependency or health.

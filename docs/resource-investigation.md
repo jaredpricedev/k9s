@@ -242,6 +242,10 @@ It merges into one list, newest first:
 - HorizontalPodAutoscaler condition transitions and the last scale time.
 - Condition transitions of the nodes running the pods.
 - Abnormal Deployment conditions and unschedulable pods, when they carry a time.
+- Grafana annotations that name the scope by tag or text, as `ANNOT` entries,
+  when Grafana is declared for the context. They are read in the same bounded
+  read, are never the `FAULT BEGAN` entry, and an unreadable Grafana is stated
+  on the sources line. See [grafana-handoff.md](grafana-handoff.md).
 
 Every entry has its exact UTC time, its age at capture, its source and the
 resource it concerns; the pane under the list shows these in full for the
@@ -260,7 +264,8 @@ instead, and **m** on it again returns to the first failing signal.
 Keys: **Enter** opens the entry's resource in its list; **/** filters by text;
 **1**, **2**, **3**, **4** narrow the window to the last 15m, 1h, 6h or 24h
 before capture and **0** shows everything read; **s** shows sources and limits;
-**r** reads again; **Esc** clears the filter, then goes back. Narrowing,
+**r** reads again; **Shift-D** opens the Grafana dashboard for the timeline's
+scope with the timeline's window; **Esc** clears the filter, then goes back. Narrowing,
 filtering and marking work on the retained observation and read nothing.
 
 Limits, which the view also states under **s**:

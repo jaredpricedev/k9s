@@ -24,6 +24,9 @@ const (
 	SourceAutoscaler Source = "Autoscaler"
 	SourceNode       Source = "Node"
 	SourceCondition  Source = "Condition"
+	// SourceAnnotation is a Grafana annotation: something a person or a
+	// pipeline wrote down, not something read from the cluster.
+	SourceAnnotation Source = "Annotation"
 )
 
 // Tag is the fixed-width list label for a source.
@@ -33,13 +36,15 @@ func (s Source) Tag() string {
 		return "HPA"
 	case SourceCondition:
 		return "STATUS"
+	case SourceAnnotation:
+		return "ANNOT"
 	default:
 		return strings.ToUpper(string(s))
 	}
 }
 
 func (s Source) rank() int {
-	for index, source := range []Source{SourceCondition, SourceAlert, SourceEvent, SourceRestart, SourceNode, SourceAutoscaler, SourceRollout, SourceConfig} {
+	for index, source := range []Source{SourceCondition, SourceAlert, SourceEvent, SourceRestart, SourceNode, SourceAutoscaler, SourceRollout, SourceConfig, SourceAnnotation} {
 		if s == source {
 			return index
 		}
@@ -432,6 +437,18 @@ var standingLimits = []string{
 	"ConfigMap and Secret entries come from metadata.managedFields: one time per manager and operation, the last write only. Values are never read into the view.",
 	"Node conditions report the last transition only. Node events are not read.",
 	"Times are those the API objects carry, to the second. Entries in the same second have no known order.",
+}
+
+// AddExternal merges entries read from outside the cluster, with the
+// coverage of that read, and restores the order. The first failing signal is
+// found again, so a reference the user chose is not kept.
+func (s *Snapshot) AddExternal(entries []Entry, coverage *Coverage, notes ...string) {
+	s.Entries = append(s.Entries, entries...)
+	if coverage != nil {
+		s.Coverage = append(s.Coverage, *coverage)
+	}
+	s.Notes = append(s.Notes, notes...)
+	s.finish()
 }
 
 // NewSnapshot orders entries and finds the first failing signal. Collect uses

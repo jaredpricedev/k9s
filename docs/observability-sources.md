@@ -40,6 +40,7 @@ k9s:
       tokenEnv: GRAFANA_TOKEN          # variable NAME, never the token
       publicURL: https://grafana.example.com
       datasource: prom-main            # Grafana UID of its Prometheus datasource
+      lokiDatasource: loki-main        # Grafana UID of a Loki datasource; links only
       dashboards:
         pod:       {uid: k8s-pod, namespaceVar: namespace, podVar: pod}
         workload:  {uid: k8s-workload, namespaceVar: namespace, workloadVar: workload}
@@ -75,6 +76,11 @@ Grafana also accepts:
 - `datasource`: the UID of Grafana's Prometheus datasource. If no `prometheus`
   source is declared, Prometheus queries go through Grafana's datasource proxy
   (`/api/datasources/proxy/uid/<uid>/...`) instead.
+- `lokiDatasource`: the UID of a Grafana Loki datasource. It is used only to
+  build Explore log links and is never queried.
+
+What these are used for (`Shift-D`, `:dashboards`, annotations in `:timeline`)
+is described in [grafana-handoff.md](grafana-handoff.md).
 
 The file is validated against the context JSON schema. A declaration that
 cannot be used (both `service` and `url`, a malformed reference, a token over
@@ -165,6 +171,9 @@ resolve the client for the active context, then call the typed reads in
 `internal/observability` from a goroutine with a cancellable context:
 `Client.Query`, `Client.QueryRange`, `Client.Alerts`, `Client.Annotations`,
 `Client.SearchDashboards`, `Client.Probe`, and `GrafanaSource.DashboardLink`.
+Links with a live range, Explore links and the pin snippet are in
+`internal/observability/grafana_links.go` (`DashboardURL`, `DashboardUIDURL`,
+`ExploreMetricsURL`, `ExploreLogsURL`, `PinSnippet`).
 Text from a source is cleaned but must still be escaped for tview.
 
 ## Synthetic fixture

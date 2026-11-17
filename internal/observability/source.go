@@ -64,6 +64,9 @@ type GrafanaSource struct {
 	PublicURL string `json:"publicURL,omitempty" yaml:"publicURL,omitempty"`
 	// Datasource is the UID of the Grafana Prometheus datasource.
 	Datasource string `json:"datasource,omitempty" yaml:"datasource,omitempty"`
+	// LokiDatasource is the UID of a Grafana Loki datasource. It is used
+	// only to build Explore log links and is never queried.
+	LokiDatasource string `json:"lokiDatasource,omitempty" yaml:"lokiDatasource,omitempty"`
 	// Dashboards maps pod, workload, node and namespace to a dashboard.
 	Dashboards map[string]Dashboard `json:"dashboards,omitempty" yaml:"dashboards,omitempty"`
 }
@@ -223,6 +226,9 @@ func (g *GrafanaSource) Validate() error {
 	if g.Datasource != "" && !grafanaUID.MatchString(g.Datasource) {
 		return errors.New("datasource must be a Grafana UID")
 	}
+	if g.LokiDatasource != "" && !grafanaUID.MatchString(g.LokiDatasource) {
+		return errors.New("lokiDatasource must be a Grafana UID")
+	}
 	for kind, d := range g.Dashboards {
 		known := false
 		for _, k := range DashboardKinds {
@@ -247,33 +253,7 @@ func (g *GrafanaSource) Validate() error {
 // publicURL and a declared dashboard; it contacts nothing. Zero times omit
 // the time range.
 func (g *GrafanaSource) DashboardLink(kind string, t LinkTarget, from, to time.Time) (string, error) {
-	if g == nil {
-		return "", ErrNotConfigured
-	}
-	if g.PublicURL == "" {
-		return "", errors.New("grafana publicURL is not declared")
-	}
-	d, ok := g.Dashboards[kind]
-	if !ok {
-		return "", fmt.Errorf("no grafana dashboard is declared for %s", kind)
-	}
-	if err := g.Validate(); err != nil {
-		return "", err
-	}
-	u, _ := parseBaseURL(g.PublicURL)
-	u.Path += "/d/" + d.UID
-	q := url.Values{}
-	for _, pair := range [][2]string{{d.NamespaceVar, t.Namespace}, {d.PodVar, t.Pod}, {d.WorkloadVar, t.Workload}, {d.NodeVar, t.Node}} {
-		if pair[0] != "" && pair[1] != "" {
-			q.Set("var-"+pair[0], pair[1])
-		}
-	}
-	if !from.IsZero() && !to.IsZero() && to.After(from) {
-		q.Set("from", fmt.Sprint(from.UnixMilli()))
-		q.Set("to", fmt.Sprint(to.UnixMilli()))
-	}
-	u.RawQuery = q.Encode()
-	return u.String(), nil
+	return g.DashboardURL(kind, t, LinkRange{From: from, To: to})
 }
 
 // Declared reports whether any source is declared.

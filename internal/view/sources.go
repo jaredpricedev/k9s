@@ -328,6 +328,9 @@ func (v *sourcesView) renderGrafana(b *strings.Builder) {
 	if g.Datasource != "" {
 		fmt.Fprintf(b, "  Datasource UID: %s\n", safeProviderText(g.Datasource))
 	}
+	if g.LokiDatasource != "" {
+		fmt.Fprintf(b, "  Loki datasource UID: %s (links only)\n", safeProviderText(g.LokiDatasource))
+	}
 	var kinds []string
 	for _, k := range observability.DashboardKinds {
 		if d, ok := g.Dashboards[k]; ok {

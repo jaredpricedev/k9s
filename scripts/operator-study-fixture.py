@@ -190,13 +190,17 @@ def study_objects(api, deny_sources=()):
                     "spec": {"containers": [{"name": "main", "image": "example.test/study:v1"}]}}
     api.objects.extend([
         node("worker-b", [
-            {"type": "MemoryPressure", "status": "Unknown", "reason": "NodeStatusUnknown"},
-            {"type": "Ready", "status": "Unknown", "reason": "NodeStatusUnknown",
+            {"type": "MemoryPressure", "status": "Unknown", "reason": "NodeStatusUnknown",
+             "lastTransitionTime": ago(19)},
+            # The node controller marks the node a minute after its kubelet
+            # went silent, which is twenty minutes before the fixture starts.
+            {"type": "Ready", "status": "Unknown", "reason": "NodeStatusUnknown", "lastTransitionTime": ago(19),
              "message": "Kubelet stopped posting node status."}], unschedulable=True),
         node("worker-c", [
             {"type": "DiskPressure", "status": "True", "reason": "KubeletHasDiskPressure",
-             "message": "kubelet has disk pressure"},
-            {"type": "Ready", "status": "True", "reason": "KubeletReady", "message": "kubelet is posting ready status"}]),
+             "lastTransitionTime": ago(45), "message": "kubelet has disk pressure"},
+            {"type": "Ready", "status": "True", "reason": "KubeletReady", "lastTransitionTime": ago(6 * 24 * 60),
+             "message": "kubelet is posting ready status"}]),
         obj("batch/v1", "Job", "report-export", "ops", {"app": "study"},
             {"backoffLimit": 6, "completions": 1, "template": pod_template},
             {"active": 1, "failed": 2, "startTime": now}),

@@ -111,6 +111,7 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 	result = append(result, networkReviewActions(owner, app)...)
 	result = append(result, historyActions(owner, app)...)
 	result = append(result, sourcesActions(app)...)
+	result = append(result, grafanaActions(owner, app)...)
 	result = append(result, timelineActions(owner, app)...)
 	result = append(result, graphActions(owner, app)...)
 	result = append(result, workspaceActions(app)...)
