@@ -370,6 +370,7 @@ func (t *Table) fitWhyColumns(data *model1.TableData, pads MaxyPad, width, why i
 // Draw recalculates the column budget after resize and renders selection as a
 // surface plus an ASCII marker. Each selected cell retains its own severity.
 func (t *Table) Draw(screen tcell.Screen) {
+	defer t.drawNextStep(screen)
 	selectRows, selectColumns := t.GetSelectable()
 	_, _, width, _ := t.GetInnerRect()
 	if t.styles != nil && width != t.layoutWidth && t.model != nil && t.model.Peek().HeaderCount() > 0 {

@@ -91,6 +91,7 @@ func (b *Browser) Init(ctx context.Context) error {
 	if e := b.Table.Init(ctx); e != nil {
 		return e
 	}
+	b.SetNextStepFilter(b.runnableNextChecks)
 	ns := client.CleanseNamespace(b.app.Config.ActiveNamespace())
 	if dao.IsK8sMeta(b.meta) && b.app.ConOK() {
 		if _, e := b.app.factory.CanForResource(ns, b.GVR(), client.ListAccess); e != nil {
