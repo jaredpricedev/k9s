@@ -115,6 +115,12 @@ class Metrics:
             labels = dict(apps, pod=pod, container="api", node=node)
             self.gauge("container_memory_working_set_bytes", labels, memory, begin, end)
             self.counter("container_cpu_usage_seconds_total", labels, cpu, begin, end)
+            # cAdvisor reports network per pod sandbox, without a container.
+            # Transmit follows the request rate (see traffic below).
+            sandbox = dict(apps, pod=pod, interface="eth0", node=node)
+            rx, tx = (2600.0, 9000.0) if pod == NEW_POD else (4200.0, 21000.0)
+            self.counter("container_network_receive_bytes_total", sandbox, [(begin, rx)], begin, end)
+            self.counter("container_network_transmit_bytes_total", sandbox, [(begin, tx)], begin, end)
             self._kube_pod(pod, "apps", node, "api", begin, end, limit, 128 * MI, 0.1,
                            restarts if pod == NEW_POD else (lambda t: 0.0),
                            "ReplicaSet", "checkout-api-7d9f8c6b5d" if pod == NEW_POD else "checkout-api-6c8d7f9b5")
@@ -192,6 +198,9 @@ class Metrics:
             self.gauge("kube_node_status_condition", dict(kube, condition="DiskPressure", status="true"),
                        (lambda t: 1.0 if t > t0 - 25 * 60 else 0.0) if node == "worker-c" else (lambda t: 0.0), long_ago)
             self.gauge("kube_node_spec_unschedulable", kube, lambda t, n=node: 1.0 if n == "worker-b" else 0.0, long_ago)
+            for resource, unit, amount in (("cpu", "core", 4.0), ("memory", "byte", 15.5 * GI), ("pods", "integer", 110.0)):
+                self.gauge("kube_node_status_allocatable", dict(kube, resource=resource, unit=unit),
+                           lambda t, v=amount: v, long_ago)
 
     def _kube_pod(self, pod, namespace, node, container, begin, end, limit, request, cpu_request, restarts, owner_kind, owner):
         where = {"namespace": namespace, "pod": pod, "container": container}
@@ -402,7 +411,8 @@ def evaluate(metrics, node, t):
             points = [(t - seconds + seconds * i / 10.0) for i in range(11)]
             samples = [(p, series.fn(p)) for p in points]
             samples = [(p, v) for p, v in samples if v is not None]
-            if len(samples) < 2:
+            # A rate needs two samples; an over-time function needs one.
+            if len(samples) < (2 if function in ("rate", "increase") else 1):
                 continue
             values = [v for _, v in samples]
             if function == "rate":

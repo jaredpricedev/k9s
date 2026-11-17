@@ -111,6 +111,10 @@ discarded.
 prefilled with it and Request is still what contacts it. Typing a base URL in
 its place works as before. See [historical-observability.md](historical-observability.md).
 
+`:graph` draws charts for a selected Pod, workload or Node from the declared
+Prometheus source, with fixed query templates and one read per request. See
+[graphs.md](graphs.md).
+
 ## States
 
 Every read returns one state, and features show it in words:
@@ -169,5 +173,8 @@ generated relative to the fixture start time and follows the checkout-api
 story: healthy request, error and latency series before the revision 2
 rollout twelve minutes before start, failing ones after it; memory climbing to
 the 256Mi limit and restarting; a node whose node-exporter series stop when it
-goes silent. The fixture evaluates only the query forms the typed builder can
+goes silent. For `:graph` it also serves per-Pod network counters and
+`kube_node_status_allocatable`; no fixture Pod has a CPU limit, so CPU limit
+and throttling read `no data` there. `--no-icons` starts the application with
+`ui.noIcons`. The fixture evaluates only the query forms the typed builder can
 produce. Fixtures show bounds and wording, not production behavior.

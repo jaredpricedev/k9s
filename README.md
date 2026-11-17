@@ -126,7 +126,9 @@ for the selected Pod against an explicitly configured Prometheus endpoint, not
 complete or UID-continuous history. Prometheus, Alertmanager and Grafana can be
 declared per context ([docs/observability-sources.md](docs/observability-sources.md));
 `:sources` shows the declaration and probes it only on request, and nothing is
-discovered or contacted while browsing. Select a cert-manager Certificate and use
+discovered or contacted while browsing. `:graph` (or `m` on a Pod, workload or
+Node) draws usage against limits over time from the declared Prometheus source,
+read once per request ([docs/graphs.md](docs/graphs.md)). Select a cert-manager Certificate and use
 `:operator-review` for bounded Certificate/Issuer evidence, not independent TLS
 verification; select a Service and use `:dependency-review` or Network review's
 `d` / Edges tab to inspect retained relationships, not prove dependency or health.

@@ -786,6 +786,9 @@ func (b *Browser) refreshActions() {
 		aa.Add(ui.KeyY, b.nativeRelationshipAction(ui.NewKeyAction(yamlAction, b.viewCmd, true), false))
 		aa.Add(ui.KeyD, b.nativeRelationshipAction(ui.NewKeyAction("Describe", b.describeCmd, true), false))
 	}
+	if _, ok := graphKinds[b.GVR().String()]; ok {
+		aa.Add(ui.KeyM, graphKeyAction(b.app, b))
+	}
 	for _, f := range b.bindKeysFn {
 		f(aa)
 	}
