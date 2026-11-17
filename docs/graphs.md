@@ -9,14 +9,14 @@ It opens on demand: `m` on a Pod, Deployment, StatefulSet, DaemonSet,
 ReplicaSet, Service or Node list, `:graph` (or `:graph 15m|1h|6h|24h`) with
 such an object selected, or "Graph: usage vs limits over time" in the Ctrl-O
 palette. For a workload or a Service, `p` on the page (or `:graph pods`, or
-"Per-Pod graphs: which Pod differs" in the palette) switches to one small
-chart per Pod; see [Which Pod is different](#which-pod-is-different-p).
+"Per-Pod graphs: which Pod differs" in the palette) compares its Pods; see
+[Which Pod is different](#which-pod-is-different-p).
 `m` is the same key in `:problems`, `:alerts` and `:timeline`, where it graphs
 the object of the selected row (in `:timeline`, the focused entry's object or
 the timeline's own workload, over the timeline's window). In `:impact`,
 `Enter` opens the graph over a window that holds both compared ranges,
-scrolled to the chart of the selected signal: Memory peak and Memory/limit
-open on MEMORY, CPU usage and CPU throttled on CPU. Request rate, error
+with the chart of the selected signal at full size: Memory peak and
+Memory/limit open on MEMORY, CPU usage and CPU throttled on CPU. Request rate, error
 ratio, latency and readiness have no chart here, and `:impact` says so
 instead of implying one. Where no Prometheus source is declared, `m` answers
 with that reason and reads nothing, and the "next:" line of a list never
@@ -26,8 +26,8 @@ names `:graph`.
 window ([grafana-handoff.md](grafana-handoff.md)). `Shift-W` opens `:slow`
 ([slow-requests.md](slow-requests.md)) and `Shift-B` opens `:probe`
 ([probe.md](probe.md)) for the graphed object, the keys that open them from a
-row; for a Node, which has neither, the key says so. In `:slow`, `m` opens
-the per-Pod page below.
+row; for a Node, which has neither, the key says so. `t` opens `:timeline`
+for the same object. In `:slow`, `m` opens the per-Pod page below.
 
 ## What is never done
 
@@ -42,6 +42,163 @@ the per-Pod page below.
   happened. Marks on the time axis state order, not cause.
 
 ## The page
+
+The page that opens says first what the series show, and then shows what
+that rests on: one chart at full size and every other signal as one row
+under it, on the same time axis. It is the calm layout of the incident views
+([presentation.md](presentation.md#calm-layout-the-standard-for-incident-views)).
+`a` shows every chart stacked, as the page was before
+([Every chart](#every-chart-a)); `a` again returns.
+
+```
+Graph  Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 15m                                             read 22:14 · 10 of 10 queries
+
+  Memory reached its 256Mi limit 6 times. A container restarted after 5 of them.                Order in time, not proof of cause.
+
+  MEMORY  254Mi now  at limit  ─ limit 256Mi  ┄ request 128Mi                                           ┊
+     256Mi ┤                  ─────────────▂▇▇▇▇▇▇▇▇▇────▂▅▇▇▇▇▇▇▇▇────▂▅▇▇▇▇▇▇▇▇─────▂▇▇▇▇▇▇▇▇─────▂▅▇▇▇▇▇▇▇▇────▂▅▇▇▇
+           │                    ┊        ▁▆██████████  ▁▆██████████▄ ▁▆██████████▄  ▁▆█████████▄  ▁▆██████████  ▁▆█████
+           │                    ┊      ▁▅████████████▁▅█████████████▁█████████████▁▅████████████▁▅████████████▁▅███████
+           │                    ┊     ▄████████████████████████████████████████████████████████████████████████████████
+     128Mi ┤                  ┄┄┄┄┄┄┄█┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+           │                    ┊  ▃▇██████████████████████████████████████████████████████████████████████████████████
+           │                     ▂▆████████████████████████████████████████████████████████████████████████████████████
+           │                    ▆██████████████████████████████████████████████████████████████████████████████████████
+           │                    ███████████████████████████████████████████████████████████████████████████████████████
+         0 ┤                    ███████████████████████████████████████████████████████████████████████████████████████
+                                ┊                                                                       ┊
+  ALSO                          ┊                                                                       ┊
+  restarts  ××××××××××××××××××××┊··············▲············▲·········▲············▲···········▲········┊·▲············  6
+  CPU       ×××××××××××××××××××××▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇  340m
+  network   ×××××××××××××××××××××▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇  9kB/s  tx
+            ─┬──────────────┬───R─────────┬─────────────┬─────────────┬──────────────┬─────────────┬────X────────┬─────
+  UTC      22:00          22:02         22:04         22:06         22:08          22:10         22:12         22:14
+
+  NO DATA  CPU limit · CPU throttled
+
+  R rollout rev 2 at 22:02
+  X last exit Error (1) at 22:12
+
+  next  n next chart (CPU)    a all charts    t what changed    D open in Grafana
+
+  ←→ time · 1 15m  2 1h  3 6h  4 24h · r re-read · s queries · b dots · Esc back
+```
+
+- **The title** names the view, the object and the window, and at the right
+  when the read began and how many queries were answered. A read that is not
+  complete is in the warning colour and keeps its count at every width. A
+  workload or Service adds the number of its Pods. A name that does not fit
+  is shortened in the middle, so the generated end of a Pod's name stays.
+- **The answer** is one or two sentences, the first bold, and a caveat that
+  says what they do not claim. They are read off the chart the rule below
+  chooses, and stay the same when another chart is put at full size:
+
+  | The samples show | The page says |
+  | --- | --- |
+  | a line within 5% of its limit, or above it, in one or more stretches of neighbouring samples | `Memory reached its 256Mi limit 6 times.` |
+  | memory of one object at its limit, and the restart counter rose between the first sample of a stretch and three steps after its last | `A container restarted after each.` (or `after 5 of them`, or `3 restarts in the last 1h, none right after.`), with `Order in time, not proof of cause.` |
+  | CPU throttled in 25% of its periods or more | `CPU was throttled in up to 88% of its periods. Usage peaked at 1.5 cores against a 1.5 cores limit.` |
+  | nothing at a limit | `Memory is 60Mi now, 23.4% of its 256Mi limit. 6 restarts in the last 1h.` with `A reading, not a statement of health.` |
+  | the last recorded exit of a container was OOMKilled | `The last exit was OOMKilled, at 04:58.` in place of the count of restarts |
+  | a chart of several Pods | the line is named: `Memory of x2x9q reached the 256Mi min limit 6 times.` The restarts of a workload are counted, not given to a Pod |
+  | no sample | `Memory has no samples in the last 15m. The query matched nothing: that is missing data, not a zero.` with `Not read is not healthy.` |
+
+  When the read failed, the reason is the answer, in the warning colour, and
+  the page has no chart ([States](#states)).
+- **One chart is at full size.** It is chosen by rule: memory, when it was
+  at its limit in the window or the last recorded exit was `OOMKilled`; else
+  CPU, when it was throttled in 25% of its periods or more (the level `:slow`
+  uses) or was at its limit; else the first chart that was at its limit (a
+  Node's disk, its Pods); else memory. `s` says which of these it was. The
+  line over the chart is its legend: the value now, the words `at limit`
+  where that is so, and the levels drawn (`─ limit 256Mi`, `┄ request
+  128Mi`). A chart of several Pods names each line by its letter and keeps
+  them solid lines; entries without room are counted (`+1 more`). The chart
+  is drawn as described under [Every chart](#every-chart-a): a filled area
+  for one series, the warning colour where it is at its limit.
+- **`ALSO`** holds every other chart as one row: its name, a strip on the
+  axis of the chart above, and the value now. The strip is that chart's
+  line on the scale it has at full size; with several lines it is the
+  highest of them at each time, and the name of that line follows the
+  value. `at limit` follows it where that is so. `×` is a time without a
+  sample (before the Pod existed), never a level. `restarts` marks every
+  rise of the restart counter with `▲` and gives the rise in the window.
+- **`n`** (or `Tab`, or `↓`) makes the next row the chart at full size, and
+  `Shift-N`, `Shift-Tab` or `↑` the previous; the line of next steps names
+  which one is next. A caller that arrives about one chart (`:impact`) finds
+  it at full size.
+- **Moments** read from the object ([Axis marks](#axis-marks)) are thin
+  guides (`┊`) through the whole block, with their letter on the axis and
+  one line each under it. The rollout line adds what the limit of the chart
+  was before it when the samples on both sides show that it changed
+  (`memory min limit 512Mi before it, 256Mi now`). The first restart has no
+  guide here: it is the first `▲` of the restarts row.
+- **`NO DATA`** names every query that was answered and matched nothing (a
+  limit that is not set, a metric that is not scraped); **`NOT READ`**, in
+  the warning colour, every one that was refused or timed out, with its
+  state, and Pods beyond the matcher limit. Neither line is ever given up
+  for room. **`OUTSIDE THE WINDOW`** names a moment that lies before or
+  after the window.
+- **`←`/`→`** move the cursor one step of the sample grid, with Shift ten
+  steps; Home and End jump to the window edges. At the window end no cursor
+  is drawn and every number is the latest sample. Once it is moved, the
+  cursor is a `┆` through the block and a `^` on the axis, the legend reads
+  `206Mi at 04:55:30`, and the word over the numbers of the rows says the
+  same time. Nothing is interpolated.
+- **Two lines of keys**: `next` names the likely steps in words (`p compare
+  the pods` for a workload, the next chart, `a all charts`, `t what
+  changed` for `:timeline`, `D open in Grafana` when Grafana is declared);
+  the dim line names the rest and ends with the way out.
+
+### What a smaller screen gives up
+
+In the order the calm layout gives things up
+([presentation.md](presentation.md#what-a-smaller-screen-gives-up)), and
+only as far as the size needs:
+
+1. The strips and the chart shorten with the width; the read status
+   shortens (`22:14 · 10/10`), then the name of the object, in the middle.
+2. The blank rows go, and the chart gives rows up, down to three, before
+   the rows under it do: at 80x24 the page is
+
+```
+Graph  Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 15m           22:14 · 10/10
+  Memory reached its 256Mi limit 6 times. A container restarted after 5 of them.
+  Order in time, not proof of cause.
+
+  MEMORY  254Mi now  at limit  ─ limit 256Mi  ┄ request 128Mi
+     256Mi ┤          ────▁▄▆█████▁▄▆████▁▄▆█████▁▄▆█████▁▄█████▁▄▆██
+     128Mi ┤          ┄▁▄▆┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+         0 ┤          ▆██████████████████████████████████████████████
+  ALSO                 ┊                                     ┊
+  restarts  ×××××××××××┊·······▲·····▲·····▲······▲·····▲····┊▲······  6
+  CPU       ×××××××××××▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇  340m
+  network   ×××××××××××▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇  9kB/s  tx
+            ┬───────┬──R────┬──────┬───────┬──────┬───────┬──X────┬──
+  UTC     22:00   22:02   22:04  22:06   22:08  22:10   22:12   22:14
+  NO DATA  CPU limit · CPU throttled
+  R rollout rev 2 at 22:02
+  X last exit Error (1) at 22:12
+
+  next  n next chart (CPU)  a all charts  t what changed  D open in Grafana
+  ←→ time · 1 15m  2 1h  3 6h  4 24h · r re-read · s queries · b dots · Esc back
+```
+
+3. Then `ALSO` folds to one line that keeps every number (`ALSO  restarts
+   6 · CPU 340m · network 9kB/s tx`): at 60 columns the answer takes three
+   lines, and that is what an 80x24 terminal narrowed to 60 shows. The
+   legend counts the levels it has no room for.
+4. Then the second key line goes, and last the guides of the moments: they
+   become one line (`MOMENTS`). What is no longer on the screen is named
+   in one line with the key that shows it (`not shown at this size (a shows
+   all): MOMENTS, ALSO`), and the page ends as the chart alone on its axis
+   under the answer. `NO DATA` and `NOT READ` stay.
+
+## Every chart (`a`)
+
+`a` is the page with all the detail: every chart stacked on one time axis,
+each with its own legend line, the restarts strip, the marks and the cursor
+readout. Its first line ends with `a short page` where there is room.
 
 ```
 Graph · Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 1h to 14:35:30Z · step 30s
@@ -122,9 +279,10 @@ Cursor 14:35:30Z (window end) · restarts 6, +6 in window
 - A legend takes at most two lines. Entries that do not fit are counted
   (`+1 more`), never dropped silently; `s` lists every series.
 - All charts share the time axis at the bottom, labelled with UTC clock
-  times. `↑`/`↓` show the charts that do not fit; the second line says how
-  many are shown. At 80x24 two charts fit; at 60 columns the page keeps one
-  or two charts and the readout, and shortens words rather than facts.
+  times. `↑`/`↓` (and `n`, `Tab`) show the charts that do not fit; the
+  second line says how many are shown. At 80x24 two charts fit; at 60
+  columns the page keeps one or two charts and the readout, and shortens
+  words rather than facts.
 - `s` shows exactly what was asked: the window with dates, the step, when the
   read began, the source, every PromQL text with its state, series and sample
   counts, and for each series where it begins late, ends early or has gaps.
@@ -199,9 +357,151 @@ counted on the page as NOT READ.
 
 ## Which Pod is different (`p`)
 
-With several Pods the overlaid lines run on top of each other. `p` draws one
-small chart per Pod instead, all on one Y scale and one time axis, so the Pod
-that behaves differently is the chart that looks different.
+With several Pods the overlaid lines run on top of each other. `p` compares
+the Pods instead: the page says which Pod differs from its peers and in how
+many signals, and shows each of those signals as one row per Pod on a
+shared time axis. `a` shows one small chart per Pod and the table of every
+signal, as the page was before ([A chart per Pod](#a-chart-per-pod-a)).
+
+```
+Compare pods  Service gitlab/gitlab-webservice-default · 3 pods · last 1h                            read 22:15 · 13 of 13 queries
+
+  Pod hx4mt differs from the other two in 6 of 10 signals. No other Pod differs.                 A difference, not proof of cause.
+
+     hx4mt differs            ▼▼▼▼▼                         ▼▼▼▼▼▼▼                                  ▼▼▼▼
+
+  QUEUED · connections waiting for a free Puma thread                                                               peak
+> hx4mt  worker-f  ▁▁▁▁▁▁▁▁▁▁▁▆▇███▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▆▇█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▄▇██▁▁▁▁▁▁▁▁▁  40     differs
+  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0
+  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0
+
+  FREE-THREADS · Puma threads free to take a request                                                                low
+  hx4mt  worker-f  ▁▁▁▁▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁  0      differs
+  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  4
+  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  4
+
+  P99 · Rails request duration, 99th percentile                                                                     peak
+  hx4mt  worker-f  ▁▁▁▁▁▁▁▁▁▁▁▄▄▇██▅▄▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▄▄▇████▅▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▄▇▇▅▄▁▁▁▁▁▁▁  47.9s  differs
+  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  346ms
+  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  346ms
+                   ───────┬───━━━━━──────┬───────────────┬──━━━━━━━──────┬───────────────┬───────────━━━━┬────────
+  UTC                   21:20          21:30           21:40           21:50           22:00           22:10
+
+  ALSO DIFFERS  throttled (hx4mt 90%, peers 1.26%) · cpu (hx4mt 1.57, peers 423m) · busy-threads (hx4mt 8, peers 4)
+  ALIKE ON ALL 3  memory · restarts · 5xx · network
+
+  next  Enter open hx4mt    g group by container / revision / node / zone    B probe the pods now
+
+  ↑↓ signal · ←→ time · 1-4 window · a show every signal · p overlaid lines · r re-read · s queries · Esc back
+```
+
+- **The answer** counts: `Pod hx4mt differs from the other two in 6 of 10
+  signals. No other Pod differs.`, with `A difference, not proof of cause.`
+  Signals that had no reading are counted in the same sentence (`3 of 10
+  signals had no reading`). Several Pods are listed with their counts.
+  When no Pod differs the page says how much it read (`No Pod differs from
+  its peers in the 7 signals read. All 13 queries answered.`) and that
+  nothing found is not proof of health; with fewer than three Pods it says
+  `2 Pods: too few to call one different. 3 are needed.` and calls none
+  different.
+- **One group per signal in which a Pod differs**, by the rule under [When
+  a Pod is called an OUTLIER](#when-a-pod-is-called-an-outlier). The signal
+  whose Pod is furthest from the median of its peers comes first, measured
+  as a share of the larger of the two values so that signals in different
+  units can be ordered. A group has as its heading the signal (for a
+  profile signal with what the profile says it measures), and over the
+  numbers the word for what they are: `peak`, `low`, `rise`, `of limit`.
+- **One row per Pod**: its short name, its Node, its strip, the number that
+  ranks it, and the word `differs` on the Pod that does. That Pod is in the
+  failure colour everywhere on the page: its name, its number and its
+  strip. Its peers are dim, in the order of their names, so a peer is on
+  the same row in every group.
+- **The strip** of the Pod that differs is a level in its colour at the
+  samples at which it is apart from the others: outside their range, at
+  least the signal's noise floor from their median, and at least twice
+  that median or at most half of it. One other Pod with a sample is enough
+  for that, because which Pod is the odd one was decided over the window.
+  Every other sample, and every sample of a peer, is the baseline `▁`. `×`
+  is a time without a sample. For a signal that is worse when low the level
+  is the shortfall, so a dip stands up. A counter (restarts) is drawn as
+  its rises (`▲`).
+- **The bands** (`▼` on the marker row, the shading behind the rows, the
+  heavy part of the axis) are the samples at which the marked row (`>`) is
+  apart from the others, under the Pod's name (`hx4mt differs`). What the
+  other signals do in those columns is what lines up with it. Opened from
+  `:slow` with `m`, the bands are the episodes that view found, under the
+  name `episodes`, for as long as the window shown lies inside the one
+  `:slow` read; after a window key that reaches further the page falls
+  back on the marked row. They state when, never why.
+- **`↑`/`↓`** (or `n`/`Shift-N`, `Tab`/`Shift-Tab`) mark the next signal,
+  in the order of the page: the ones in which a Pod differs, then the
+  others. A signal in which no Pod differs can be marked too: it is then
+  shown as the last group, its rows quiet and without bands. `Enter` opens
+  the charts of the Pod in the marked row, for the same window.
+- **The other signals are one line each**: `ALSO DIFFERS` for those that
+  have no room as a group, each with the Pod, its number and the median of
+  its peers; `ALIKE ON ALL 3` for those in which no Pod is an `OUTLIER`
+  (which is not "identical": see the rule); `NOT COMPARED` for those with
+  too few Pods that have samples; `NOT READ` with the state of each that
+  gave no reading. The last two are never given up for room.
+- **More Pods than five** show the Pods that differ (three at most), the
+  others three or fewer at a time by name, and one row that counts the rest
+  (`+8 more  like their peers`). `PgUp`/`PgDn` turn the page of the peers;
+  the key line says which page it is.
+- **`←`/`→`** move the cursor as on the charts. Once it is moved, the number
+  of every row is its sample under the cursor and the word over the numbers
+  is the time (`at 04:30:00`).
+- **How many groups**: as many as the size holds without giving anything
+  up, blank rows included; at 132x36 that is three signals of three Pods.
+  A second group is worth the blank rows around the answer and the keys;
+  no group is worth a row that is left out. At 80x24 one or two groups are
+  shown and the rest are in `ALSO DIFFERS`:
+
+```
+Compare pods  Service gitlab/g…service-default · 3 pods · last 1h  22:15 · 13/13
+  Pod hx4mt differs from the other two in 6 of 10 signals. No other Pod differs.
+  A difference, not proof of cause.
+
+     hx4mt differs      ▼▼▼           ▼▼▼▼                ▼▼▼
+  QUEUED · connections waiting for a free Puma thread              peak
+> hx4mt  worker-f  ▁▁▁▁▁▆██▁▁▁▁▁▁▁▁▁▁▁▄▇██▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▄▇█▁▁▁▁  40    differs
+  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0
+  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0
+  FREE-THREADS · Puma threads free to take a request               low
+  hx4mt  worker-f  ▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁  0     differs
+  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  4
+  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  4
+                   ─────━━━───┬───────━━━┯───────────┬────━━━───┬
+  UTC                       21:30      21:45       22:00      22:15
+  ALSO DIFFERS  p99 (hx4mt 47.9s, peers 346ms) +3 more
+  ALIKE ON ALL 3  memory · restarts · 5xx · network
+
+  next  Enter open hx4mt  g group by container / revision / node / zone
+  ↑↓ signal · ←→ time · 1-4 window · a show every signal · Esc back
+```
+
+  At 60 columns the strips shorten and the key lines name fewer keys;
+  nothing else changes. Below 12 columns of strip the rows are written as
+  text, and what is not shown is named with the key that shows it.
+- `p` returns to the charts. `s` lists the per-Pod queries too, and says
+  how this page is derived from them.
+- `:slow` opens this page with `m`: for the Pods behind its Service, with
+  the signal that set a Pod apart there marked (for example `p99`), for the
+  window it read and with its episodes as the bands, so the two views show
+  the same Pods, the same reading and the same minutes. The signal is named
+  as `profile/signal`; when this page reads that reading under its own name
+  (`throttled`, `cpu`, `memory`, `restarts`) the name alone finds it, and
+  an unknown one changes nothing.
+- On a page whose read did not succeed there is nothing to compare; `p`
+  and `g` say so and point at `r`, and so does `n` for the chart.
+
+### A chart per Pod (`a`)
+
+`a` is the page with all the detail: one small chart per Pod for one signal,
+all on one Y scale and one time axis, and where the page is tall enough the
+table of every signal. Its first line ends with `a short page` where there
+is room. `n` and `Shift-N` step through the signals in the order they are
+read in, and `↑`/`↓` page through the Pods.
 
 ```
 Graph · Service gitlab/gitlab-webservice-default · last 1h to 14:38Z · step 30s
@@ -247,9 +547,8 @@ Cursor 14:38:00Z (window end) · hx4mt 346ms · 8wzpd 346ms · 2bq7k 346ms
 - The third line names every signal. The selected one is in brackets; a star
   marks a signal in which a Pod differs from its peers; a signal that could
   not be compared carries the reason (`5xx (no data)`, `throttled (denied)`).
-  `n` and `Shift-N` step through the signals; from the overlaid charts `n`
-  opens this page. A page opens on the first signal in which a Pod differs,
-  else on the first that has samples. Where the names do not all fit, the
+  `n` and `Shift-N` step through the signals. The page opens on the signal
+  the short page marked. Where the names do not all fit, the
   ones on either side are counted (`+4 earlier`, `+5 more`).
 - The fourth line says which Pod differs and in which signals. It states a
   difference between peers over the same window; it never says why. That
@@ -284,15 +583,6 @@ Cursor 14:38:00Z (window end) · hx4mt 346ms · 8wzpd 346ms · 2bq7k 346ms
 - The page fits from 40x12 up, the smallest size the view draws at: the key
   line is always the last line, and a status that does not fit two lines
   keeps the count of what is not shown.
-- `p` returns to the overlaid lines. `s` lists the per-Pod queries too.
-- `:slow` opens this page with `m`: for the Pods behind its Service, on the
-  signal that set a Pod apart there (for example `p99`) and for the window it
-  read, so the two views show the same Pods, the same reading and the same
-  minutes. The signal is named as `profile/signal`; when this page reads that
-  reading under its own name (`throttled`, `cpu`, `memory`, `restarts`) the
-  name alone finds it, and an unknown one opens on the first signal.
-- On a page whose read did not succeed there is nothing to compare; `p`, `n`
-  and `g` say so and point at `r`.
 
 ### When a Pod is called an OUTLIER
 
@@ -335,7 +625,62 @@ not scraped shows as `no data` in the strip and is not drawn as zeros.
 ## Regroup (`g`)
 
 `g` folds the same per-Pod series into groups, and `Shift-G` steps back:
-by pod, by container, by revision, by node, by zone. Each group is one small
+by pod, by container, by revision, by node, by zone.
+
+On the short page a group is one row where a Pod was one: its name, its
+size (`2 pods`), its strip, a number, and where a Pod of it differs that
+Pod's name and the word `differs`. The strip is the member of the group
+that is furthest out at each time (its highest, or for a signal that is
+worse when low its lowest), drawn in the Pod's colour at the samples at
+which a Pod of the group that differs is apart from the other Pods. The
+number is that Pod's own when one Pod of the group differs, else the
+group's worst. The title says how the Pods are grouped (`· by revision`),
+the answer stays the one about the Pods, and `Enter` opens the Pod of the
+marked group. So "only the Pods on one Node" or "only revision 2" is one row
+that looks different:
+
+```
+Compare pods  Deployment apps/checkout-api · 4 pods · by revision · last 1h                          read 22:15 · 15 of 15 queries
+
+  Pod x2x9q differs from the other 3 in 5 of 7 signals. No other Pod differs. 1 of 8 signals had no reading.
+  A difference, not proof of cause.
+
+              x2x9q differs                                                               ▼▼▼▼▼▼ ▼▼▼▼▼
+
+  RESTARTS                                                                                                rise
+> rev 2 7d9f8c6b5d  2 pods  ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××··▲·▲·▲·▲·▲·▲··  +6        x2x9q  differs
+  rev 1 6c8d7f9b5   2 pods  ············································································  +0
+
+  ERRORS · share of requests answered with an error status                                                peak
+  rev 2 7d9f8c6b5d  2 pods  ××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××████████████████  75%       x2x9q  differs
+  rev 1 6c8d7f9b5   2 pods  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  2.03%
+
+  P50 · request duration, median
+  rev 2 7d9f8c6b5d  2 pods  ××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××████████████████  556ms     x2x9q  differs
+  rev 1 6c8d7f9b5   2 pods  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  80ms
+
+  MEMORY                                                                                                  of limit
+  rev 2 7d9f8c6b5d  2 pods  ××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××▁▇██████████████  99.2%     x2x9q  differs
+  rev 1 6c8d7f9b5   2 pods  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  38.1%
+                            ──────┬────────────┬───────────┬────────────┬────────────┬────━━━━━━─┯━━━━──
+  UTC                           21:20        21:30       21:40        21:50        22:00       22:10
+
+  ALSO DIFFERS  network (x2x9q 11.6kB/s, peers 25.2kB/s)
+  ALIKE ON ALL 4  cpu · p99
+  NOT READ  throttled (no data)
+
+  next  Enter open x2x9q    g group by node / zone / pod / container    B probe the pods now
+
+  ↑↓ signal · ←→ time · 1-4 window · a show every signal · p overlaid lines · r re-read · s queries · Esc back
+```
+
+By container, the rows are the containers of every Pod (`hx4mt/webservice`)
+and a container is compared with the same container of the other Pods; a
+signal that is measured per Pod is named in the line `PER POD ONLY`. A group
+whose label could not be determined is a row named "not known". `a` shows
+the page below.
+
+With `a`, each group is one small
 chart on the shared scale: the filled area is the median of the group's Pods,
 their maximum is a line above it and their minimum one dash per column
 inside it (in braille dots, `b`: a line and two thin lines), and the title
@@ -380,7 +725,14 @@ Marks are moments read from the objects themselves, plus one from the data:
   `lastState.terminated.finishedAt` among the Pod's containers.
 - `F first restart`: the first rise of the restart counter inside the window.
 
-A mark outside the window is listed with "(before window)" and not placed.
+On the short page `R` and `X` are guides through the chart and the rows
+under it, with one line each (`R rollout rev 2 at 21:58`); the first restart
+is the first `▲` of the restarts row and has no letter. A mark outside the
+window is named in the line `OUTSIDE THE WINDOW` and not placed. The caveat
+is the one beside the answer.
+
+On the page with every chart (`a`) the three marks are named in one line. A
+mark outside the window is listed with "(before window)" and not placed.
 The line ends with "order, not cause"; that caveat is kept when space is
 short. Nodes have no object mark.
 
@@ -389,10 +741,12 @@ short. Nodes have no object mark.
 | What the page shows | Meaning |
 | --- | --- |
 | charts with values | the queries were answered and had samples |
-| `no data`, "no samples in this window (not a zero)" | answered, matched nothing: missing data, not health |
+| `no data`, "no samples in this window (not a zero)", the line `NO DATA`, a row of `×` | answered, matched nothing: missing data, not health |
+| the line `NOT READ`, a read status in the warning colour (`9 of 10 queries`) | a query was refused or not answered; the line names it with its state |
+| an answer in the warning colour, `Not read is not healthy.` | the chart the answer is read off has no sample, or nothing could be read |
 | a line that stops, `– last 05:03` | the series has no later sample; it is not zero |
 | `denied`, `timeout`, `absent`, `unavailable` in a legend | that one query failed; the others are still drawn |
-| a page of text instead of charts | every query, or the Pod lookup, failed alike, or no Prometheus source is declared; it says which and points to `:sources` |
+| a page of text instead of charts | every query, or the Pod lookup, failed alike, or no Prometheus source is declared; the answer says which and points to `:sources`, and the keys named are `r` and `s` |
 
 Leaving the view or pressing a window key cancels the read in flight; a reply
 that arrives after the view closed or the destination changed is discarded.
@@ -415,7 +769,7 @@ window's name.
   observability-sources.md (8 s, 1 MiB, 32 series, 4096 samples), and all
   within 30 s. A Service adds one instant query and the configuration reads
   of the network path collector.
-- The per-Pod comparison is read when `p`, `n` or `g` is first pressed for a
+- The per-Pod comparison is read when `p` or `g` is first pressed for a
   window, and again on `r` or a window key; never while browsing. While the
   charts are being read again these keys wait for that read instead of
   cancelling it, and the comparison is then read for the charts that arrive.
@@ -449,5 +803,30 @@ window's name.
 - Per-interface network, custom metrics and raw PromQL are not offered here.
   Per-container series are offered only as the container grouping of the
   comparison.
+- The answer of the short page is derived by fixed rules from the samples of
+  one chart. It counts and orders; it does not diagnose. "Reached its limit"
+  needs a sample within 5% of the limit: a spike between two samples of a
+  long window is not counted, and a memory value is the peak within its
+  step, so a stretch can outlast the moment by up to that step. "Restarted
+  after" pairs each stretch with one rise of the counter between its first
+  sample and three steps after its last; it does not know which container
+  restarted or why.
+- A row under `ALSO` is one chart folded to one row of eight levels: it
+  shows the shape and whether a level is near the top of its own scale, not
+  a value. The number beside it is exact.
+- On the short page of the comparison a Pod's row is drawn against the
+  other Pods sample by sample with one other Pod being enough, so with two
+  Pods left at some time the row can stand up where the rule over the
+  window would not have been able to tell the two apart. A Pod that does
+  not differ over the window is always the baseline, whatever a single
+  sample of it did; `a` draws every Pod's own series.
+- The order of the signals on that page compares differences across units
+  by their share of the larger value. It is an order to read in, not a
+  ranking of severity.
+- The bands taken from `:slow` are that view's episodes at the time it was
+  read; they are not read again here, and are dropped when the window shown
+  reaches outside the one `:slow` read.
+- At 80x24 the chart at full size has three rows when the object has both
+  marks and a line of missing data; `a` or a taller terminal shows more.
 - The charts were exercised against the synthetic fixture and unit tests, not
   against a production Prometheus.

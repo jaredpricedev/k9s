@@ -596,7 +596,10 @@ func Render(p *Page, plan *Plan, o Options) Rendered {
 			if axis == nil {
 				axis = AxisLines(b, f, l, o)
 			}
-			text = axis[it.n]
+			// A page whose window is not a stretch of time has no axis.
+			if it.n < len(axis) {
+				text = axis[it.n]
+			}
 		case itFolded:
 			g := &p.Groups[it.group]
 			text = FoldedLine(g.Label, g.Color, g.items(), g.quiet(), plan.Width, o)

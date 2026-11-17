@@ -253,6 +253,26 @@ func (o Options) clip(text string, width int) string {
 	return runewidth.Truncate(text, width, tail)
 }
 
+// clipMiddle shortens text to a width in cells by leaving its middle out,
+// so that both its start and its end can be read.
+func (o Options) clipMiddle(text string, width int) string {
+	mark := o.words("…")
+	if cells(text) <= width || width < 2*cells(mark)+6 {
+		return o.clip(text, width)
+	}
+	runes := []rune(text)
+	end, used := len(runes), 0
+	for tail := (width - cells(mark)) / 2; end > 0; end-- {
+		w := runewidth.RuneWidth(runes[end-1])
+		if used+w > tail {
+			break
+		}
+		used += w
+	}
+	rest := string(runes[end:])
+	return runewidth.Truncate(text, width-cells(mark)-cells(rest), "") + mark + rest
+}
+
 // margin is the right margin: a wide screen keeps two cells free.
 func margin(width int) int {
 	if width >= 100 {
