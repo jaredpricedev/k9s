@@ -10,20 +10,24 @@ import (
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/hubble"
+	"github.com/derailed/k9s/internal/observability"
 	"k8s.io/client-go/tools/clientcmd/api"
 )
 
 // Context tracks K9s context configuration.
 type Context struct {
-	Hubble       hubble.Config `yaml:"hubble,omitempty"`
-	ClusterName  string        `yaml:"cluster,omitempty"`
-	ReadOnly     *bool         `yaml:"readOnly,omitempty"`
-	Skin         string        `yaml:"skin,omitempty"`
-	Namespace    *Namespace    `yaml:"namespace"`
-	View         *View         `yaml:"view"`
-	FeatureGates FeatureGates  `yaml:"featureGates"`
-	Proxy        *Proxy        `yaml:"proxy"`
-	mx           sync.RWMutex
+	Hubble hubble.Config `yaml:"hubble,omitempty"`
+	// Observability declares optional Prometheus, Alertmanager and Grafana
+	// sources for this context. Declaring one contacts nothing.
+	Observability observability.Sources `yaml:"observability,omitempty"`
+	ClusterName   string                `yaml:"cluster,omitempty"`
+	ReadOnly      *bool                 `yaml:"readOnly,omitempty"`
+	Skin          string                `yaml:"skin,omitempty"`
+	Namespace     *Namespace            `yaml:"namespace"`
+	View          *View                 `yaml:"view"`
+	FeatureGates  FeatureGates          `yaml:"featureGates"`
+	Proxy         *Proxy                `yaml:"proxy"`
+	mx            sync.RWMutex
 }
 
 // NewContext creates a new cluster configuration.
@@ -54,7 +58,15 @@ func NewContextFromKubeConfig(ks KubeSettings) (*Context, error) {
 }
 
 func (c *Context) merge(old *Context) {
-	if old == nil || old.Namespace == nil {
+	if old == nil {
+		return
+	}
+	// Sources are only ever edited by hand, so a save keeps what is on disk
+	// when the in-memory context declares none.
+	if !c.Observability.Declared() {
+		c.Observability = old.Observability
+	}
+	if old.Namespace == nil {
 		return
 	}
 	if c.Namespace == nil {

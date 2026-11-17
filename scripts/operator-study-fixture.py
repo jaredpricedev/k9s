@@ -20,6 +20,7 @@ import tempfile
 import threading
 import types
 from urllib.error import HTTPError
+from urllib.parse import parse_qs, quote
 from urllib.request import Request, urlopen
 
 
@@ -44,12 +45,28 @@ spec = importlib.util.spec_from_file_location("daily_workspace_journeys", HERE /
 daily = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(daily)
 demo = daily.journeys.demo
+sys.path.insert(0, str(HERE))
+import observability_sources_fixture as observed  # noqa: E402
 
 
 class StudyHandler(daily.WorkspaceHandler):
     """Add explicit missing-coverage states while retaining existing guards."""
 
     def do_GET(self):
+        proxied = observed.PROXY_PATH.match(self.path.split("?", 1)[0])
+        if proxied and proxied.group(1) == observed.NAMESPACE:
+            # Declared observability sources, reached the way the app reaches
+            # them: through the API server service proxy. Read-only.
+            parsed = self.record("GET")
+            code, body = self.server.observability.handle(
+                proxied.group(3), proxied.group(4), proxied.group(5) or "/", parse_qs(parsed.query))
+            payload = json.dumps(body).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return None
         if self.path.startswith("/apis/metrics.k8s.io/"):
             self.record("GET")
             return self.failure(403, "Forbidden", "Synthetic fixture denies metrics API reads")
@@ -82,8 +99,13 @@ class StudyHandler(daily.WorkspaceHandler):
         return super().do_GET()
 
 
-def study_objects(api):
-    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+def study_objects(api, deny_sources=()):
+    started = datetime.now(timezone.utc).replace(microsecond=0)
+    now = started.isoformat().replace("+00:00", "Z")
+    # Prometheus, Alertmanager and Grafana answers share the start time that
+    # every "minutes ago" below is measured from.
+    api.observability = observed.Sources(started.timestamp(), deny_sources)
+    api.objects.extend(observed.service_objects(now))
 
     def obj(api_version, kind, name, namespace, labels, spec=None, status=None):
         return {"apiVersion": api_version, "kind": kind, "metadata": {
@@ -378,6 +400,58 @@ def named_get(base, path):
         return json.loads(response.read())
 
 
+def smoke_sources(base):
+    """The declared sources answer through the service proxy and tell the
+    checkout-api story: healthy before the rollout, failing after it."""
+    proxy = "/api/v1/namespaces/monitoring/services/%s/proxy"
+    prometheus, alertmanager, grafana = (proxy % s for s in ("prometheus:9090", "alertmanager:9093", "grafana:3000"))
+    now = datetime.now(timezone.utc).timestamp()
+
+    def instant(expression, at):
+        value = named_get(base, prometheus + "/api/v1/query?query=" + quote(expression) + "&time=%.3f" % at)
+        assert value["status"] == "success", value
+        return value["data"]["result"]
+
+    ratio = ('(sum(rate(http_requests_total{namespace="apps",service="checkout-api",code=~"5.."}[300s]))'
+             ' / sum(rate(http_requests_total{namespace="apps",service="checkout-api"}[300s])))')
+    before, after = (float(instant(ratio, at)[0]["value"][1]) for at in (now - 3600, now))
+    assert before < 0.01 < 0.15 < after, (before, after)
+    latency = ('histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket'
+               '{namespace="apps",service="checkout-api"}[300s])))')
+    fast, slow = (float(instant(latency, at)[0]["value"][1]) for at in (now - 3600, now))
+    assert fast < 0.5 < 1.0 < slow, (fast, slow)
+    limits = instant('kube_pod_container_resource_limits{namespace="apps",resource="memory"}', now)
+    assert {int(item["value"][1]) for item in limits} == {256 * 1024 * 1024, 512 * 1024 * 1024}, limits
+    memory = named_get(base, prometheus + "/api/v1/query_range?query=" + quote(
+        'container_memory_working_set_bytes{namespace="apps",pod="%s"}' % observed.NEW_POD) +
+        "&start=%.3f&end=%.3f&step=15" % (now - 1800, now))["data"]["result"]
+    values = [float(v) for _, v in memory[0]["values"]]
+    assert len(memory) == 1 and max(values) <= 256 * 1024 * 1024 and max(values) > 240 * 1024 * 1024, max(values)
+    assert float(memory[0]["values"][0][0]) >= now - observed.ROLLOUT - 30, "new pod has samples before the rollout"
+    silent = instant('node_memory_MemAvailable_bytes{node="worker-b"}', now)
+    assert silent == [], "worker-b must have no node-exporter sample after it went silent"
+    alerts = named_get(base, alertmanager + "/api/v2/alerts")
+    states = sorted((a["labels"]["alertname"], a["status"]["state"]) for a in alerts)
+    assert ("CheckoutHighErrorRate", "active") in states and ("Watchdog", "active") in states, states
+    assert sum(1 for a in alerts if a["status"]["silencedBy"]) == 1
+    assert sum(1 for a in alerts if a["status"]["inhibitedBy"]) == 1
+    scoped = named_get(base, alertmanager + "/api/v2/alerts?filter=" + quote('namespace="apps"'))
+    assert len(scoped) == 3, [a["labels"]["alertname"] for a in scoped]
+    assert named_get(base, grafana + "/api/health")["database"] == "ok"
+    assert {d["uid"] for d in named_get(base, grafana + "/api/search?type=dash-db")} >= {"k8s-pod", "k8s-node"}
+    notes = named_get(base, grafana + "/api/annotations?from=%d&to=%d&tags=deploy" % ((now - 3600) * 1000, now * 1000))
+    assert len(notes) == 1 and "revision 2" in notes[0]["text"], notes
+    through = named_get(base, grafana + "/api/datasources/proxy/uid/prom-main/api/v1/query?query=" + quote("up{}"))
+    assert through["status"] == "success" and len(through["data"]["result"]) == 3
+    denied = observed.Sources(deny=("grafana",))
+    assert denied.handle("grafana", "3000", "/api/health", {})[0] == 403
+    assert denied.handle("prometheus", "9090", "/api/v1/status/buildinfo", {})[0] == 200
+    return ["Prometheus, Alertmanager and Grafana answer through the monitoring service proxy",
+            "checkout-api 5xx ratio %.3f before the rollout, %.3f now; p95 %.2fs before, %.2fs now" % (before, after, fast, slow),
+            "worker-b has no node-exporter sample after it stopped reporting",
+            "one silenced and one inhibited alert; --deny-source answers HTTP 403"]
+
+
 def smoke():
     api = daily.WorkspaceAPI()
     study_objects(api)
@@ -435,6 +509,7 @@ def smoke():
             except HTTPError as error:
                 assert error.code == 405, (method, error.code)
                 checks.append(method + " rejected with HTTP 405")
+        checks.extend(smoke_sources(base))
         return checks
     finally:
         api.shutdown()
@@ -448,6 +523,8 @@ def main():
     parser.add_argument("--binary", type=Path, help="application binary for the interactive session")
     parser.add_argument("--journal", type=Path, help="new private JSON request journal path (never overwritten)")
     parser.add_argument("--smoke", action="store_true", help="check named objects, mutation rejection and server cleanup")
+    parser.add_argument("--deny-source", action="append", default=[], choices=sorted(observed.SERVICES),
+                        help="answer HTTP 403 for this declared observability source (repeatable)")
     parser.add_argument("app_args", nargs=argparse.REMAINDER, help="optional application arguments after --")
     args = parser.parse_args()
     if args.smoke:
@@ -463,7 +540,7 @@ def main():
         parser.error("--journal already exists; choose a new path")
 
     api = daily.WorkspaceAPI()
-    study_objects(api)
+    study_objects(api, args.deny_source)
     thread = threading.Thread(target=api.serve_forever, daemon=True)
     thread.start()
     child = None
@@ -475,6 +552,11 @@ def main():
             env = isolated_environment(root, kubeconfig)
             (root / "config" / "k9plus" / "config.yaml").write_text(
                 "k9s:\n  skipLatestRevCheck: true\n  refreshRate: 2\n  ui:\n    splashless: true\n")
+            # Declare the three synthetic sources for the study context so the
+            # observability features work with no setup. Declaring contacts nothing.
+            context_dir = root / "config" / "k9plus" / "clusters" / "study-loopback" / "study-dev"
+            context_dir.mkdir(parents=True, exist_ok=True)
+            (context_dir / "config.yaml").write_text(observed.CONTEXT_CONFIG)
             command = [str(binary), "--kubeconfig", str(kubeconfig), "--readonly"]
             if args.app_args:
                 command.extend(args.app_args[1:] if args.app_args[0] == "--" else args.app_args)

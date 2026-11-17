@@ -68,6 +68,95 @@
             }
           }
         },
+        "observability": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "prometheus": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "service": { "type": "string" },
+                "url": { "type": "string" },
+                "tokenEnv": { "type": "string" }
+              }
+            },
+            "alertmanager": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "service": { "type": "string" },
+                "url": { "type": "string" },
+                "tokenEnv": { "type": "string" }
+              }
+            },
+            "grafana": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "service": { "type": "string" },
+                "url": { "type": "string" },
+                "tokenEnv": { "type": "string" },
+                "publicURL": { "type": "string" },
+                "datasource": { "type": "string" },
+                "dashboards": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "pod": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["uid"],
+                      "properties": {
+                        "uid": { "type": "string" },
+                        "namespaceVar": { "type": "string" },
+                        "podVar": { "type": "string" },
+                        "workloadVar": { "type": "string" },
+                        "nodeVar": { "type": "string" }
+                      }
+                    },
+                    "workload": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["uid"],
+                      "properties": {
+                        "uid": { "type": "string" },
+                        "namespaceVar": { "type": "string" },
+                        "podVar": { "type": "string" },
+                        "workloadVar": { "type": "string" },
+                        "nodeVar": { "type": "string" }
+                      }
+                    },
+                    "node": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["uid"],
+                      "properties": {
+                        "uid": { "type": "string" },
+                        "namespaceVar": { "type": "string" },
+                        "podVar": { "type": "string" },
+                        "workloadVar": { "type": "string" },
+                        "nodeVar": { "type": "string" }
+                      }
+                    },
+                    "namespace": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["uid"],
+                      "properties": {
+                        "uid": { "type": "string" },
+                        "namespaceVar": { "type": "string" },
+                        "podVar": { "type": "string" },
+                        "workloadVar": { "type": "string" },
+                        "nodeVar": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
         "hubble": {
           "type": "object",
           "additionalProperties": false,

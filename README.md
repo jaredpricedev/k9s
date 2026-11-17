@@ -123,7 +123,10 @@ compatibility; `:security-review` summarizes declared facts, not scanner or
 admission results; `:backup-review <controller-namespace>` reviews bounded
 Velero metadata, not recoverability; and `:history-review` runs bounded queries
 for the selected Pod against an explicitly configured Prometheus endpoint, not
-complete or UID-continuous history. Select a cert-manager Certificate and use
+complete or UID-continuous history. Prometheus, Alertmanager and Grafana can be
+declared per context ([docs/observability-sources.md](docs/observability-sources.md));
+`:sources` shows the declaration and probes it only on request, and nothing is
+discovered or contacted while browsing. Select a cert-manager Certificate and use
 `:operator-review` for bounded Certificate/Issuer evidence, not independent TLS
 verification; select a Service and use `:dependency-review` or Network review's
 `d` / Edges tab to inspect retained relationships, not prove dependency or health.

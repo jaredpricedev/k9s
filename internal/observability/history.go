@@ -8,9 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
-	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -24,8 +22,12 @@ const MaxSeries = 32
 const MaxSamples = 4096
 
 type Request struct {
-	Scope      provider.Scope
-	URL        string
+	Scope provider.Scope
+	// URL is a hand-typed Prometheus base URL. It is ignored, and replaced by
+	// the source description, when Source is set.
+	URL string
+	// Source is a client resolved from the context's declared sources.
+	Source     *Client `json:"-"`
 	Start, End time.Time
 	Step       time.Duration
 }
@@ -61,13 +63,20 @@ func Validate(r *Request) error {
 			return errors.New("invalid Pod scope")
 		}
 	}
-	if len(r.URL) > 2048 {
-		return errors.New("provider URL exceeds limit")
-	}
-	u, err := url.Parse(r.URL)
-	if err != nil || u.Hostname() == "" || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil || u.RawQuery != "" || u.ForceQuery ||
-		u.Fragment != "" || strings.Contains(r.URL, "#") {
-		return errors.New("use an HTTP(S) base URL without credentials, query or fragment")
+	if r.Source != nil {
+		if r.Source.Kind() != KindPrometheus {
+			return errors.New("history needs a prometheus source")
+		}
+		r.URL = r.Source.Display()
+	} else {
+		if len(r.URL) > 2048 {
+			return errors.New("provider URL exceeds limit")
+		}
+		u, err := parseBaseURL(r.URL)
+		if err != nil {
+			return err
+		}
+		r.URL = u.String()
 	}
 	if r.Start.IsZero() || r.End.IsZero() || !r.End.After(r.Start) || r.End.Sub(r.Start) > 24*time.Hour {
 		return errors.New("choose a positive UTC window of at most 24 hours")
@@ -80,7 +89,6 @@ func Validate(r *Request) error {
 	if r.Step < 15*time.Second {
 		r.Step = 15 * time.Second
 	}
-	r.URL = strings.TrimRight(u.String(), "/")
 	return nil
 }
 
@@ -96,53 +104,41 @@ func Collect(ctx context.Context, r Request) (*Snapshot, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = nil // Do not inherit proxy credentials or an unrelated endpoint mapping.
-	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	client := r.Source
+	if client == nil {
+		var err error
+		if client, err = NewURLClient(KindPrometheus, r.URL, ""); err != nil {
+			return nil, err
+		}
+		defer client.Close()
+	}
 	s := &Snapshot{Request: r, ObservedAt: time.Now().UTC()}
 	totalSeries, totalSamples := 0, 0
 	for i, q := range Queries(&r) {
 		e := Evidence{Query: q, Unit: []string{"cumulative CPU seconds", "memory working-set bytes"}[i], State: "unknown"}
-		u, _ := url.Parse(r.URL + "/api/v1/query_range")
-		params := url.Values{
+		// The shared bounded GET supplies the deadline, byte limit, redirect
+		// refusal and redaction; this adapter keeps its stricter retention.
+		body, st := client.Get(ctx, "/api/v1/query_range", url.Values{
 			"query": {q},
 			"start": {strconv.FormatFloat(float64(r.Start.UnixNano())/1e9, 'f', 9, 64)},
 			"end":   {strconv.FormatFloat(float64(r.End.UnixNano())/1e9, 'f', 9, 64)},
 			"step":  {strconv.FormatFloat(r.Step.Seconds(), 'f', 0, 64)},
-		}
-		u.RawQuery = params.Encode()
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
-		if err != nil {
-			return nil, errors.New("provider request unavailable")
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			return nil, errors.New("provider unavailable")
-		}
-		body, readErr := io.ReadAll(io.LimitReader(resp.Body, MaxBytes+1))
-		resp.Body.Close()
+		})
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		if readErr != nil {
-			return nil, errors.New("provider response unavailable")
-		}
-		if len(body) > MaxBytes {
+		switch {
+		case st.State == StateComplete:
+		case st.State == StateIncomplete:
 			return nil, errors.New("provider response exceeds limit")
-		}
-		if resp.StatusCode != http.StatusOK {
-			switch resp.StatusCode {
-			case 401, 403:
-				e.State = "denied"
-			case 404:
-				e.State = "absent"
-			default:
-				e.State = "unavailable"
-			}
+		case st.HTTPStatus == 0:
+			return nil, errors.New("provider unavailable")
+		case st.State == StateDenied, st.State == StateAbsent:
+			e.State = string(st.State)
+			s.Evidence = append(s.Evidence, e)
+			continue
+		default:
+			e.State = "unavailable"
 			s.Evidence = append(s.Evidence, e)
 			continue
 		}

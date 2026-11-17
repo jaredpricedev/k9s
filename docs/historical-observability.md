@@ -6,6 +6,13 @@ requires a caller-selected Prometheus HTTP(S) base URL and explicit UTC RFC3339
 start/end times. The defaults are the previous hour; only Request submits. `r`
 reopens that form. Ordinary browsing requires no provider.
 
+When the context declares a Prometheus source (see
+[observability-sources.md](observability-sources.md)) the form is prefilled
+with it, for example `service monitoring/prometheus:9090`, and Request reads
+through that source: the Kubernetes API service proxy with kube credentials,
+or the declared URL. Opening the form still contacts nothing. Replacing the
+prefilled text with a base URL uses that URL instead, with no credential.
+
 The adapter issues at most two GET query_range requests, for
 container_cpu_usage_seconds_total and container_memory_working_set_bytes with
 exact escaped namespace and Pod matchers. CPU is cumulative seconds, not a rate,

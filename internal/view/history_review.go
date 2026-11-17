@@ -26,6 +26,7 @@ type historyView struct {
 	chrome *tview.TextView
 	*Details
 	request         observability.Request
+	declared        *observability.Client
 	snapshot        *observability.Snapshot
 	loader          func(context.Context, observability.Request) (*observability.Snapshot, error)
 	cancel          context.CancelFunc
@@ -51,6 +52,12 @@ func (c *Command) historyReviewCommand() {
 			Context: target.Context, Namespace: c.app.Config.CachedNamespace(), TargetNamespace: target.Namespace,
 			GVR: target.GVR.String(), Name: target.Name, UID: string(target.UID), Revision: c.app.Config.DestinationRevision(),
 		}, Start: now.Add(-time.Hour), End: now}}
+	// A declared Prometheus source becomes the default of the form. Resolving
+	// it reads configuration only; Request is still what contacts it.
+	if source, _ := observabilitySource(c.app, observability.KindPrometheus); source != nil {
+		v.declared = source
+		v.request.Source, v.request.URL = source, source.Display()
+	}
 	if err := c.app.inject(v, false); err != nil {
 		c.app.Flash().Err(err)
 		return
@@ -126,7 +133,12 @@ func (v *historyView) form() {
 	r := v.request
 	address, start, end := r.URL, r.Start.UTC().Format(time.RFC3339), r.End.UTC().Format(time.RFC3339)
 	form := tview.NewForm().SetItemPadding(0)
-	form.AddInputField("URL", address, 24, nil, func(s string) { address = s })
+	label, width := "URL", 24
+	if v.declared != nil {
+		// Zero fills the dialog so the declared source is readable in full.
+		label, width = "Source", 0
+	}
+	form.AddInputField(label, address, width, nil, func(s string) { address = s })
 	form.AddInputField("Start UTC", start, 24, nil, func(s string) { start = s })
 	form.AddInputField("End UTC", end, 24, nil, func(s string) { end = s })
 	const page = "history-source-form"
@@ -139,7 +151,12 @@ func (v *historyView) form() {
 			return
 		}
 		var err error
-		r.URL = address
+		// The untouched default means the declared source; any other text is
+		// a hand-typed base URL, exactly as before.
+		r.URL, r.Source = address, nil
+		if v.declared != nil && strings.TrimSpace(address) == v.declared.Display() {
+			r.Source = v.declared
+		}
 		r.Start, err = time.Parse(time.RFC3339, start)
 		if err == nil {
 			r.End, err = time.Parse(time.RFC3339, end)
@@ -160,7 +177,11 @@ func (v *historyView) form() {
 	form.SetButtonBackgroundColor(styles.ButtonBgColor.Color()).SetButtonTextColor(styles.ButtonFgColor.Color()).
 		SetLabelColor(styles.LabelFgColor.Color()).SetFieldTextColor(styles.FieldFgColor.Color()).SetFieldBackgroundColor(styles.BgColor.Color())
 	modal := ui.NewModalForm("Pod history", form)
-	modal.SetText("Two scoped CPU/memory queries. Provider cluster mapping and historical Pod UID are unverified. Max 24h. Request contacts this URL.")
+	text := "Two scoped CPU/memory queries. Provider cluster mapping and historical Pod UID are unverified. Max 24h. Request contacts this URL."
+	if v.declared != nil {
+		text = "Two scoped CPU/memory queries. Source is the Prometheus declared for this context; type a base URL to use another. Historical Pod UID is unverified. Max 24h. Request contacts it."
+	}
+	modal.SetText(text)
 	modal.SetTextColor(styles.FgColor.Color()).SetDoneFunc(func(int, string) { dismiss() })
 	v.app.Content.Pages.AddPage(page, modal, false, true)
 	v.app.SetFocus(modal)
