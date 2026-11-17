@@ -158,18 +158,23 @@ func TestGraphTargetNeedsOneSupportedObject(t *testing.T) {
 		{SelectedResourceTarget{GVR: client.DsGVR, Namespace: "apps", Name: "a"}, "DaemonSet apps/a"},
 		{SelectedResourceTarget{GVR: client.RsGVR, Namespace: "apps", Name: "a"}, "ReplicaSet apps/a"},
 		{SelectedResourceTarget{GVR: client.NodeGVR, Name: "worker-b"}, "Node worker-b"},
-		{SelectedResourceTarget{GVR: client.SvcGVR, Namespace: "apps", Name: "a"}, ""},
+		// A Service is graphed through the Pods behind it, which are resolved
+		// by its captured UID.
+		{SelectedResourceTarget{GVR: client.SvcGVR, Namespace: "apps", Name: "a", UID: "uid-a"}, "Service apps/a"},
+		{SelectedResourceTarget{GVR: client.CmGVR, Namespace: "apps", Name: "a"}, ""},
 		{SelectedResourceTarget{GVR: client.PodGVR, Name: "a"}, ""},
 		{SelectedResourceTarget{UnavailableReason: "no selection"}, ""},
 	} {
 		got, err := graphTargetFor(tc.target)
 		if tc.want == "" {
-			require.ErrorContains(t, err, "Select a Pod, Deployment, StatefulSet, DaemonSet, ReplicaSet or Node first")
+			require.ErrorContains(t, err, "Select a Pod, Deployment, StatefulSet, DaemonSet, ReplicaSet, Service or Node first")
 			continue
 		}
 		require.NoError(t, err)
 		require.Equal(t, tc.want, got.Label())
 	}
+	_, err := graphTargetFor(SelectedResourceTarget{GVR: client.SvcGVR, Namespace: "apps", Name: "a"})
+	require.ErrorContains(t, err, "Select the Service in its list first", "without its UID the Pods behind a Service are not resolved")
 }
 
 func TestGraphPodQueriesAreFixedTemplatesWithEscapedMatchers(t *testing.T) {
@@ -213,10 +218,12 @@ func TestGraphPodQueriesAreFixedTemplatesWithEscapedMatchers(t *testing.T) {
 
 func TestGraphWorkloadFindsPodsThroughKubeStateMetricsAndFoldsPastTheCap(t *testing.T) {
 	dp := &graphTarget{Kind: "Deployment", Namespace: "apps", Name: "checkout.api"}
-	require.Equal(t, `count by (pod) (max_over_time(kube_pod_info{namespace="apps",created_by_kind="ReplicaSet",created_by_name=~"checkout\\.api-[a-z0-9]{5,10}"}[3600s]))`,
+	// The lookup also keeps the Node and the owner of each Pod: they place a
+	// Pod in a group when the series are regrouped.
+	require.Equal(t, `count by (pod,node,created_by_kind,created_by_name) (max_over_time(kube_pod_info{namespace="apps",created_by_kind="ReplicaSet",created_by_name=~"checkout\\.api-[a-z0-9]{5,10}"}[3600s]))`,
 		graphOwnerQuery(dp, time.Hour).String())
 	sts := &graphTarget{Kind: "StatefulSet", Namespace: "ops", Name: "ledger-db"}
-	require.Equal(t, `count by (pod) (max_over_time(kube_pod_info{namespace="ops",created_by_kind="StatefulSet",created_by_name="ledger-db"}[900s]))`,
+	require.Equal(t, `count by (pod,node,created_by_kind,created_by_name) (max_over_time(kube_pod_info{namespace="ops",created_by_kind="StatefulSet",created_by_name="ledger-db"}[900s]))`,
 		graphOwnerQuery(sts, 15*time.Minute).String())
 
 	few := buildGraphPlan(sts, []string{"ledger-db-0", "ledger-db-1"}, 30*time.Second)
@@ -645,9 +652,14 @@ func TestGraphIsRegisteredAsCommandPaletteEntryAndListKey(t *testing.T) {
 	command.updateSuggestionAliases()
 	require.Contains(t, command.suggestionAliases(), graphCommandToken)
 
-	// Honest reasons: the wrong kind of selection, and no declared source.
+	// Honest reasons: the wrong kind of selection, a Service without its
+	// captured UID, and no declared source.
+	configMap := SelectedResourceTarget{Context: v.target.Context, GVR: client.CmGVR, Namespace: "apps", Name: "checkout-api"}
+	require.Contains(t, graphAvailability(v.app, configMap), "Select a Pod, Deployment, StatefulSet, DaemonSet, ReplicaSet, Service or Node first")
 	service := SelectedResourceTarget{Context: v.target.Context, GVR: client.SvcGVR, Namespace: "apps", Name: "checkout-api"}
-	require.Contains(t, graphAvailability(v.app, service), "Select a Pod, Deployment, StatefulSet, DaemonSet, ReplicaSet or Node first")
+	require.Contains(t, graphAvailability(v.app, service), "Select the Service in its list first")
+	service.UID = "uid-checkout"
+	require.Empty(t, graphAvailability(v.app, service), "a Service is graphed through the Pods behind it")
 	ct, err := v.app.Config.CurrentContext()
 	require.NoError(t, err)
 	ct.Observability = observability.Sources{}
@@ -679,6 +691,11 @@ func TestGraphWrapKeepsEveryCharacterAndBrackets(t *testing.T) {
 		if width >= 60 {
 			require.Contains(t, strings.Join(lines, "\n"), "[a-z0-9]", "width %d", width)
 		}
+	}
+	// A list of Pod names breaks between names, never inside one.
+	names := `  sum by (pod) (up{namespace="gitlab",pod=~"gitlab-webservice-default-6f9c7d5b84-2bq7k|gitlab-webservice-default-6f9c7d5b84-8wzpd|gitlab-webservice-default-6f9c7d5b84-hx4mt"})`
+	for _, line := range graphWrap(names, 120, "  ")[1:] {
+		require.True(t, strings.HasPrefix(strings.TrimSpace(line), "pod=~") || strings.HasPrefix(strings.TrimSpace(line), "gitlab-webservice-default-"), "a name was cut: %q", line)
 	}
 	require.Equal(t, []string{"one two three four", "five"}, graphWrap("one two three four five", 20, ""))
 	require.Equal(t, []string{"a", "", "b"}, graphWrap("a\n\nb", 20, ""))

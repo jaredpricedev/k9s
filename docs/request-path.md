@@ -335,6 +335,14 @@ bytes. It must not be given text assembled from cluster names or input.
 
 `:graph` uses the solid stroke, with each line's letter repeated along it
 when a chart has several lines, in place of the dotted lines it drew before.
+Its per-Pod comparison (`p`, [graphs.md](graphs.md#which-pod-is-different-p))
+uses the grid, the sparkline and the outlier rule, and resolves the app hop
+of the Service in front of the Pods to add the profile's per-Pod signals
+(latency, queue, thread pool) to its own. For that page the grid gained a
+`Ceiling`, so that the scale stays the same from page to page; a count axis
+now ends on a whole number with a whole half, a duration axis past a minute
+on whole minutes or hours, and a row that carries a level line is labelled
+with that level's value.
 `:impact` keeps its eight-level block trend: a four-level line would lose
 detail in the six to twelve cells it has per side.
 

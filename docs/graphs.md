@@ -6,8 +6,11 @@ from the Prometheus source declared for the context
 seen against a limit when metrics-server is denied or absent.
 
 It opens on demand: `m` on a Pod, Deployment, StatefulSet, DaemonSet,
-ReplicaSet or Node list, `:graph` (or `:graph 15m|1h|6h|24h`) with such an
-object selected, or "Graph: usage vs limits over time" in the Ctrl-O palette.
+ReplicaSet, Service or Node list, `:graph` (or `:graph 15m|1h|6h|24h`) with
+such an object selected, or "Graph: usage vs limits over time" in the Ctrl-O
+palette. For a workload or a Service, `p` on the page (or `:graph pods`, or
+"Per-Pod graphs: which Pod differs" in the palette) switches to one small
+chart per Pod; see [Which Pod is different](#which-pod-is-different-p).
 `m` is the same key in `:problems`, `:alerts` and `:timeline`, where it graphs
 the object of the selected row (in `:timeline`, the focused entry's object or
 the timeline's own workload, over the timeline's window). In `:impact`,
@@ -66,6 +69,17 @@ Cursor 05:19:00Z (window end) · restarts 6, +6 in window
   answered and matched nothing in the whole window.
 - The Y axis starts at zero and is labelled at the top, the middle and zero,
   in Kubernetes units (Mi/Gi, millicores below one core) or bytes per second.
+  The top is a round number whose half is round too: a count ends on a whole
+  number with a whole half (2, 4, 6, 10, 20, never a tick at 0.5 or 2.5), and
+  a duration longer than a minute ends on whole minutes or hours.
+- A row that carries a limit, request, allocatable or size line is labelled
+  with that level's own value (`1.5 ┤───`), so a line never sits on a row
+  that names another number. Data is always drawn over a level line, never
+  under it. In a chart only a few rows high a request and a limit can fall
+  into the same text row; then only the limit is drawn there, and the legend
+  still gives both values.
+- A legend takes at most two lines. Entries that do not fit are counted
+  (`+1 more`), never dropped silently; `s` lists every series.
 - All charts share the time axis at the bottom, labelled with UTC clock
   times. `↑`/`↓` show the charts that do not fit; the second line says how
   many are shown. At 80x24 two charts fit; at 60 columns the page keeps one
@@ -116,7 +130,23 @@ A workload's Pods are found with one instant query of `kube_pod_info` over
 the window (`created_by_kind`, `created_by_name`), so Pods that a rollout has
 already replaced are still drawn. A Deployment is matched through ReplicaSets
 named `<deployment>-<hash>`. If that query names no Pod, the page says so and
-asks nothing else; kube-state-metrics is required for a workload graph.
+asks nothing else; kube-state-metrics is required for a workload graph. The
+same query keeps each Pod's `node`, `created_by_kind` and `created_by_name`
+labels, which place the Pod in a group when the series are regrouped.
+
+### Services
+
+A Service is graphed through the Pods behind it. They are resolved from the
+cluster, with your credentials, by the bounded and UID-checked collector of
+`:network-review` ([network-path-review.md](network-path-review.md)): the
+Pods the Service's selector matches now and the Pods its EndpointSlices name.
+A Service that was deleted and recreated under the same name is not followed.
+The charts are the workload charts for those Pods; there are no rollout marks,
+because a Service has no revisions. A Pod the Service selected earlier in the
+window and no longer selects is not drawn, and the `s` page says so. When the
+Service cannot be read or selects no Pod, the page says which and asks
+Prometheus nothing. One more instant query of `kube_pod_info` gives the Node
+and owner of each Pod; without it the charts are still drawn.
 
 Up to four Pods are drawn as one line each. More are folded into the minimum,
 average and maximum across Pods, and the second line says how many Pods were
@@ -125,6 +155,140 @@ its Pods (`min limit`, `min request`): after a rollout that lowers a limit,
 the level steps down where the first Pod with the new limit appears. At most
 30 Pod names (900 characters) go into one matcher; Pods beyond that are
 counted on the page as NOT READ.
+
+## Which Pod is different (`p`)
+
+With several Pods the overlaid lines run on top of each other. `p` draws one
+small chart per Pod instead, all on one Y scale and one time axis, so the Pod
+that behaves differently is the chart that looks different.
+
+```
+Graph · Deployment gitlab/gitlab-webservice-default · last 1h to 09:41Z · step 30s
+read 09:41:29Z · 13 of 13 queries answered · 3 pods
+throttled*  cpu*  memory  restarts  [p99*]  5xx  queued*  free-threads*  busy-threads*  network
+* hx4mt differs in 6 of 10 signals: throttled, cpu, p99, queued, free-threads, busy-threads · a difference, not a cause
+P99 by pod · worst first by peak · Rails request duration, 99th percentile, gitlab-webservice profile
+     hx4mt · worker-f    OUTLIER · peak 47.9s   8wzpd · worker-e    peak 346ms   2bq7k · worker-d    peak 346ms
+50s ┤       ⡆           ⢰⢲                  ┆  │                             ┆  │                             ┆
+25s ┤      ⡇⠘⡆          ⡇ ⡇              ⡇⡇ ┆  │                             ┆  │                             ┆
+  0 ┤⣀⣀⣀⣀⣀⡼  ⢸⣀⣀⣀⣀⣀⣀⣀⣀⣀⡇   ⣇⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡼  ⣇⣀  │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀  │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀
+
+EVERY SIGNAL · one row per signal, each on its own scale · the number is what ranks the Pod · * differs from its peers
+                hx4mt · worker-f                 8wzpd · worker-e                 2bq7k · worker-d
+  throttled*    ⣀⣀⣀⣸⠙⢲⣀⣀⣀⣀⣀⣰⠚⠙⢲⣀⣀⣀⣀⣀⣀⣰⠒⢲⣀ 90%*      ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ 1.26%     ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ 1.26%
+> p99*          ⣀⣀⣀⣸⠙⢲⣀⣀⣀⣀⣀⣠⠼⠙⢲⣀⣀⣀⣀⣀⣀⣰⠲⢤⣀ 47.9s*    ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ 346ms     ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ 346ms
+Cursor 09:41:00Z (window end) · hx4mt 346ms · 8wzpd 346ms · 2bq7k 346ms
+```
+
+- The third line names every signal. The selected one is in brackets; a star
+  marks a signal in which a Pod differs from its peers; a signal that could
+  not be compared carries the reason (`5xx (no data)`, `throttled (denied)`).
+  `n` and `Shift-N` step through the signals; from the overlaid charts `n`
+  opens this page. A page opens on the first signal in which a Pod differs,
+  else on the first that has samples. Where the names do not all fit, the
+  ones on either side are counted (`+4 earlier`, `+5 more`).
+- The fourth line says which Pod differs and in which signals. It states a
+  difference between peers over the same window; it never says why. That
+  caveat is kept when the line is shortened.
+- Charts are sorted worst first: by the peak, by the lowest value for a
+  signal that is worse when low (free threads), by the rise of a counter
+  (restarts), and for memory by the peak as a share of the limit when every
+  Pod has one. Each title has the short Pod name, its Node, the word
+  `OUTLIER` where it applies and the ranking number; with room also the last
+  value. All titles of a page take the same form. A Pod that was asked for
+  and has no samples is still drawn, as `no samples`, last.
+- A limit is drawn as a `─` level in the CPU and memory charts and is part
+  of the shared scale.
+- `←`/`→` move one cursor through every chart at once. The readout under the
+  charts lists every Pod's value at that time (`–` where a Pod has no sample
+  there), and counts the Pods it has no room for.
+- Pods that do not fit are counted in the second line (`pods 1-4 of 12`) and
+  `↑`/`↓` page through them. The scale is that of all Pods on every page.
+- Where the page is tall enough, a table under the charts shows every signal
+  at once: one row per signal, one thin trend per Pod on that row's own
+  scale, and the number that ranks the Pod, starred where the Pod differs.
+  The Pods keep the order of the charts above.
+- At 80x24 two by two charts fit. Below 72 columns the page is a ranked list
+  instead: one row per Pod with its Node, a thin trend on the shared scale,
+  the ranking number, the value at the cursor and `OUTLIER`. Under it, where
+  there is room, every signal is one row with its worst Pod, that Pod's
+  number and the median of all Pods; signals without a row are counted.
+  Narrower still, the Node column goes first and then the value at the
+  cursor (the header then no longer names it); a name is shortened last.
+- The page fits from 40x12 up, the smallest size the view draws at: the key
+  line is always the last line, and a status that does not fit two lines
+  keeps the count of what is not shown.
+- `p` returns to the overlaid lines. `s` lists the per-Pod queries too.
+- On a page whose read did not succeed there is nothing to compare; `p`, `n`
+  and `g` say so and point at `r`.
+
+### When a Pod is called an OUTLIER
+
+Each Pod is reduced to one number per signal over the window (the number it
+is ranked by). A Pod is an `OUTLIER` when that number is far from the median
+of all Pods: a modified z-score of at least 3.5 on the median absolute
+deviation, at least twice the median (or at most half of it), and further
+from the median than a noise floor (5 percentage points for a ratio, 0.1 s,
+0.1 cores, 64Mi, 10 kB/s, 1 for a count). Throttling, restarts and profile
+signals that are worse when high only mark a Pod above its peers; signals
+that are worse when low only below; CPU, memory and network either way.
+Fewer than three Pods are never compared, and the page says so. A Pod that
+is not marked is not thereby healthy, and a mark is not a cause.
+
+### Signals and the metrics they need
+
+| Signal | What is read per Pod | Metric |
+| --- | --- | --- |
+| `throttled` | share of CPU periods in which a container was held at its limit | `container_cpu_cfs_throttled_periods_total` / `container_cpu_cfs_periods_total` |
+| `cpu` | cores used, against the Pod's limit | `container_cpu_usage_seconds_total`, `kube_pod_container_resource_limits{resource="cpu"}` |
+| `memory` | working set, against the Pod's limit | `container_memory_working_set_bytes`, `kube_pod_container_resource_limits{resource="memory"}` |
+| `restarts` | the restart counter | `kube_pod_container_status_restarts_total` |
+| profile signals | latency, error share, queue and thread pool, as the request-path profiles of the app hop declare them | see [request-path.md](request-path.md) |
+| `network` | receive plus transmit bytes per second | `container_network_receive_bytes_total`, `container_network_transmit_bytes_total` |
+
+The profile signals come from the request-path declaration of the Service in
+front of the Pods (`requestPath.services.<namespace/name>.app`, else the
+defaults `red` and `container-cpu`). For a Service that is the Service
+itself. For a workload it is a Service of the namespace whose selector
+matches the workload's Pod template, found with one Get of the workload and
+one list of at most 200 Services; a Service that has a declaration is
+preferred, else the first by name, and the `s` page says which was used and
+why. Of a profile, the signals that name a worse side and can be read per Pod
+are compared (for `gitlab-webservice`: `p99`, `5xx`, `queued`,
+`free-threads`, `busy-threads`), at most six; the two `container-cpu`
+signals are the page's own `throttled` and `cpu`. A signal whose metric is
+not scraped shows as `no data` in the strip and is not drawn as zeros.
+
+## Regroup (`g`)
+
+`g` folds the same per-Pod series into groups, and `Shift-G` steps back:
+by pod, by container, by revision, by node, by zone. Each group is one small
+chart on the shared scale: the line is the median of the group's Pods, the
+two thin lines are their minimum and maximum, and the title gives the group,
+its size, the Pod in it that is an `OUTLIER` and the number the group is
+ranked by. That number is its worst Pod's (the peak, the lowest value or the
+largest rise); with room the title adds the latest value of the median and
+says that it is the median (`largest +6 in window · median now 3`). The word
+belongs to a Pod, not to the group: a short title of a group of several Pods
+counts them (`1 OUTLIER`). Groups are sorted worst first. So "only the Pods
+on one Node", "only revision 2" or "only one container" is one chart that
+looks different.
+
+| Grouping | A Pod's group comes from |
+| --- | --- |
+| container | the `container` label of the series; one more read per signal that has it (`throttled`, `cpu`, `memory`, `restarts`), made the first time this grouping is shown. A container is compared with the same container of the other Pods. A profile signal or the network is measured per Pod and says so instead of drawing. |
+| revision | `created_by_name` of `kube_pod_info` when the owner is a ReplicaSet (the pod-template hash). For a StatefulSet or DaemonSet, `label_controller_revision_hash` of `kube_pod_labels`, which kube-state-metrics exposes only when that label is allow-listed. The title is `rev N hash` when the object history that the axis marks read names the revision. |
+| node | the `node` label of `kube_pod_info` |
+| zone | `label_topology_kubernetes_io_zone` of `kube_node_labels` for the Pod's Node, one instant query |
+
+The line under the readout names the grouping, where it came from, the size
+of every group and the Pods whose group could not be determined, with the
+reason (`zone not known for 8wzpd (kube_node_labels names no zone for their
+Nodes)`). Those Pods are drawn as a group of their own named "not known";
+no Pod is left out. A Pod name that appears on two Nodes within the window
+(a StatefulSet Pod recreated elsewhere) is placed on neither. The cursor
+readout gives the median of each group at the cursor; in the ranked list
+that column is headed `MEDIAN` and the time.
 
 ## Axis marks
 
@@ -174,14 +338,41 @@ window's name.
 - One page is ten GETs for a Pod, eleven for a workload drawn per Pod,
   fifteen for a folded workload and eight for a Node, four at a time, each bounded as described in
   observability-sources.md (8 s, 1 MiB, 32 series, 4096 samples), and all
-  within 30 s.
+  within 30 s. A Service adds one instant query and the configuration reads
+  of the network path collector.
+- The per-Pod comparison is read when `p`, `n` or `g` is first pressed for a
+  window, and again on `r` or a window key; never while browsing. While the
+  charts are being read again these keys wait for that read instead of
+  cancelling it, and the comparison is then read for the charts that arrive.
+  Leaving the page cancels a comparison read that is in flight; coming back
+  asks it once more. It is one
+  range query per signal (five, plus at most six from profiles), two for the
+  limits and at most two instant label lookups, minus the series the charts
+  already hold for the same window. Regrouping by container adds four. The
+  same per-query limits apply: more than 32 series (Pods, or Pods times
+  containers) or 4096 samples cut an answer, and the page then says
+  `cut at the series or sample limit` in the second line and `CUT` beside the
+  signal. At most 30 Pod names go into a matcher, as on the charts.
+- The Pods of a Service are the ones it selects now; the network path
+  collector reads at most 16 EndpointSlice target Pods that the selector did
+  not already return.
+- The comparison ranks a Pod by one number over the whole window. A Pod that
+  was different for a short part of a long window can be hidden by that; a
+  shorter window (`1`) shows it. Free threads of 7, 4 and 0 mark nobody: with
+  three Pods the rule needs a clear gap.
+- The band of a group is computed here from the per-Pod series, so it covers
+  only the Pods that were read. The limit drawn in a group is the lowest
+  limit among its Pods. Per-container limits are not drawn.
+- The thin trend of the table of every signal has four levels per row; it
+  shows the shape, the number beside it is exact.
 - A memory value is the peak within its step (at least one minute); a rate is
   taken over four steps and at least two minutes, so short spikes in CPU or
   network are averaged.
 - Lines are not joined across more than one and a half steps.
 - Node charts require a `node` label on node-exporter series. Setups that
   identify nodes only by `instance` show `no data` for CPU, memory and disk.
-- Per-container lines, per-interface network, custom metrics and raw PromQL
-  are not offered.
+- Per-interface network, custom metrics and raw PromQL are not offered here.
+  Per-container series are offered only as the container grouping of the
+  comparison.
 - The charts were exercised against the synthetic fixture and unit tests, not
   against a production Prometheus.

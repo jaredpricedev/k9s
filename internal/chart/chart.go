@@ -10,6 +10,7 @@ package chart
 
 import (
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -234,27 +235,52 @@ type Tick struct {
 	Label string
 }
 
-// Ticks labels the top, the bottom and, from four rows up, the middle.
-func (p *Panel) Ticks(height int) []Tick {
+// Ticks labels the top, the bottom and, from four rows up, the middle. A
+// row that carries a level line (a limit, a request) is labelled with that
+// level's own value instead, so that a line never sits on a row that names
+// another number; the top and the bottom row keep the scale.
+func (p *Panel) Ticks(height int) []Tick { return p.ticks(height, 4) }
+
+func (p *Panel) ticks(height, yDots int) []Tick {
 	if height < 1 {
 		return nil
 	}
 	top := p.Top()
 	ticks := []Tick{{Row: 0, Label: p.Unit.Format(top)}}
-	if height >= 4 {
-		ticks = append(ticks, Tick{Row: rowOf(top/2, top, height), Label: p.Unit.Format(top / 2)})
-	}
 	if height >= 2 {
 		ticks = append(ticks, Tick{Row: height - 1, Label: "0"})
 	}
+	taken := map[int]bool{0: true, height - 1: true}
+	for i := range p.Series {
+		s := &p.Series[i]
+		if s.Kind != Reference || len(s.Points) == 0 {
+			continue
+		}
+		// The latest level names the row; where a level stepped during
+		// the window, the earlier part runs on an unlabelled row.
+		level := s.Points[len(s.Points)-1].V
+		if row := height - 1 - levelOf(level, top, height*yDots)/yDots; !taken[row] {
+			taken[row] = true
+			ticks = append(ticks, Tick{Row: row, Label: p.Unit.Format(level)})
+		}
+	}
+	if row := rowOf(top/2, top, height); height >= 4 && !taken[row] {
+		ticks = append(ticks, Tick{Row: row, Label: p.Unit.Format(top / 2)})
+	}
+	sort.Slice(ticks, func(a, b int) bool { return ticks[a].Row < ticks[b].Row })
 	return ticks
 }
 
-// GutterWidth is the width the Y labels of a panel need.
+// GutterWidth is the width the Y labels of a panel need at any height.
 func (p *Panel) GutterWidth() int {
 	width := 1
 	for _, tick := range p.Ticks(4) {
 		width = max(width, runewidth.StringWidth(tick.Label))
+	}
+	for i := range p.Series {
+		if s := &p.Series[i]; s.Kind == Reference && len(s.Points) > 0 {
+			width = max(width, runewidth.StringWidth(p.Unit.Format(s.Points[len(s.Points)-1].V)))
+		}
 	}
 	return width
 }
@@ -374,7 +400,7 @@ func (p *Panel) Render(f Frame, height, gutter int, o Options) []string {
 	}
 	_, drawn := p.Max()
 	ticks := make(map[int]string)
-	for _, tick := range p.Ticks(height) {
+	for _, tick := range p.ticks(height, yDots) {
 		if _, taken := ticks[tick.Row]; !taken {
 			ticks[tick.Row] = tick.Label
 		}
