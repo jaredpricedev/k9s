@@ -72,6 +72,19 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "red": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "requests": { "type": "string" },
+                "codeLabel": { "type": "string" },
+                "errorCodes": { "type": "string" },
+                "durationBuckets": { "type": "string" },
+                "namespaceLabel": { "type": "string" },
+                "workloadLabel": { "type": "string" },
+                "podLabel": { "type": "string" }
+              }
+            },
             "prometheus": {
               "type": "object",
               "additionalProperties": false,

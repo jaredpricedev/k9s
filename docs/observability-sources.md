@@ -49,6 +49,10 @@ k9s:
 
 Each source has exactly one of `service` or `url`.
 
+An optional `red:` block under `k9s.observability` maps the HTTP request,
+error and duration metric and label names used by `:impact`; it is described
+in [impact.md](impact.md) and contacts nothing.
+
 `service: namespace/name:port` (or `namespace/https:name:port` for a Service
 that serves TLS; the port may be a number or a port name). The source is
 reached through the Kubernetes API server service proxy,
