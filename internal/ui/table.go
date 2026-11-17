@@ -75,6 +75,7 @@ type Table struct {
 	literalFields      bool
 	layoutWidth        int
 	columnWidths       map[string]int
+	hideWhy            bool
 	health             tableHealth
 	trends             map[string]*rowTrend
 	trendAt            time.Time
@@ -606,6 +607,7 @@ func (t *Table) shouldExcludeColumn(h model1.HeaderColumn) bool {
 		(h.Name == "NAMESPACE" && !t.GetModel().ClusterWide()) ||
 		(h.MX && !t.hasMetrics) ||
 		(h.VS && vul.ImgScanner == nil) ||
+		(h.Name == tableWhyColumn && t.hideWhy) ||
 		(t.columnWidths != nil && t.columnWidths[h.Name] == 0)
 }
 
@@ -767,8 +769,22 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 		if t.styles != nil {
 			p := &t.presentation
 			cellColor = p.text
+			own := rendererLevel(re.Row.Level)
 			if statusColumn(h[c].Name) {
-				cellColor = t.statusColor(h[c].Name, original, fgColor)
+				// A bare count has no meaning of its own; where the renderer
+				// gave a verdict it replaces the legacy row color as the hint.
+				fallback := fgColor
+				switch own {
+				case levelFailure:
+					fallback = model1.ErrColor
+				case levelWarning:
+					fallback = model1.PendingColor
+				case levelProgress:
+					fallback = model1.StdColor
+				}
+				cellColor = t.statusColor(h[c].Name, original, fallback)
+			} else if h[c].Name == tableWhyColumn && own != levelText {
+				cellColor = t.levelColor(own)
 			}
 			cell.SetBackgroundColor(p.canvas)
 		}

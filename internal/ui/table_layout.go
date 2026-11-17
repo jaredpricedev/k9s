@@ -66,15 +66,20 @@ func (t *Table) selectedForeground(color tcell.Color) tcell.Color {
 // fitColumns reserves complete Pod diagnostics before optional columns. It
 // changes only presentation; original fields and references stay in the model.
 func (t *Table) fitColumns(data *model1.TableData, pads MaxyPad) {
-	t.columnWidths = nil
+	t.columnWidths, t.hideWhy = nil, false
 	_, _, width, _ := t.GetInnerRect()
 	t.layoutWidth = width
 	if width <= 0 || t.wide {
 		return
 	}
 	if t.gvr.GVR().Resource != "pods" {
-		if width < 96 {
-			t.fitStatusColumns(data, pads, width)
+		// The cause column exists only while some listed row reports a cause.
+		why := t.whyWidth(data)
+		t.hideWhy = why == 0
+		// A split keeps the state columns; a list without any (Jobs,
+		// Services) keeps its natural columns and still shows the cause.
+		if (width >= 96 || !t.fitStatusColumns(data, pads, width, why)) && why > 0 {
+			t.fitWhyColumns(data, pads, width, why)
 		}
 		return
 	}
@@ -175,7 +180,7 @@ func (t *Table) fitColumns(data *model1.TableData, pads MaxyPad) {
 // fitStatusColumns keeps native/provider status facts readable in a split.
 // Secondary columns are omitted only when their complete values cannot fit;
 // source rows remain intact for Describe, YAML, filter and export.
-func (t *Table) fitStatusColumns(data *model1.TableData, pads MaxyPad, width int) {
+func (t *Table) fitStatusColumns(data *model1.TableData, pads MaxyPad, width, why int) bool {
 	available := make(map[string]int)
 	for index, column := range data.Header() {
 		if !t.shouldExcludeColumn(column) {
@@ -183,7 +188,7 @@ func (t *Table) fitStatusColumns(data *model1.TableData, pads MaxyPad, width int
 		}
 	}
 	if available["NAME"] == 0 {
-		return
+		return false
 	}
 	critical := []string{"STATUS", "STATE", tableReadyColumn, "HEALTH", "HEALTHY", "PHASE", "VERDICT", "CONDITION"}
 	hasStatus := false
@@ -191,7 +196,7 @@ func (t *Table) fitStatusColumns(data *model1.TableData, pads MaxyPad, width int
 		hasStatus = hasStatus || available[name] > 0
 	}
 	if !hasStatus {
-		return
+		return false
 	}
 	cols := make(map[string]int)
 	remaining := width
@@ -203,13 +208,34 @@ func (t *Table) fitStatusColumns(data *model1.TableData, pads MaxyPad, width int
 		}
 	}
 	if len(cols) == 0 {
-		return
+		return false
 	}
 	if available["NAMESPACE"] > 0 && width >= 60 && remaining > 22 {
 		cols["NAMESPACE"] = min(12, available["NAMESPACE"])
 		remaining -= cols["NAMESPACE"] + 1
 	}
 	cols["NAME"] = max(6, min(28, remaining-1))
+	if why > 0 {
+		// A name gives up width it does not use, then elides down to a
+		// recognizable stem, so the cause is readable beside the state. The
+		// cause is left out, never the state, when even that is too narrow.
+		cols["NAME"] = max(6, min(cols["NAME"], available["NAME"]))
+		least := min(why, minWhyWidth)
+		room := remaining - cols["NAME"] - 2
+		if short := least - room; short > 0 && cols["NAME"]-short >= 16 {
+			cols["NAME"] -= short
+			room += short
+		}
+		if room >= least {
+			size := min(why, maxWhyWidth, room)
+			// Age keeps its place when the cause stays readable without it.
+			if age := available["AGE"]; age > 0 && size == room && size-age-1 >= least {
+				size -= age + 1
+			}
+			cols[tableWhyColumn] = size
+			remaining -= size + 1
+		}
+	}
 	remaining -= cols["NAME"] + 1
 	for _, name := range []string{tableRestartsColumn, "EXPIRES", "REVISION", "KIND", "SUSPEND", "AGE", "RENEWAL", "SOURCE", "ISSUER"} {
 		size := available[name]
@@ -218,6 +244,126 @@ func (t *Table) fitStatusColumns(data *model1.TableData, pads MaxyPad, width int
 			remaining -= size + 1
 		}
 	}
+	// Budgets count padding and separator, so each complete column draws two
+	// cells narrower than reserved. The cause grows into that real width.
+	if size := cols[tableWhyColumn]; size > 0 {
+		spare := remaining - 1
+		for name, reserved := range cols {
+			switch text := available[name] - 2; {
+			case name == tableWhyColumn:
+			case name != "NAME" && name != "NAMESPACE":
+				spare += 2
+			case text > displayWidth(name)+2:
+				// Identity columns are drawn unpadded, as wide as their text.
+				spare += reserved - min(reserved, text-1)
+			}
+		}
+		cols[tableWhyColumn] += max(0, min(spare, min(why, maxWhyWidth)-size))
+	}
+	t.columnWidths = cols
+	return true
+}
+
+// A cause narrower than minWhyWidth is not shown; optional columns give way
+// until it has easyWhyWidth; it never takes more than maxWhyWidth.
+const minWhyWidth, easyWhyWidth, maxWhyWidth = 18, 24, 80
+
+// whyWidth is the widest cause any listed row reports, in terminal cells, or
+// zero when the list has no visible WHY column or no row reports a cause.
+func (t *Table) whyWidth(data *model1.TableData) int {
+	index, ok := data.Header().IndexOf(tableWhyColumn, true)
+	if !ok || t.shouldExcludeColumn(data.Header()[index]) {
+		return 0
+	}
+	widest := 0
+	data.RowsRange(func(_ int, re model1.RowEvent) bool {
+		if index < len(re.Row.Fields) {
+			widest = max(widest, displayWidth(strings.TrimSpace(re.Row.Fields[index])))
+		}
+		return true
+	})
+	return widest
+}
+
+// fitWhyColumns budgets a full-width, non-Pod list that reports a cause. All
+// columns keep their natural width and the cause takes what is left. When
+// that is too little to read, a long name is elided first and then optional
+// columns are omitted from the right; identity, state and age always stay.
+// When even that leaves too little, nothing is omitted and the cause is left
+// out.
+// The omitted columns return as soon as no row reports a cause, and Ctrl-W
+// shows every column in full at any time.
+func (t *Table) fitWhyColumns(data *model1.TableData, pads MaxyPad, width, why int) {
+	var order []string
+	available := make(map[string]int)
+	for i, h := range data.Header() {
+		if !t.shouldExcludeColumn(h) {
+			order = append(order, h.Name)
+			available[h.Name] = max(1, pads[i]+2)
+		}
+	}
+	if available["NAME"] == 0 {
+		return
+	}
+	cols := make(map[string]int, len(order))
+	for _, name := range order {
+		if name != tableWhyColumn {
+			cols[name] = available[name]
+		}
+	}
+	nameFloor := 24
+	if width < 96 {
+		nameFloor = 16
+		if cols["NAMESPACE"] > 14 {
+			cols["NAMESPACE"] = 14
+		}
+	}
+	// Two cells hold the selection marker. A column draws its text, at most
+	// two cells less than its generous budget, and one separator. Identity
+	// columns are drawn unpadded once a budget exists.
+	room := func() int {
+		left := width - 2 - 1
+		for name, size := range cols {
+			text := available[name] - 2
+			if (name == "NAME" || name == "NAMESPACE") && text > displayWidth(name)+2 {
+				text--
+			}
+			left -= min(size, text) + 1
+		}
+		return left
+	}
+	least := min(why, minWhyWidth)
+	fitName := func(floor int) {
+		cols["NAME"] = available["NAME"]
+		if short := least - room(); short > 0 && available["NAME"]-2 > floor {
+			cols["NAME"] = max(floor, available["NAME"]-2-short)
+		}
+	}
+	fitName(nameFloor)
+	// Optional columns give way from the right until the cause reads easily,
+	// never a Job's completions: a row counted as failing with no visible
+	// evidence is worse than a missing duration.
+	easy := min(why, easyWhyWidth)
+	for i := len(order) - 1; i >= 0 && room() < easy; i-- {
+		name := order[i]
+		if name == "NAME" || name == "NAMESPACE" || name == "AGE" || name == "COMPLETIONS" ||
+			name == tableWhyColumn || statusColumn(name) {
+			continue
+		}
+		delete(cols, name)
+	}
+	// Last, as in a split list with a state column, a narrow list gives up
+	// the namespace; Ctrl-W and Describe still show it.
+	if _, ok := cols["NAMESPACE"]; ok && width < 96 && room() < least {
+		delete(cols, "NAMESPACE")
+		// The name now leads the row and shares its cells with the marker.
+		fitName(nameFloor + 2)
+	}
+	if room() < least {
+		t.hideWhy = true
+		return
+	}
+	cols[tableWhyColumn] = min(why, maxWhyWidth, room())
 	t.columnWidths = cols
 }
 
@@ -329,20 +475,7 @@ type tableHealth struct {
 }
 
 func (t *Table) statusColor(name, value string, fallback tcell.Color) tcell.Color {
-	p := &t.presentation
-	switch statusLevelOf(name, value, fallback) {
-	case levelFailure:
-		return p.failure
-	case levelWarning:
-		return p.warning
-	case levelProgress:
-		return p.progress
-	case levelUnknown:
-		return p.unknown
-	case levelHealthy:
-		return p.healthy
-	}
-	return p.text
+	return t.levelColor(statusLevelOf(name, value, fallback))
 }
 
 // rowLevel is the state a row reports now. A status word (CrashLoopBackOff,
@@ -369,10 +502,46 @@ func rowLevel(h model1.Header, re *model1.RowEvent, fallback tcell.Color) status
 			worst = level
 		}
 	}
+	// A renderer that read the object's conditions knows more than a count:
+	// its verdict replaces the readiness count, so the summary agrees with
+	// WHY. It never lowers what a visible status word already reports.
+	if own := rendererLevel(re.Row.Level); own != levelText {
+		return max(own, worst)
+	}
 	if worst == levelText {
 		return ready
 	}
 	return worst
+}
+
+func rendererLevel(level model1.Level) statusLevel {
+	switch level {
+	case model1.LevelFailing:
+		return levelFailure
+	case model1.LevelDegraded:
+		return levelWarning
+	case model1.LevelProgress:
+		return levelProgress
+	}
+	return levelText
+}
+
+// levelColor is the semantic color of a level.
+func (t *Table) levelColor(level statusLevel) tcell.Color {
+	p := &t.presentation
+	switch level {
+	case levelFailure:
+		return p.failure
+	case levelWarning:
+		return p.warning
+	case levelProgress:
+		return p.progress
+	case levelUnknown:
+		return p.unknown
+	case levelHealthy:
+		return p.healthy
+	}
+	return p.text
 }
 
 // ToggleProblemsFirst lists failing, degraded and progressing rows ahead of

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package render
 
@@ -24,6 +25,7 @@ var defaultDSHeader = model1.Header{
 	model1.HeaderColumn{Name: "READY", Attrs: model1.Attrs{Align: tview.AlignRight}},
 	model1.HeaderColumn{Name: "UP-TO-DATE", Attrs: model1.Attrs{Align: tview.AlignRight}},
 	model1.HeaderColumn{Name: "AVAILABLE", Attrs: model1.Attrs{Align: tview.AlignRight}},
+	model1.HeaderColumn{Name: "WHY"},
 	model1.HeaderColumn{Name: "LABELS", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "VALID", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "AGE", Attrs: model1.Attrs{Time: true}},
@@ -65,6 +67,8 @@ func (d DaemonSet) defaultRow(raw *unstructured.Unstructured, r *model1.Row) err
 		return err
 	}
 
+	why, level := daemonSetWhy(&ds)
+	r.Level = level
 	r.ID = client.MetaFQN(&ds.ObjectMeta)
 	r.Fields = model1.Fields{
 		ds.Namespace,
@@ -75,6 +79,7 @@ func (d DaemonSet) defaultRow(raw *unstructured.Unstructured, r *model1.Row) err
 		strconv.Itoa(int(ds.Status.NumberReady)),
 		strconv.Itoa(int(ds.Status.UpdatedNumberScheduled)),
 		strconv.Itoa(int(ds.Status.NumberAvailable)),
+		why,
 		mapToStr(ds.Labels),
 		AsStatus(d.diagnose(ds.Status.DesiredNumberScheduled, ds.Status.NumberReady)),
 		ToAge(ds.GetCreationTimestamp()),

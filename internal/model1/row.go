@@ -1,12 +1,27 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package model1
+
+// Level is a renderer's own verdict on a row, taken from the object's status.
+// LevelNone leaves the classification to the visible status columns.
+type Level int8
+
+const (
+	LevelNone Level = iota
+	LevelProgress
+	LevelDegraded
+	LevelFailing
+)
 
 // Row represents a collection of columns.
 type Row struct {
 	ID     string
 	Fields Fields
+	// Level is not a column: it travels beside the fields so a list can count
+	// and order a row by what its WHY phrase reports without parsing text.
+	Level Level
 }
 
 // NewRow returns a new row with initialized fields.
@@ -24,6 +39,7 @@ func (r Row) Labelize(cols []int, labelCol int, labels []string) Row {
 	for _, label := range labels {
 		out.Fields = append(out.Fields, m[label])
 	}
+	out.Level = r.Level
 
 	return out
 }
@@ -32,7 +48,7 @@ func (r Row) Labelize(cols []int, labelCol int, labels []string) Row {
 func (r Row) Customize(cols []int) Row {
 	out := NewRow(len(cols))
 	r.Fields.Customize(cols, out.Fields)
-	out.ID = r.ID
+	out.ID, out.Level = r.ID, r.Level
 
 	return out
 }
@@ -50,6 +66,7 @@ func (r Row) Clone() Row {
 	return Row{
 		ID:     r.ID,
 		Fields: r.Fields.Clone(),
+		Level:  r.Level,
 	}
 }
 
