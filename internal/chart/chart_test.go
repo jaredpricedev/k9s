@@ -142,13 +142,18 @@ func TestTicksLabelTopMiddleAndZero(t *testing.T) {
 	require.Nil(t, p.Ticks(0))
 }
 
+// dots are the options of the braille style, which the tests of the braille
+// renderer ask for by name: the default style draws areas and stepped lines
+// and has its own tests in style_test.go.
+func dots(cursor int) Options { return Options{Cursor: cursor, Style: Dots} }
+
 func TestRenderScalesLinesAndReferencesToTheAxis(t *testing.T) {
 	f := frame(time.Hour, time.Minute, 30)
 	p := Panel{Unit: Bytes, Series: []Series{
 		{Name: "usage", Key: 'a', Points: points(time.Minute, 0, 60, flat(128*mi))},
 		{Name: "limit", Kind: Reference, Glyph: '─', ASCII: '=', Points: points(time.Minute, 0, 60, flat(256*mi))},
 	}}
-	lines := p.Render(f, 5, 6, Options{Cursor: -1})
+	lines := p.Render(f, 5, 6, dots(-1))
 	require.Len(t, lines, 5)
 	require.Equal(t, " 256Mi ┤"+strings.Repeat("─", 30), lines[0], "the limit is the top of the axis")
 	require.True(t, strings.HasPrefix(lines[2], " 128Mi ┤"), lines[2])
@@ -168,7 +173,7 @@ func TestRenderLeavesHolesEmptyAndNeverDrawsMissingDataAsZero(t *testing.T) {
 	f := frame(time.Hour, time.Minute, 30)
 	holed := Series{Key: 'a', Points: append(points(time.Minute, 0, 20, flat(100)), points(time.Minute, 40, 60, flat(100))...)}
 	p := Panel{Unit: Count, Series: []Series{holed}}
-	body := plot(p.Render(f, 4, 4, Options{Cursor: -1}), 4)
+	body := plot(p.Render(f, 4, 4, dots(-1)), 4)
 	top := []rune(body[0])
 	require.Len(t, top, 30)
 	for col := 11; col < 20; col++ {
@@ -180,18 +185,24 @@ func TestRenderLeavesHolesEmptyAndNeverDrawsMissingDataAsZero(t *testing.T) {
 
 	// A series that ends early stops where its last sample is.
 	ended := Panel{Unit: Count, Series: []Series{{Key: 'b', Points: points(time.Minute, 0, 30, flat(100))}}}
-	row := []rune(plot(ended.Render(f, 4, 4, Options{Cursor: -1}), 4)[0])
+	row := []rune(plot(ended.Render(f, 4, 4, dots(-1)), 4)[0])
 	require.Equal(t, 'b', row[len(row)-1])
 	require.Len(t, row, 16)
 
-	// No samples at all: the plot says so and has no scale and no line.
+	// No samples at all: the plot says so and has no scale and no line, in
+	// any style.
 	empty := Panel{Unit: Bytes, Empty: "no samples in this window", Series: []Series{{Name: "usage", Key: 'a'}}}
-	lines := empty.Render(f, 4, 6, Options{Cursor: -1})
-	text := strings.Join(lines, "\n")
-	require.Contains(t, text, "no samples in this window")
-	require.NotContains(t, text, "┤", "no tick is labelled without a scale")
-	for _, r := range text {
-		require.False(t, r >= 0x2800 && r <= 0x28ff, "no braille without samples")
+	for _, o := range []Options{dots(-1), {Cursor: -1}, {Cursor: -1, ASCII: true}} {
+		lines := empty.Render(f, 4, 6, o)
+		text := strings.Join(lines, "\n")
+		require.Contains(t, text, "no samples in this window")
+		require.NotContains(t, text, "┤", "no tick is labelled without a scale")
+		require.NotContains(t, text, "+", "no tick is labelled without a scale")
+		for _, r := range text {
+			require.False(t, r >= 0x2800 && r <= 0x28ff, "no braille without samples")
+			require.False(t, r >= 0x2581 && r <= 0x2588, "no area without samples")
+			require.False(t, r == '─' || r == '*', "no line without samples")
+		}
 	}
 }
 
@@ -200,7 +211,7 @@ func TestRenderStepsAreJoinedAndDashedLinesAreSparser(t *testing.T) {
 	dots := func(dash int) int {
 		p := Panel{Unit: Count, Series: []Series{{Dash: dash, Points: points(time.Minute, 0, 60, func(i int) float64 { return float64(i) })}}}
 		count := 0
-		for _, r := range strings.Join(p.Render(f, 6, 3, Options{Cursor: -1}), "") {
+		for _, r := range strings.Join(p.Render(f, 6, 3, dots(-1)), "") {
 			if r >= 0x2800 && r <= 0x28ff {
 				for bits := r - 0x2800; bits > 0; bits &= bits - 1 {
 					count++
@@ -241,7 +252,7 @@ func TestRenderCursorAndColoursAndNarrowWidths(t *testing.T) {
 	}
 	p := Panel{Unit: Count, Series: series}
 	f := frame(time.Hour, time.Minute, 30)
-	lines := p.Render(f, 4, 3, Options{Cursor: 30, AxisColor: "#a5b0aa", CursorColor: "#e1e7e3"})
+	lines := p.Render(f, 4, 3, Options{Cursor: 30, AxisColor: "#a5b0aa", CursorColor: "#e1e7e3", Style: Dots})
 	text := strings.Join(lines, "\n")
 	require.Contains(t, text, "[#79c7d4::]")
 	require.Contains(t, text, "[#ef8278::]")
@@ -251,8 +262,10 @@ func TestRenderCursorAndColoursAndNarrowWidths(t *testing.T) {
 	series[0].Color, series[1].Color = "", ""
 	for _, width := range []int{1, 2, 8, 20} {
 		narrow := frame(time.Hour, time.Minute, width)
-		for _, line := range p.Render(narrow, 3, 3, Options{Cursor: 60}) {
-			require.LessOrEqual(t, runewidth.StringWidth(line), 3+2+width, "width %d", width)
+		for _, o := range []Options{dots(60), {Cursor: 60}, {Cursor: 60, ASCII: true}} {
+			for _, line := range p.Render(narrow, 3, 3, o) {
+				require.LessOrEqual(t, runewidth.StringWidth(line), 3+2+width, "width %d", width)
+			}
 		}
 		for _, line := range Axis(narrow, 3, nil, Options{Cursor: 60}) {
 			require.LessOrEqual(t, runewidth.StringWidth(line), 3+2+width, "width %d", width)

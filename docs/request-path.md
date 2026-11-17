@@ -316,18 +316,28 @@ returned.
 
 ### Drawing primitives (`internal/chart`)
 
-- `Series.Stroke`: `Thin` (unchanged default), `Solid` (continuous: every
-  dot column a line crosses is filled from where the line enters it to where
-  it leaves, so a steep sawtooth is one stroke; `Dash` is ignored) and `Bold`
-  (solid, two dots thick). A line is never joined across a hole in the
-  samples.
+- `Options.Style`: `Auto` (the default) draws a panel's only line as a
+  filled area of eighth blocks, 8 levels per row, and several lines as
+  stepped lines of box-drawing characters, one level per row; `Dots` draws
+  every line in braille. `Panel.Filled` says which series is the area;
+  `Series.Fill` asks for it among several lines (a median between its
+  minimum and maximum), and `Series.Limit` marks the level an area warns of
+  when it comes `Near` it (`Options.WarnColor`; the caller says "at limit"
+  in words). In every style a hole in the samples is a gap, never a zero,
+  and `Options.ASCII` draws plain characters whatever the style.
+- `Series.Stroke`, for the braille style: `Thin` (unchanged default),
+  `Solid` (continuous: every dot column a line crosses is filled from where
+  the line enters it to where it leaves, so a steep sawtooth is one stroke;
+  `Dash` is ignored) and `Bold` (solid, two dots thick). A line is never
+  joined across a hole in the samples.
 - `Series.Marker` repeats a glyph along a line (`MarkerFor(n)` gives eight
   distinct ones) so lines can be told apart without colour or dashes. In the
   plain character form only a plain character marker is drawn; there every
   line also has its own character.
-- `Spark` draws a one-cell-high trend: a thin joined braille line
-  (`SparkLine`) or eighth-block bars (`SparkBars`), with `×` (`x` without
-  icons) for a missing sample. `SparkValues` folds samples into cells by the
+- `Spark` draws a one-cell-high trend: eighth blocks (`SparkLine`, the
+  default, and `SparkBars` for separate measurements) or a thin joined
+  braille line (`SparkDots`, the trend of the `Dots` style), with `×` (`x`
+  without icons) for a missing sample. `SparkValues` folds samples into cells by the
   largest value, so a short peak is kept, and leaves a cell without a sample
   missing.
 - `Lanes` draws labelled rows on one time axis: a mark where the lane's
@@ -346,8 +356,9 @@ returned.
 - Units `Seconds` (`310ms`, `41s`) and `PerSecond`, and `UnitNamed` for the
   unit names of signals.
 
-`:graph` uses the solid stroke, with each line's letter repeated along it
-when a chart has several lines, in place of the dotted lines it drew before.
+`:graph` draws a chart with one series as a filled area and a chart with
+several as stepped lines, with each line's letter repeated along it; `b`
+switches to braille dots (solid stroke) and back.
 Its per-Pod comparison (`p`, [graphs.md](graphs.md#which-pod-is-different-p))
 uses the grid, the sparkline and the outlier rule, and resolves the app hop
 of the Service in front of the Pods to add the profile's per-Pod signals
@@ -356,8 +367,8 @@ of the Service in front of the Pods to add the profile's per-Pod signals
 now ends on a whole number with a whole half, a duration axis past a minute
 on whole minutes or hours, and a row that carries a level line is labelled
 with that level's value.
-`:impact` keeps its eight-level block trend: a four-level line would lose
-detail in the six to twelve cells it has per side.
+`:impact` keeps its own eight-level block trend, which the other views now
+share; it has no braille form and does not bind `b`.
 
 ## Synthetic scenario: GitLab intermittent hang
 

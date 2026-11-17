@@ -23,6 +23,8 @@ type Mini struct {
 
 // Grid lays several mini charts out side by side with one shared Y scale
 // and one shared time axis, so that their shapes can be compared directly.
+// In the default style a mini chart is a filled area: its only line, or the
+// one of several that is marked Fill (see Panel.Filled).
 type Grid struct {
 	Unit  Unit
 	Minis []Mini

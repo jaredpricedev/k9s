@@ -30,6 +30,8 @@ type graphColors struct {
 	Data                            []string
 	Ceiling, Request, Axis, Cursor  string
 	Title, Muted, Failure, Restarts string
+	// AtLimit is the colour of a filled area where it is at its limit.
+	AtLimit string
 }
 
 func graphHex(c config.Color) string {
@@ -45,6 +47,7 @@ func graphPalette(p config.SemanticPalette) graphColors {
 		Data:    []string{graphHex(p.Focus), graphHex(p.Category), graphHex(p.Progress), graphHex(p.Text)},
 		Ceiling: graphHex(p.Failure), Request: graphHex(p.Warning), Axis: graphHex(p.Muted), Cursor: graphHex(p.Text),
 		Title: graphHex(p.Focus), Muted: graphHex(p.Muted), Failure: graphHex(p.Failure), Restarts: graphHex(p.Warning),
+		AtLimit: graphHex(p.Warning),
 	}
 }
 
@@ -75,6 +78,15 @@ type graphPage struct {
 	Signal   string
 	Grouping graphGrouping
 	Shown    int
+	// Style is the chart style of the session: areas and solid lines, or
+	// braille dots.
+	Style chart.Style
+}
+
+// options are the chart options of the page for a cursor.
+func (pg *graphPage) options(cursor int) chart.Options {
+	return chart.Options{ASCII: pg.ASCII, Cursor: cursor, AxisColor: pg.Colors.Axis, CursorColor: pg.Colors.Cursor,
+		Style: pg.Style, WarnColor: pg.Colors.AtLimit}
 }
 
 // graphPanel is a panel ready to draw, with the state of each query.
@@ -145,7 +157,9 @@ func (s *graphSnapshot) panels(colors graphColors) []graphPanel {
 				}
 				lines++
 			case sp.Role == graphRoleCeiling:
-				series.Color = colors.Ceiling
+				// A filled area that comes near it changes colour, and
+				// the legend says "at limit" in words.
+				series.Color, series.Limit = colors.Ceiling, true
 			case sp.Role == graphRoleRequest:
 				series.Color = colors.Request
 			}
@@ -226,7 +240,12 @@ func graphEmptyText(p *graphPanel) string {
 }
 
 // legend builds the legend entries of a panel with the values at time at.
-func (p *graphPanel) legend(f chart.Frame, at time.Time, ascii bool) []chart.Entry {
+// A series is named by what identifies it in the plot: a line by its
+// letter, a filled area by a block. A value that is at a limit says so in
+// words, which is what the warning colour of an area means.
+func (p *graphPanel) legend(f chart.Frame, at time.Time, o chart.Options) []chart.Entry {
+	ascii := o.ASCII
+	filled := p.Chart.Filled(o)
 	entries := make([]chart.Entry, 0, len(p.Chart.Series))
 	for i := range p.Chart.Series {
 		series := &p.Chart.Series[i]
@@ -238,6 +257,9 @@ func (p *graphPanel) legend(f chart.Frame, at time.Time, ascii bool) []chart.Ent
 		switch series.Kind {
 		case chart.Line:
 			entry.Glyph = string(series.Key)
+			if i == filled {
+				entry.Glyph = string(chart.FillGlyph)
+			}
 		case chart.Reference:
 			entry.Glyph = string(series.Glyph)
 			if ascii {
@@ -249,6 +271,9 @@ func (p *graphPanel) legend(f chart.Frame, at time.Time, ascii bool) []chart.Ent
 			entry.Value = p.States[i]
 		case ok:
 			entry.Value = unit.Format(value)
+			if series.Kind == chart.Line {
+				entry.Value += p.atLimit(f, at, value)
+			}
 		case len(series.Points) > 0 && series.Points[len(series.Points)-1].T.Before(at):
 			// The series stopped: say when, rather than only "nothing here".
 			entry.Value = graphNoSample + " last " + series.Points[len(series.Points)-1].T.UTC().Format("15:04")
@@ -260,6 +285,22 @@ func (p *graphPanel) legend(f chart.Frame, at time.Time, ascii bool) []chart.Ent
 		entries = append(entries, entry)
 	}
 	return entries
+}
+
+// atLimit names the limit a value is at, at a time: " at limit". It is
+// empty when the value is under every limit of the panel or none was read
+// at that time.
+func (p *graphPanel) atLimit(f chart.Frame, at time.Time, value float64) string {
+	for i := range p.Chart.Series {
+		series := &p.Chart.Series[i]
+		if !series.Limit {
+			continue
+		}
+		if limit, ok := f.ValueAt(series, at); ok && chart.Near(value, limit) {
+			return " at " + series.Name
+		}
+	}
+	return ""
 }
 
 func graphClock(t time.Time) string { return t.UTC().Format("15:04:05Z") }
@@ -550,7 +591,7 @@ func graphWords(text string, ascii bool) string {
 
 // graphFooter is the key line. For a workload or Service it names the two
 // keys that answer "which Pod is different?" before the window keys.
-func graphFooter(width int, charts, ascii, pods bool) string {
+func graphFooter(width int, charts, ascii, pods bool, style chart.Style) string {
 	texts := []string{
 		"←/→ cursor · Home/End · 1 15m  2 1h  3 6h  4 24h · r re-read · s queries · ↑/↓ charts · Esc back",
 		"←/→ cursor · 1 15m 2 1h 3 6h 4 24h · r re-read · s queries · Esc back",
@@ -565,16 +606,17 @@ func graphFooter(width int, charts, ascii, pods bool) string {
 			"p per pod · g regroup · 1-4 window · r read · s queries",
 		}
 	}
-	for _, text := range texts {
-		if !charts {
-			text = strings.TrimPrefix(text, "←/→ cursor · ")
+	if !charts {
+		// A page without charts has no cursor and no style to switch.
+		for _, text := range texts {
+			text = graphWords(strings.TrimPrefix(text, "←/→ cursor · "), ascii)
+			if runewidth.StringWidth(text) <= width {
+				return text
+			}
 		}
-		text = graphWords(text, ascii)
-		if runewidth.StringWidth(text) <= width {
-			return text
-		}
+		return "1-4 window · r read · Esc"
 	}
-	return "1-4 window · r read · Esc"
+	return chartStyleFit(texts, style, width, ascii, "1-4 window · r read · Esc")
 }
 
 // renderGraph lays the whole page out for a size. Every line fits Width.
@@ -611,7 +653,7 @@ func renderGraph(s *graphSnapshot, pg *graphPage) []string {
 			}
 		}
 		lines = append(lines, "", graphPaint(c.Muted, graphFit("Source: prometheus via "+s.Source, width)),
-			"", graphPaint(c.Muted, graphFooter(width, false, pg.ASCII, false)))
+			"", graphPaint(c.Muted, graphFooter(width, false, pg.ASCII, false, pg.Style)))
 		return lines
 	}
 
@@ -637,12 +679,12 @@ func renderGraph(s *graphSnapshot, pg *graphPage) []string {
 	frame := chart.Frame{Start: s.Start, End: s.End, Step: s.Step, Width: max(width-gutter-2, 8)}
 	cursor := min(max(pg.Cursor, 0), frame.Steps())
 	at := frame.TimeAt(cursor)
-	options := chart.Options{ASCII: pg.ASCII, Cursor: cursor, AxisColor: c.Axis, CursorColor: c.Cursor}
+	options := pg.options(cursor)
 
 	legends := make([][]string, len(panels))
 	for i := range panels {
 		title := panels[i].Spec.Title
-		entries := panels[i].legend(frame, at, pg.ASCII)
+		entries := panels[i].legend(frame, at, options)
 		for j := range entries {
 			entries[j].Value = graphWords(entries[j].Value, pg.ASCII)
 		}
@@ -782,7 +824,7 @@ func renderGraph(s *graphSnapshot, pg *graphPage) []string {
 		}
 	}
 	plain("", readout)
-	plain(c.Muted, graphFooter(width, true, pg.ASCII, s.Target.workload()))
+	plain(c.Muted, graphFooter(width, true, pg.ASCII, s.Target.workload(), pg.Style))
 	return lines
 }
 
@@ -913,5 +955,9 @@ func graphReport(s *graphSnapshot) string {
 	b.WriteString("  A value in the legend is the sample at the cursor, not an interpolation.\n")
 	b.WriteString("  – means no sample at the cursor; no data means the query matched nothing in the window.\n")
 	b.WriteString("  Lines are not joined across more than one and a half steps.\n")
+	b.WriteString("  A chart with one line is a filled area: its top edge is the value, and a column without a sample is empty.\n")
+	b.WriteString("  A chart with several lines draws each as a stepped line: one row is one level, the legend has the exact value.\n")
+	fmt.Fprintf(&b, "  \"at limit\" is a sample within %s of its limit or above it; an area is drawn in the warning colour there.\n", chart.Ratio.Format(1-chart.NearLimit))
+	b.WriteString("  b draws braille dots instead, which are finer and harder to read; b again returns.\n")
 	return b.String()
 }

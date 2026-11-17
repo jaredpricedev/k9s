@@ -77,6 +77,7 @@ A Service, an Ingress or a workload that reports no problem keeps a plain border
 | `r` | Read again. In `:probe` it is the one read there is: it sends the requests, after a confirmation | every one of them |
 | `s` | The queries or sources behind the page | `:graph`, `:slow`, dashboards, `:query`, `:timeline` |
 | `p` | One chart per Pod | `:graph` only |
+| `b` | Chart style: filled areas and solid lines (the default), or braille dots, which are finer and harder to read. One press switches, the next returns; the choice holds for the session in every view named here | `:graph` (overlaid, per Pod and regrouped), `:slow`, dashboards, `:query` |
 | `+` / `_` | More / fewer requests per Pod | `:probe` only; the digits stay windows |
 
 `TestHangViewsShareOneKeyboard` holds the views to this table. The palette and `?` list each command once under Inspect and name the key that opens it on the same entry (`Slow requests: which hop (Shift-W)`).

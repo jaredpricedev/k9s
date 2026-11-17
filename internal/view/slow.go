@@ -397,6 +397,9 @@ func (v *slowView) bindSlowKeys() {
 		tcell.KeyCtrlF: ui.NewKeyAction("Queries: page down", do(func() { v.scrollDetail(1) }), false),
 		tcell.KeyCtrlB: ui.NewKeyAction("Queries: page up", do(func() { v.scrollDetail(-1) }), false),
 		grafanaKey:     grafanaKeyAction(v.app, func() actionOwner { return v }, nil),
+		// The trends of the hop table follow the chart style of the
+		// session, as the charts a hop opens do.
+		chartStyleKey: chartStyleAction(v.app, v.render),
 	})
 	back := func(event *tcell.EventKey) *tcell.EventKey {
 		if v.cursor >= 0 {

@@ -242,7 +242,7 @@ func TestQueryPageChartsATypedExpressionAndSaysWhatWentWrong(t *testing.T) {
 		"a …2bq7k 0  b …8wzpd 0  c …hx4mt 0",
 		`A sum by (pod) (puma_queued_connections{namespace="gitlab", pod=~"gitlab-webservice-default-.+"})`,
 		"Variables: namespace=gitlab (selection) · pod=~gitlab-webservice-default-.+ (name prefix of the",
-		"e edit · Esc back",
+		"e edit · b dots · Esc back",
 	} {
 		require.Contains(t, text, want)
 	}
@@ -268,7 +268,7 @@ func TestQueryPageChartsATypedExpressionAndSaysWhatWentWrong(t *testing.T) {
 	for _, want := range []string{
 		"NOT DRAWN: expression failed: bad_data: 1:8: parse error: unexpected character: '>' [31m.",
 		"Prometheus rejected the expression as it was sent, in its own words above. Nothing was read. Press e to edit the expression.",
-		"1 15m 2 1h 3 6h 4 24h · r re-read · s detail · e edit · Esc back",
+		"1 15m 2 1h 3 6h 4 24h · r re-read · s detail · e edit · b dots · Esc back",
 	} {
 		require.Contains(t, strings.ReplaceAll(text, "[]", "]"), want)
 	}

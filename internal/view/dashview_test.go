@@ -200,7 +200,7 @@ func TestDashboardPageDrawsTheGitLabStoryAtEverySize(t *testing.T) {
 		"CPU usage against limit  a …2bq7k 350m  b …8wzpd 350m", "c …hx4mt 480m peak 1.47  d limit 1.5",
 		"50s ┤", "25s ┤", "15/s ┤", "1.5 ┤", "04:10     04:20     04:30",
 		`Panel 1 of 11 · stat · A sum(rate(http_requests_total{namespace="gitlab", pod=~".*"}[2m[]))`,
-		"←/→ ↑/↓ panel · Enter zoom · 1 15m  2 1h  3 6h  4 24h · r re-read · s queries · Shift-D Grafana · Esc back",
+		"←/→ ↑/↓ panel · Enter zoom · 1 15m  2 1h  3 6h  4 24h · r re-read · s queries · Shift-D Grafana · b dots · Esc back",
 	} {
 		require.Contains(t, wide, want)
 	}
@@ -222,7 +222,7 @@ func TestDashboardPageDrawsTheGitLabStoryAtEverySize(t *testing.T) {
 		"  Puma threads in use                      CPU throttled, worst pod",
 		"min 346ms  max 47.9s (red)",
 		"Request duration p99 by pod  a …2bq7k 310ms  b …8wzpd 310ms", "c …hx4mt 350ms peak 47.9s",
-		"←/→ ↑/↓ panel · Enter zoom · 1-4 window · r re-read · s queries · Esc",
+		"←/→ ↑/↓ panel · Enter zoom · 1-4 window · r re-read · s queries · b dots · Esc",
 	} {
 		require.Contains(t, normal, want)
 	}
@@ -276,7 +276,7 @@ func TestDashboardZoomReadsExactSamplesAndShowsTheExpression(t *testing.T) {
 		"complete · 3 series · 363 samples · legend {{pod}}",
 		"About: Rails request duration, 99th percentile, one line per pod.",
 		"Variables: namespace=gitlab (selection) · pod=~.* (All)",
-		"←/→ cursor · ↑/↓ panel · 1 15m  2 1h  3 6h  4 24h · r re-read · s queries · Shift-D Grafana · Esc grid",
+		"←/→ cursor · ↑/↓ panel · 1 15m  2 1h  3 6h  4 24h · r re-read · s queries · Shift-D Grafana · b dots · Esc grid",
 	} {
 		require.Contains(t, text, want)
 	}

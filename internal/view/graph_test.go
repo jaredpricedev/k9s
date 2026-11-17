@@ -287,8 +287,10 @@ func TestGraphPageDrawsTheStoryAtEverySize(t *testing.T) {
 	for _, want := range []string{
 		"Graph · Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 1h to 05:00Z · step 30s",
 		"read 05:00:07Z · 10 of 10 queries answered · 2 no data",
-		"MEMORY  a working set 60Mi  ─ limit 256Mi  ┄ request 128Mi",
-		"CPU cores  a usage 340m  ─ limit no data  ┄ request 100m  throttled no data",
+		// A chart with one line is a filled area, named by a block in the
+		// legend; the two lines of the network chart keep their letters.
+		"MEMORY  █ working set 60Mi  ─ limit 256Mi  ┄ request 128Mi",
+		"CPU cores  █ usage 340m  ─ limit no data  ┄ request 100m  throttled no data",
 		"NETWORK  a rx 2.6kB/s  b tx 9kB/s",
 		"256Mi ┤", "128Mi ┤", "restarts │", "▲",
 		"04:10", "04:55",
@@ -302,8 +304,8 @@ func TestGraphPageDrawsTheStoryAtEverySize(t *testing.T) {
 	// 80x24 leaves 20 rows inside the frame: two charts, and it says so.
 	normal := graphPlainLines(t, renderGraph(snapshot, &graphPage{Width: 80, Height: 20, Cursor: last}), 80)
 	require.Contains(t, normal, "2 of 3 charts (↑/↓)")
-	require.Contains(t, normal, "MEMORY  a working set")
-	require.Contains(t, normal, "CPU cores  a usage 340m")
+	require.Contains(t, normal, "MEMORY  █ working set")
+	require.Contains(t, normal, "CPU cores  █ usage 340m")
 	require.NotContains(t, normal, "NETWORK")
 	require.Contains(t, normal, "order, not cause")
 	require.LessOrEqual(t, strings.Count(normal, "\n")+1, 20)
@@ -312,7 +314,7 @@ func TestGraphPageDrawsTheStoryAtEverySize(t *testing.T) {
 	narrow := graphPlainLines(t, renderGraph(snapshot, &graphPage{Width: 60, Height: 20, Cursor: last - 40}), 60)
 	for _, want := range []string{
 		"· 1h to 05:00Z · step 30s", "x2x9q", "10/10 answered · 2 no data · 1/3 charts ↑↓",
-		"MEMORY  a working set – first 04:48", "─ limit – first 04:48  ┄ request – first 04:48", "restarts –, +6 in window",
+		"MEMORY  █ working set – first 04:48", "─ limit – first 04:48  ┄ request – first 04:48", "restarts –, +6 in window",
 		"Cursor 04:40:00Z, -20m", "order, not cause", "1-4 window",
 	} {
 		require.Contains(t, narrow, want)
@@ -331,7 +333,7 @@ func TestGraphCursorReadsExactSamplesNotInterpolations(t *testing.T) {
 	page.Cursor = int(snapshot.Window/snapshot.Step) - 9
 	text := graphPlainLines(t, renderGraph(snapshot, page), 100)
 	require.Contains(t, text, "Cursor 04:55:30Z, 4m30s before window end")
-	require.Contains(t, text, "a working set 206Mi")
+	require.Contains(t, text, "█ working set 206Mi")
 	require.Contains(t, text, "restarts 4, +6 in window")
 }
 
@@ -353,11 +355,23 @@ func TestGraphEmptyAnswersAreNoDataNeverAZeroLine(t *testing.T) {
 	text := graphPlainLines(t, renderGraph(snapshot, &graphPage{Width: 80, Height: 30}), 80)
 	require.Contains(t, text, "10 of 10 queries answered · 10 no data")
 	require.Equal(t, 3, strings.Count(text, "no samples in this window (not a zero)"))
-	require.Contains(t, text, "a working set no data")
+	require.Contains(t, text, "█ working set no data")
 	require.Contains(t, text, "restarts no data")
+	// Nothing is plotted without samples: no dot, no block of an area
+	// (the one block of a line is the legend's name for the series) and
+	// no stroke of a line.
 	for _, r := range text {
 		require.False(t, r >= 0x2800 && r <= 0x28ff, "nothing is plotted without samples")
+		require.False(t, r >= 0x2581 && r <= 0x2587, "nothing is filled without samples")
 	}
+	for _, line := range strings.Split(text, "\n") {
+		if at := strings.Index(line, "│"); at >= 0 && !strings.Contains(line, "└") {
+			require.Empty(t, strings.Trim(line[at+len("│"):], " ┆"+"no samples in this window (not a zero)"), "an empty plot row: %q", line)
+		}
+	}
+	dotted := graphPlainLines(t, renderGraph(snapshot, &graphPage{Width: 80, Height: 30, Style: chart.Dots}), 80)
+	require.Contains(t, dotted, "a working set no data")
+	require.Equal(t, 3, strings.Count(dotted, "no samples in this window (not a zero)"))
 	require.NotContains(t, text, "┤", "no scale is invented")
 	require.Nil(t, snapshot.failure(), "an answered query is not a failure")
 	report := graphReport(snapshot)
@@ -427,7 +441,8 @@ func TestGraphWorkloadPageNamesPodsAndStatesMissingOwnership(t *testing.T) {
 	require.Equal(t, pods, snapshot.Pods)
 	text := graphPlainLines(t, renderGraph(snapshot, &graphPage{Width: 100, Height: 30, Cursor: 120}), 100)
 	require.Contains(t, text, "2 pods")
-	require.Contains(t, text, "MEMORY  a k4m2t – last 04:48  b x2x9q 250Mi  ─ min limit 256Mi")
+	// 250Mi of a 256Mi limit is at the limit, and the legend says so.
+	require.Contains(t, text, "MEMORY  a k4m2t – last 04:48  b x2x9q 250Mi at min limit  ─ min limit 256Mi")
 	require.Contains(t, text, "512Mi ┤")
 	report := graphReport(snapshot)
 	require.Contains(t, report, "Pods found: checkout-api-6c8d7f9b5-k4m2t, checkout-api-7d9f8c6b5d-x2x9q")

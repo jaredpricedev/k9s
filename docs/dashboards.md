@@ -87,8 +87,8 @@ Panel 1 of 11 · stat · A sum(rate(http_requests_total{namespace="gitlab", pod=
 
 | Grafana type | Drawn as |
 | --- | --- |
-| `timeseries`, `graph` | A line chart over the window. Each series is one continuous line that ends in its letter; with several lines the letter repeats along the line. The legend names each line by the panel's `legendFormat` (`{{label}}` is replaced) or, without one, by the labels that differ, and gives the line's last sample. |
-| `stat`, `singlestat` | The value by the panel's reducer (`lastNotNull`, `last`, `first`, `mean`, `max`, `min`, `sum`), the threshold word, a thin sparkline of the window and the window's minimum and maximum. |
+| `timeseries`, `graph` | A chart over the window. One series is a filled area of eighth blocks; several series are solid stepped lines, each ending in its letter, which also repeats along the line. `b` draws braille dots instead ([graphs.md](graphs.md#the-page)). The legend names each line by the panel's `legendFormat` (`{{label}}` is replaced) or, without one, by the labels that differ, and gives the line's last sample. |
+| `stat`, `singlestat` | The value by the panel's reducer (`lastNotNull`, `last`, `first`, `mean`, `max`, `min`, `sum`), the threshold word, a sparkline of the window in eighth blocks (`×` for a cell without a sample) and the window's minimum and maximum. |
 | `gauge` | The value, the threshold word, a thin bar against the panel's `min` and `max`, and the sparkline. When the window's maximum falls into another threshold step than the value, the value line adds it: `3.82%  green · max 87.7% red`. |
 | `bargauge` | One row per series: name, bar and value. A `stat` or `gauge` whose query returns several series is drawn the same way. |
 | `row` | A section line. Panels inside a collapsed row are drawn like any other. |
@@ -204,6 +204,7 @@ still offers the dashboard, or for a query page the expression in Explore.
 | `r` | Read the panels again |
 | `s` | Queries, variables and what was not drawn |
 | `Shift-D` | Open the same dashboard in Grafana with the window drawn here and the variables the selection filled |
+| `b` | Chart style: filled areas and solid lines (the default) or braille dots; the choice holds for the session and is the same in `:graph` and `:slow` |
 | `Esc` | Back |
 
 In a zoomed panel `←` `→` move the cursor along the sample grid (`Shift`

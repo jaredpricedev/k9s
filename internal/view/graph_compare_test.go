@@ -445,7 +445,7 @@ func TestGraphComparePageFitsEverySizeAndCountsWhatIsNotShown(t *testing.T) {
 			"hx4mt · worker-f ", " OUTLIER · 86%  ", "100% +", "Left/Right cursor",
 		}},
 		{name: "by node at 80", width: 80, height: 20, grouping: graphByNode, cursor: stalled, want: []string{
-			"CPU THROTTLED by node · line median, thin lines min and max · worst first by pe…",
+			"CPU THROTTLED by node · area median, lines min and max · worst first by peak · …",
 			"worker-f · 1 pod ", " OUTLIER · 86%  ", "worker-d · 2 pods", "worker-e · 1 pod",
 			"Cursor 04:32:00Z, -28m · medians: worker-f 86% · worker-d 1.35% · worker-e 1.3%",
 			"By node (kube_pod_info): worker-f 1 pod, worker-d 2, worker-e 1 · all placed",
@@ -590,18 +590,25 @@ func TestGraphSparkKeepsTheWorstSampleOfACellAndLeavesHolesEmpty(t *testing.T) {
 		points = append(points, chart.Point{T: start.Add(time.Duration(i) * 30 * time.Second), V: v})
 	}
 	for _, tc := range []struct {
-		name string
-		low  bool
-		want string
+		name  string
+		low   bool
+		style chart.Style
+		want  string
 	}{
 		// The series begins ten minutes in and ends ten minutes early:
 		// those cells are empty. The hole inside is the gap glyph.
-		{name: "a peak signal keeps the largest sample", want: " ⠉⠉⠉×⠉⠉⠉⠉ "},
-		{name: "a signal that is worse when low keeps the smallest", low: true, want: " ⢹⣸⠉×⠉⠉⠉⠉ "},
+		{name: "a peak signal keeps the largest sample", want: " ███×████ "},
+		{name: "a signal that is worse when low keeps the smallest", low: true, want: " █▁█×████ "},
+		// The braille style draws the same cells as a thin line.
+		{name: "dots: a peak signal keeps the largest sample", style: chart.Dots, want: " ⠉⠉⠉×⠉⠉⠉⠉ "},
+		{name: "dots: a signal that is worse when low keeps the smallest", style: chart.Dots, low: true, want: " ⢹⣸⠉×⠉⠉⠉⠉ "},
 	} {
-		require.Equal(t, tc.want, graphSpark(points, frame, 4, "", "", false, tc.low), tc.name)
+		require.Equal(t, tc.want, graphSpark(points, frame, 4, "", "", chart.Options{Style: tc.style}, tc.low), tc.name)
 	}
-	require.Equal(t, strings.Repeat(" ", 10), graphSpark(nil, frame, 4, "", "", false, false), "no samples draw nothing, never a level")
+	for _, o := range []chart.Options{{}, {Style: chart.Dots}, {ASCII: true}} {
+		require.Equal(t, strings.Repeat(" ", 10), graphSpark(nil, frame, 4, "", "", o, false), "no samples draw nothing, never a level")
+	}
+	require.Equal(t, " ^_^x^^^^ ", graphSpark(points, frame, 4, "", "", chart.Options{ASCII: true, Style: chart.Dots}, true), "noIcons keeps its plain characters in either style")
 }
 
 func TestGraphCompareReportNamesEveryQueryAndTheRule(t *testing.T) {

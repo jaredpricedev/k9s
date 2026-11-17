@@ -277,12 +277,16 @@ func (v *slowView) render() {
 	v.body.ScrollToBeginning()
 	// The plain form of an arrow is a word, so a hint is measured as drawn.
 	arrows, sides := v.plain("↑↓"), v.plain("←→")
-	v.footer.SetText(timelineTag(v.app.Styles.Semantic().Muted, false) + tview.Escape(impactFit(width,
-		arrows+" hop · Enter open · "+sides+" cursor · n/N episode · 1 15m  2 1h  3 6h  4 24h · s queries and rules · r re-read · Esc back",
-		arrows+" hop · Enter open · "+sides+" cursor · n/N episode · 1-4 window · s queries · r re-read · Esc back",
-		arrows+" hop · Enter open · "+sides+" cursor · 1-4 window · s queries · r read · Esc",
-		"Enter open · "+sides+" cursor · 1-4 window · s queries · Esc",
-		"Enter open · 1-4 window · s queries · Esc")) + "[-:-:-]")
+	// The key that switches the trends between blocks and dots is named
+	// wherever a form leaves room for it.
+	forms := chartStyleForms([]string{
+		arrows + " hop · Enter open · " + sides + " cursor · n/N episode · 1 15m  2 1h  3 6h  4 24h · s queries and rules · r re-read · Esc back",
+		arrows + " hop · Enter open · " + sides + " cursor · n/N episode · 1-4 window · s queries · r re-read · Esc back",
+		arrows + " hop · Enter open · " + sides + " cursor · 1-4 window · s queries · r read · Esc",
+		"Enter open · " + sides + " cursor · 1-4 window · s queries · Esc",
+		"Enter open · 1-4 window · s queries · Esc",
+	}, v.app.chartStyle())
+	v.footer.SetText(timelineTag(v.app.Styles.Semantic().Muted, false) + tview.Escape(impactFit(width, forms...)) + "[-:-:-]")
 }
 
 // titleLine names the Service, the window in clock time, when it was read
@@ -508,7 +512,7 @@ func (v *slowView) rowCell(line *slowLine, row slowRow, columns slowColumns, fra
 			if line.state == slowpath.Outlier || line.state == slowpath.Elevated {
 				sparkColor = color
 			}
-			spark = chart.Spark(chart.SparkValues(line.trend, frame), chart.SparkOptions{ASCII: v.noIcons(), Max: line.top,
+			spark = chart.Spark(chart.SparkValues(line.trend, frame), chart.SparkOptions{ASCII: v.noIcons(), Style: chart.SparkStyleOf(v.app.chartStyle()), Max: line.top,
 				Color: graphColor(sparkColor), GapColor: graphColor(p.Muted)})
 		}
 		b.WriteString("[-:-:-]" + spark + " ")

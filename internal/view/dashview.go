@@ -180,6 +180,7 @@ func (v *dashView) Init(ctx context.Context) error {
 		tcell.KeyEscape:  ui.NewKeyAction("Back", v.escape, false),
 		ui.KeyQ:          ui.NewKeyAction("Back", v.escape, false),
 		grafanaKey:       ui.NewKeyActionWithOpts(grafanaKeyLabel, do(v.openInGrafana), ui.ActionOpts{Visible: true, Priority: 5}),
+		chartStyleKey:    chartStyleAction(v.app, v.render),
 	})
 	if v.spec.isQuery() {
 		v.actions.Add(dashEditKey, ui.NewKeyAction("Edit the expression", do(v.editQuery), true))
@@ -538,7 +539,7 @@ func (v *dashView) render() {
 	}
 	page := &dashPage{
 		Width: width, Height: height, ASCII: ascii, Colors: dashPalette(v.app.Styles.Semantic()),
-		Selected: v.selected, First: v.first, Zoom: v.zoom, Cursor: v.cursor, Busy: v.busy,
+		Selected: v.selected, First: v.first, Zoom: v.zoom, Cursor: v.cursor, Busy: v.busy, Style: v.app.chartStyle(),
 	}
 	var lines []string
 	if v.snapshot == nil || v.snapshot.Window != v.window {

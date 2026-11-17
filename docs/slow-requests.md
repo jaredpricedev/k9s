@@ -53,6 +53,7 @@ read.
 | `h` | The existing native Hubble view for the backend Pods ([hubble.md](hubble.md)) |
 | `Shift-D` | Grafana hand-off for the selected Pod or the workload, with the window that was read ([grafana-handoff.md](grafana-handoff.md)) |
 | `t` | `:timeline` for the selected Pod or the workload |
+| `b` | Chart style: the trends as eighth blocks (the default) or as a thin braille line, as in `:graph`, the dashboards and `:query`; the choice holds for the session |
 | `Esc` | Put the cursor away; then back |
 
 These keys are the ones the sibling views use. `Shift-B` is the probe and
@@ -116,8 +117,9 @@ One row per hop, in the order a request meets them.
 | network | the network profiles (default `cilium-hubble`), per destination Pod | drops by reason, TCP resets per new connection, flows |
 
 Columns: `HOP`, `WHAT` (the host, the Service or the profile), `LAST 1h` (a
-thin trend of the hop's main signal, scaled so that the usual level sits
-low and only a burst reaches the top), `WORST` (the key number: the worst
+trend of the hop's main signal in eighth blocks, one cell high, with `×` for
+a cell without a sample, scaled so that the usual level sits low and only a
+burst reaches the top), `WORST` (the key number: the worst
 sample of the main signal in the window), `STATE` and `EVIDENCE`. Evidence
 that does not fit loses whole items from the end and says so with an
 ellipsis; a number is never cut.

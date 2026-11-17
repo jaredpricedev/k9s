@@ -15,6 +15,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/derailed/k9s/internal"
+	"github.com/derailed/k9s/internal/chart"
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/model"
@@ -63,6 +64,8 @@ type App struct {
 	showCrumbs         bool
 	headerOverride     *bool
 	headerFlex         *tview.Flex
+	// chartLook is the chart style of the session; see chart_style.go.
+	chartLook chart.Style
 }
 
 // NewApp returns a K9s app instance.

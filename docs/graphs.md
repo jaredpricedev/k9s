@@ -44,27 +44,57 @@ the per-Pod page below.
 ## The page
 
 ```
-Graph · Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 1h to 05:19Z · step 30s
-read 05:19:29Z · 10 of 10 queries answered · 2 no data
-MEMORY  a working set 253Mi  ─ limit 256Mi  ┄ request 128Mi
-   256Mi ┤                                        ───⡜⠉⠹⣠⠋⠉⢣⢠⠋⠙⡄⡜⠉⠹⣠⠋⠉⢣a
-   128Mi ┤                                        ┄⡜┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
-       0 ┤                                                             ┆
-restarts │                                            ▲  ▲   ▲ ▲  ▲   ▲┆
-         └─┬─────────┬────────┬────────┬────────┬─────R───F┬───────X──^
-                   04:25    04:30    04:35    04:40      05:10
-R rollout rev 2 05:07 · F first restart 05:09 · X last exit Error (1) 05:17 · order, not cause
-Cursor 05:19:00Z (window end) · restarts 6, +6 in window
+Graph · Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 1h to 14:35:30Z · step 30s
+read 14:35:43Z · 10 of 10 queries answered · 2 no data · 2 of 3 charts (↑/↓)
+MEMORY  █ working set 254Mi at limit  ─ limit 256Mi  ┄ request 128Mi
+   256Mi ┤                                                       ──▄█─██▄█▄█─███
+         │                                                         ██▄██████▄███
+   128Mi ┤                                                       ┄▃┄┄┄┄┄┄┄┄┄┄┄┄┄
+         │                                                        ██████████████
+       0 ┤                                                        ██████████████
+CPU cores  █ usage 340m  ─ limit no data  ┄ request 100m  throttled no data
+    400m ┤                                                        ▃▃▃▃▃▃▃▃▃▃▃▃▃▃
+    200m ┤                                                        ██████████████
+    100m ┤                                                       ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+       0 ┤                                                        ██████████████
+restarts │                                                          ▲ ▲ ▲ ▲ ▲ ▲┆
+         └─────┬──────────┬───────────┬───────────┬──────────┬───R──F────┬───X─^
+             13:40      13:50       14:00       14:10      14:20       14:30
+R rollout rev 2 14:23 · F first restart 14:25 · X last exit Error (1) 14:33
+order, not cause
+Cursor 14:35:30Z (window end) · restarts 6, +6 in window
+←/→ cursor · 1 15m 2 1h 3 6h 4 24h · r re-read · s queries · b dots · Esc back
 ```
 
 - The first line names the object, the window, the window end and the step.
   The second says when the read began and how the queries went.
+- A chart with one series (limits and requests are levels, not series) is a
+  **filled area**: each column is filled from zero up to its value in eighth
+  blocks (`▁▂▃▄▅▆▇█`), so a chart of H rows has 8×H levels. The top edge of
+  the area is the value. A column without a sample is empty; a sample of
+  zero is still one eighth high, so a hole is never mistaken for zero.
+- A chart with several series draws each as a **solid stepped line** of
+  box-drawing characters (`─ │ ╭ ╮ ╰ ╯`): level along a row, a vertical run
+  where it changes rows, however far, and a break where samples are missing.
+  One row is one level, so such a line is coarser than an area; the legend
+  has the exact value. A line ends in its letter (`a`, `b`, …) and the
+  letter repeats along its level stretches, so lines are told apart without
+  colour. Where two lines run level in the same cells the first keeps them
+  and both letters are there; a turn of the second is still drawn.
+- `b` switches every chart and trend to **braille dots** and back (the
+  footer names it as `b dots` / `b solid`). Dots have two columns and four
+  rows per cell: finer, and harder to read. The choice holds for the
+  session and is the same in `:graph`, `:slow`, drawn dashboards and
+  `:query`.
 - Each chart has a legend line. Every drawn series has a glyph that is also
-  in the plot: a line is one continuous stroke that ends in its letter (`a`,
-  `b`, …), and when a chart has several lines the letter also repeats along
-  the line; a limit, allocatable amount or size is a
-  `─` level; a request is a `┄` level. Colour repeats this and is never the
-  only difference.
+  in the plot: `█` for a filled area, its letter for a line; a limit,
+  allocatable amount or size is a `─` level; a request is a `┄` level.
+  Colour repeats this and is never the only difference.
+- Where an area comes within 5% of its limit (or above it) its columns are
+  drawn in the warning colour, its top is drawn in the limit's row in place
+  of the line, and the legend says `at limit` after the value at the cursor
+  (`at min limit`, `at allocatable`, `at size` for those levels). The words
+  are there in every style and for lines too.
 - The value after each name is the sample at the cursor. `←`/`→`
   move the cursor one step of the sample grid, with Shift ten steps, and
   Home/End jump to the window edges. Nothing is interpolated: `–` means there
@@ -78,10 +108,17 @@ Cursor 05:19:00Z (window end) · restarts 6, +6 in window
   a duration longer than a minute ends on whole minutes or hours.
 - A row that carries a limit, request, allocatable or size line is labelled
   with that level's own value (`1.5 ┤───`), so a line never sits on a row
-  that names another number. Data is always drawn over a level line, never
-  under it. In a chart only a few rows high a request and a limit can fall
+  that names another number. The top of an area and every line are always
+  drawn over a level line, never under it; a level that lies under the top
+  of an area is drawn over the area's body, so it stays visible (the `┄`
+  row above). In a chart only a few rows high a request and a limit can fall
   into the same text row; then only the limit is drawn there, and the legend
   still gives both values.
+- Ticks, levels, lines and areas share one scale: each row is an equal
+  share of the axis, the bottom row starts at zero and the top row ends at
+  the top. A level exactly on the edge between two rows is drawn in the row
+  nearer the middle, which keeps round levels off the rows that carry the
+  scale's own labels.
 - A legend takes at most two lines. Entries that do not fit are counted
   (`+1 more`), never dropped silently; `s` lists every series.
 - All charts share the time axis at the bottom, labelled with UTC clock
@@ -93,7 +130,7 @@ Cursor 05:19:00Z (window end) · restarts 6, +6 in window
   counts, and for each series where it begins late, ends early or has gaps.
 - With `ui.noIcons` the page is drawn with plain characters: `*`, `+`, `o`,
   `x` for lines at one level per row, `=` and `.` for levels, `^` for
-  restarts. The braille drawing has two dots per column and four per row.
+  restarts. Nothing is filled there and `b` changes nothing; it says so.
 
 ## Charts and the metrics they need
 
@@ -167,22 +204,45 @@ small chart per Pod instead, all on one Y scale and one time axis, so the Pod
 that behaves differently is the chart that looks different.
 
 ```
-Graph · Deployment gitlab/gitlab-webservice-default · last 1h to 09:41Z · step 30s
-read 09:41:29Z · 13 of 13 queries answered · 3 pods
+Graph · Service gitlab/gitlab-webservice-default · last 1h to 14:38Z · step 30s
+read 14:38:11Z · 13 of 13 queries answered · 3 pods
 throttled*  cpu*  memory  restarts  [p99*]  5xx  queued*  free-threads*  busy-threads*  network
 * hx4mt differs in 6 of 10 signals: throttled, cpu, p99, queued, free-threads, busy-threads · a difference, not a cause
 P99 by pod · worst first by peak · Rails request duration, 99th percentile, gitlab-webservice profile
-     hx4mt · worker-f    OUTLIER · peak 47.9s   8wzpd · worker-e    peak 346ms   2bq7k · worker-d    peak 346ms
-50s ┤       ⡆           ⢰⢲                  ┆  │                             ┆  │                             ┆
-25s ┤      ⡇⠘⡆          ⡇ ⡇              ⡇⡇ ┆  │                             ┆  │                             ┆
-  0 ┤⣀⣀⣀⣀⣀⡼  ⢸⣀⣀⣀⣀⣀⣀⣀⣀⣀⡇   ⣇⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⡼  ⣇⣀  │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀  │⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀
+     hx4mt · worker-f    OUTLIER · peak 47.9s   8wzpd · worker-e              peak 346ms   2bq7k · worker-d              peak 346ms
+50s ┤      ▅▅           ▅▅                  ┆  │                                       ┆  │                                       ┆
+    │      ██           ██                  ┆  │                                       ┆  │                                       ┆
+    │      ██           ██               ▂  ┆  │                                       ┆  │                                       ┆
+    │      ██           ██               █  ┆  │                                       ┆  │                                       ┆
+25s ┤      ██          ▁██▂              █▁ ┆  │                                       ┆  │                                       ┆
+    │      ██▃         ████              ██ ┆  │                                       ┆  │                                       ┆
+    │     ████         ████             ███ ┆  │                                       ┆  │                                       ┆
+    │     ████         ████             ███ ┆  │                                       ┆  │                                       ┆
+  0 ┤▁▁▁▁▁████▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁  │▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  │▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+    └────┬─────────┬─────────┬─────────┬────^  └────┬─────────┬─────────┬─────────┬────^  └────┬─────────┬─────────┬─────────┬────^
+       13:45     14:00     14:15     14:30        13:45     14:00     14:15     14:30        13:45     14:00     14:15     14:30
 
 EVERY SIGNAL · one row per signal, each on its own scale · the number is what ranks the Pod · * differs from its peers
-                hx4mt · worker-f                 8wzpd · worker-e                 2bq7k · worker-d
-  throttled*    ⣀⣀⣀⣸⠙⢲⣀⣀⣀⣀⣀⣰⠚⠙⢲⣀⣀⣀⣀⣀⣀⣰⠒⢲⣀ 90%*      ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ 1.26%     ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ 1.26%
-> p99*          ⣀⣀⣀⣸⠙⢲⣀⣀⣀⣀⣀⣠⠼⠙⢲⣀⣀⣀⣀⣀⣀⣰⠲⢤⣀ 47.9s*    ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ 346ms     ⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀ 346ms
-Cursor 09:41:00Z (window end) · hx4mt 346ms · 8wzpd 346ms · 2bq7k 346ms
+                hx4mt · worker-f                      8wzpd · worker-e                      2bq7k · worker-d
+  throttled*    ▁▁▁▃▇▅▁▁▁▁▁▁▆▇▅▁▁▁▁▁▁▁▁▂▆▃▁ 90%*      ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 1.26%     ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 1.26%
+  cpu*          ▃▃▃▄▆▅▃▃▃▃▃▃▆▇▅▃▃▃▃▃▃▃▃▃▆▄▃ 1.57*     ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂ 423m      ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂ 423m
+  memory        ▆▆▆▆▇▇▇▇▇▇▇▇▆▆▆▆▆▆▆▇▇▇▇▇▇▇▇ 67.1%     ▇▇▆▆▆▆▆▆▇▇▇▇▇▇▇▇▆▆▆▆▆▆▆▇▇▇▇ 67.1%     ▇▇▇▇▇▇▆▆▆▆▆▆▇▇▇▇▇▇▇▇▆▆▆▆▆▆▆ 67.1%
+  restarts      ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ +0        ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ +0        ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ +0
+> p99*          ▁▁▁▃█▄▁▁▁▁▁▁▅█▄▁▁▁▁▁▁▁▁▁▆▃▁ 47.9s*    ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 346ms     ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 346ms
+  5xx           ▁▁▁▁▃▂▁▁▁▁▁▁▂▃▂▁▁▁▁▁▁▁▁▁▂▁▁ 0.27%     ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.03%     ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0.03%
+  queued*       ▁▁▁▆█▁▁▁▁▁▁▁██▁▁▁▁▁▁▁▁▁▄█▁▁ 40*       ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0         ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁ 0
+  free-threads* ▅▅▅▁▁▅▅▅▅▅▆▅▁▁▅▅▅▆▅▅▅▅▅▁▁▅▅ 0*        ▅▇▅▅▅▅▅▅▇▅▅▇▅▅▆▅▅▅▆▅▅▇▅▅▅▅▅ 4         ▅▅▇▅▅▇▅▅▅▅▅▅▇▅▅▆▅▅▅▆▅▅▇▅▅▆▅ 4
+  busy-threads* ▄▅▅██▅▅▄▅▅▃▅██▄▅▅▃▅▅▄▅▅██▅▅ 8*        ▅▂▅▅▄▄▅▄▂▅▅▂▅▅▃▄▅▄▃▅▅▂▅▅▄▄▅ 4         ▅▅▂▅▅▂▄▅▄▄▅▅▂▅▅▃▄▅▄▃▅▅▂▅▅▃▄ 4
+  network       █▇▇█▄▇▇███▇▇▇▂▇▇███▇▇██▇▅▇█ 392kB/s   ██▇▇██▇▇▇██▇▇██▇▇▇██▇▇███▇▇ 392kB/s   ▇██▇▇██▇▇▇██▇▇███▇▇██▇▇███▇ 392kB/s
+Cursor 14:38:00Z (window end) · hx4mt 346ms · 8wzpd 346ms · 2bq7k 346ms
+←/→ cursor · n/N signal · g/G regroup · p overlaid lines · ↑/↓ page · 1-4 window · r re-read · s queries · b dots · Esc back
 ```
+
+- Every small chart is a filled area, like a chart with one series on the
+  overlaid page: a Pod near zero is a baseline one eighth high, a Pod
+  without samples has no fill and says `no samples`. A trend in a row is
+  eighth blocks one cell high, with `×` for a cell without a sample. `b`
+  switches both to braille dots and back.
 
 - The third line names every signal. The selected one is in brackets; a star
   marks a signal in which a Pod differs from its peers; a signal that could
@@ -202,7 +262,9 @@ Cursor 09:41:00Z (window end) · hx4mt 346ms · 8wzpd 346ms · 2bq7k 346ms
   value. All titles of a page take the same form. A Pod that was asked for
   and has no samples is still drawn, as `no samples`, last.
 - A limit is drawn as a `─` level in the CPU and memory charts and is part
-  of the shared scale.
+  of the shared scale. A Pod whose area comes within 5% of its limit is
+  drawn in the warning colour there, and the readout under the charts says
+  `at limit` after its value.
 - `←`/`→` move one cursor through every chart at once. The readout under the
   charts lists every Pod's value at that time (`–` where a Pod has no sample
   there), and counts the Pods it has no room for.
@@ -274,8 +336,10 @@ not scraped shows as `no data` in the strip and is not drawn as zeros.
 
 `g` folds the same per-Pod series into groups, and `Shift-G` steps back:
 by pod, by container, by revision, by node, by zone. Each group is one small
-chart on the shared scale: the line is the median of the group's Pods, the
-two thin lines are their minimum and maximum, and the title gives the group,
+chart on the shared scale: the filled area is the median of the group's Pods,
+their maximum is a line above it and their minimum one dash per column
+inside it (in braille dots, `b`: a line and two thin lines), and the title
+gives the group,
 its size, the Pod in it that is an `OUTLIER` and the number the group is
 ranked by. That number is its worst Pod's (the peak, the lowest value or the
 largest rise); with room the title adds the latest value of the median and

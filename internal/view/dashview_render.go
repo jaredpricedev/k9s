@@ -62,6 +62,8 @@ type dashPage struct {
 	Busy   string
 	// Lines is the grid for this width.
 	Lines []dashboard.Line
+	// Style is the chart style of the session.
+	Style chart.Style
 }
 
 type dashRender struct {
@@ -284,7 +286,7 @@ func (s *dashSnapshot) statusParts(first, last, level int) []string {
 	return parts
 }
 
-func dashFooter(width int, zoom, single, query, ascii bool) string {
+func dashFooter(width int, zoom, single, query, ascii bool, style chart.Style) string {
 	var forms []string
 	switch {
 	case zoom && single:
@@ -312,16 +314,12 @@ func dashFooter(width int, zoom, single, query, ascii bool) string {
 			"Tab panel · Enter zoom · 1-4 window · r read · s queries",
 		}
 	}
-	for _, text := range forms {
-		if !query {
-			text = strings.Replace(text, " · e edit", "", 1)
-		}
-		text = graphWords(text, ascii)
-		if runewidth.StringWidth(text) <= width {
-			return text
+	if !query {
+		for i := range forms {
+			forms[i] = strings.Replace(forms[i], " · e edit", "", 1)
 		}
 	}
-	return "1-4 window · r read · Esc"
+	return chartStyleFit(forms, style, width, ascii, "1-4 window · r read · Esc")
 }
 
 // renderDash lays the whole page out for a size. Every line fits Width.
@@ -541,7 +539,7 @@ func (r *dashRender) chartTile(index, width, legendRows, plotRows, gutter int) [
 	for len(legend) < legendRows {
 		legend = append(legend, "")
 	}
-	options := chart.Options{ASCII: r.pg.ASCII, Cursor: -1, AxisColor: r.c.Axis, CursorColor: r.c.Cursor}
+	options := chart.Options{ASCII: r.pg.ASCII, Cursor: -1, AxisColor: r.c.Axis, CursorColor: r.c.Cursor, Style: r.pg.Style}
 	legend = append(legend, panel.Render(f, plotRows, gutter, options)...)
 	return append(legend, chart.Axis(f, gutter, nil, options)...)
 }
@@ -649,7 +647,7 @@ func (r *dashRender) valueTile(index, width int) []string {
 			text += graphPaint(r.c.level(v.MaxStep.Level), r.fit(peak, inner-used))
 		}
 		out = append(out, text)
-		spark := chart.Spark(chart.SparkValues(line.Points, r.frame(inner)), chart.SparkOptions{ASCII: r.pg.ASCII, Color: r.c.Data[0], GapColor: r.c.Axis})
+		spark := chart.Spark(chart.SparkValues(line.Points, r.frame(inner)), chart.SparkOptions{ASCII: r.pg.ASCII, Style: chart.SparkStyleOf(r.pg.Style), Color: r.c.Data[0], GapColor: r.c.Axis})
 		if p.Kind == dashboard.KindGauge {
 			of := " of " + p.Unit.Chart.Format(high)
 			out = append(out, "  "+r.bar(share(v.Value), inner-runewidth.StringWidth(of), level)+graphPaint(r.c.Muted, of), "  "+spark)
@@ -940,7 +938,7 @@ func (r *dashRender) grid() {
 		r.lines = append(r.lines, "")
 	}
 	r.plain("", r.readout())
-	r.plain(r.c.Muted, dashFooter(r.width, false, len(s.Dash.Panels) == 1, s.Spec.isQuery(), pg.ASCII))
+	r.plain(r.c.Muted, dashFooter(r.width, false, len(s.Dash.Panels) == 1, s.Spec.isQuery(), pg.ASCII, pg.Style))
 }
 
 // readout says in one line what the selected panel is and asks.
@@ -1116,7 +1114,7 @@ func (r *dashRender) zoom() {
 		title = pg.Busy + " · shown: " + title
 	}
 	r.lines = append(r.lines, graphBold(r.c.Text, r.fit(title, r.width)))
-	footer := dashFooter(r.width, true, single, s.Spec.isQuery(), pg.ASCII)
+	footer := dashFooter(r.width, true, single, s.Spec.isQuery(), pg.ASCII, pg.Style)
 	detail := r.zoomDetail(index)
 	data := r.data(index)
 	if problem, advice := r.undrawn(index, &data); problem != "" {
@@ -1129,7 +1127,7 @@ func (r *dashRender) zoom() {
 	f := r.frame(r.width - gutter - 2)
 	cursor := min(max(pg.Cursor, 0), f.Steps())
 	when := f.TimeAt(cursor)
-	options := chart.Options{ASCII: pg.ASCII, Cursor: cursor, AxisColor: r.c.Axis, CursorColor: r.c.Cursor}
+	options := chart.Options{ASCII: pg.ASCII, Cursor: cursor, AxisColor: r.c.Axis, CursorColor: r.c.Cursor, Style: pg.Style}
 	top := r.zoomTop(index, &panel, f, when)
 	r.lines = append(r.lines, top...)
 	// headline, panel line, what is above the plot, axis, cursor, keys.

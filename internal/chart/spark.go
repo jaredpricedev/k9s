@@ -20,14 +20,27 @@ const (
 type SparkStyle int
 
 const (
-	// SparkLine is a thin connected line in braille, four levels high. A
-	// jump between two neighbouring cells is joined by a vertical run.
+	// SparkLine is a trend in eighth blocks, eight levels in one cell: the
+	// height of a cell is its value. The plain character form has five
+	// levels.
 	SparkLine SparkStyle = iota
 	// SparkBars is one eighth-block bar per value, eight levels high, for
 	// rows where each value is a separate measurement (a probe request)
 	// rather than a trend.
 	SparkBars
+	// SparkDots is a thin connected line in braille, four levels high. A
+	// jump between two neighbouring cells is joined by a vertical run. It
+	// is the trend of the Dots style.
+	SparkDots
 )
+
+// SparkStyleOf is the sparkline that goes with a chart style.
+func SparkStyleOf(s Style) SparkStyle {
+	if s == Dots {
+		return SparkDots
+	}
+	return SparkLine
+}
 
 var (
 	sparkBars      = []rune("▁▂▃▄▅▆▇█")
@@ -74,7 +87,7 @@ func Spark(values []float64, o SparkOptions) string {
 		glyphs = sparkBarsASCII
 	case o.ASCII:
 		glyphs = sparkLineASCII
-	case o.Style == SparkBars:
+	case o.Style != SparkDots:
 		glyphs = sparkBars
 	}
 	levels := 4

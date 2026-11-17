@@ -80,7 +80,7 @@ func TestSolidStrokeKeepsASteepSawtoothConnected(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			panel := Panel{Unit: Count, Series: []Series{{Points: samples(time.Minute, values...), Stroke: tt.stroke, Dash: tt.dash}}}
-			lines := panel.Render(f, 5, 3, Options{Cursor: -1})
+			lines := panel.Render(f, 5, 3, dots(-1))
 			lo, hi := dotColumns(t, lines, 3, f.Width)
 			for x := range lo {
 				if x >= len(lo)-2 {
@@ -108,7 +108,7 @@ func TestSolidStrokeKeepsASteepSawtoothConnected(t *testing.T) {
 	}
 	count := func(s Series) (empty int) {
 		panel := Panel{Unit: Count, Ceiling: 100, Series: []Series{s}}
-		lo, _ := dotColumns(t, panel.Render(f, 5, 3, Options{Cursor: -1}), 3, f.Width)
+		lo, _ := dotColumns(t, panel.Render(f, 5, 3, dots(-1)), 3, f.Width)
 		for _, l := range lo[:len(lo)-2] {
 			if l < 0 {
 				empty++
@@ -125,7 +125,7 @@ func TestSolidStrokeNeverJoinsAcrossAHole(t *testing.T) {
 	nan := math.NaN()
 	panel := Panel{Unit: Count, Series: []Series{{Stroke: Solid,
 		Points: samples(time.Minute, 10, 10, 10, 10, nan, nan, nan, nan, nan, nan, 90, 90, 90, 90)}}}
-	lo, _ := dotColumns(t, panel.Render(f, 4, 3, Options{Cursor: -1}), 3, f.Width)
+	lo, _ := dotColumns(t, panel.Render(f, 4, 3, dots(-1)), 3, f.Width)
 	for x := 8; x < 20; x++ {
 		assert.Equalf(t, -1, lo[x], "dot column %d lies in the hole and must stay empty", x)
 	}
@@ -183,17 +183,30 @@ func TestSpark(t *testing.T) {
 		opts   SparkOptions
 		want   string
 	}{
-		{"thin line joins a jump with a vertical run", []float64{0, 0, 3, 3, 0}, SparkOptions{}, "⣀⣸⠉⢹⣀"},
-		{"a flat series is a baseline, not blank", []float64{0, 0, 0}, SparkOptions{}, "⣀⣀⣀"},
-		{"a missing sample is a gap, never a low value", []float64{1, nan, nan, 1}, SparkOptions{}, "⠉××⠉"},
-		{"a jump is not joined across a gap", []float64{0, nan, 3}, SparkOptions{}, "⣀×⠉"},
-		{"a fixed maximum keeps rows comparable", []float64{1, 1, 1}, SparkOptions{Max: 100}, "⣀⣀⣀"},
-		{"values above the maximum stay on the top level", []float64{50, 500}, SparkOptions{Max: 100}, "⠚⠉"},
+		// A trend is eighth blocks, one cell high: the height is the value.
+		{"a trend is one eighth block per value", []float64{0, 1, 2, 3, 4, 5, 6, 7}, SparkOptions{}, "▁▂▃▄▅▆▇█"},
+		{"a jump is two heights side by side", []float64{0, 0, 3, 3, 0}, SparkOptions{}, "▁▁██▁"},
+		{"a flat series is a baseline, not blank", []float64{0, 0, 0}, SparkOptions{}, "▁▁▁"},
+		{"a missing sample is a gap, never a low value", []float64{1, nan, nan, 1}, SparkOptions{}, "█××█"},
+		{"a gap between a low and a high value", []float64{0, nan, 3}, SparkOptions{}, "▁×█"},
+		{"a fixed maximum keeps rows comparable", []float64{1, 1, 1}, SparkOptions{Max: 100}, "▁▁▁"},
+		{"values above the maximum stay on the top level", []float64{50, 500}, SparkOptions{Max: 100}, "▅█"},
+		{"a single value", []float64{2}, SparkOptions{Max: 4}, "▅"},
+		// The braille line is the trend of the Dots style, as it was.
+		{"dots: thin line joins a jump with a vertical run", []float64{0, 0, 3, 3, 0}, SparkOptions{Style: SparkDots}, "⣀⣸⠉⢹⣀"},
+		{"dots: a flat series is a baseline, not blank", []float64{0, 0, 0}, SparkOptions{Style: SparkDots}, "⣀⣀⣀"},
+		{"dots: a missing sample is a gap, never a low value", []float64{1, nan, nan, 1}, SparkOptions{Style: SparkDots}, "⠉××⠉"},
+		{"dots: a jump is not joined across a gap", []float64{0, nan, 3}, SparkOptions{Style: SparkDots}, "⣀×⠉"},
+		{"dots: a fixed maximum keeps rows comparable", []float64{1, 1, 1}, SparkOptions{Style: SparkDots, Max: 100}, "⣀⣀⣀"},
+		{"dots: values above the maximum stay on the top level", []float64{50, 500}, SparkOptions{Style: SparkDots, Max: 100}, "⠚⠉"},
+		{"dots: plain characters do not change with the style", []float64{0, 1, 2, 3, 4, nan}, SparkOptions{ASCII: true, Style: SparkDots}, "_.-~^x"},
 		{"bars for separate measurements", []float64{0, 1, 2, 3, 4, 5, 6, 7}, SparkOptions{Style: SparkBars}, "▁▂▃▄▅▆▇█"},
 		{"bars with a gap", []float64{7, nan, 0}, SparkOptions{Style: SparkBars}, "█×▁"},
 		{"plain line", []float64{0, 1, 2, 3, 4, nan}, SparkOptions{ASCII: true}, "_.-~^x"},
 		{"plain bars", []float64{0, 7, nan}, SparkOptions{ASCII: true, Style: SparkBars}, "_#x"},
 		{"colour runs share one tag and gaps keep their own", []float64{1, 1, nan, 1}, SparkOptions{Color: "#79c7d4", GapColor: "#5c6370"},
+			"[#79c7d4::]██[-::][#5c6370::]×[-::][#79c7d4::]█[-::]"},
+		{"dots: colour runs share one tag and gaps keep their own", []float64{1, 1, nan, 1}, SparkOptions{Style: SparkDots, Color: "#79c7d4", GapColor: "#5c6370"},
 			"[#79c7d4::]⠉⠉[-::][#5c6370::]×[-::][#79c7d4::]⠉[-::]"},
 		{"nothing to draw", nil, SparkOptions{}, ""},
 	}
@@ -214,6 +227,8 @@ func TestSpark(t *testing.T) {
 		return "blue"
 	}})
 	assert.Equal(t, "[blue::]▁[-::][red::]█[-::][blue::]▁[-::]", slow)
+	assert.Equal(t, SparkLine, SparkStyleOf(Auto))
+	assert.Equal(t, SparkDots, SparkStyleOf(Dots))
 }
 
 func TestSparkValuesKeepPeaksAndHoles(t *testing.T) {
@@ -354,14 +369,16 @@ func TestGridLayout(t *testing.T) {
 			g := gridOf(tt.minis)
 			got := g.Layout(tt.width, tt.height)
 			assert.Equal(t, tt.want, got)
-			lines, layout := g.Render(p0, pat(10), time.Minute, tt.width, tt.height, Options{Cursor: -1})
-			assert.Equal(t, got, layout)
-			assert.LessOrEqual(t, len(lines), tt.height)
-			for _, line := range lines {
-				assert.LessOrEqual(t, cellWidth(line), tt.width, "%q", line)
-			}
-			if got.Shown == 0 {
-				assert.Empty(t, lines)
+			for _, o := range []Options{{Cursor: -1}, dots(-1), {Cursor: -1, ASCII: true}} {
+				lines, layout := g.Render(p0, pat(10), time.Minute, tt.width, tt.height, o)
+				assert.Equal(t, got, layout)
+				assert.LessOrEqual(t, len(lines), tt.height)
+				for _, line := range lines {
+					assert.LessOrEqual(t, cellWidth(line), tt.width, "%q", line)
+				}
+				if got.Shown == 0 {
+					assert.Empty(t, lines)
+				}
 			}
 		})
 	}
@@ -372,7 +389,24 @@ func TestGridSharesOneScaleAndOneAxis(t *testing.T) {
 	g.Minis = append(g.Minis, Mini{Title: "pod-d"})
 	assert.Equal(t, 40.0, g.Top(), "the scale is the maximum over every mini chart")
 
+	// Every mini chart is a filled area: a flat series near zero is a
+	// baseline of one eighth, never blank, and the chart without samples
+	// has no fill at all.
 	lines, layout := g.Render(p0, pat(10), time.Minute, 100, 8, Options{Cursor: -1})
+	require.Equal(t, GridLayout{Columns: 4, Rows: 1, PlotWidth: 21, PlotHeight: 5, Gutter: 3, Shown: 4}, layout)
+	assert.Equal(t, []string{
+		"     pod-a       p99 300ms   pod-b       p99 300ms   pod-c         p99 40s   pod-d",
+		"40s ┤                       │                       │█████████████████████  │",
+		"    │                       │                       │█████████████████████  │",
+		"20s ┤                       │                       │█████████████████████  │ no data",
+		"    │                       │                       │█████████████████████  │",
+		"  0 ┤▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  │▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  │█████████████████████  │",
+		"    └┬─────────┬─────────┬  └┬─────────┬─────────┬  └┬─────────┬─────────┬  └┬─────────┬─────────┬",
+		"             13:35                   13:35                   13:35                   13:35",
+	}, lines)
+
+	// The braille style keeps the lines it always drew.
+	lines, layout = g.Render(p0, pat(10), time.Minute, 100, 8, dots(-1))
 	require.Equal(t, GridLayout{Columns: 4, Rows: 1, PlotWidth: 21, PlotHeight: 5, Gutter: 3, Shown: 4}, layout)
 	want := []string{
 		"     pod-a       p99 300ms   pod-b       p99 300ms   pod-c         p99 40s   pod-d",
@@ -399,7 +433,7 @@ func TestGridSharesOneScaleAndOneAxis(t *testing.T) {
 	// does not shift the columns.
 	g.Escape = func(s string) string { return strings.ReplaceAll(s, "pod-", "POD-") }
 	g.Minis[2].TitleColor = "#e06c75"
-	tagged, _ := g.Render(p0, pat(10), time.Minute, 100, 8, Options{Cursor: -1, AxisColor: "#5c6370"})
+	tagged, _ := g.Render(p0, pat(10), time.Minute, 100, 8, Options{Cursor: -1, AxisColor: "#5c6370", Style: Dots})
 	assert.Contains(t, tagged[0], "[#e06c75::]POD-c         p99 40s[-::]")
 	assert.Equal(t, cellWidth(lines[1]), cellWidth(tagged[1]))
 }

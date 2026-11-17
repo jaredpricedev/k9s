@@ -94,6 +94,16 @@ func TestHangViewsShareOneKeyboard(t *testing.T) {
 	require.False(t, moved.Opts.Visible, "the pointer to Shift-N is not offered as a key")
 	require.Contains(t, moved.Description, "Shift-N")
 
+	// b switches the chart style, areas and solid lines or braille dots,
+	// in every view that draws a chart or a trend with one, and is not
+	// taken by anything in the two that do not.
+	for _, name := range []string{"slow", "graph", "dash"} {
+		require.Equal(t, chartStyleLabel, walkKey(views[name], chartStyleKey), name)
+	}
+	require.Equal(t, ui.KeyB, chartStyleKey)
+	require.Empty(t, walkKey(views["probe"], chartStyleKey))
+	require.Empty(t, walkKey(views["impact"], chartStyleKey))
+
 	// w alone opens nothing: Shift-W is :slow, here as on a Service row.
 	for name, actions := range views {
 		require.Empty(t, walkKey(actions, ui.KeyW), name)

@@ -279,6 +279,7 @@ func (v *graphView) Init(ctx context.Context) error {
 		tcell.KeyEscape: ui.NewKeyAction("Back", v.escape, false),
 		ui.KeyQ:         ui.NewKeyAction("Back", v.escape, false),
 		grafanaKey:      grafanaKeyAction(v.app, func() actionOwner { return v }, nil),
+		chartStyleKey:   chartStyleAction(v.app, v.render),
 	})
 	// The comparison keys are named in the header only where there are
 	// Pods to compare; elsewhere they answer with the reason.
@@ -672,7 +673,7 @@ func (v *graphView) render() {
 	}
 	page := &graphPage{
 		Width: width, Height: height, ASCII: v.app.Config.K9s.UI.NoIcons, Colors: graphPalette(v.app.Styles.Semantic()),
-		Cursor: v.cursor, First: v.first, Busy: v.busy,
+		Cursor: v.cursor, First: v.first, Busy: v.busy, Style: v.app.chartStyle(),
 	}
 	var lines []string
 	if v.snapshot == nil || v.snapshot.Window != v.window {

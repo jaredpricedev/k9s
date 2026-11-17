@@ -121,7 +121,7 @@ func TestSlowFramesStateEveryHopWhenItHappenedAndWhatOverlapsAtEverySize(t *test
 			// on a whole step.
 			require.Contains(t, frame, "next: Shift-B probe each pod now · m p99 per pod · Enter on …-hx4mt graphs it · h Hubble · Shift-D Grafana · t timeline\n")
 			require.NotContains(t, frame, "p probe", "p is not the probe: Shift-B is, here as on a Service row")
-			require.Contains(t, frame, "↑↓ hop · Enter open · ←→ cursor · n/N episode · 1 15m  2 1h  3 6h  4 24h · s queries and rules · r re-read · Esc back")
+			require.Contains(t, frame, "↑↓ hop · Enter open · ←→ cursor · n/N episode · 1 15m  2 1h  3 6h  4 24h · s queries and rules · r re-read · b dots · Esc back")
 		case 80:
 			require.Contains(t, frame, "Slow requests / gitlab-webservice-default · last 1h · read 08:20:12")
 			require.Contains(t, frame, "3 episodes of client give-ups (HTTP 499) at the ingress, 2m-4m each.")

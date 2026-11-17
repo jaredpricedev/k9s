@@ -100,8 +100,8 @@ func TestALevelLineNeverOverdrawsData(t *testing.T) {
 		{Kind: Reference, Points: qualityFlat(1), Glyph: '┄', ASCII: '.'},
 		line,
 	}}
-	for _, ascii := range []bool{false, true} {
-		options := Options{ASCII: ascii, Cursor: -1}
+	// Braille dots and plain characters: every glyph of the line is there.
+	for _, options := range []Options{{Cursor: -1, Style: Dots}, {ASCII: true, Cursor: -1}} {
 		bare := alone.Render(qualityFrame(60), 6, 4, options)
 		drawn := with.Render(qualityFrame(60), 6, 4, options)
 		require.Len(t, drawn, len(bare))
@@ -117,6 +117,43 @@ func TestALevelLineNeverOverdrawsData(t *testing.T) {
 		}
 		require.Positive(t, levels, "the level is still drawn where there is no data")
 	}
+
+	// A filled area: the cell in which the area ends is the value, and no
+	// level is ever drawn over it. Under that cell the area is only body,
+	// and there a level stays visible by being drawn over it.
+	options := Options{Cursor: -1}
+	require.Equal(t, 2, with.Filled(options))
+	bare := alone.Render(qualityFrame(60), 6, 4, options)
+	drawn := with.Render(qualityFrame(60), 6, 4, options)
+	require.Len(t, drawn, len(bare))
+	cells := func(lines []string) [][]rune {
+		out := make([][]rune, len(lines))
+		for row, line := range lines {
+			out[row] = []rune(line)[6:]
+			for len(out[row]) < 60 {
+				out[row] = append(out[row], ' ')
+			}
+		}
+		return out
+	}
+	a, b := cells(bare), cells(drawn)
+	for col := range 60 {
+		top := 0
+		for top < len(a) && a[top][col] == ' ' {
+			top++
+		}
+		require.Less(t, top, len(a), "column %d has a sample", col)
+		require.Equal(t, string(a[top][col]), string(b[top][col]), "column %d: the top of the area is drawn over the level, never under it", col)
+		for row := top + 1; row < len(a); row++ {
+			if b[row][col] != a[row][col] {
+				require.Contains(t, "─┄", string(b[row][col]), "row %d column %d: only a level is drawn over the body of an area", row, col)
+			}
+		}
+	}
+	// The request (1 of 2) crosses the body or the empty plot in every
+	// column; the limit (1.5) is hidden only where the area ends on it.
+	require.Equal(t, strings.Repeat("┄", 60), string(b[2]))
+	require.Equal(t, strings.Repeat("─", 20)+strings.Repeat("▄", 20)+strings.Repeat("─", 20), string(b[1]))
 }
 
 func TestGridCeilingKeepsOneScaleFromPageToPage(t *testing.T) {
@@ -140,7 +177,7 @@ func TestGridCeilingKeepsOneScaleFromPageToPage(t *testing.T) {
 		{Title: "a", Series: []Series{{Kind: Reference, Points: qualityFlat(1.5), Glyph: '─', ASCII: '='}, {Points: qualityFlat(1.52), Stroke: Solid}}},
 		{Title: "b", Series: []Series{{Kind: Reference, Points: qualityFlat(1.5), Glyph: '─', ASCII: '='}, {Points: qualityFlat(0.4), Stroke: Solid}}},
 	}}
-	lines, layout = limited.Render(qualityStart, qualityStart.Add(time.Hour), 30*time.Second, 80, 7, Options{Cursor: -1})
+	lines, layout = limited.Render(qualityStart, qualityStart.Add(time.Hour), 30*time.Second, 80, 7, Options{Cursor: -1, Style: Dots})
 	require.Equal(t, 2, layout.Columns)
 	require.Equal(t, len("1.5"), layout.Gutter)
 	axis := -1
@@ -156,6 +193,13 @@ func TestGridCeilingKeepsOneScaleFromPageToPage(t *testing.T) {
 	// The first chart's data runs on its limit and is drawn over it; the
 	// second shows the level on the same row.
 	require.Contains(t, strings.Join(lines, "\n"), "1.5 ┤⠉")
+	require.Contains(t, strings.Join(lines, "\n"), "│────")
+	// As areas the same holds: the first chart's area ends on its limit
+	// and is drawn over it, the second shows the level on the same row.
+	lines, layout = limited.Render(qualityStart, qualityStart.Add(time.Hour), 30*time.Second, 80, 7, Options{Cursor: -1})
+	require.Equal(t, 2, layout.Columns)
+	require.Equal(t, len("1.5"), layout.Gutter)
+	require.Contains(t, strings.Join(lines, "\n"), "1.5 ┤█")
 	require.Contains(t, strings.Join(lines, "\n"), "│────")
 }
 

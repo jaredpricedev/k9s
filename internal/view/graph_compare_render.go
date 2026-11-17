@@ -124,7 +124,7 @@ func graphPodItems(set *graphSeriesSet, colors graphColors) []graphItem {
 			item.Word, item.Mark, color = graphOutlierWord, graphOutlierWord, colors.Failure
 		}
 		if len(m.Limit) > 0 {
-			item.Series = append(item.Series, chart.Series{Kind: chart.Reference, Points: m.Limit, Glyph: '─', ASCII: '=', Color: colors.Ceiling})
+			item.Series = append(item.Series, chart.Series{Kind: chart.Reference, Points: m.Limit, Glyph: '─', ASCII: '=', Color: colors.Ceiling, Limit: true})
 		}
 		item.Series = append(item.Series, chart.Series{Points: m.Points, Stroke: chart.Solid, Color: color})
 		items = append(items, item)
@@ -132,8 +132,9 @@ func graphPodItems(set *graphSeriesSet, colors graphColors) []graphItem {
 	return items
 }
 
-// graphGroupItems are groups as drawable items: the median as the line,
-// the minimum and maximum as thin lines around it.
+// graphGroupItems are groups as drawable items: the median as the area (in
+// braille and plain characters, the line), the minimum and maximum as
+// lines around it.
 func graphGroupItems(set *graphSeriesSet, groups []graphGroup, by graphGrouping, colors graphColors) []graphItem {
 	items := make([]graphItem, 0, len(groups))
 	unit := "pod"
@@ -177,14 +178,16 @@ func graphGroupItems(set *graphSeriesSet, groups []graphGroup, by graphGrouping,
 			item.Mark = item.Word
 		}
 		if len(g.Limit) > 0 {
-			item.Series = append(item.Series, chart.Series{Kind: chart.Reference, Points: g.Limit, Glyph: '─', ASCII: '=', Color: colors.Ceiling})
+			item.Series = append(item.Series, chart.Series{Kind: chart.Reference, Points: g.Limit, Glyph: '─', ASCII: '=', Color: colors.Ceiling, Limit: true})
 		}
 		if len(g.Members) > 1 {
 			item.Series = append(item.Series,
 				chart.Series{Points: g.High, Color: colors.Axis},
 				chart.Series{Points: g.Low, Color: colors.Axis})
 		}
-		item.Series = append(item.Series, chart.Series{Points: g.Mid, Stroke: chart.Solid, Color: color})
+		// The median is the filled area of the chart; the minimum and the
+		// maximum stay lines around it.
+		item.Series = append(item.Series, chart.Series{Points: g.Mid, Stroke: chart.Solid, Color: color, Fill: true})
 		items = append(items, item)
 	}
 	return items
@@ -261,7 +264,7 @@ func graphTitleForm(items []graphItem, width int) int {
 // A cell that holds several samples shows the worst of them: the largest,
 // or with low the smallest, so that a short dip of a signal that is worse
 // when low is not folded away any more than a short peak is.
-func graphSpark(points []chart.Point, f chart.Frame, top float64, color, gap string, ascii, low bool) string {
+func graphSpark(points []chart.Point, f chart.Frame, top float64, color, gap string, o chart.Options, low bool) string {
 	values := chart.SparkValues(points, f)
 	if low {
 		mirrored := make([]chart.Point, len(points))
@@ -286,7 +289,7 @@ func graphSpark(points []chart.Point, f chart.Frame, top float64, color, gap str
 		return strings.Repeat(" ", f.Width)
 	}
 	return strings.Repeat(" ", first) +
-		chart.Spark(values[first:last+1], chart.SparkOptions{ASCII: ascii, Max: top, Color: color, GapColor: gap}) +
+		chart.Spark(values[first:last+1], chart.SparkOptions{ASCII: o.ASCII, Style: chart.SparkStyleOf(o.Style), Max: top, Color: color, GapColor: gap}) +
 		strings.Repeat(" ", f.Width-1-last)
 }
 
@@ -461,20 +464,14 @@ func graphCompareStatus(c *graphCompare, shown, first, total int, what string, l
 	return parts
 }
 
-func graphCompareFooter(width int, ascii bool) string {
-	for _, text := range []string{
+func graphCompareFooter(width int, ascii bool, style chart.Style) string {
+	return chartStyleFit([]string{
 		"←/→ cursor · n/N signal · g/G regroup · p overlaid lines · ↑/↓ page · 1-4 window · r re-read · s queries · Esc back",
 		"←/→ cursor · n signal · g regroup · p overlaid · ↑/↓ page · 1-4 window · r re-read · s queries · Esc",
 		"←/→ cursor · n signal · g regroup · p overlaid · ↑/↓ page · r read · s queries",
 		"←/→ cursor · n signal · g regroup · p overlaid · r read · s queries",
 		"n signal · g regroup · p overlaid · ↑/↓ page · r read · Esc",
-	} {
-		text = graphWords(text, ascii)
-		if runewidth.StringWidth(text) <= width {
-			return text
-		}
-	}
-	return "n signal · g regroup · p overlaid"
+	}, style, width, ascii, "n signal · g regroup · p overlaid")
 }
 
 // graphGroupingLine names the grouping, the size of every group and the
@@ -543,7 +540,7 @@ func renderGraphCompare(s *graphSnapshot, c *graphCompare, pg *graphPage) []stri
 		}
 		w.plain(col.Muted, busy)
 		w.out = append(w.out, "")
-		w.plain(col.Muted, graphCompareFooter(width, pg.ASCII))
+		w.plain(col.Muted, graphCompareFooter(width, pg.ASCII, pg.Style))
 		return w.out
 	}
 	standing := c.standing()
@@ -555,7 +552,7 @@ func renderGraphCompare(s *graphSnapshot, c *graphCompare, pg *graphPage) []stri
 	sig, index := c.signal(pg.Signal)
 	if sig == nil {
 		w.plain(col.Muted, "No Pod was asked for, so there is nothing to compare.")
-		w.plain(col.Muted, graphCompareFooter(width, pg.ASCII))
+		w.plain(col.Muted, graphCompareFooter(width, pg.ASCII, pg.Style))
 		return w.out
 	}
 	pg.Signal = sig.ID
@@ -604,6 +601,10 @@ func renderGraphCompare(s *graphSnapshot, c *graphCompare, pg *graphPage) []stri
 			text := items[i].Name + " " + graphNoSample
 			if v, ok := valueAt(items[i].Trend); ok {
 				text = items[i].Name + " " + sig.Unit.Format(v)
+				// In words what the warning colour of an area means.
+				if limit, ok := valueAt(items[i].Limit); ok && chart.Near(v, limit) {
+					text += " at limit"
+				}
 			}
 			parts = append(parts, text)
 		}
@@ -722,7 +723,7 @@ func renderGraphCompare(s *graphSnapshot, c *graphCompare, pg *graphPage) []stri
 		scale.Minis = append(scale.Minis, chart.Mini{Series: items[i].Series})
 	}
 	ceiling := scale.Top()
-	options := chart.Options{ASCII: pg.ASCII, Cursor: cursor, AxisColor: col.Axis, CursorColor: col.Cursor}
+	options := pg.options(cursor)
 	if len(items) > 0 && !list {
 		// The page size is that of the whole set, so that paging steps by
 		// whole pages; a page holds what fits at a readable size.
@@ -817,6 +818,9 @@ func renderGraphCompare(s *graphSnapshot, c *graphCompare, pg *graphPage) []stri
 	rest := " · " + order + " · " + sig.About
 	if by != graphByPod {
 		rest = " · line median, thin lines min and max" + rest
+		if !pg.ASCII && pg.Style == chart.Auto {
+			rest = strings.Replace(rest, "line median, thin lines", "area median, lines", 1)
+		}
 	}
 	if set.Incomplete {
 		rest = " · CUT at the source's series or sample limit" + rest
@@ -853,7 +857,7 @@ func renderGraphCompare(s *graphSnapshot, c *graphCompare, pg *graphPage) []stri
 				w.plain(col.Muted, line)
 			}
 		}
-		w.plain(col.Muted, graphCompareFooter(width, pg.ASCII))
+		w.plain(col.Muted, graphCompareFooter(width, pg.ASCII, pg.Style))
 		return w.out
 	case len(items) == 0:
 		w.plain("", "No Pod was asked for, so there is nothing to compare.")
@@ -862,7 +866,7 @@ func renderGraphCompare(s *graphSnapshot, c *graphCompare, pg *graphPage) []stri
 	for _, line := range under {
 		w.plain("", line)
 	}
-	w.plain(col.Muted, graphCompareFooter(width, pg.ASCII))
+	w.plain(col.Muted, graphCompareFooter(width, pg.ASCII, pg.Style))
 	return w.out
 }
 
@@ -961,7 +965,7 @@ func graphSignalTable(c *graphCompare, st *graphStanding, shown *graphSeriesSet,
 				value += "*"
 				color, valueColor = col.Failure, col.Failure
 			}
-			row += graphSpark(m.Points, frame, scale.Top(), color, col.Muted, pg.ASCII, sig.Rank == graphRankLow) + " " +
+			row += graphSpark(m.Points, frame, scale.Top(), color, col.Muted, pg.options(-1), sig.Rank == graphRankLow) + " " +
 				graphPaint(valueColor, pad(value, valueW)) + strings.Repeat(" ", gap)
 		}
 		lines = append(lines, strings.TrimRight(row, " "))
@@ -1162,7 +1166,7 @@ func graphCompareList(items []graphItem, sig *graphSignal, set *graphSeriesSet, 
 		if item.Mark != "" {
 			tail += " " + item.Mark
 		}
-		trend := graphSpark(item.Trend, frame, ceiling, lineColor, col.Muted, pg.ASCII, sig.Rank == graphRankLow)
+		trend := graphSpark(item.Trend, frame, ceiling, lineColor, col.Muted, pg.options(-1), sig.Rank == graphRankLow)
 		if len(item.Trend) == 0 {
 			trend = graphPaint(col.Muted, pad(graphNoSamples, trendW))
 		}
