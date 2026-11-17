@@ -116,6 +116,7 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 	result = append(result, graphActions(owner, app)...)
 	result = append(result, impactActions(owner, app)...)
 	result = append(result, slowActions(owner, app)...)
+	result = append(result, probeActions(owner, app)...)
 	result = append(result, workspaceActions(app)...)
 	// A view may bind a key to a command the catalog already lists. The
 	// palette and help then show the command once, with its key named.

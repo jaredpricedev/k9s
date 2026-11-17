@@ -795,6 +795,9 @@ func (b *Browser) refreshActions() {
 	if _, ok := slowKinds[b.GVR().String()]; ok {
 		aa.Add(slowKey, slowKeyAction(b.app, b))
 	}
+	if _, ok := probeKinds[b.GVR().String()]; ok {
+		aa.Add(probeKey, probeKeyAction(b.app, b))
+	}
 	for _, f := range b.bindKeysFn {
 		f(aa)
 	}
