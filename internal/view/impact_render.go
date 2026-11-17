@@ -163,6 +163,11 @@ func (v *impactView) headerLines(tight bool) []string {
 				fmt.Sprintf("%s / %s · %s (%s)", impactTitle, w.Name, r.Label(), short))
 		}
 	}
+	if read != nil && read.incomplete != "" {
+		// A cut revision list can hide the real latest rollout; say so
+		// before any number is read.
+		add(read.incomplete, p.Warning, true)
+	}
 	switch {
 	case read == nil:
 		add("Reading the rollout history, then the declared Prometheus source.", p.Text, false)

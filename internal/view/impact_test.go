@@ -401,3 +401,15 @@ func TestImpactTargetsWorkloadsAndIsRegistered(t *testing.T) {
 	require.Equal(t, impactColumns{percent: 6}, impactLayout(60))
 	require.Equal(t, []string{"After rev 2 (04:20): error ratio", "0.2% -> 14.1%."}, impactWrap("After rev 2 (04:20): error ratio 0.2% -> 14.1%.", 33))
 }
+
+func TestImpactWarnsWhenTheRevisionListWasCut(t *testing.T) {
+	v := impactViewFixture(t)
+	read := impactStoryRead(t, impactStory())
+	read.incomplete = "Only the first 200 ReplicaSets were read (limit 200): a later rollout may be missing."
+	v.accept(read)
+	for _, size := range [][2]int{{100, 30}, {80, 20}, {60, 20}} {
+		frame := drawnText(t, v, size[0], size[1])
+		require.Contains(t, frame, "Only the first 200 ReplicaSets were read (limit 200)", "%dx%d", size[0], size[1])
+		require.Contains(t, frame, "Error ratio", "%dx%d", size[0], size[1])
+	}
+}

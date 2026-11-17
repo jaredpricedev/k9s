@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 const secretValue = "synthetic-value-must-not-be-shown"
@@ -200,4 +201,26 @@ func TestStatefulSetRevisionsComeFromControllerRevisions(t *testing.T) {
 	require.Equal(t, []string{"image v3 -> v4", "env ~PAYMENT_TOKEN"}, changes)
 	require.Empty(t, limit, "an unchanged limit is not reported as a change")
 	require.Contains(t, history.Notes[0], "ControllerRevision")
+}
+
+func TestHistorySaysWhenTheRevisionListWasCut(t *testing.T) {
+	objects := cluster(
+		object("apps/v1", "Deployment", "checkout-api", rolloutAt.Add(-96*time.Hour), nil, map[string]any{"spec": selector()}),
+		replicaSet(t, "checkout-api-6c8d7f9b5", "1", rolloutAt.Add(-72*time.Hour), "checkout-api", "v1", "512Mi"),
+	)
+	workload := Workload{Kind: KindDeployment, Namespace: "apps", Name: "checkout-api"}
+	history, err := ReadHistory(t.Context(), objects, workload)
+	require.NoError(t, err)
+	require.Empty(t, history.Incomplete, "a complete list makes no claim about missing rollouts")
+
+	// The server holds more ReplicaSets than one bounded read returns.
+	objects.PrependReactor("list", "replicasets", func(k8stesting.Action) (bool, runtime.Object, error) {
+		list := &unstructured.UnstructuredList{Object: map[string]any{"apiVersion": "apps/v1", "kind": "ReplicaSetList"}}
+		list.SetContinue("more")
+		list.Items = append(list.Items, *replicaSet(t, "checkout-api-6c8d7f9b5", "1", rolloutAt.Add(-72*time.Hour), "checkout-api", "v1", "512Mi"))
+		return true, list, nil
+	})
+	history, err = ReadHistory(t.Context(), objects, workload)
+	require.NoError(t, err)
+	require.Equal(t, "Only the first 1 ReplicaSets were read (limit 200): a later rollout may be missing.", history.Incomplete)
 }

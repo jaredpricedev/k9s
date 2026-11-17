@@ -95,6 +95,9 @@ type History struct {
 	Revisions []Revision
 	// Notes state what the history cannot show.
 	Notes []string
+	// Incomplete is set when the revision list was cut by the read limit,
+	// so the latest retained revision may not be the latest rollout.
+	Incomplete string
 }
 
 // Rollout is one revision taking effect, with its neighbours.
@@ -284,7 +287,8 @@ func ReadHistory(ctx context.Context, objects dynamic.Interface, w Workload) (*H
 		return nil, readError(what+" of "+w.Label(), err)
 	}
 	if list.GetContinue() != "" {
-		history.Notes = append(history.Notes, fmt.Sprintf("only the first %d %s were read; the latest revision may be missing", len(list.Items), what))
+		history.Incomplete = fmt.Sprintf("Only the first %d %s were read (limit %d): a later rollout may be missing.", len(list.Items), what, MaxRevisions)
+		history.Notes = append(history.Notes, history.Incomplete)
 	}
 	for index := range list.Items {
 		item := &list.Items[index]

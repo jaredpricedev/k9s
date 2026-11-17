@@ -7,6 +7,7 @@ import (
 	"context"
 	"math"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -298,12 +299,16 @@ type fakeSource struct {
 	answers map[string]func(offset time.Duration) float64
 	buckets map[string]func(offset time.Duration) float64
 	status  observability.Status
+	// Collect reads several templates at once; mu guards queries.
+	mu      sync.Mutex
 	queries []string
 }
 
 func (f *fakeSource) QueryRange(_ context.Context, e observability.Expr, start, end time.Time) observability.PromResult {
 	query := e.String()
+	f.mu.Lock()
 	f.queries = append(f.queries, query)
+	f.mu.Unlock()
 	result := observability.PromResult{Status: observability.Status{State: observability.StateComplete}, Query: query,
 		Start: start, End: end, Step: observability.StepFor(end.Sub(start))}
 	if f.status.State != "" {
@@ -465,7 +470,7 @@ func TestCollectReportsDeniedTooFewSamplesAndTrafficShiftsHonestly(t *testing.T)
 
 	healthy := &fakeSource{answers: map[string]func(time.Duration) float64{"http_requests_total": stepped(40, 41), `code=~"5.."`: stepped(4, 0.041)}}
 	report = Collect(t.Context(), healthy, checkoutRequest(t))
-	require.Contains(t, report.Summary(), "no compared signal is worse by the stated thresholds (2 compared, 1 better); better: error ratio 10.0% -> 0.1%.")
+	require.Contains(t, report.Summary(), "no compared signal is worse by the stated thresholds (2 compared, 1 better, 9 not compared); better: error ratio 10.0% -> 0.1%.")
 
 	none := Collect(t.Context(), &fakeSource{}, checkoutRequest(t))
 	require.Contains(t, none.Summary(), "no signal could be compared. That is missing data, not a sign that nothing changed.")

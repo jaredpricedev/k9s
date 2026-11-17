@@ -38,7 +38,10 @@ Kubernetes, three bounded reads at most (three-second timeout each):
 2. The workload.
 3. Its revisions: ReplicaSets with the workload's selector for a Deployment,
    ControllerRevisions for a StatefulSet or DaemonSet; at most 200, filtered
-   to those the workload controls.
+   to those the workload controls. When the server holds more than that, the
+   header says in a warning line that only the first 200 were read and that a
+   later rollout may be missing, because "latest" is then only the latest
+   revision that was read.
 
 Prometheus, nine range queries through the shared client (eight seconds and
 1 MiB each, at most three in flight, no redirects, cancellable). Leaving the
@@ -180,8 +183,9 @@ It lists the signals that are worse by the rule above, in a fixed order, with
 one latency figure (the highest percentile that moved). "memory at limit"
 means the peak working set reached 90 % of the limit; when the revision also
 changed the limit, both values follow in brackets, taken from the two pod
-templates. When nothing is worse it says so, and how many signals were
-compared. When the request rate rose or fell by a factor of two or more it
+templates. When nothing is worse it says so, how many signals were compared
+and how many were not, so a quiet sentence is never read as health when
+signals are missing. When the request rate rose or fell by a factor of two or more it
 adds that error ratio and latency are not like-for-like.
 
 ## Limits

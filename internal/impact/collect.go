@@ -387,7 +387,7 @@ func (r *Report) Summary() string {
 	if r.Failure != "" {
 		return head + "nothing was read from the source: " + r.Failure + ". No comparison was made."
 	}
-	worse, better, same, _ := r.Counts()
+	worse, better, same, uncompared := r.Counts()
 	compared := worse + better + same
 	if compared == 0 {
 		return head + "no signal could be compared. That is missing data, not a sign that nothing changed."
@@ -428,6 +428,10 @@ func (r *Report) Summary() string {
 		text += fmt.Sprintf("no compared signal is worse by the stated thresholds (%d compared", compared)
 		if better > 0 {
 			text += fmt.Sprintf(", %d better", better)
+		}
+		// A quiet sentence must not read as health when signals are missing.
+		if uncompared > 0 {
+			text += fmt.Sprintf(", %d not compared", uncompared)
 		}
 		text += ")"
 		list(Better)

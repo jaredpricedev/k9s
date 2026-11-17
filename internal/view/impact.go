@@ -42,7 +42,9 @@ type impactRead struct {
 	rollout  *impact.Rollout
 	report   *impact.Report
 	notes    []string
-	err      error
+	// incomplete says the revision list was cut by its read limit.
+	incomplete string
+	err        error
 }
 
 // impactView is an on-demand, retained comparison: it reads when opened and
@@ -135,7 +137,7 @@ func readImpact(ctx context.Context, objects dynamic.Interface, sources *observa
 		read.err = err
 		return read
 	}
-	read.notes = history.Notes
+	read.notes, read.incomplete = history.Notes, history.Incomplete
 	rollout, err := history.Rollout(back)
 	if rollout.Total > 0 {
 		read.rollout = &rollout
