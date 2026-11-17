@@ -4,11 +4,13 @@ package timeline
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -89,6 +91,7 @@ func incident() []runtime.Object {
 			"spec": map[string]any{"scaleTargetRef": map[string]any{"kind": "Deployment", "name": "checkout"}, "maxReplicas": int64(4)},
 			"status": map[string]any{"lastScaleTime": ago(26 * time.Hour), "conditions": []any{
 				map[string]any{"type": "ScalingActive", "status": "False", "reason": "FailedGetResourceMetric", "lastTransitionTime": ago(8 * time.Minute)}}}}),
+		&unstructured.Unstructured{Object: map[string]any{"apiVersion": "v1", "kind": "Namespace", "metadata": map[string]any{"name": "apps"}}},
 		&unstructured.Unstructured{Object: map[string]any{"apiVersion": "v1", "kind": "Node", "metadata": map[string]any{"name": "node-a", "uid": "node-a"},
 			"status": map[string]any{"conditions": []any{map[string]any{"type": "Ready", "status": "True", "reason": "KubeletReady", "lastTransitionTime": ago(144 * time.Hour)}}}}},
 	}
@@ -302,4 +305,29 @@ func TestSpansAndClock(t *testing.T) {
 	require.Equal(t, "2d", Coarse(71*time.Hour))
 	require.Equal(t, "11:58:00", Clock(now.Add(-2*time.Minute), now))
 	require.Equal(t, "Nov14 12h", Clock(now.Add(-72*time.Hour), now))
+}
+
+func TestCollectRefusesAMissingNamespaceAndSaysWhenItCannotVerifyOne(t *testing.T) {
+	r, dyn := readers(t, incident()...)
+	_, err := Collect(context.Background(), r, &Scope{Context: "ctx", Namespace: "nosuch"}, now)
+	require.ErrorContains(t, err, "namespace nosuch was not found", "empty lists in a missing namespace must not read as a quiet namespace")
+
+	dyn.PrependReactor("get", "namespaces", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: "namespaces"}, "apps", errors.New("no"))
+	})
+	s, err := Collect(context.Background(), r, &Scope{Context: "ctx", Namespace: "apps"}, now)
+	require.NoError(t, err, "a namespace-restricted reader still gets a timeline")
+	require.NotEmpty(t, s.Entries)
+	require.Contains(t, s.Report(0), "The namespace object itself could not be read (access denied")
+}
+
+func TestAutoscalerDeliberatelyDisabledIsNotAFailingSignal(t *testing.T) {
+	at := metav1.NewTime(now.Add(-time.Hour))
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{Status: autoscalingv2.HorizontalPodAutoscalerStatus{Conditions: []autoscalingv2.HorizontalPodAutoscalerCondition{
+		{Type: autoscalingv2.ScalingActive, Status: corev1.ConditionFalse, Reason: "ScalingDisabled", LastTransitionTime: at},
+		{Type: autoscalingv2.ScalingActive, Status: corev1.ConditionFalse, Reason: "FailedGetResourceMetric", LastTransitionTime: at}}}}
+	entries, _ := autoscalerEntries(hpa)
+	require.Len(t, entries, 2)
+	require.False(t, entries[0].Failing)
+	require.True(t, entries[1].Failing)
 }

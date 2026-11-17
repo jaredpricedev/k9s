@@ -115,11 +115,15 @@ func TestTimelineNoIconsUsesASCIIMarksOnly(t *testing.T) {
 func TestTimelineDetailStatesExactTimeSourceResourceAndOrderNotCause(t *testing.T) {
 	v := timelineViewFixture(t)
 	require.Equal(t, v.snapshot.Onset, v.focused, "opens on the first failing signal")
-	require.Contains(t, v.detail.GetText(true), "2026-11-17 11:50:00Z · 10m before capture · Event · Pod apps/checkout-api-7d9f8c6b5d-x2x9q")
+	require.Contains(t, v.detail.GetText(true), "2026-11-17 11:50:00Z  10m ago  Event  pod/checkout-api-7d9f8c6b5d-x2x9q",
+		"the identifying line shortens its wording rather than wrap at 80 columns")
 	require.Contains(t, v.detail.GetText(true), "First failing signal that could be read")
 	v.table.Select(5, 0) // header, restart, event, rule, rollout, config
 	text := v.detail.GetText(true)
-	require.Contains(t, text, "2026-11-17 11:46:00Z · 14m before capture · Config · ConfigMap apps/checkout-config")
+	require.Contains(t, text, "2026-11-17 11:46:00Z  14m ago  Config  cm/checkout-config")
+	drawnText(t, v, 120, 34)
+	require.Contains(t, v.detail.GetText(true), "2026-11-17 11:46:00Z · 14m before capture · Config · ConfigMap apps/checkout-config",
+		"the full wording returns when it fits")
 	require.Contains(t, text, "This change preceded the first failing signal by 4m. Order is not cause.")
 	require.Contains(t, text, "Time from: metadata.managedFields[].time and manager")
 	target := v.SelectedResource()
@@ -245,6 +249,9 @@ func TestTimelineScopeFollowsSelectionThenNamespace(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "namespace ops", scope.Label(), "an explicit namespace argument wins")
 
+	_, _, err = timelineScope(pod, "apps", client.NamespaceAll)
+	require.ErrorContains(t, err, "single namespace", "all is not a namespace to read")
+
 	for _, active := range []string{client.NamespaceAll, client.BlankNamespace, client.ClusterScope} {
 		_, _, err = timelineScope(none, active, "")
 		require.ErrorContains(t, err, "a timeline reads a single namespace")
@@ -267,4 +274,24 @@ func TestTimelineIsRegisteredInTheActionCatalog(t *testing.T) {
 	command := NewCommand(v.app)
 	command.updateSuggestionAliases()
 	require.Contains(t, command.suggestionAliases(), timelineCommandToken)
+}
+
+func TestTimelineDetailKeepsOrderSentenceAndChangeVisibleWhenNarrow(t *testing.T) {
+	v := timelineViewFixture(t)
+	for index := range v.snapshot.Entries {
+		if strings.HasPrefix(v.snapshot.Entries[index].Summary, "rev 2") {
+			v.snapshot.Entries[index].Summary = "rev 2: image v1 -> v2; env ~PAYMENT_TOKEN +FEATURE_FLAGS; limits.memory 512Mi -> 256Mi"
+		}
+	}
+	v.render()
+	drawnText(t, v, 60, 24)
+	v.table.Select(4, 0) // header, restart, event, rule, rollout
+	frame := drawnText(t, v, 60, 24)
+	require.NotContains(t, frame, "\nrs/", "the identifying line does not wrap")
+	require.Contains(t, frame, "2026-11-17 11:48:00Z  12m ago  Rollout  rs/checkout")
+	require.Contains(t, frame, "Preceded the first failing signal by 2m; order, not cause.")
+	require.Contains(t, frame, "256Mi", "the pane cannot scroll, so the whole change must fit")
+	for _, line := range strings.Split(frame, "\n") {
+		require.LessOrEqual(t, runewidth.StringWidth(line), 60)
+	}
 }

@@ -61,6 +61,9 @@ var timelineKinds = map[string]string{
 func timelineScope(target SelectedResourceTarget, activeNamespace, argument string) (*timeline.Scope, string, error) {
 	scope := &timeline.Scope{Context: target.Context}
 	if argument != "" {
+		if client.IsAllNamespaces(argument) || client.IsClusterScoped(argument) {
+			return nil, "", errors.New("A timeline reads a single namespace: name one, as in :timeline apps")
+		}
 		scope.Namespace = argument
 		return scope, "", nil
 	}
@@ -385,8 +388,11 @@ func (v *timelineView) Draw(screen tcell.Screen) {
 	if width != v.width || height != v.height {
 		v.width, v.height = width, height
 		detail := 5
-		if height < 18 {
+		switch {
+		case height < 18:
 			detail = 3
+		case height >= 28:
+			detail = 7
 		}
 		if detail != v.detailHeight {
 			v.detailHeight = detail
@@ -589,11 +595,31 @@ func (v *timelineView) renderDetail() {
 	if entry.Ref.Namespace == "" {
 		where = entry.Ref.Kind + " " + entry.Ref.Name
 	}
-	lines := []string{
-		timelineTag(p.Focus, true) + tview.Escape(fmt.Sprintf("%s · %s before capture · %s · %s", timeline.Stamp(entry.At),
-			timeline.Span(s.CapturedAt.Sub(entry.At)), entry.Source, where)) + "[-:-:-]",
+	// The pane is short and cannot scroll, so the identifying line must not
+	// wrap: it shortens its wording, then elides the middle of the name. The
+	// text view wraps on encoded length, so the budget is counted in bytes,
+	// which is never less than the width in cells.
+	width := v.viewWidth()
+	age := timeline.Span(s.CapturedAt.Sub(entry.At))
+	head := fmt.Sprintf("%s · %s before capture · %s · %s", timeline.Stamp(entry.At), age, entry.Source, where)
+	if len(head) >= width {
+		prefix := fmt.Sprintf("%s  %s ago  %s  ", timeline.Stamp(entry.At), age, entry.Source)
+		name := entry.Ref.Short()
+		if room := width - 1 - len(prefix); len(name) > room {
+			name = strings.TrimRight(timelineName(name, max(room-len("…")+1, 8)), " ")
+		}
+		head = prefix + name
 	}
-	relation, _ := s.Relation(v.focused)
+	lines := []string{timelineTag(p.Focus, true) + tview.Escape(head) + "[-:-:-]"}
+	relation, delta := s.Relation(v.focused)
+	sentence := s.RelationSentence(v.focused)
+	if relation == timeline.RelationBefore && entry.Change && len(sentence) >= width {
+		moment := "the first failing signal"
+		if s.Chosen {
+			moment = "your reference moment"
+		}
+		sentence = "Preceded " + moment + " by " + timeline.Span(delta) + "; order, not cause."
+	}
 	color := p.Muted
 	switch {
 	case relation == timeline.RelationOnset:
@@ -602,7 +628,7 @@ func (v *timelineView) renderDetail() {
 		color = p.Warning
 	}
 	lines = append(lines, timelineTag(color, relation == timeline.RelationOnset || (relation == timeline.RelationBefore && entry.Change))+
-		tview.Escape(s.RelationSentence(v.focused))+"[-:-:-]",
+		tview.Escape(sentence)+"[-:-:-]",
 		tview.Escape(entry.Summary))
 	var details []string
 	for _, item := range entry.Detail {

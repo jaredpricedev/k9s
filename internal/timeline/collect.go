@@ -173,8 +173,20 @@ func Collect(ctx context.Context, readers *Readers, scope *Scope, now time.Time)
 		}
 	}
 
-	// First pass: five independent namespace reads.
+	// First pass: five independent namespace reads. Without a selected
+	// resource nothing else proves the namespace exists, and lists in a
+	// namespace that does not exist succeed with no items.
 	var pass sync.WaitGroup
+	var namespaceErr error
+	if scope.Kind == "" {
+		pass.Add(1)
+		go func() {
+			defer pass.Done()
+			readCtx, stop := context.WithTimeout(ctx, ReadTimeout)
+			defer stop()
+			_, namespaceErr = readers.Objects.Resource(gvr(resNamespaces)).Get(readCtx, scope.Namespace, metav1.GetOptions{})
+		}()
+	}
 	reads := make([]listRead, 5)
 	for index, item := range []struct {
 		source, resource string
@@ -194,6 +206,14 @@ func Collect(ctx context.Context, readers *Readers, scope *Scope, now time.Time)
 		}()
 	}
 	pass.Wait()
+	if namespaceErr != nil {
+		if apierrors.IsNotFound(namespaceErr) {
+			return nil, fmt.Errorf("namespace %s was not found in this context", scope.Namespace)
+		}
+		_, detail := readState(namespaceErr)
+		snapshot.Notes = append(snapshot.Notes, "The namespace object itself could not be read ("+detail+
+			"). If the namespace does not exist, every list is empty; an empty timeline does not show that it exists.")
+	}
 	podRead, eventRead, setRead, deploymentRead, hpaRead := &reads[0], &reads[1], &reads[2], &reads[3], &reads[4]
 
 	pods := decode[corev1.Pod](podRead.items, &podRead.coverage)

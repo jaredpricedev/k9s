@@ -121,7 +121,19 @@ first question of an incident. With a Pod, Deployment, ReplicaSet, StatefulSet,
 DaemonSet or Job selected it follows that workload and what it depends on. With
 nothing suitable selected it covers the active namespace, and `:timeline <ns>`
 names a namespace directly. It needs one namespace: in all-namespaces mode with
-no selection the action is listed as unavailable and says why.
+no selection the action is listed as unavailable and says why, and
+`:timeline all` is refused. For a namespace scope the namespace object is read
+too: lists in a namespace that does not exist succeed with no items, so a
+missing namespace is reported as not found instead of as a quiet timeline. When
+the namespace object cannot be read (for example, access denied) the timeline
+is still shown and the **s** page says its existence was not verified.
+
+The pane under the list cannot scroll. Its first line (exact time, age, source,
+resource) shortens its wording and then elides the middle of the name instead
+of wrapping, and below about 72 columns the order sentence shortens to
+"Preceded the first failing signal by 2m; order, not cause." so the full text
+of the change stays visible. A very long event message or change list can
+still be cut at the bottom of the pane.
 
 It merges into one list, newest first:
 

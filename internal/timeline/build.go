@@ -20,6 +20,7 @@ const (
 	resPods        = "v1/pods"
 	resEvents      = "v1/events"
 	resNodes       = "v1/nodes"
+	resNamespaces  = "v1/namespaces"
 	resConfigMaps  = "v1/configmaps"
 	resSecrets     = "v1/secrets"
 	resDeployments = "apps/v1/deployments"
@@ -483,7 +484,9 @@ func configEntries(kind string, meta *metav1.ObjectMeta) []Entry {
 func autoscalerEntries(hpa *autoscalingv2.HorizontalPodAutoscaler) (entries []Entry, untimed []string) {
 	ref := Ref{Resource: resHPAs, Kind: "HorizontalPodAutoscaler", Namespace: hpa.Namespace, Name: hpa.Name}
 	for _, condition := range hpa.Status.Conditions {
-		failing := condition.Type != autoscalingv2.ScalingLimited && condition.Status == corev1.ConditionFalse
+		// ScalingDisabled is a scale target deliberately at zero replicas.
+		failing := condition.Type != autoscalingv2.ScalingLimited && condition.Status == corev1.ConditionFalse &&
+			condition.Reason != "ScalingDisabled"
 		summary := fmt.Sprintf("%s=%s %s", condition.Type, condition.Status, condition.Reason)
 		if condition.LastTransitionTime.IsZero() {
 			if failing {
