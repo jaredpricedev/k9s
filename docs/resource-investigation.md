@@ -114,6 +114,77 @@ certificate metadata; failure preserves the verification error and trust source.
 **r** on a probe result explicitly repeats the handshake. No client certificate,
 STARTTLS, revocation check, in-pod probe or automatic remediation is provided.
 
+## Problems across kinds (`:problems`)
+
+`:problems` (also "Problems across kinds, ranked" in the `Ctrl-O` action palette)
+answers "what is broken here right now?" in one ranked list, with no setup. It is
+the instant counterpart of the [daily workspace](daily-workspace.md): it needs no
+saved scope, writes no file and keeps no history.
+
+**What it reads.** The viewing destination: the active namespace, or all
+namespaces when the app is viewing all. Opening the view performs one bounded
+list per source — Pods, Deployments, ReplicaSets (only to resolve which
+Deployment controls a Pod), StatefulSets, DaemonSets, Jobs,
+PersistentVolumeClaims, Nodes (cluster-scoped) and Warning events from the last
+hour. Each list is a single page of at most 500 objects with a 4 second timeout,
+and the whole observation ends after 10 seconds. The reads run off the UI thread
+against the client that was current when they started. `r` reads again on
+request. Nothing is polled, watched or refreshed in the background, and the view
+never writes to the cluster.
+
+**What the header states.** The scope, the clock time of the read, what each
+source returned, and a `NOT READ` line naming every source that was denied, timed
+out, is not served, or was cut off at one page (`incomplete`). Rows from a
+partial read are still listed. A quiet list says which sources were checked and
+which were not; it never calls the destination healthy.
+
+**Rows.** Each row has a severity word (`failing`, `degraded`, `in progress`, or
+`warning` for a resource that only a recent Warning event names), the kind,
+namespace/name, a cause phrase and, when the status carries a transition time,
+how long the state has lasted at the time of the read (`FOR`; `-` when the
+status does not say). Pod causes are the same STATUS word and `WHY` phrase as the
+Pod list. Other kinds use their own status only: Deployment conditions and
+available replicas, StatefulSet and DaemonSet ready counts, Job `Failed`
+conditions and failed-pod counts, claim phase, and Node `Ready` and pressure
+conditions. When a status names a state but no reason (a `Pending` claim, for
+example), the most frequent Warning event is quoted beside it and labelled
+`event`. Rows are ordered by severity, then by the number of signals (status
+findings, affected pods and distinct Warning reasons), shown as `SIG` from 100
+columns.
+
+**Folding.** Pods that report a problem are folded into the Deployment,
+StatefulSet, DaemonSet or Job that controls them, matched by controller UID and
+never by name. The owner's row says how many pods are affected; `Space` (or
+Right/Left) expands and folds them. A pod whose owner could not be read or
+verified stays on its own row.
+
+**Keys.** `Enter` opens the resource in its ordinary list, using the same
+navigation as related-resource jumps: the list is narrowed to that resource with
+it selected, and `Esc` returns to the problems list exactly as it was read,
+restoring the viewing namespace the jump changed. `d` describes, `l` opens logs
+for a Pod row, `/` filters by words that must all occur in the severity, kind,
+namespace, name or cause, and `Esc` clears a filter before it leaves the view.
+
+**Narrow terminals.** From 100 columns all columns are shown. Below 100 the kind
+is abbreviated and the signal count is dropped; below 72 only severity, name and
+cause remain, the kind becomes a prefix of the name and the namespace is left to
+the detail lines under the list, which always give the selected row's full
+identity, complete cause and Warning events. Names are elided before the
+severity word. With `noIcons` the expand markers are `+`, `-` and `|`.
+
+**Limits.** Severity and cause are what each object's status and events reported
+at the moment of the read; they are evidence, not a diagnosed root cause, and a
+row's absence is not proof of health. Objects beyond the first 500 of a kind are
+not classified. Cordoned nodes, paused Deployments, suspended Jobs, CronJobs,
+custom resources and metrics are not examined. A Warning event about an earlier
+UID of a current name is listed separately as an earlier identity. Kinds named
+only by an event and unknown to the view cannot be opened with `Enter`.
+
+`scripts/operator-study-fixture.py` serves synthetic objects for every row type
+(a stalled Deployment with two failing pods behind a ReplicaSet, a partly ready
+StatefulSet, a failed Job, a Pending claim and Warning events) and denies the
+cluster-wide DaemonSet list and `ops` events so the `NOT READ` line can be seen.
+
 ## Verification and operation
 
 Focused tests cover generated PKI, wrong names, unknown roots, expired certificates,
