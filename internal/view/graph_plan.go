@@ -40,14 +40,23 @@ const graphDefaultWindow = time.Hour
 var graphKinds = map[string]string{
 	client.PodGVR.String(): "Pod", client.DpGVR.String(): "Deployment", client.RsGVR.String(): "ReplicaSet",
 	client.StsGVR.String(): "StatefulSet", client.DsGVR.String(): "DaemonSet", client.NodeGVR.String(): "Node",
+	client.SvcGVR.String(): graphKindService,
 }
 
-// graphTarget is the captured object a graph page describes.
+const graphKindService = "Service"
+
+// graphTarget is the captured object a graph page describes. UID is kept
+// for a Service, whose Pods are resolved from the cluster by that identity.
 type graphTarget struct {
-	Context, Kind, Resource, Namespace, Name string
+	Context, Kind, Resource, Namespace, Name, UID string
 }
 
+// workload is true for a target that stands for several Pods: a workload,
+// or a Service and the Pods behind it.
 func (t *graphTarget) workload() bool { return t.Kind != "Pod" && t.Kind != "Node" }
+
+// owned is true when the Pods are found by their owner in kube_pod_info.
+func (t *graphTarget) owned() bool { return t.workload() && t.Kind != graphKindService }
 
 func (t *graphTarget) Label() string {
 	if t.Namespace == "" {
@@ -58,7 +67,7 @@ func (t *graphTarget) Label() string {
 
 //nolint:gocritic // The immutable selection is captured by value.
 func graphTargetFor(target SelectedResourceTarget) (*graphTarget, error) {
-	const hint = "Select a Pod, Deployment, StatefulSet, DaemonSet, ReplicaSet or Node first: a graph is drawn for one object"
+	const hint = "Select a Pod, Deployment, StatefulSet, DaemonSet, ReplicaSet, Service or Node first: a graph is drawn for one object"
 	if target.Err() != nil {
 		return nil, errors.New(hint)
 	}
@@ -66,7 +75,11 @@ func graphTargetFor(target SelectedResourceTarget) (*graphTarget, error) {
 	if !ok || (kind != "Node" && target.Namespace == "") {
 		return nil, errors.New(hint)
 	}
-	return &graphTarget{Context: target.Context, Kind: kind, Resource: target.GVR.String(), Namespace: target.Namespace, Name: target.Name}, nil
+	if kind == graphKindService && target.UID == "" {
+		return nil, errors.New("Select the Service in its list first: its Pods are resolved by the Service's own UID")
+	}
+	return &graphTarget{Context: target.Context, Kind: kind, Resource: target.GVR.String(), Namespace: target.Namespace, Name: target.Name,
+		UID: string(target.UID)}, nil
 }
 
 type graphRole int
@@ -128,6 +141,11 @@ func graphRequest(e observability.Expr) graphSeriesSpec {
 	return graphSeriesSpec{ID: "request", Name: "request", Expr: e, Kind: chart.Reference, Role: graphRoleRequest, Glyph: '┄', ASCII: '.'}
 }
 
+// graphPodLabels are the kube_pod_info labels kept per Pod: its name, the
+// Node it runs on and its owner. The last three place a Pod in a group when
+// the series are regrouped; a missing label leaves that group unknown.
+var graphPodLabels = []string{"pod", "node", "created_by_kind", "created_by_name"}
+
 // graphOwnerQuery asks kube-state-metrics which Pods the workload owned at
 // any time in the window, so that Pods already replaced are still drawn.
 func graphOwnerQuery(t *graphTarget, window time.Duration) observability.Expr {
@@ -137,7 +155,52 @@ func graphOwnerQuery(t *graphTarget, window time.Duration) observability.Expr {
 		kind, name = "ReplicaSet", observability.Re("created_by_name", observability.RegexQuote(t.Name)+"-[a-z0-9]{5,10}")
 	}
 	sel := observability.Select("kube_pod_info", observability.Eq("namespace", t.Namespace), observability.Eq("created_by_kind", kind), name)
-	return observability.Aggregate("count", observability.OverTime("max", sel, window), "pod")
+	return observability.Aggregate("count", observability.OverTime("max", sel, window), graphPodLabels...)
+}
+
+// graphPodInfoQuery asks the same labels for Pods that are already named,
+// as the Pods behind a Service are.
+func graphPodInfoQuery(namespace string, pods []string, window time.Duration) observability.Expr {
+	matcher, _, _ := graphPodMatcher(pods)
+	sel := observability.Select("kube_pod_info", observability.Eq("namespace", namespace), matcher)
+	return observability.Aggregate("count", observability.OverTime("max", sel, window), graphPodLabels...)
+}
+
+// graphPodMeta is what kube_pod_info says about one Pod. A field is empty
+// when the label is missing or when the window holds two answers for it.
+type graphPodMeta struct {
+	Node, OwnerKind, OwnerName string
+}
+
+// graphPodsFrom reads the Pod names and their labels from a kube_pod_info
+// answer. A Pod name that appears with two Nodes or owners in the window
+// (a StatefulSet Pod recreated elsewhere) keeps neither: the page then says
+// its group is not known instead of choosing one.
+func graphPodsFrom(res *observability.PromResult) (pods []string, meta map[string]graphPodMeta) {
+	meta = make(map[string]graphPodMeta)
+	for i := range res.Series {
+		labels := res.Series[i].Labels
+		pod := labels["pod"]
+		if pod == "" {
+			continue
+		}
+		next := graphPodMeta{Node: labels["node"], OwnerKind: labels["created_by_kind"], OwnerName: labels["created_by_name"]}
+		seen, ok := meta[pod]
+		if !ok {
+			pods = append(pods, pod)
+			meta[pod] = next
+			continue
+		}
+		if seen.Node != next.Node {
+			seen.Node = ""
+		}
+		if seen.OwnerKind != next.OwnerKind || seen.OwnerName != next.OwnerName {
+			seen.OwnerKind, seen.OwnerName = "", ""
+		}
+		meta[pod] = seen
+	}
+	sort.Strings(pods)
+	return pods, meta
 }
 
 // graphPodMatcher matches exactly the named Pods. It reports how many names
@@ -302,10 +365,19 @@ type graphSnapshot struct {
 	Owner       *observability.PromResult
 	Pods        []string
 	PodsOmitted int
-	Plan        graphPlan
-	Results     map[string]observability.PromResult
-	Marks       []graphMark
-	MarkNote    string
+	// Members is set for a Service: how its Pods were resolved from the
+	// cluster. PodInfo is then the kube_pod_info lookup of those Pods.
+	Members *graphMembers
+	PodInfo *observability.PromResult
+	// Meta holds the Node and owner of each Pod, from kube_pod_info.
+	Meta map[string]graphPodMeta
+	// Revisions maps a ReplicaSet or ControllerRevision name to its
+	// revision number, when the object history was read.
+	Revisions map[string]int64
+	Plan      graphPlan
+	Results   map[string]observability.PromResult
+	Marks     []graphMark
+	MarkNote  string
 }
 
 // graphMark is a moment read from the object itself.
@@ -332,28 +404,55 @@ func graphFrameTimes(now time.Time, window time.Duration) (start, end time.Time,
 	return end.Add(-window), end, step
 }
 
+// graphMembers says how the Pods of a Service were resolved from the
+// cluster, with the Kubernetes API and the user's own credentials.
+type graphMembers struct {
+	Pods []string
+	// Origin says where the names came from; Problem, when set, says why
+	// there are none, and nothing is asked of Prometheus.
+	Origin, Problem string
+	// Notes are reads that did not complete; the Pod list may be short.
+	Notes []string
+}
+
 // loadGraph performs every read of one page. It never contacts anything
 // but the given source, and stops when ctx ends.
 func loadGraph(ctx context.Context, q graphQuerier, t *graphTarget, window time.Duration, now time.Time) *graphSnapshot {
+	return loadGraphOf(ctx, q, t, window, now, nil)
+}
+
+// loadGraphOf is loadGraph for a target whose Pods were resolved by the
+// caller, as a Service's are.
+func loadGraphOf(ctx context.Context, q graphQuerier, t *graphTarget, window time.Duration, now time.Time, members *graphMembers) *graphSnapshot {
 	start, end, step := graphFrameTimes(now, window)
 	s := &graphSnapshot{Target: *t, Window: window, Step: step, Start: start, End: end, ReadAt: now.UTC(), Source: q.Display(),
-		Results: make(map[string]observability.PromResult)}
-	if t.workload() {
+		Results: make(map[string]observability.PromResult), Members: members}
+	switch {
+	case t.owned():
 		owner := q.Query(ctx, graphOwnerQuery(t, window), end)
 		s.Owner = &owner
 		if !owner.OK() {
 			return s
 		}
-		for i := range owner.Series {
-			if pod := owner.Series[i].Labels["pod"]; pod != "" {
-				s.Pods = append(s.Pods, pod)
-			}
-		}
-		sort.Strings(s.Pods)
+		s.Pods, s.Meta = graphPodsFrom(&owner)
 		if len(s.Pods) == 0 {
 			return s
 		}
 		_, _, s.PodsOmitted = graphPodMatcher(s.Pods)
+	case t.workload():
+		if members == nil || members.Problem != "" || len(members.Pods) == 0 {
+			return s
+		}
+		s.Pods = append([]string(nil), members.Pods...)
+		sort.Strings(s.Pods)
+		_, _, s.PodsOmitted = graphPodMatcher(s.Pods)
+		// The Node and owner of each Pod are metric labels; without them
+		// the charts are still drawn and the groups are "not known".
+		info := q.Query(ctx, graphPodInfoQuery(t.Namespace, s.Pods, window), end)
+		s.PodInfo = &info
+		if info.OK() {
+			_, s.Meta = graphPodsFrom(&info)
+		}
 	}
 	s.Plan = buildGraphPlan(t, s.Pods, step)
 	type job struct {

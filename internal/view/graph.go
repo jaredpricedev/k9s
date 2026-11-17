@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,8 @@ import (
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/impact"
+	"github.com/derailed/k9s/internal/inspect"
+	"github.com/derailed/k9s/internal/networkpath"
 	"github.com/derailed/k9s/internal/observability"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
@@ -27,6 +30,13 @@ const (
 	graphCommandToken = "graph"
 	graphTitle        = "Graph"
 	graphRevisionKey  = "deployment.kubernetes.io/revision"
+	// graphPodsWord opens the per-Pod comparison: ":graph pods", and the
+	// focus "pods" or "pods:<signal>" of openGraphAt.
+	graphPodsWord = "pods"
+	// graphServiceListLimit bounds the one list of Services that finds the
+	// Service in front of a workload.
+	graphServiceListLimit = 200
+	graphNoPeers          = "Nothing to compare: :graph on a workload or a Service compares its Pods"
 )
 
 // graphView draws charts for one object from the declared Prometheus
@@ -48,6 +58,21 @@ type graphView struct {
 	// focus names the chart to scroll to when the first read arrives.
 	focus         string
 	width, height int
+
+	// The per-Pod comparison: whether it is shown, the selected signal and
+	// grouping, the first item of the page shown and the page size the
+	// last layout had. compare is its retained read; it belongs to one
+	// snapshot and is read again with it.
+	comparing       bool
+	signal          string
+	grouping        graphGrouping
+	page, pageSize  int
+	compare         *graphCompare
+	compareAsked    *graphSnapshot
+	containersAsked *graphCompare
+	// loadCompare reads the comparison for a snapshot; given an earlier
+	// comparison it only adds the per-container series to it.
+	loadCompare func(context.Context, *graphSnapshot, *graphCompare) *graphCompare
 }
 
 func parseGraphWindow(text string) (time.Duration, bool) {
@@ -64,16 +89,25 @@ func (c *Command) graphCommand(line string) {
 	if owner, ok := c.app.Content.Top().(actionOwner); ok {
 		target = actionTarget(owner, c.app.Config.ActiveContextName())
 	}
-	window := graphDefaultWindow
-	if fields := strings.Fields(line); len(fields) > 1 {
-		parsed, ok := parseGraphWindow(fields[1])
+	window, focus := graphDefaultWindow, ""
+	fields := strings.Fields(line)
+	if len(fields) > 3 {
+		c.app.Flash().Warn("Use :graph [pods] [15m|1h|6h|24h], as in :graph pods 6h")
+		return
+	}
+	for _, field := range fields[min(1, len(fields)):] {
+		if field == graphPodsWord && focus == "" {
+			focus = graphPodsWord
+			continue
+		}
+		parsed, ok := parseGraphWindow(field)
 		if !ok {
-			c.app.Flash().Warn("A graph window is one of 15m, 1h, 6h or 24h, as in :graph 6h")
+			c.app.Flash().Warn("A graph window is one of 15m, 1h, 6h or 24h, as in :graph 6h; :graph pods compares the Pods of a workload")
 			return
 		}
 		window = parsed
 	}
-	c.app.openGraph(target, window)
+	c.app.openGraphAt(target, window, focus)
 }
 
 //nolint:gocritic // The view owns a captured selection independently of navigation.
@@ -97,6 +131,14 @@ func (a *App) openGraphAt(target SelectedResourceTarget, window time.Duration, f
 	sources, restConfig := declaredSources(a), kubeRESTConfig(a)
 	objects, objectNote := graphObjectReader(a, t)
 	v := newGraphView(a, t, window)
+	if word, signal, _ := strings.Cut(focus, ":"); word == graphPodsWord {
+		// The caller arrives to compare Pods, optionally about one signal.
+		if !t.workload() {
+			a.Flash().Warn(graphNoPeers)
+			return
+		}
+		v.comparing, v.signal, focus = true, signal, ""
+	}
 	v.focus = focus
 	v.load = func(ctx context.Context, window time.Duration) *graphSnapshot {
 		now := time.Now()
@@ -106,14 +148,34 @@ func (a *App) openGraphAt(target SelectedResourceTarget, window time.Duration, f
 			return &graphSnapshot{Target: *t, Window: window, Step: step, Start: start, End: end, ReadAt: now.UTC(), Source: "no source", Status: &st}
 		}
 		defer source.Close()
-		snapshot := loadGraph(ctx, source, t, window, now)
+		var members *graphMembers
+		if t.Kind == graphKindService {
+			// The Pods behind a Service come from the cluster, through the
+			// same bounded collector :network-review uses.
+			members = &graphMembers{Problem: "The Pods behind the Service were not resolved. " + objectNote}
+			if objects != nil {
+				members = graphServiceMembers(ctx, objects, t)
+			}
+		}
+		snapshot := loadGraphOf(ctx, source, t, window, now, members)
 		snapshot.MarkNote = objectNote
 		if objects != nil {
 			marks, cancel := context.WithTimeout(ctx, observability.DefaultTimeout)
 			defer cancel()
-			snapshot.Marks, snapshot.MarkNote = graphMarksFrom(marks, objects, t)
+			snapshot.Marks, snapshot.MarkNote, snapshot.Revisions = graphObjectFacts(marks, objects, t)
 		}
 		return snapshot
+	}
+	v.loadCompare = func(ctx context.Context, base *graphSnapshot, earlier *graphCompare) *graphCompare {
+		source, _ := observability.Resolve(sources, observability.KindPrometheus, restConfig)
+		if source == nil {
+			return nil
+		}
+		defer source.Close()
+		if earlier != nil {
+			return loadGraphContainers(ctx, source, earlier)
+		}
+		return loadGraphCompare(ctx, source, base, sources, graphServiceFor(ctx, objects, t, sources), time.Now())
 	}
 	if err := a.inject(v, false); err != nil {
 		a.Flash().Err(err)
@@ -143,10 +205,19 @@ func graphAvailability(app *App, target SelectedResourceTarget) string { //nolin
 
 func graphActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 	target := actionTarget(owner, app.Config.ActiveContextName())
+	reason := graphAvailability(app, target)
+	pods := reason
+	if t, err := graphTargetFor(target); pods == "" && err == nil && !t.workload() {
+		pods = graphNoPeers
+	}
 	return []ui.ActionDescriptor{{
 		ID: "resource.graph", Label: "Graph: usage vs limits over time", Category: ui.ActionInspect,
-		Shortcut: ":" + graphCommandToken, Discoverable: true, UnavailableReason: graphAvailability(app, target),
+		Shortcut: ":" + graphCommandToken, Discoverable: true, UnavailableReason: reason,
 		Handler: func(*tcell.EventKey) *tcell.EventKey { app.openGraph(target, 0); return nil },
+	}, {
+		ID: "resource.graph-pods", Label: "Per-Pod graphs: which Pod differs", Category: ui.ActionInspect,
+		Shortcut: ":" + graphCommandToken + " " + graphPodsWord, Discoverable: true, UnavailableReason: pods,
+		Handler: func(*tcell.EventKey) *tcell.EventKey { app.openGraphAt(target, 0, graphPodsWord); return nil },
 	}}
 }
 
@@ -191,7 +262,7 @@ func (v *graphView) Init(ctx context.Context) error {
 		v.actions.Add(ui.Key1+tcell.Key(index), ui.NewKeyAction("Window "+graphSpan(window), do(func() { v.setWindow(window) }), true))
 	}
 	v.actions.Bulk(ui.KeyMap{
-		ui.KeyR:         ui.NewKeyAction("Re-read", do(v.refresh), true),
+		ui.KeyR:         ui.NewKeyAction("Re-read", do(v.reread), true),
 		ui.KeyS:         ui.NewKeyAction("Queries and gaps", do(v.toggleReport), true),
 		tcell.KeyLeft:   ui.NewKeyAction("Cursor earlier", v.moveCmd(-1), true),
 		tcell.KeyRight:  ui.NewKeyAction("Cursor later", v.moveCmd(1), true),
@@ -203,8 +274,138 @@ func (v *graphView) Init(ctx context.Context) error {
 		ui.KeyQ:         ui.NewKeyAction("Back", v.escape, false),
 		grafanaKey:      grafanaKeyAction(v.app, func() actionOwner { return v }, nil),
 	})
+	// The comparison keys are named in the header only where there are
+	// Pods to compare; elsewhere they answer with the reason.
+	pods := v.target.workload()
+	opts := func(priority int) ui.ActionOpts {
+		if !pods {
+			return ui.ActionOpts{}
+		}
+		return ui.ActionOpts{Visible: true, Priority: priority}
+	}
+	// While the report is open these keys stay with the text: g and G are
+	// its top and bottom.
+	charts := func(run func()) ui.ActionHandler {
+		return func(event *tcell.EventKey) *tcell.EventKey {
+			if v.report {
+				return event
+			}
+			run()
+			return nil
+		}
+	}
+	v.actions.Bulk(ui.KeyMap{
+		ui.KeyP:      ui.NewKeyActionWithOpts("Per pod", charts(v.toggleCompare), opts(1)),
+		ui.KeyN:      ui.NewKeyActionWithOpts("Next signal", charts(func() { v.stepSignal(1) }), opts(2)),
+		ui.KeyG:      ui.NewKeyActionWithOpts("Regroup", charts(func() { v.regroup(1) }), opts(3)),
+		ui.KeyShiftN: ui.NewKeyActionWithOpts("Previous signal", charts(func() { v.stepSignal(-1) }), ui.ActionOpts{Visible: pods}),
+		ui.KeyShiftG: ui.NewKeyActionWithOpts("Regroup back", charts(func() { v.regroup(-1) }), ui.ActionOpts{Visible: pods}),
+	})
 	v.render()
 	return nil
+}
+
+// toggleCompare switches between the overlaid lines and one chart per Pod.
+func (v *graphView) toggleCompare() {
+	if !v.target.workload() {
+		v.app.Flash().Warn(graphNoPeers)
+		return
+	}
+	v.comparing = !v.comparing
+	v.ensureCompare()
+	v.render()
+}
+
+// regroup cycles how the series are folded: by pod, container, revision,
+// node and zone. From the overlaid charts it opens the comparison.
+func (v *graphView) regroup(delta int) {
+	if !v.target.workload() {
+		v.app.Flash().Warn(graphNoPeers)
+		return
+	}
+	v.comparing = true
+	v.grouping = (v.grouping + graphGrouping(delta) + graphGroupings) % graphGroupings
+	v.page = 0
+	v.ensureCompare()
+	v.render()
+}
+
+// stepSignal cycles the signal of the comparison.
+func (v *graphView) stepSignal(delta int) {
+	if !v.target.workload() {
+		v.app.Flash().Warn(graphNoPeers)
+		return
+	}
+	if !v.comparing || v.compare == nil || len(v.compare.Signals) == 0 {
+		return
+	}
+	_, index := v.compare.signal(v.signal)
+	n := len(v.compare.Signals)
+	v.signal = v.compare.Signals[(index+delta+n)%n].ID
+	v.page = 0
+	v.render()
+}
+
+// ensureCompare starts the read the comparison still needs, if any: every
+// signal per Pod for the snapshot shown, and the per-container series the
+// first time the series are regrouped by container. Each is asked once per
+// snapshot; r reads again.
+func (v *graphView) ensureCompare() {
+	if !v.comparing || v.snapshot == nil || v.snapshot.Window != v.window || v.snapshot.failure() != nil || v.loadCompare == nil {
+		return
+	}
+	switch {
+	case v.compare == nil || v.compare.Base != v.snapshot:
+		if v.compareAsked != v.snapshot {
+			v.compareAsked = v.snapshot
+			v.readCompare(nil, "Reading every signal once per Pod…")
+		}
+	case v.grouping == graphByContainer && !v.compare.Containers:
+		if v.containersAsked != v.compare {
+			v.containersAsked = v.compare
+			v.readCompare(v.compare, "Reading the per-container series once…")
+		}
+	}
+}
+
+// readCompare starts one bounded read of the comparison off the UI thread.
+// A newer request or leaving the view cancels it; a late reply is dropped.
+func (v *graphView) readCompare(earlier *graphCompare, busy string) {
+	if !v.current() {
+		v.app.Flash().Warn("Destination changed; reopen :graph")
+		return
+	}
+	if v.cancel != nil {
+		v.cancel()
+	}
+	v.generation++
+	generation, base, load := v.generation, v.snapshot, v.loadCompare
+	ctx, cancel := context.WithTimeout(context.Background(), graphDeadline)
+	v.cancel = cancel
+	v.busy = busy
+	go func() {
+		defer cancel()
+		compare := load(ctx, base, earlier)
+		if errors.Is(ctx.Err(), context.Canceled) || !v.app.IsRunning() {
+			return
+		}
+		v.app.QueueUpdateDraw(func() {
+			if v.active && generation == v.generation && v.current() {
+				v.acceptCompare(compare)
+			}
+		})
+	}()
+}
+
+func (v *graphView) acceptCompare(compare *graphCompare) {
+	v.busy = ""
+	if compare == nil {
+		v.app.Flash().Warn("The per-Pod series were not read: the Prometheus source is unavailable; :sources shows why")
+	} else if compare.Base == v.snapshot {
+		v.compare = compare
+	}
+	v.ensureCompare()
+	v.render()
 }
 
 func (v *graphView) escape(event *tcell.EventKey) *tcell.EventKey {
@@ -222,11 +423,14 @@ func (v *graphView) moveCmd(delta int) ui.ActionHandler {
 		if v.report || v.snapshot == nil {
 			return event
 		}
+		// The step is local: the handler is called again and again, and a
+		// Shift press must not make every later press ten times larger.
+		step := delta
 		if event != nil && event.Modifiers()&tcell.ModShift != 0 {
-			delta *= 10
+			step *= 10
 		}
 		last := int(v.snapshot.Window / v.snapshot.Step)
-		v.cursor = min(max(v.cursor+delta, 0), last)
+		v.cursor = min(max(v.cursor+step, 0), last)
 		v.atEnd = v.cursor == last
 		v.render()
 		return nil
@@ -237,6 +441,12 @@ func (v *graphView) scrollCmd(delta int) ui.ActionHandler {
 	return func(event *tcell.EventKey) *tcell.EventKey {
 		if v.report || v.snapshot == nil {
 			return event
+		}
+		if v.comparing {
+			// A page of charts at a time; the layout settles the bounds.
+			v.page = max(v.page+delta*max(v.pageSize, 1), 0)
+			v.render()
+			return nil
 		}
 		v.first = min(max(v.first+delta, 0), max(len(v.snapshot.Plan.Panels)-1, 0))
 		v.render()
@@ -255,6 +465,12 @@ func (v *graphView) setWindow(window time.Duration) {
 		return
 	}
 	v.window, v.atEnd = window, true
+	v.refresh()
+}
+
+// reread reads the page again: the charts, and with them the comparison.
+func (v *graphView) reread() {
+	v.compare, v.compareAsked, v.containersAsked = nil, nil, nil
 	v.refresh()
 }
 
@@ -342,6 +558,9 @@ func (v *graphView) accept(snapshot *graphSnapshot) {
 		v.focus = ""
 	}
 	v.snapshot = snapshot
+	// The comparison belongs to the read it was made for.
+	v.compare = nil
+	v.ensureCompare()
 	v.render()
 }
 
@@ -368,7 +587,11 @@ func (v *graphView) render() {
 		if width <= 0 {
 			width = 80
 		}
-		text := graphReport(v.snapshot) + "\ns or Esc returns to the charts · r re-read"
+		text := graphReport(v.snapshot)
+		if v.compare != nil && v.compare.Base == v.snapshot {
+			text += graphCompareReport(v.compare)
+		}
+		text += "\ns or Esc returns to the charts · r re-read"
 		if v.app.Config.K9s.UI.NoIcons {
 			text = graphWords(text, true)
 		}
@@ -390,6 +613,10 @@ func (v *graphView) render() {
 			graphBold(page.Colors.Title, graphFit("Graph · "+v.target.Label()+" · last "+graphSpan(v.window), width)),
 			graphPaint(page.Colors.Muted, graphFit("Reading the declared Prometheus source once… Esc cancels and goes back.", width)),
 		}
+	} else if v.comparing {
+		page.First, page.Signal, page.Grouping = v.page, v.signal, v.grouping
+		lines = renderGraphCompare(v.snapshot, v.compare, page)
+		v.page, v.pageSize, v.signal = page.First, page.Shown, page.Signal
 	} else {
 		lines = renderGraph(v.snapshot, page)
 		// The page settles the scroll position: a chart that fits is shown.
@@ -420,13 +647,24 @@ func graphObjectReader(app *App, t *graphTarget) (objects dynamic.Interface, not
 // owning ReplicaSet of the newest revision was created, and when a container
 // last exited. They are bounded reads of metadata and status.
 func graphMarksFrom(ctx context.Context, dial dynamic.Interface, t *graphTarget) (marks []graphMark, note string) {
+	marks, note, _ = graphObjectFacts(ctx, dial, t)
+	return marks, note
+}
+
+// graphObjectFacts is graphMarksFrom plus the revision number of every
+// ReplicaSet or ControllerRevision those same reads named, so that a group
+// of Pods can be titled "rev 2" instead of only by its hash.
+func graphObjectFacts(ctx context.Context, dial dynamic.Interface, t *graphTarget) (marks []graphMark, note string, revisions map[string]int64) {
+	revisions = make(map[string]int64)
 	replicaSets := dial.Resource(client.RsGVR.GVR()).Namespace(t.Namespace)
 	rollout := func(rs *unstructured.Unstructured) {
 		revision := rs.GetAnnotations()[graphRevisionKey]
 		created := rs.GetCreationTimestamp()
-		if _, err := strconv.Atoi(revision); err != nil || created.IsZero() {
+		number, err := strconv.Atoi(revision)
+		if err != nil || created.IsZero() {
 			return
 		}
+		revisions[rs.GetName()] = int64(number)
 		marks = append(marks, graphMark{Key: 'R', T: created.UTC(), Label: "rollout rev " + revision,
 			Origin: "creation time of ReplicaSet " + rs.GetName() + " (revision " + revision + ")"})
 	}
@@ -434,7 +672,7 @@ func graphMarksFrom(ctx context.Context, dial dynamic.Interface, t *graphTarget)
 	case "Pod":
 		pod, err := dial.Resource(client.PodGVR.GVR()).Namespace(t.Namespace).Get(ctx, t.Name, metav1.GetOptions{})
 		if err != nil {
-			return nil, "The Pod was not read, so no object times are marked."
+			return nil, "The Pod was not read, so no object times are marked.", revisions
 		}
 		for _, owner := range pod.GetOwnerReferences() {
 			if owner.Kind != "ReplicaSet" {
@@ -452,7 +690,10 @@ func graphMarksFrom(ctx context.Context, dial dynamic.Interface, t *graphTarget)
 		// :impact uses, so both views name the same moment.
 		history, err := impact.ReadHistory(ctx, dial, impact.Workload{Kind: t.Kind, Namespace: t.Namespace, Name: t.Name})
 		if err != nil {
-			return nil, "The revision history was not read, so no rollout time is marked."
+			return nil, "The revision history was not read, so no rollout time is marked.", revisions
+		}
+		for i := range history.Revisions {
+			revisions[history.Revisions[i].Name] = history.Revisions[i].Number
 		}
 		if n := len(history.Revisions); n > 0 {
 			latest := &history.Revisions[n-1]
@@ -471,7 +712,118 @@ func graphMarksFrom(ctx context.Context, dial dynamic.Interface, t *graphTarget)
 			rollout(rs)
 		}
 	}
-	return marks, note
+	return marks, note, revisions
+}
+
+// graphServiceMembers resolves the Pods behind a Service with the bounded,
+// UID-checked collector of :network-review: the Pods its selector matches
+// and the Pods its EndpointSlices name. It reads configuration only.
+func graphServiceMembers(ctx context.Context, dial dynamic.Interface, t *graphTarget) *graphMembers {
+	members := &graphMembers{}
+	snapshot, err := networkpath.Collect(ctx, dial, networkpath.Scope{Service: inspect.ResourceIdentity{
+		Context: t.Context, GVR: networkpath.ServiceGVR, Namespace: t.Namespace, Name: t.Name, UID: t.UID}})
+	failed := ""
+	if err != nil {
+		// The collector's own sentences name no address and no credential.
+		failed = observability.Clean(err.Error(), 200) + "."
+	}
+	if snapshot == nil {
+		members.Problem = strings.TrimSpace("The Service was not read, so the Pods behind it are not known. " + failed)
+		return members
+	}
+	seen := make(map[string]bool)
+	for i := range snapshot.Pods {
+		if name := snapshot.Pods[i].Source.Identity.Name; name != "" && !seen[name] {
+			seen[name] = true
+			members.Pods = append(members.Pods, name)
+		}
+	}
+	sort.Strings(members.Pods)
+	members.Origin = fmt.Sprintf("%d Pods from the Service's selector and its EndpointSlice targets, read %s.", len(members.Pods), graphClock(snapshot.CapturedAt))
+	if snapshot.Omitted > 0 {
+		members.Notes = append(members.Notes, fmt.Sprintf("%d endpoint targets beyond the read limit were not read.", snapshot.Omitted))
+	}
+	for i := range snapshot.Coverage {
+		if cov := &snapshot.Coverage[i]; cov.GVR == networkpath.PodGVR && cov.State != "" && cov.Detail != "" {
+			members.Notes = append(members.Notes, "Pods: "+observability.Clean(cov.Detail, 200)+".")
+		}
+	}
+	switch {
+	case len(members.Pods) == 0 && failed != "":
+		members.Problem = "The Pods behind the Service were not resolved: " + failed
+	case len(members.Pods) == 0:
+		members.Problem = "The Service selects no Pod now: its selector and its EndpointSlices name none."
+	case failed != "":
+		members.Notes = append(members.Notes, "The read did not complete, so Pods may be missing: "+failed)
+	}
+	return members
+}
+
+// graphServiceFor finds the Service whose request-path declaration chooses
+// the app-hop profiles for the Pods of a workload: a Service of the
+// namespace whose selector matches the workload's Pod template. It is one
+// Get and one bounded list, and a Service with a declaration is preferred.
+// Without a Service the default profiles apply, and the note says so.
+func graphServiceFor(ctx context.Context, dial dynamic.Interface, t *graphTarget, sources *observability.Sources) graphServicePath {
+	if t.Kind == graphKindService {
+		return graphServicePath{Path: t.Namespace + "/" + t.Name, Note: "the Service the graph was opened on"}
+	}
+	const fallback = "; the default app-hop profiles apply"
+	if dial == nil || !t.owned() {
+		return graphServicePath{Note: "no Kubernetes connection to find the Service in front of these Pods" + fallback}
+	}
+	ctx, cancel := context.WithTimeout(ctx, observability.DefaultTimeout)
+	defer cancel()
+	object, err := dial.Resource(client.NewGVR(t.Resource).GVR()).Namespace(t.Namespace).Get(ctx, t.Name, metav1.GetOptions{})
+	if err != nil {
+		return graphServicePath{Note: "the " + t.Kind + " was not read, so the Service in front of its Pods is not known" + fallback}
+	}
+	labels, _, _ := unstructured.NestedStringMap(object.Object, "spec", "template", "metadata", "labels")
+	if len(labels) == 0 {
+		return graphServicePath{Note: "the " + t.Kind + " has no Pod template labels to match a Service by" + fallback}
+	}
+	list, err := dial.Resource(client.SvcGVR.GVR()).Namespace(t.Namespace).List(ctx, metav1.ListOptions{Limit: graphServiceListLimit})
+	if err != nil {
+		return graphServicePath{Note: "the Services of the namespace were not read" + fallback}
+	}
+	var names []string
+	for i := range list.Items {
+		selector, _, _ := unstructured.NestedStringMap(list.Items[i].Object, "spec", "selector")
+		if len(selector) == 0 {
+			continue
+		}
+		matches := true
+		for key, value := range selector {
+			if labels[key] != value {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			names = append(names, list.Items[i].GetName())
+		}
+	}
+	sort.Strings(names)
+	cut := ""
+	if list.GetContinue() != "" {
+		cut = fmt.Sprintf(" (only the first %d Services of the namespace were read)", len(list.Items))
+	}
+	if len(names) == 0 {
+		return graphServicePath{Note: "no Service selects this " + t.Kind + "'s Pod template" + cut + fallback}
+	}
+	chosen, how := names[0], "its selector matches the Pod template"
+	if len(names) > 1 {
+		how = fmt.Sprintf("the first by name of %d Services whose selector matches the Pod template", len(names))
+	}
+	if sources != nil && sources.RequestPath != nil {
+		for _, name := range names {
+			if _, declared := sources.RequestPath.Services[t.Namespace+"/"+name]; declared {
+				chosen, how = name, "its selector matches the Pod template and it has a requestPath declaration"
+				break
+			}
+		}
+	}
+	return graphServicePath{Path: t.Namespace + "/" + chosen, Note: how + cut}
 }
 
 // graphLastExit finds the most recent recorded container exit of a Pod.

@@ -31,6 +31,11 @@ type Grid struct {
 	MinWidth, MinHeight int
 	// Empty is written inside a mini chart that has no sample.
 	Empty string
+	// Ceiling, when positive, is the top of the shared Y axis instead of
+	// the rounded maximum of the mini charts given. A caller that shows
+	// the charts one page at a time sets it to the Top of all of them, so
+	// that the scale does not change from page to page.
+	Ceiling float64
 	// Escape protects titles and notes from the caller's markup (nil
 	// leaves them alone), as in Legend.
 	Escape func(string) string
@@ -60,6 +65,9 @@ const (
 // Top is the top of the shared Y axis: the rounded maximum of every mini
 // chart.
 func (g *Grid) Top() float64 {
+	if g.Ceiling > 0 {
+		return g.Ceiling
+	}
 	top := 0.0
 	for i := range g.Minis {
 		panel := Panel{Unit: g.Unit, Series: g.Minis[i].Series}
@@ -70,8 +78,19 @@ func (g *Grid) Top() float64 {
 	return g.Unit.Ceil(top)
 }
 
+// scale is a panel with the shared top and every level line of the grid,
+// so that the label gutter is wide enough for a level's own label in any
+// mini chart.
 func (g *Grid) scale() Panel {
-	return Panel{Unit: g.Unit, Ceiling: g.Top()}
+	scale := Panel{Unit: g.Unit, Ceiling: g.Top()}
+	for i := range g.Minis {
+		for j := range g.Minis[i].Series {
+			if s := &g.Minis[i].Series[j]; s.Kind == Reference && len(s.Points) > 0 {
+				scale.Series = append(scale.Series, Series{Kind: Reference, Points: s.Points[len(s.Points)-1:]})
+			}
+		}
+	}
+	return scale
 }
 
 // Layout fits the grid into width by height cells. Each grid row takes one

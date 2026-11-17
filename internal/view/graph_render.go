@@ -70,6 +70,11 @@ type graphPage struct {
 	// Cursor is a sample-grid index; First is the first chart shown.
 	Cursor, First int
 	Busy          string
+	// Signal and Grouping select what the comparison page shows; Shown is
+	// written back by it: the number of charts or rows on one page.
+	Signal   string
+	Grouping graphGrouping
+	Shown    int
 }
 
 // graphPanel is a panel ready to draw, with the state of each query.
@@ -335,6 +340,18 @@ func (s *graphSnapshot) failure() []string {
 	switch {
 	case s.Status != nil:
 		return explain(*s.Status, "the read")
+	case s.Target.Kind == graphKindService && (s.Members == nil || s.Members.Problem != "" || len(s.Members.Pods) == 0):
+		// The Pods of a Service are resolved from the cluster. Without
+		// them nothing was asked of Prometheus.
+		lines := []string{"The Pods behind this Service were not resolved, so nothing was asked of Prometheus."}
+		if s.Members != nil && s.Members.Problem != "" {
+			lines[0] = s.Members.Problem
+			lines = append(lines, "Nothing was asked of Prometheus. That is missing data, not a healthy reading.")
+		}
+		if s.Members != nil {
+			lines = append(lines, s.Members.Notes...)
+		}
+		return append(lines, ":network-review on the Service shows its selector, EndpointSlices and what could not be read.")
 	case s.Owner != nil && !s.Owner.OK():
 		return explain(s.Owner.Status, "the lookup of this "+s.Target.Kind+"'s Pods")
 	case s.Owner != nil && len(s.Pods) == 0:
@@ -384,7 +401,7 @@ func (s *graphSnapshot) statusParts(shown, total, level int) []string {
 	if t.Incomplete > 0 {
 		parts = append(parts, fmt.Sprintf("%d incomplete", t.Incomplete))
 	}
-	if s.Owner != nil {
+	if s.Target.workload() {
 		pods := fmt.Sprintf("%d pods", len(s.Pods))
 		if len(s.Pods) > graphLineCap {
 			pods += " folded into min/avg/max"
@@ -529,13 +546,24 @@ func graphWords(text string, ascii bool) string {
 	return graphPlainWords.Replace(text)
 }
 
-func graphFooter(width int, charts, ascii bool) string {
-	for _, text := range []string{
+// graphFooter is the key line. For a workload or Service it names the two
+// keys that answer "which Pod is different?" before the window keys.
+func graphFooter(width int, charts, ascii, pods bool) string {
+	texts := []string{
 		"←/→ cursor · Home/End · 1 15m  2 1h  3 6h  4 24h · r re-read · s queries · ↑/↓ charts · Esc back",
 		"←/→ cursor · 1 15m 2 1h 3 6h 4 24h · r re-read · s queries · Esc back",
 		"←/→ cursor · 1-4 window · r re-read · s queries · Esc",
 		"←/→ cursor · 1-4 window · r read · s queries",
-	} {
+	}
+	if pods {
+		texts = []string{
+			"←/→ cursor · p one chart per pod · g regroup · 1 15m  2 1h  3 6h  4 24h · r re-read · s queries · ↑/↓ charts · Esc back",
+			"←/→ cursor · p per pod · g regroup · 1-4 window · r re-read · s queries · Esc back",
+			"←/→ cursor · p per pod · g regroup · 1-4 window · r read · s queries",
+			"p per pod · g regroup · 1-4 window · r read · s queries",
+		}
+	}
+	for _, text := range texts {
 		if !charts {
 			text = strings.TrimPrefix(text, "←/→ cursor · ")
 		}
@@ -581,7 +609,7 @@ func renderGraph(s *graphSnapshot, pg *graphPage) []string {
 			}
 		}
 		lines = append(lines, "", graphPaint(c.Muted, graphFit("Source: prometheus via "+s.Source, width)),
-			"", graphPaint(c.Muted, graphFooter(width, false, pg.ASCII)))
+			"", graphPaint(c.Muted, graphFooter(width, false, pg.ASCII, false)))
 		return lines
 	}
 
@@ -752,7 +780,7 @@ func renderGraph(s *graphSnapshot, pg *graphPage) []string {
 		}
 	}
 	plain("", readout)
-	plain(c.Muted, graphFooter(width, true, pg.ASCII))
+	plain(c.Muted, graphFooter(width, true, pg.ASCII, s.Target.workload()))
 	return lines
 }
 
@@ -820,6 +848,29 @@ func graphReport(s *graphSnapshot) string {
 			fmt.Fprintf(&b, " (%s)", s.Status.Reason)
 		}
 		b.WriteString("\n")
+	}
+	if s.Members != nil {
+		b.WriteString("\nPODS BEHIND THE SERVICE (Kubernetes API, your credentials; the Pods it selects now)\n")
+		if s.Members.Origin != "" {
+			fmt.Fprintf(&b, "  %s\n", s.Members.Origin)
+		}
+		if s.Members.Problem != "" {
+			fmt.Fprintf(&b, "  %s\n", s.Members.Problem)
+		}
+		for _, note := range s.Members.Notes {
+			fmt.Fprintf(&b, "  %s\n", note)
+		}
+		if len(s.Pods) > 0 {
+			fmt.Fprintf(&b, "  Pods found: %s\n", strings.Join(s.Pods, ", "))
+		}
+		b.WriteString("  A Pod the Service selected earlier in the window and no longer selects is not drawn.\n")
+	}
+	if s.PodInfo != nil {
+		describe("NODE AND OWNER OF EACH POD (instant query at the window end)", s.PodInfo)
+	}
+	if s.Target.workload() && s.Owner == nil && s.PodsOmitted > 0 {
+		fmt.Fprintf(&b, "  NOT READ: %d Pods beyond the matcher limit (%d names). The charts cover only the first %d by name.\n",
+			s.PodsOmitted, graphPodNameLimit, len(s.Pods)-s.PodsOmitted)
 	}
 	if s.Owner != nil {
 		describe("PODS OF THE WORKLOAD (instant query at the window end)", s.Owner)

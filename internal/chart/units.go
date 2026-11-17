@@ -125,10 +125,18 @@ func (u Unit) Format(v float64) string {
 	return sig(v)
 }
 
+// secondsLadder are the axis maxima of a duration longer than a minute:
+// each is a round number of minutes or hours, and so is its half.
+var secondsLadder = []float64{120, 240, 360, 600, 1200, 1800, 3600, 7200, 14400, 21600, 43200, 86400, 172800, 345600, 604800}
+
 // Ceil rounds a positive maximum up to a value that makes readable ticks at
 // the maximum and at half of it. Bytes round on powers of two.
 func (u Unit) Ceil(v float64) float64 {
 	if !(v > 0) || math.IsInf(v, 0) {
+		if u == Count {
+			// Whole ticks even when every count is zero.
+			return 2
+		}
 		return 1
 	}
 	if u == Ratio && v <= 1 {
@@ -137,6 +145,27 @@ func (u Unit) Ceil(v float64) float64 {
 				return step
 			}
 		}
+	}
+	if u == Seconds && v > 60 {
+		// Past a minute a duration is written in minutes and hours, so the
+		// axis ends on a round number of those, and so does its half.
+		for _, step := range secondsLadder {
+			if v <= step*(1+1e-9) {
+				return step
+			}
+		}
+	}
+	if u == Count && v >= 1 {
+		// A count is drawn in whole numbers: the maximum and its half are
+		// both integers, so the middle tick never reads 0.5 or 2.5.
+		magnitude := math.Pow(10, math.Floor(math.Log10(v)+1e-9))
+		for _, step := range []float64{1, 1.5, 2, 3, 4, 5, 6, 8, 10} {
+			top := step * magnitude
+			if v <= top*(1+1e-9) && math.Mod(top, 2) == 0 {
+				return top
+			}
+		}
+		return 10 * magnitude
 	}
 	base, steps := 10.0, []float64{1, 1.5, 2, 3, 4, 5, 6, 8, 10}
 	if u == Bytes && v >= 1024 {
