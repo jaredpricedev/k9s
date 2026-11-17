@@ -120,6 +120,7 @@ func (c *Command) updateSuggestionAliases() {
 		sourcesCommandToken,
 		graphCommandToken,
 		dashboardsCommandToken,
+		impactCommandToken,
 	}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
@@ -370,6 +371,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.timelineCommand(p.GetLine())
 	case graphCommandToken:
 		c.graphCommand(p.GetLine())
+	case impactCommandToken:
+		c.impactCommand()
 	default:
 		return false
 	}

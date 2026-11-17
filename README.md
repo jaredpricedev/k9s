@@ -93,6 +93,7 @@ and [Hubble measurements](docs/hubble-performance-2026-10-04.md).
 | Scheduled job review | `:job-review` |
 | What changed before it broke | Select a Pod or workload, then `:timeline` (or `:timeline <namespace>`) |
 | The Grafana dashboard for the selection, at the incident's time range | `Shift-D` on a Pod, workload, Node or namespace; `:dashboards` lists the rest |
+| Did the last rollout make it worse, in numbers | Select a Deployment, StatefulSet, DaemonSet or Pod, then `:impact` ([docs/impact.md](docs/impact.md)) |
 | Access, capacity, storage, node maintenance | `:access`, `:capacity`, `:storage`; select a Node then `:maintenance` or `o` |
 | Network path / task handoff | Select a Service then `:network-review`; `:taskbook save` / `:taskbook open` |
 | Connection checks and session reconnect | `:connection`, then `r` to retry checks or `R` to reconnect the same context while retaining workspace/navigation |

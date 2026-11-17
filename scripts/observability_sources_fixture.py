@@ -800,4 +800,8 @@ CONTEXT_CONFIG = """k9s:
         namespace:
           uid: k8s-namespace
           namespaceVar: namespace
+    # :impact matches HTTP series by the service label, as the alert rules
+    # of this story do, instead of by pod-name pattern.
+    red:
+      workloadLabel: service
 """

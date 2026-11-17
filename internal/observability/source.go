@@ -43,6 +43,8 @@ type Sources struct {
 	Prometheus   *Source        `json:"prometheus,omitempty" yaml:"prometheus,omitempty"`
 	Alertmanager *Source        `json:"alertmanager,omitempty" yaml:"alertmanager,omitempty"`
 	Grafana      *GrafanaSource `json:"grafana,omitempty" yaml:"grafana,omitempty"`
+	// RED optionally maps HTTP request, error and duration metric names.
+	RED *RED `json:"red,omitempty" yaml:"red,omitempty"`
 }
 
 // Source says how one source is reached. Exactly one of Service and URL is set.
