@@ -73,6 +73,14 @@ type SignalRead struct {
 	answered bool
 }
 
+// look says how far back one sample of the signal looks.
+func (s *SignalRead) look() Lookback {
+	if s.Query == nil {
+		return Lookback{}
+	}
+	return s.Query.Look
+}
+
 // Bad reports whether the signal has a direction that counts as bad.
 func (s *SignalRead) Bad() bool { return s.Rule.Worse != WorseNone }
 
@@ -157,7 +165,7 @@ func (s *SignalRead) summarize(step time.Duration) {
 	for i := range s.Series {
 		series := &s.Series[i]
 		series.Median = Median(series.Points)
-		series.Crossed = Crossings(series.Points, s.Rule, step)
+		series.Crossed = Crossings(series.Points, s.Rule, step, s.look())
 		crossed = append(crossed, series.Crossed...)
 		for index, point := range series.Points {
 			if index == 0 || (s.Rule.Worse == WorseLow && point.V < series.Worst) || (s.Rule.Worse != WorseLow && point.V > series.Worst) {

@@ -96,7 +96,7 @@ func TestTheHangIsLocatedOnOnePodAndTheUnrelatedBlipIsNotBlamed(t *testing.T) {
 	assert.Equal(t, "p99 6ms", dns.Key)
 	assert.Equal(t, "servfail 0 · dns-errors 0 · nxdomain 15% · requests 40/s", dns.Evidence, "the Hubble DNS signal is DNS evidence")
 	network := report.Hop(slowpath.HopNetwork)
-	assert.Equal(t, "drops 0.8/s", network.Key)
+	assert.Equal(t, "drops 0.37/s", network.Key, "a one-minute burst of 0.8/s read through a rate over two minutes never shows its own level")
 	assert.Equal(t, "POLICY_DENIED to …-2bq7k · rst 0.17% · flows 360/s", network.Evidence)
 	assert.Nil(t, network.Signal("dns-errors"))
 
@@ -116,7 +116,8 @@ func TestTheHangIsLocatedOnOnePodAndTheUnrelatedBlipIsNotBlamed(t *testing.T) {
 	assert.Equal(t, []string{"ingress: 499, p99, +1", "endpoints: not ready …-hx4mt", "pods: p99 …-hx4mt", "pods: queued …-hx4mt",
 		"pods: free-threads …-hx4mt", "pods: throttled …-hx4mt", "3 dependencies", "dns", "network: drops …-2bq7k", "restarts", "rollouts, new pods"}, labels)
 	drops := lane(t, report, slowpath.HopNetwork)
-	assert.Equal(t, []chart.Interval{{Start: before(41.5), End: before(40.5)}}, drops.Marks)
+	assert.Equal(t, []chart.Interval{{Start: before(41.5), End: before(40.5)}}, drops.Marks,
+		"the minute of the burst, as a gauge would mark it, not the two and a half minutes its rate stayed raised")
 	assert.Equal(t, slowtest.Calm, drops.Pod)
 	assert.Zero(t, slowpath.OverlapCount(report.Episodes, drops.Marks), "the blip is between two episodes")
 	assert.Equal(t, 3, slowpath.OverlapCount(report.Episodes, lane(t, report, "app:throttled").Marks))
@@ -309,7 +310,8 @@ func TestAWideWindowSaysWhatItCannotShow(t *testing.T) {
 		"A sample here stands for 5m and a rate for 20m: a stall of a few minutes merges with the next one or disappears; 1h or 15m shows it.")
 	assert.NotContains(t, sentences(slowtest.Report(&slowtest.Story{}, slowtest.Sources(), slowtest.Path(), time.Hour)), "A sample here stands for")
 	short := slowtest.Report(&slowtest.Story{}, slowtest.Sources(), slowtest.Path(), 15*time.Minute)
-	assert.Equal(t, "1 episode of client give-ups (HTTP 499) at the ingress: 08:13:00 UTC, for 2m.", short.Headline, "a short window writes seconds")
+	assert.Equal(t, "1 episode of client give-ups (HTTP 499) at the ingress: 08:13:00 UTC, for 2m.", short.Headline,
+		"a short window writes seconds; the rate crosses its rule a sample after the stall begins and the stretch is stated from the stall")
 	assert.Contains(t, sentences(short), "It overlaps slow p99, queueing, no free threads and CPU throttling on pod …-hx4mt.")
 	assert.Contains(t, sentences(short), "It does not overlap endpoints, dependencies, dns, network, restarts or rollouts.")
 }
@@ -387,4 +389,65 @@ func TestAlertsAndRolloutsAreDatedFactsOnTheirOwnLanes(t *testing.T) {
 	unread := slowpath.Evaluate(plan, slowpath.Collect(t.Context(), &slowtest.Story{}, plan), &slowpath.Alerts{Note: "alertmanager: denied (HTTP 403)"}, slowtest.Now)
 	assert.Equal(t, "alertmanager: denied (HTTP 403)", lane(t, unread, "alerts").NotRead)
 	assert.Contains(t, sentences(unread), "Not read: alerts.")
+}
+
+func TestARateIsStatedWithoutTheTimeItsWindowHoldsABurst(t *testing.T) {
+	report := slowtest.Report(&slowtest.Story{}, slowtest.Sources(), slowtest.Path(), time.Hour)
+	stalls := []chart.Interval{{Start: before(52.5), End: before(49.5)}, {Start: before(33.5), End: before(29.5)}, {Start: before(7.5), End: before(5.5)}}
+	queued := lane(t, report, "app:queued")
+	require.Equal(t, stalls, queued.Marks, "a gauge is raised for as long as the stall lasts")
+
+	// The story answers a rate as a Prometheus does: over two minutes, so
+	// its samples are raised for two minutes after each stall. The stretch
+	// is stated without them, and so lines up with the gauge of the same
+	// stall instead of running on after it has cleared.
+	gaveUp := report.Hop(slowpath.HopIngress).Signal("499")
+	raised := 0
+	for _, point := range gaveUp.Series[0].Points {
+		if gaveUp.Rule.Crosses(point.V, gaveUp.Series[0].Median) {
+			raised++
+		}
+	}
+	assert.Equal(t, 30, raised, "nine minutes of stalls are fifteen minutes of raised samples")
+	assert.Equal(t, stalls, gaveUp.Crossed)
+	assert.Equal(t, stalls, lane(t, report, slowpath.HopIngress).Marks)
+	assert.Equal(t, stalls, lane(t, report, "app:throttled").Marks,
+		"a share that needs a third of the window to cross its rule begins that third earlier, even for a stall as long as the window")
+	assert.Equal(t, stalls, lane(t, report, "app:p99").Marks, "a quantile of a rate holds a stall for the whole window")
+	assert.Contains(t, report.SignalStat(gaveUp), "raised 9m of 1h in 3 stretches")
+	detail := strings.Join(report.Detail(report.Hop(slowpath.HopIngress)), "\n")
+	assert.Contains(t, detail, "  stretches: read from a rate over 2m; the time a burst takes to leave that window is not counted")
+	assert.NotContains(t, strings.Join(report.Detail(report.Hop(slowpath.HopService)), "\n"), "stretches: read from a rate", "a gauge has no window")
+	assert.Contains(t, detail, "  highest 39.6/s at ", "a signal without a bad direction has a highest sample, not a worst one")
+}
+
+func TestEpisodesAreCountedFromTheSignalTheHeadlineNames(t *testing.T) {
+	// The ingress is slow twice. Clients gave up only the first time.
+	within := func(at time.Time, from, to float64) bool { return !at.Before(before(from)) && at.Before(before(to)) }
+	slow := ranger(func(query string, at time.Time) map[string]float64 {
+		switch {
+		case strings.Contains(query, `status=~"5.."`):
+			return map[string]float64{"": 0.0001}
+		case strings.Contains(query, `status="499"`):
+			if within(at, 50, 45) {
+				return map[string]float64{"": 2}
+			}
+			return map[string]float64{"": 0.01}
+		case strings.Contains(query, "nginx_ingress_controller_request_duration_seconds_bucket"):
+			if within(at, 50, 45) || within(at, 20, 14) {
+				return map[string]float64{"": 9}
+			}
+			return map[string]float64{"": 0.4}
+		case strings.Contains(query, "nginx_ingress_controller_requests"):
+			return map[string]float64{"": 40}
+		}
+		return nil
+	})
+	plan := slowpath.BuildPlan(slowtest.Sources(), quietPath(), time.Hour, slowtest.Now)
+	report := slowpath.Evaluate(plan, slowpath.Collect(t.Context(), slow, plan), nil, slowtest.Now)
+	ingress := lane(t, report, slowpath.HopIngress)
+	assert.Equal(t, []string{"499", "p99"}, ingress.Names)
+	assert.Len(t, ingress.Marks, 2, "the lane marks both stretches in which the hop was raised")
+	require.Len(t, report.Episodes, 1, "the second stretch had no give-up in it")
+	assert.True(t, strings.HasPrefix(report.Headline, "1 episode of client give-ups (HTTP 499) at the ingress: 07:30 UTC, for "), report.Headline)
 }

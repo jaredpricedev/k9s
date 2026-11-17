@@ -85,7 +85,10 @@ Prometheus, one batch per read:
   (8 seconds, 1 MiB, 32 series, 4096 samples, 120 sample times);
 - the step is the one `:graph` uses for the window: 15s for 15m, 30s for 1h,
   5m for 6h, 15m for 24h; a rate is taken over four steps and at least two
-  minutes.
+  minutes;
+- the window ends on a whole step, and on a whole minute when it is longer
+  than 15m, so that a lane column and the cursor begin and end at the
+  minutes they are labelled with.
 
 Alertmanager, one read, only when the context declares one: the alerts whose
 `namespace` label is the Service's namespace.
@@ -151,11 +154,53 @@ adds less than 50ms cannot explain a page that waits. The rule of every
 signal is printed beside its numbers under `s`.
 
 Each raised sample stands for the step that ends at it: a query evaluated
-at a time looks back from it (a rate over its window, a gauge at its last
-scrape, a counter since the sample before). A stretch is therefore as long
-as its raised samples are many, the newest sample of the window is on the
-strip, and a sentence states a stretch by the time of its first raised
-sample.
+at a time looks back from it (a gauge at its last scrape, a counter since
+the sample before). A stretch of a gauge is therefore as long as its raised
+samples are many, the newest sample of the window is on the strip, and a
+sentence states a stretch by the sample that ends its first step.
+
+A rate, a share of two rates and a quantile of a rate look back further:
+over the rate window (2m at 1h). A burst that has ended is still in the
+rate until it has left that window, so the samples of a three-minute stall
+are raised for about five minutes. Drawn as they are, give-ups at the
+ingress would seem to go on for two minutes after the queue on the Pod had
+cleared. The stretch of such a signal is therefore stated without that
+time:
+
+- While a burst enters the window the rate climbs in proportion to the
+  part of it that is inside, and it falls the same way while the burst
+  leaves: two ramps as long as the window *W*, or as long as the burst
+  when the burst is shorter and never fills the window.
+- The first and the last raised sample each hold a part of the peak, which
+  is how far up its ramp each sits. The first then says how long the burst
+  had been going on, the last how much of it was still in the window. That
+  is read with ramps as long as the window and as long as the burst; the
+  wrong reading is always the longer one, so the shorter is taken.
+- When those two samples do not sit on such ramps (the series jumps to its
+  peak in one step), or together hold more than 0.8 of them, the stretch is
+  solved from the number of raised samples instead. The rule is crossed
+  once a part *f* of a ramp is climbed (the distance from the usual level
+  to the rule, over the distance to the peak) and until less than *f* is
+  left, so the raised samples of a burst of length *D* span *D + (1 - 2f)W*
+  when it is longer than the window and *W + (1 - 2f)D* when it is shorter.
+  At most 0.4 of a ramp is taken off at each end, and a burst shorter than
+  the window is solved this way only up to *f* = 0.3.
+- A quantile does not climb in proportion. It is taken to be slow while any
+  part of its window is, and is always solved from the number of samples.
+- The stretch is stated to a whole number of steps, at least one, and from
+  the step in which a gauge of the same burst would begin.
+- A stretch that reaches the first or the last sample keeps that end: the
+  burst may have begun before the window, or may not be over.
+- A gauge, a counter, a signal that is bad when low and a rate window no
+  longer than one step are left as they are.
+
+For a burst longer than the rate window this gives the stretch a gauge of
+the same burst would have, wherever the samples fall. A burst no longer
+than the window never fills it, so its peak does not say how large it was;
+its stretch is right to within one step at either end. The samples
+themselves are not changed: the trend, the worst number and the value at
+the cursor are what the source answered, and the detail of a signal (`s`)
+says when its stretches were read from a rate.
 
 A signal whose extra matcher matched no series (a counter has no
 `status="499"` series before the first 499) is read as zero when the same
@@ -203,14 +248,21 @@ are moved to the nearest column edge, so that the cells a lane fills add up
 to the time written beside it; a stretch shorter than half a column keeps
 one cell. To the right of a lane is the time it was over its rule, or, with
 the cursor, its worst value in the cursor's column. When the lanes do not
-all fit, the marked ones stay and one line names the rest.
+all fit, the marked ones stay and one line names the rest. When not even
+the marked ones fit, the lane the episodes are counted from stays, then the
+lanes that overlap every episode, then those that overlap some, and the
+line counts the marked lanes that are left out. The lanes never take a row
+from the summary, which keeps whole sentences.
 
 ## What lines up
 
 An **episode** is a stretch of the first raised signal on the path (the
 ingress's 499 when it is raised), with stretches closer than two steps
 joined. The headline counts the episodes and states when each began and how
-long they lasted.
+long they lasted. A lane that folds several signals of a hop marks every
+stretch in which any of them was raised, but the episodes are those of the
+one signal the headline names: a stretch in which the ingress was slow and
+no client gave up is on the lane and is not counted as a give-up.
 
 The summary is computed from interval overlap only:
 
@@ -240,7 +292,10 @@ from the least important; what overlaps every episode and the caveat stay.
 - 80x24: the hop table without the `WHAT` column and with quiet dependencies
   on one row, the lanes with marks, and the summary.
 - 60 columns: hop, key number and state word; the trend column is left out
-  first. The lanes keep the Pod name before the signal names.
+  first. A lane label that does not fit keeps what its marks mean and the
+  Pod (`not ready …-hx4mt`, `p99 +3 …-hx4mt`) before the name of the hop.
+- The page of queries and rules (`s`) wraps at every width: no number, rule
+  or query is cut.
 - With `noIcons` every character is ASCII except the `·` separator: `->`
   for the arrow, `#` for a mark, `x` for no data, `...` for an elision.
 - State is always a word. Color repeats it and is taken from the semantic
@@ -264,6 +319,15 @@ from the least important; what overlaps every episode and the caveat stay.
   interest.
 - The ingress-nginx duration histogram ends at 10s by default, so a longer
   wait reads as 10s.
+- The stretch of a rate is an estimate. A burst no longer than the rate
+  window is right to within one step at either end. A quantile whose slow
+  requests are a thin share of the window's traffic (a stalled Pod answers
+  few requests) crosses its rule later and leaves it sooner than assumed,
+  and can read a step or two short. A share of two rates is read as a rate
+  although it does not climb exactly in proportion. A source that answers
+  something other than a mean over the window for these queries (a
+  recording rule with another range) is read by the number of its raised
+  samples, less the window.
 - The CoreDNS numbers are cluster-wide: they describe what CoreDNS answered
   to everyone. Only the Hubble `dns-errors` signal is about these Pods.
 - The rules are fixed and cannot be configured. They are stated on screen so

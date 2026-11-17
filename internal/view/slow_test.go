@@ -73,7 +73,7 @@ func TestSlowFramesStateEveryHopWhenItHappenedAndWhatOverlapsAtEverySize(t *test
 		flat := strings.Join(strings.Fields(frame), " ")
 		// Hop, key number and status word at every width.
 		for _, want := range [][2]string{{"client → ingress", "499 2.2/s elevated"}, {"ingress → service", "2 of 3 ready elevated"},
-			{"service → pods", "p99 48s OUTLIER"}, {"dns", "p99 6ms quiet"}, {"network", "drops 0.8/s elevated"}} {
+			{"service → pods", "p99 48s OUTLIER"}, {"dns", "p99 6ms quiet"}, {"network", "drops 0.37/s elevated"}} {
 			require.Regexp(t, `(?m)^[> ] `+regexp.QuoteMeta(want[0])+` .*`+regexp.QuoteMeta(want[1]), slowFlatLines(frame), "%dx%d", size[0], size[1])
 		}
 		require.Contains(t, flat, "3 episodes of client give-ups (HTTP 499) at the ingress")
@@ -104,8 +104,11 @@ func TestSlowFramesStateEveryHopWhenItHappenedAndWhatOverlapsAtEverySize(t *test
 				require.Contains(t, frame, label)
 			}
 			// One column is one minute: the three stalls and, between the
-			// first two, the unrelated burst of drops on another lane.
-			require.Contains(t, frame, "pods: throttled …-hx4mt        │········███················████······················██·····  9m of 1h")
+			// first two, the unrelated burst of drops on another lane. The
+			// give-ups are read from a rate over two minutes and the queue
+			// from a gauge; both fill the same cells.
+			require.Contains(t, frame, "ingress: 499, p99, +1          │········███················████······················██·····  9m of 1h")
+			require.Contains(t, frame, "pods: queued …-hx4mt           │········███················████······················██·····  9m of 1h")
 			require.Contains(t, frame, "network: drops …-2bq7k         │···················█········································  1m of 1h")
 			require.Contains(t, frame, "no marks: dependencies, dns, restarts, rollouts")
 			require.Contains(t, frame, "WHAT LINES UP")
@@ -122,6 +125,7 @@ func TestSlowFramesStateEveryHopWhenItHappenedAndWhatOverlapsAtEverySize(t *test
 			require.Contains(t, flat, "pods → 3 deps 3 read quiet no rule crossed: postgre", "quiet dependencies share a row when the screen is short")
 			require.Contains(t, flat, "OUTLIER 1 of 3: …-hx4mt vs 350ms")
 			require.Contains(t, frame, "pods …-hx4mt: p99 +3", "the Pod name survives a narrow label")
+			require.Contains(t, frame, "not ready …-hx4mt", "and so does what its marks mean")
 			require.Contains(t, frame, "network: drops …-2bq7k")
 			require.Contains(t, frame, "when, UTC")
 			require.Contains(t, frame, "1 column = 2m")
@@ -129,8 +133,9 @@ func TestSlowFramesStateEveryHopWhenItHappenedAndWhatOverlapsAtEverySize(t *test
 		case 60:
 			require.Contains(t, frame, "  HOP                WORST         STATE    EVIDENCE")
 			require.NotContains(t, frame, "LAST 1h", "the trend gives way before hop, key number or state")
-			require.Contains(t, frame, "pods …-hx4mt")
-			require.Contains(t, frame, "network …-2bq7k")
+			for _, label := range []string{"not ready …-hx4mt", "p99 +3 …-hx4mt", "drops …-2bq7k"} {
+				require.Contains(t, frame, label, "a narrow label keeps what the mark means and the Pod")
+			}
 		}
 	}
 }
@@ -190,10 +195,13 @@ func TestSlowNoIconsUsesPlainCharactersOnly(t *testing.T) {
 		require.Contains(t, frame, "OUTLIER")
 		require.Contains(t, frame, "##", "a mark is a hash")
 		require.Contains(t, frame, "...-hx4mt")
+		lines := strings.Split(strings.TrimRight(frame, "\n "), "\n")
+		require.Regexp(t, `Esc( back)?$`, strings.TrimRight(lines[len(lines)-1], " "),
+			"the key hints are measured in the words that are drawn, and end whole at %d columns", size[0])
 	}
 	frame := drawnText(t, v, 132, 32)
 	require.Contains(t, frame, "WHEN IT HAPPENED · 1 column = 1m · # over its rule · x no data · UTC")
-	require.Contains(t, frame, "pods: throttled ...-hx4mt      |........###................####......................##.....  9m of 1h")
+	require.Contains(t, frame, "pods: queued ...-hx4mt         |........###................####......................##.....  9m of 1h")
 	require.Contains(t, frame, "> service -> pods")
 	require.Contains(t, frame, "Up/Down hop · Enter open · Left/Right cursor")
 	require.Contains(t, frame, "latency 120us")
@@ -462,4 +470,54 @@ func TestSlowDiscardsALateReplyAfterTheDestinationChanged(t *testing.T) {
 	other.refresh(true)
 	require.False(t, asked)
 	require.Contains(t, drawnText(t, other, 100, 30), "Destination changed; this read is retained. Reopen :slow for the current context.")
+}
+
+func TestSlowKeepsWholeSentencesAndTheFindingWhenRowsAreFew(t *testing.T) {
+	v := slowViewFixture(t)
+	v.accept(slowStoryRead(&slowtest.Story{}, time.Hour))
+	// 60x24 with the Pods of the app hop listed leaves seven rows under the
+	// table: two lanes, the axis, one line for the rest and the summary.
+	slowPress(t, v, tcell.KeyEnter)
+	frame := drawnText(t, v, 60, 20)
+	lines := strings.Split(strings.TrimRight(frame, "\n "), "\n")
+	require.Contains(t, frame, "    …-hx4mt")
+	require.Contains(t, frame, "ingress: 499, p9… │", "the lane the episodes are counted from stays")
+	require.Contains(t, frame, "p99 +3 …-hx4mt    │", "then the lane that overlaps every episode: it is what the summary speaks about")
+	require.Contains(t, frame, "2 more lanes with marks do not fit")
+	require.NotContains(t, frame, "not ready …-hx4mt │")
+	summary := strings.TrimRight(lines[len(lines)-2], " ")
+	require.True(t, strings.HasSuffix(summary, "."), "the summary ends with a whole sentence, not in the middle of one: %q", summary)
+	require.Contains(t, strings.Join(strings.Fields(frame), " "), "All 3 overlap slow p99, queueing, no free threads and CPU throttling on pod …-hx4mt.")
+
+	// The line that names the rest gives way when exactly the marked lanes
+	// fit without it; one lane is never left out for the sake of saying so.
+	lanes, rest := slowPickLanes(v.report(), 4)
+	require.Len(t, lanes, 4)
+	require.Empty(t, rest)
+	lanes, rest = slowPickLanes(v.report(), 2)
+	require.Len(t, lanes, 1, "the lanes and the line that names the rest never take more rows than they are given")
+	require.Equal(t, slowpath.HopIngress, lanes[0].ID)
+	require.Contains(t, rest, "3 more lanes with marks do not fit")
+
+	// The page of queries and rules wraps: no number and no rule is cut.
+	slowPress(t, v, ui.KeyS)
+	var detail []string
+	for range 12 {
+		drawn := strings.Split(drawnText(t, v, 60, 20), "\n")
+		for i, line := range drawn {
+			if strings.HasPrefix(line, "QUERIES") {
+				require.Regexp(t, `^QUERIES( AND RULES)? · s returns · (lines )?\d+-\d+ of \d+ · PgDn PgUp *$`, line, "the paging keys are not cut off a narrow heading")
+				detail = append(detail, drawn[i+1:len(drawn)-1]...)
+			}
+		}
+		slowPress(t, v, tcell.KeyPgDn)
+	}
+	text := strings.Join(strings.Fields(strings.Join(detail, " ")), " ")
+	require.Contains(t, text, "worst 48s at 07:28 (…-hx4mt) · usual 350ms · raised 9m of 1h in 3 stretches · 363 samples in 3 series, step 30s")
+	require.Contains(t, text, "rule: raised at 3x its window median and at least 50ms above it; always raised at 5s")
+	require.Contains(t, text, "rule: raised at 3x its window median and at least 25 points above it; always raised at 50%")
+	require.Contains(t, text, "stretches: read from a rate over 2m; the time a burst takes to leave that window is not counted")
+	for _, line := range detail {
+		require.False(t, strings.HasSuffix(strings.TrimRight(line, " "), "…"), "cut: %q", line)
+	}
 }

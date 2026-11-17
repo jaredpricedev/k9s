@@ -33,6 +33,11 @@ type Lane struct {
 	// Marks are the stretches in which a rule was crossed, or the moments
 	// of dated facts. Unknown are the stretches without data.
 	Marks, Unknown []chart.Interval
+	// Named are the stretches of the one signal Phrase names, when the lane
+	// folds several signals of a hop: episodes are counted from them, so
+	// that a count of client give-ups never includes a stretch in which
+	// only another signal of the hop was raised. Nil means Marks.
+	Named []chart.Interval
 	// NotRead says why the whole lane has no data.
 	NotRead string
 	// Values and Unit are what the cursor reads off the lane; Low is true
@@ -162,7 +167,7 @@ func (r *Report) hopLane(h *Hop) Lane {
 	if len(crossed) == 0 {
 		return lane
 	}
-	lane.Phrase = Phrase(crossed[0].Name)
+	lane.Phrase, lane.Named = Phrase(crossed[0].Name), crossed[0].Crossed
 	if series := crossed[0].WorstSeries(); series != nil && series.Group != "" {
 		lane.Phrase += " (" + series.Group + ")"
 	}
@@ -505,7 +510,13 @@ func (r *Report) Detail(h *Hop) []string {
 			lines = append(lines, head, "  not read: "+sig.Reason, "  query: "+sig.Text)
 			continue
 		}
-		lines = append(lines, head, "  "+r.SignalStat(sig), "  rule: "+sig.Rule.Text(), "  query: "+sig.Text)
+		lines = append(lines, head, "  "+r.SignalStat(sig), "  rule: "+sig.Rule.Text())
+		if look := sig.look(); look.Window > r.Step && sig.Bad() && !sig.Rule.Counter && sig.Rule.Worse == WorseHigh {
+			// Why a stretch is shorter than its raised samples are many.
+			lines = append(lines, "  stretches: read from a rate over "+impact.Dur(look.Window)+
+				"; the time a burst takes to leave that window is not counted")
+		}
+		lines = append(lines, "  query: "+sig.Text)
 		for _, deviation := range sig.Outliers {
 			what := "worst sample"
 			if deviation.Sustained {
@@ -535,7 +546,12 @@ func (r *Report) SignalStat(sig *SignalRead) string {
 	if !sig.Read {
 		return "not read: " + sig.Reason
 	}
-	parts := []string{"worst " + sig.Format(sig.Worst) + " at " + r.Clock(sig.WorstAt)}
+	// A signal without a bad direction has a highest sample, not a worst one.
+	extreme := "worst "
+	if !sig.Bad() {
+		extreme = "highest "
+	}
+	parts := []string{extreme + sig.Format(sig.Worst) + " at " + r.Clock(sig.WorstAt)}
 	if series := sig.WorstSeries(); series != nil {
 		pod := series.Pod
 		if pod != "" {

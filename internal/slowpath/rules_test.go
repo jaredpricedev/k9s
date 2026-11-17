@@ -58,8 +58,8 @@ func TestEveryRuleIsStatedInWords(t *testing.T) {
 		return slowpath.RuleFor(&observability.Signal{Name: name, Unit: unit, Worse: worse}).Text()
 	}
 	assert.Equal(t, "raised at 3x its window median and at least 50ms above it; always raised at 5s", text("p99", observability.UnitSeconds, observability.WorseHigh))
-	assert.Equal(t, "raised at 3x its window median and at least 1% above it; always raised at 5%", text("5xx", observability.UnitRatio, observability.WorseHigh))
-	assert.Equal(t, "raised at 3x its window median and at least 25% above it; always raised at 50%", text("throttled", observability.UnitRatio, observability.WorseHigh))
+	assert.Equal(t, "raised at 3x its window median and at least 1 point above it; always raised at 5%", text("5xx", observability.UnitRatio, observability.WorseHigh))
+	assert.Equal(t, "raised at 3x its window median and at least 25 points above it; always raised at 50%", text("throttled", observability.UnitRatio, observability.WorseHigh))
 	assert.Equal(t, "raised at 3x its window median and at least 0.1/s above it", text("drops", observability.UnitPerSecond, observability.WorseHigh))
 	assert.Equal(t, "raised at 1/3 of its window median or less and at least 1 below it; always raised at 0", text("free-threads", observability.UnitCount, observability.WorseLow))
 	assert.Equal(t, "always raised at 90%", text(slowpath.SignalMemory, observability.UnitRatio, observability.WorseHigh))

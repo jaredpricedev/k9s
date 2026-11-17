@@ -87,6 +87,9 @@ type Query struct {
 	// Sent is the expression that is asked: per Pod when PerPod is set.
 	Sent   observability.Expr
 	PerPod bool
+	// Look says how far back one sample of the answer looks: the rate
+	// window for a rate, a share of rates or a quantile, nothing for a gauge.
+	Look Lookback
 }
 
 // Plan is one bounded batch for one window. Building it contacts nothing.
@@ -126,6 +129,12 @@ func (p *Plan) take(index int, resolved *observability.HopPlan, perPod bool) {
 	hop.NotRead = append(hop.NotRead, resolved.NotRead...)
 	for i := range resolved.Queries {
 		q := Query{HopQuery: resolved.Queries[i], HopIndex: index, Sent: resolved.Queries[i].Expr}
+		switch q.Signal.Kind {
+		case observability.SignalRate, observability.SignalRatio:
+			q.Look = Lookback{Window: p.RateWindow}
+		case observability.SignalQuantile:
+			q.Look = Lookback{Window: p.RateWindow, Quantile: true}
+		}
 		if perPod && q.PodLabel != "" && q.ByPod.Err() == nil {
 			q.Sent, q.PerPod = q.ByPod, true
 		}
@@ -190,7 +199,14 @@ func BuildPlan(sources *observability.Sources, path *Path, window time.Duration,
 		window = DefaultWindow
 	}
 	step := observability.StepFor(window)
-	end := now.UTC().Truncate(step)
+	// The window ends on a whole step, and on a whole minute when times are
+	// written without seconds: a column of the lanes strip and the cursor
+	// then begin and end at the minute they are labeled with.
+	align := step
+	if window > 15*time.Minute {
+		align = max(step, time.Minute)
+	}
+	end := now.UTC().Truncate(align)
 	plan := &Plan{Path: path, Window: window, Start: end.Add(-window), End: end, Step: step, RateWindow: impact.RateWindowFor(step)}
 	key, pods, rate := path.Key(), path.PodNames(), plan.RateWindow
 	add := func(spec *HopSpec) int {

@@ -72,7 +72,7 @@ func capital(text string) string {
 }
 
 // first is the time a stretch is stated by: for a stretch made of samples
-// the first sample that was raised, which is lead after the stretch
+// the sample that ends its first step, which is lead after the stretch
 // begins; for a moment, the moment.
 func first(iv chart.Interval, lead time.Duration) time.Time {
 	if iv.End.After(iv.Start) {
@@ -222,7 +222,12 @@ func (r *Report) summarizeQuiet(unread *named) {
 // headline counts the episodes of the symptom lane and states when they
 // began and how long they lasted.
 func (r *Report) headline(symptom *Lane) {
-	r.Episodes = Clip(Join(symptom.Marks, EpisodeGap*r.Step), r.Start, r.End)
+	marks := symptom.Marks
+	if symptom.Named != nil {
+		// The headline names one signal; its stretches are the episodes.
+		marks = symptom.Named
+	}
+	r.Episodes = Clip(Join(marks, EpisodeGap*r.Step), r.Start, r.End)
 	count := len(r.Episodes)
 	noun := "episodes"
 	if count == 1 {

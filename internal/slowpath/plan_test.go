@@ -20,6 +20,18 @@ import (
 func TestOneBatchResolvesEveryHopInPathOrder(t *testing.T) {
 	plan := slowpath.BuildPlan(slowtest.Sources(), slowtest.Path(), time.Hour, slowtest.Now.Add(17*time.Second))
 	assert.Equal(t, slowtest.Now, plan.End, "the window ends on a sample time")
+	// Times of an hour are written without seconds, so the window ends on a
+	// whole minute: a lane column from 07:28 to 07:29 is that minute, not
+	// the one that begins half a minute later.
+	late := slowpath.BuildPlan(slowtest.Sources(), slowtest.Path(), time.Hour, slowtest.Now.Add(47*time.Second))
+	assert.Equal(t, slowtest.Now, late.End)
+	short := slowpath.BuildPlan(slowtest.Sources(), slowtest.Path(), 15*time.Minute, slowtest.Now.Add(47*time.Second))
+	assert.Equal(t, slowtest.Now.Add(45*time.Second), short.End, "a quarter of an hour is written with seconds and ends on its own step")
+	for _, query := range late.Queries {
+		gauge := query.Signal.Kind == observability.SignalGauge || query.Profile == slowpath.ProfileCAdvisor || query.Profile == slowpath.ProfileKubeState
+		assert.Equal(t, !gauge, query.Look.Window == late.RateWindow, "%s: only what is read from a rate looks back over the rate window", query.Signal.Name)
+		assert.Equal(t, query.Signal.Kind == observability.SignalQuantile, query.Look.Quantile, query.Signal.Name)
+	}
 	assert.Equal(t, slowtest.Now.Add(-time.Hour), plan.Start)
 	assert.Equal(t, 30*time.Second, plan.Step)
 	assert.Equal(t, 2*time.Minute, plan.RateWindow, "the rate window :graph and :impact use for this step")

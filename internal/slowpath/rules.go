@@ -5,6 +5,8 @@ package slowpath
 
 import (
 	"fmt"
+	"math"
+	"strings"
 
 	"github.com/derailed/k9s/internal/chart"
 	"github.com/derailed/k9s/internal/observability"
@@ -152,8 +154,39 @@ func (r Rule) Crosses(value, median float64) bool {
 	return false
 }
 
+// Level is the lowest value that crosses the rule of a signal that is bad
+// when high, for a series whose usual level is median. It is infinite for
+// a rule that such a value cannot cross.
+func (r Rule) Level(median float64) float64 {
+	level := math.Inf(1)
+	if r.Worse != WorseHigh || r.Counter {
+		return level
+	}
+	if r.Factor > 0 {
+		level = math.Max(r.Factor*median, median+r.Floor)
+	}
+	if r.Always > 0 {
+		level = math.Min(level, r.Always)
+	}
+	return level
+}
+
 // factor writes 3 for 3.0 and 2.5 for 2.5.
 func factor(f float64) string { return fmt.Sprintf("%g", f) }
+
+// distance writes how far from the usual level a sample must be. A share
+// is measured in points, so that "25 points above 4%" is not read as a
+// quarter more than 4%.
+func (r Rule) distance() string {
+	if r.Unit == chart.Ratio {
+		points := strings.TrimSuffix(r.Unit.Format(r.Floor), "%")
+		if points == "1" {
+			return "1 point"
+		}
+		return points + " points"
+	}
+	return r.Unit.Format(r.Floor)
+}
 
 // Text states the rule in one sentence part, for the detail area.
 func (r Rule) Text() string {
@@ -165,7 +198,7 @@ func (r Rule) Text() string {
 	case r.Worse == WorseLow:
 		text := ""
 		if r.Factor > 0 {
-			text = "raised at 1/" + factor(r.Factor) + " of its window median or less and at least " + r.Unit.Format(r.Floor) + " below it"
+			text = "raised at 1/" + factor(r.Factor) + " of its window median or less and at least " + r.distance() + " below it"
 		}
 		if r.AtZero {
 			if text != "" {
@@ -177,7 +210,7 @@ func (r Rule) Text() string {
 	}
 	text := ""
 	if r.Factor > 0 {
-		text = "raised at " + factor(r.Factor) + "x its window median and at least " + r.Unit.Format(r.Floor) + " above it"
+		text = "raised at " + factor(r.Factor) + "x its window median and at least " + r.distance() + " above it"
 	}
 	if r.Always > 0 {
 		if text != "" {

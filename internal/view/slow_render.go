@@ -275,12 +275,14 @@ func (v *slowView) render() {
 	body := v.bodyLines(width, height-len(header)-1-tableHeight)
 	v.body.SetText(strings.Join(body, "\n"))
 	v.body.ScrollToBeginning()
-	arrows, sides := "↑↓", "←→"
-	v.footer.SetText(timelineTag(v.app.Styles.Semantic().Muted, false) + tview.Escape(v.plain(impactFit(width,
+	// The plain form of an arrow is a word, so a hint is measured as drawn.
+	arrows, sides := v.plain("↑↓"), v.plain("←→")
+	v.footer.SetText(timelineTag(v.app.Styles.Semantic().Muted, false) + tview.Escape(impactFit(width,
 		arrows+" hop · Enter open · "+sides+" cursor · n/N episode · 1 15m  2 1h  3 6h  4 24h · s queries and rules · r re-read · Esc back",
 		arrows+" hop · Enter open · "+sides+" cursor · n/N episode · 1-4 window · s queries · r re-read · Esc back",
 		arrows+" hop · Enter open · "+sides+" cursor · 1-4 window · s queries · r read · Esc",
-		"Enter open · "+sides+" cursor · 1-4 window · s queries · Esc"))) + "[-:-:-]")
+		"Enter open · "+sides+" cursor · 1-4 window · s queries · Esc",
+		"Enter open · 1-4 window · s queries · Esc")) + "[-:-:-]")
 }
 
 // titleLine names the Service, the window in clock time, when it was read
@@ -798,6 +800,11 @@ func (v *slowView) shareRows(report *slowpath.Report, width, rows int) slowBudge
 		fixed--
 	}
 	b.lanes, b.folded = slowPickLanes(report, rows-fixed-len(b.summary))
+	if left := rows - fixed - len(b.lanes) - count(b.folded != ""); len(b.summary) > left {
+		// Two lanes always remain; the summary then keeps the whole
+		// sentences that fit beside them and is never cut in the middle.
+		b.summary = v.sentences(report, width, max(left, 0))
+	}
 	if spare := rows - fixed - len(b.summary) - len(b.lanes) - count(b.folded != ""); spare > 0 {
 		// Rows the lanes did not need go to the summary, then the detail.
 		if more := v.sentences(report, width, summaryCap+spare); len(more) > len(b.summary) {
@@ -811,10 +818,14 @@ func (v *slowView) shareRows(report *slowpath.Report, width, rows int) slowBudge
 	return b
 }
 
-// slowPickLanes chooses the lanes that fit: all of them when there is room;
-// else the lanes with marks, as many of the others as fit, and one line
-// that names the rest. The app hop keeps one lane per signal while the
-// marked lanes fit, and one lane otherwise.
+// slowPickLanes chooses the lanes that fit in budget rows: all of them when
+// there is room; else the lanes with marks, as many of the others as fit,
+// and one line that names the rest. The app hop keeps one lane per signal
+// while the marked lanes fit, and one lane otherwise. When not even the
+// marked lanes fit, the lane the episodes are counted from stays, then the
+// lanes that overlap every episode, then those that overlap some: what the
+// summary speaks about is what remains drawn. The lanes and the line that
+// names the rest never take more than budget rows (two at least).
 func slowPickLanes(report *slowpath.Report, budget int) (lanes []slowpath.Lane, folded string) {
 	budget = max(budget, 2)
 	if len(report.Lanes) <= budget {
@@ -822,26 +833,48 @@ func slowPickLanes(report *slowpath.Report, budget int) (lanes []slowpath.Lane, 
 	}
 	candidates := [][]slowpath.Lane{report.Lanes, report.CompactLanes()}
 	for index, candidate := range candidates {
-		marked := 0
+		if len(candidate) <= budget {
+			return candidate, ""
+		}
+		var marked []int
 		for i := range candidate {
 			if len(candidate[i].Marks) > 0 {
-				marked++
+				marked = append(marked, i)
 			}
 		}
-		if marked+1 > budget && index < len(candidates)-1 {
+		if len(marked)+1 > budget && index < len(candidates)-1 {
 			continue
 		}
-		// The line that names what is left out gives way to a marked lane.
-		room := budget - 1 - marked
-		if room < 0 {
-			budget++
+		// The line that names what is left out gives way when exactly the
+		// marked lanes fit without it.
+		limit := budget - 1
+		if len(marked) == budget {
+			limit = budget
 		}
+		rank := func(i int) int {
+			lane := &candidate[i]
+			switch overlaps := slowpath.OverlapCount(report.Episodes, lane.Marks); {
+			case report.Symptom >= 0 && lane.ID == report.Lanes[report.Symptom].ID:
+				return 0
+			case len(report.Episodes) > 0 && overlaps == len(report.Episodes):
+				return 1
+			case overlaps > 0:
+				return 2
+			}
+			return 3
+		}
+		sort.SliceStable(marked, func(a, b int) bool { return rank(marked[a]) < rank(marked[b]) })
+		keep := map[int]bool{}
+		for _, i := range marked[:min(limit, len(marked))] {
+			keep[i] = true
+		}
+		room := limit - len(keep)
 		var quiet, unread []string
 		more := 0
 		for i := range candidate {
 			lane := candidate[i]
 			switch {
-			case len(lane.Marks) > 0 && len(lanes) < budget-1:
+			case keep[i]:
 				lanes = append(lanes, lane)
 			case len(lane.Marks) > 0:
 				more++
@@ -854,6 +887,10 @@ func slowPickLanes(report *slowpath.Report, budget int) (lanes []slowpath.Lane, 
 				quiet = append(quiet, lane.Short)
 			}
 		}
+		if limit == budget {
+			return lanes, ""
+		}
+		// Never one: a single lane more would have taken this line's row.
 		var parts []string
 		if more > 0 {
 			parts = append(parts, fmt.Sprintf("%d more lanes with marks do not fit", more))
@@ -863,9 +900,6 @@ func slowPickLanes(report *slowpath.Report, budget int) (lanes []slowpath.Lane, 
 		}
 		if len(unread) > 0 {
 			parts = append(parts, "not read: "+strings.Join(unread, ", "))
-		}
-		if room < 0 && more == 0 {
-			return lanes, ""
 		}
 		return lanes, strings.Join(parts, " · ")
 	}
@@ -915,27 +949,35 @@ func (v *slowView) detailLines(report *slowpath.Report, width, rows int) []strin
 	add := func(color config.Color, bold bool, text string) {
 		out = append(out, timelineTag(color, bold)+tview.Escape(v.cut(text, width))+"[-:-:-]")
 	}
+	// Nothing on this page is cut: the numbers, the rule and the query are
+	// the evidence behind a status word. Words wrap at spaces; a query has
+	// few and is broken where the line ends.
+	wrapped := func(color config.Color, bold bool, text string, wrap func(string, int) []string) {
+		body := strings.TrimPrefix(text, "  ")
+		first, rest := "", "  "
+		if body != text {
+			first, rest = "  ", "    "
+		}
+		for index, part := range wrap(body, width-len(rest)) {
+			indent := first
+			if index > 0 {
+				indent = rest
+			}
+			add(color, bold, indent+part)
+		}
+	}
 	for _, hop := range v.focusedHops() {
 		for _, text := range report.Detail(hop) {
 			text = v.plain(text)
 			switch {
 			case !strings.HasPrefix(text, " "):
-				add(p.Text, true, text)
-			case strings.HasPrefix(text, "  query:") || strings.HasPrefix(text, "  not read") || strings.HasPrefix(text, "  note:"):
-				color := p.Muted
-				if strings.HasPrefix(text, "  not read") {
-					color = p.Warning
-				}
-				// A query is wrapped, never cut: it is the evidence.
-				for index, part := range slowHardWrap(strings.TrimPrefix(text, "  "), width-4) {
-					indent := "  "
-					if index > 0 {
-						indent = "    "
-					}
-					add(color, false, indent+part)
-				}
+				wrapped(p.Text, true, text, impactWrap)
+			case strings.HasPrefix(text, "  query:"):
+				wrapped(p.Muted, false, text, slowHardWrap)
+			case strings.HasPrefix(text, "  not read"):
+				wrapped(p.Warning, false, text, slowHardWrap)
 			default:
-				add(p.Muted, false, text)
+				wrapped(p.Muted, false, text, impactWrap)
 			}
 		}
 	}
@@ -947,9 +989,15 @@ func (v *slowView) detailLines(report *slowpath.Report, width, rows int) []strin
 	page := max(rows-1, 1)
 	v.detailPage = page
 	v.detailTop = min(v.detailTop, max(len(out)-page, 0))
-	head := "QUERIES, SAMPLES AND RULES · s or Enter returns to the lanes"
+	// The paging keys stay in the heading at every width: they are the only
+	// way to the lines below.
+	head := impactFit(width, "QUERIES, SAMPLES AND RULES · s or Enter returns to the lanes", "QUERIES AND RULES · s returns to the lanes", "QUERIES AND RULES · s returns")
 	if len(out) > page {
-		head += fmt.Sprintf(" · lines %d-%d of %d · PgDn PgUp", v.detailTop+1, min(v.detailTop+page, len(out)), len(out))
+		from, to := v.detailTop+1, min(v.detailTop+page, len(out))
+		head = impactFit(width,
+			fmt.Sprintf("QUERIES, SAMPLES AND RULES · s or Enter returns to the lanes · lines %d-%d of %d · PgDn PgUp", from, to, len(out)),
+			fmt.Sprintf("QUERIES AND RULES · s returns · lines %d-%d of %d · PgDn PgUp", from, to, len(out)),
+			fmt.Sprintf("QUERIES · s returns · %d-%d of %d · PgDn PgUp", from, to, len(out)))
 	}
 	lines := []string{timelineTag(p.Focus, true) + tview.Escape(v.cut(head, width)) + "[-:-:-]"}
 	return append(lines, out[v.detailTop:min(v.detailTop+page, len(out))]...)
@@ -966,7 +1014,9 @@ func (v *slowView) laneLabel(report *slowpath.Report, lane *slowpath.Lane, width
 	if len(lane.Names) > 1 {
 		more = fmt.Sprintf(" +%d", len(lane.Names)-1)
 	}
-	for _, text := range []string{lane.Short + " " + pod + ": " + lane.Names[0] + more, lane.Short + " " + pod} {
+	// What the mark means goes before where the hop is: "not ready …-hx4mt"
+	// says more than "endpoints …-hx4mt".
+	for _, text := range []string{lane.Short + " " + pod + ": " + lane.Names[0] + more, lane.Names[0] + more + " " + pod, lane.Short + " " + pod} {
 		if runewidth.StringWidth(v.plain(text)) <= width {
 			return v.plain(text)
 		}

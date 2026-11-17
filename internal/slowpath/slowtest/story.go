@@ -3,11 +3,14 @@
 
 // Package slowtest is a synthetic request path for tests: an intermittent
 // hang on one Pod of three, answered the way a declared Prometheus would
-// answer the queries of a request-path batch. It contacts nothing.
+// answer the queries of a request-path batch, rate windows included. It
+// contacts nothing.
 package slowtest
 
 import (
 	"context"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -180,6 +183,34 @@ func samples(start, end time.Time, step time.Duration, value func(t time.Time) (
 	return out
 }
 
+var rateWindow = regexp.MustCompile(`\[(\d+)s\]`)
+
+// windowed answers a query that takes a rate the way a Prometheus does:
+// one sample is the mean of the level over the rate window that ends at it,
+// so a stall is still in the answer until it has left that window. A
+// quantile of a rate is slow while any part of its window is. A query
+// without a rate window is a gauge and is answered as it is.
+func windowed(query string, step time.Duration, level func(time.Time) float64) func(time.Time) float64 {
+	match := rateWindow.FindStringSubmatch(query)
+	if match == nil {
+		return level
+	}
+	seconds, _ := strconv.Atoi(match[1])
+	window, quantile := time.Duration(seconds)*time.Second, strings.Contains(query, "histogram_quantile")
+	return func(t time.Time) float64 {
+		total, low, high, count := 0.0, level(t), level(t), 0
+		for at := t.Add(-window); !at.After(t); at = at.Add(step / 3) {
+			v := level(at)
+			total, low, high = total+v, min(low, v), max(high, v)
+			count++
+		}
+		if quantile || low == high {
+			return high
+		}
+		return total / float64(count)
+	}
+}
+
 // QueryRange answers one range read of the batch.
 func (s *Story) QueryRange(_ context.Context, e observability.Expr, start, end time.Time) observability.PromResult {
 	s.Calls.Add(1)
@@ -206,16 +237,16 @@ func (s *Story) QueryRange(_ context.Context, e observability.Expr, start, end t
 				Samples: samples(start, end, step, func(time.Time) (float64, bool) { return 0.002, true })})
 		}
 		if !s.Quiet {
+			burst := windowed(query, step, func(t time.Time) float64 {
+				if between(t, Blip) {
+					return 0.8
+				}
+				return 0
+			})
 			res.Series = append(res.Series, observability.PromSeries{
 				Labels: map[string]string{"destination_pod": Calm, "reason": "POLICY_DENIED"},
 				Samples: samples(start, end, step, func(t time.Time) (float64, bool) {
-					switch {
-					case t.Before(Now.Add(-Blip[0])):
-						return 0, false
-					case between(t, Blip):
-						return 0.8, true
-					}
-					return 0, true
+					return burst(t), !t.Before(Now.Add(-Blip[0]))
 				})})
 		}
 		return res
@@ -228,15 +259,17 @@ func (s *Story) QueryRange(_ context.Context, e observability.Expr, start, end t
 		if !found {
 			continue
 		}
-		value := answers[i].value
+		value := func(pod string) func(time.Time) (float64, bool) {
+			level := windowed(query, step, func(t time.Time) float64 { return answers[i].value(s, pod, t) })
+			return func(t time.Time) (float64, bool) { return level(t), true }
+		}
 		if answers[i].label == "" {
-			res.Series = []observability.PromSeries{{Labels: map[string]string{},
-				Samples: samples(start, end, step, func(t time.Time) (float64, bool) { return value(s, "", t), true })}}
+			res.Series = []observability.PromSeries{{Labels: map[string]string{}, Samples: samples(start, end, step, value(""))}}
 			return res
 		}
 		for _, pod := range s.pods() {
 			res.Series = append(res.Series, observability.PromSeries{Labels: map[string]string{answers[i].label: pod},
-				Samples: samples(start, end, step, func(t time.Time) (float64, bool) { return value(s, pod, t), true })})
+				Samples: samples(start, end, step, value(pod))})
 		}
 		return res
 	}
