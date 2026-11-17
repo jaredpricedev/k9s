@@ -754,6 +754,7 @@ CONTEXT_CONFIG = """k9s:
       service: monitoring/grafana:3000
       publicURL: https://grafana.study.example.test
       datasource: prom-main
+      lokiDatasource: loki-main
       dashboards:
         pod:
           uid: k8s-pod

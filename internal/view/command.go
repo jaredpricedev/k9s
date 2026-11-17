@@ -117,6 +117,7 @@ func (c *Command) updateSuggestionAliases() {
 		problemsCommandToken,
 		timelineCommandToken,
 		sourcesCommandToken,
+		dashboardsCommandToken,
 	}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
@@ -345,6 +346,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.historyReviewCommand()
 	case sourcesCommandToken:
 		c.sourcesCommand()
+	case dashboardsCommandToken:
+		c.dashboardsCommand(p.GetLine())
 	case "security-review":
 		c.securityReviewCommand()
 	case upgradeReadinessCommand:

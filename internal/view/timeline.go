@@ -133,8 +133,19 @@ func (a *App) openTimeline(target SelectedResourceTarget, argument string) {
 	}
 	readers := &timeline.Readers{Objects: objects, Metadata: meta}
 	v := newTimelineView(a, scope, note)
+	// The declaration is captured here; Grafana is contacted only inside the
+	// same bounded read as the cluster, never on its own.
+	sources, restConfig := declaredSources(a), kubeRESTConfig(a)
 	v.loader = func(ctx context.Context) (*timeline.Snapshot, error) {
-		return timeline.Collect(ctx, readers, scope, time.Now())
+		now := time.Now()
+		notes := make(chan *timelineAnnotations, 1)
+		go func() { notes <- readTimelineAnnotations(ctx, sources, restConfig, now) }()
+		snapshot, err := timeline.Collect(ctx, readers, scope, now)
+		read := <-notes
+		if err == nil && snapshot != nil {
+			read.mergeInto(snapshot)
+		}
+		return snapshot, err
 	}
 	if err := a.inject(v, false); err != nil {
 		a.Flash().Err(err)
@@ -229,6 +240,7 @@ func (v *timelineView) bindTimelineKeys() {
 	v.actions.Add(ui.KeyR, ui.NewKeyAction("Re-read timeline", idle(v.refresh), true))
 	v.actions.Add(ui.KeyS, ui.NewKeyAction("Sources and limits", idle(v.toggleSources), true))
 	v.actions.Add(ui.KeyM, ui.NewKeyAction("Mark reference moment", idle(v.markReference), true))
+	v.actions.Add(grafanaKey, grafanaKeyAction(v.app, func() actionOwner { return v }, func() bool { return !v.cmdBuff.IsActive() }))
 	v.actions.Add(tcell.KeyEnter, ui.NewKeyAction("Open resource", func(*tcell.EventKey) *tcell.EventKey {
 		if v.cmdBuff.IsActive() {
 			v.applyQuery(v.cmdBuff.GetText())
@@ -327,6 +339,10 @@ func (v *timelineView) openEntry() {
 	}
 	if v.scope.Context != v.app.Config.ActiveContextName() {
 		v.app.Flash().Warn("Context changed; reopen the timeline")
+		return
+	}
+	if entry.Source == timeline.SourceAnnotation {
+		v.openAnnotation(entry)
 		return
 	}
 	if entry.Ref.Resource == "" || entry.Ref.Name == "" {
@@ -468,7 +484,10 @@ func (v *timelineView) render() {
 		v.text.SetText("No observation yet.")
 	}
 	width := v.viewWidth()
-	footer := "Enter open · / filter · 1 15m  2 1h  3 6h  4 24h  0 all · m mark · s sources · r re-read · Esc back"
+	footer := "Enter open · / filter · 1 15m  2 1h  3 6h  4 24h  0 all · m mark · s sources · r re-read · Shift-D Grafana · Esc back"
+	if tview.TaggedStringWidth(footer) > width {
+		footer = "Enter open · / filter · 1 15m  2 1h  3 6h  4 24h  0 all · m mark · s sources · r re-read · Esc back"
+	}
 	if tview.TaggedStringWidth(footer) > width {
 		footer = "Enter open · / filter · 1-4,0 window · m mark · s sources · r read · Esc"
 	}

@@ -157,6 +157,9 @@ func (b *Browser) bindKeys(aa *ui.KeyActions) {
 	if hubbleResource(b.GVR()) {
 		aa.Add(ui.KeyShiftH, ui.NewKeyAction("Hubble Peers", b.hubbleCmd, true))
 	}
+	if grafanaKeyResource(b.GVR()) {
+		aa.Add(grafanaKey, grafanaKeyAction(b.app, func() actionOwner { return b }, nil))
+	}
 	aa.Bulk(ui.KeyMap{
 		tcell.KeyEscape: ui.NewSharedKeyAction("Filter Reset", b.resetCmd, false),
 		ui.KeyQ:         ui.NewSharedKeyAction("Filter Reset", b.resetCmd, false),

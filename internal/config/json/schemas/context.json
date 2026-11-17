@@ -99,6 +99,7 @@
                 "tokenEnv": { "type": "string" },
                 "publicURL": { "type": "string" },
                 "datasource": { "type": "string" },
+                "lokiDatasource": { "type": "string" },
                 "dashboards": {
                   "type": "object",
                   "additionalProperties": false,
