@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/derailed/k9s/internal/problems"
+	"github.com/derailed/tview"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -351,23 +352,77 @@ func problemsDetail(line *problemsLine, readAt time.Time) string {
 	return text
 }
 
-// problemsFooter keeps as many key hints as fit, most useful first.
+// problemsFooter keeps as many key hints as fit, most useful first. When the
+// spelled-out hints do not fit, shorter labels are used so that filter and
+// re-read stay on show at 80 and 60 columns.
 func problemsFooter(width int, rows, pods bool) string {
-	hints := []string{"r re-read"}
-	switch {
-	case rows && pods:
-		hints = []string{"Enter open in list", "d describe", "l logs", "Space pods", "/ filter", "r re-read"}
-	case rows:
-		hints = []string{"Enter open in list", "d describe", "l logs", "/ filter", "r re-read"}
+	type hint struct{ long, short string }
+	hints := []hint{{"r re-read", "r reread"}}
+	if rows {
+		hints = []hint{{"Enter open in list", "Enter open"}, {"d describe", "d desc"}, {"l logs", "l logs"}}
+		if pods {
+			hints = append(hints, hint{"Space pods", "Space pods"})
+		}
+		hints = append(hints, hint{"/ filter", "/ filter"}, hint{"r re-read", "r reread"})
 	}
-	hints = append(hints, "Esc back", "? help")
+	hints = append(hints, hint{"Esc back", "Esc back"}, hint{"? help", "? help"})
+	long := make([]string, 0, len(hints))
+	for _, h := range hints {
+		long = append(long, h.long)
+	}
+	if text := strings.Join(long, " · "); runewidth.StringWidth(text) <= width {
+		return text
+	}
 	text := ""
-	for _, hint := range hints {
-		next := strings.TrimPrefix(text+" · "+hint, " · ")
+	for _, h := range hints {
+		next := strings.TrimPrefix(text+"  "+h.short, "  ")
 		if runewidth.StringWidth(next) > width {
 			break
 		}
 		text = next
 	}
 	return text
+}
+
+// problemsPack breaks text at its " · " separators so that an item such as
+// "jobs 0" is never split between its name and its count by word wrap. A
+// single item wider than the pane is left for the pane to wrap.
+func problemsPack(text string, width int) string {
+	if width < 1 {
+		return text
+	}
+	const sep = " · "
+	var out []string
+	for _, paragraph := range strings.Split(text, "\n") {
+		line, used := "", 0
+		for _, item := range strings.Split(paragraph, sep) {
+			size := runewidth.StringWidth(item)
+			switch {
+			case line == "":
+				line, used = item, size
+			case used+runewidth.StringWidth(sep)+size+2 <= width: // room for a trailing " ·"
+				line, used = line+sep+item, used+runewidth.StringWidth(sep)+size
+			default:
+				out = append(out, line+" ·")
+				line, used = item, size
+			}
+			if used > width {
+				// The pane wraps this item; continue from its last wrapped line.
+				if wrapped := tview.WordWrap(line, width); len(wrapped) > 0 {
+					used = runewidth.StringWidth(wrapped[len(wrapped)-1])
+				}
+			}
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
+}
+
+// problemsWrappedRows is how many pane rows text occupies at width.
+func problemsWrappedRows(text string, width int) int {
+	rows := 0
+	for _, line := range strings.Split(text, "\n") {
+		rows += max(1, len(tview.WordWrap(line, width)))
+	}
+	return rows
 }

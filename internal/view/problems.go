@@ -51,7 +51,8 @@ type problemsView struct {
 	destinationRevision    uint64
 	originalCapture        func(*tcell.EventKey) *tcell.EventKey
 	returnDestination      *inspectionReturnDestination
-	width                  int
+	width, height          int
+	headerRows, detailRows int
 }
 
 var (
@@ -525,21 +526,22 @@ func (v *problemsView) render() {
 		}
 		status = strings.TrimPrefix(status+" · ", " · ") + fmt.Sprintf("filter %q shows %d of %d", v.query, shown, len(v.snapshot.Rows))
 	}
-	header := problemsHeader(v.snapshot, v.namespace, status, width)
-	rows := 0
-	for index, line := range header {
-		// One cell narrower than the pane: a line that exactly fills it wraps.
-		rows += max(1, len(tview.WordWrap(line, width-1)))
-		line = tview.Escape(line)
-		if strings.HasPrefix(line, "NOT READ") {
-			line = fmt.Sprintf("[#%06x::b]%s[-::-]", config.ReadableForeground(p.Warning.Color(), canvas).Hex(), line)
-		} else if index == 0 {
-			line = "[::b]" + line + "[::-]"
+	// One cell narrower than the pane: a line that exactly fills it wraps.
+	var header []string
+	for index, line := range problemsHeader(v.snapshot, v.namespace, status, width) {
+		for _, part := range strings.Split(problemsPack(line, width-1), "\n") {
+			part = tview.Escape(part)
+			if strings.HasPrefix(line, "NOT READ") {
+				part = fmt.Sprintf("[#%06x::b]%s[-::-]", config.ReadableForeground(p.Warning.Color(), canvas).Hex(), part)
+			} else if index == 0 {
+				part = "[::b]" + part + "[::-]"
+			}
+			header = append(header, part)
 		}
-		header[index] = line
 	}
 	v.header.SetText(strings.Join(header, "\n"))
-	v.ResizeItem(v.header, min(rows, 7), 0)
+	v.headerRows = min(problemsWrappedRows(v.header.GetText(true), width-1), 7)
+	v.ResizeItem(v.header, v.headerRows, 0)
 
 	selected, _ := v.table.GetSelection()
 	v.table.Clear()
@@ -581,7 +583,6 @@ func (v *problemsView) render() {
 	if len(v.lines) > 0 {
 		v.table.Select(max(1, min(selected, len(v.lines))), 0)
 		v.ResizeItem(v.table, 0, 1)
-		v.ResizeItem(v.detail, 3, 0)
 	} else {
 		// Nothing to select: the explanation takes the room instead of a blank list.
 		v.ResizeItem(v.table, 0, 0)
@@ -591,12 +592,26 @@ func (v *problemsView) render() {
 	v.renderDetail()
 }
 
+// renderDetail spells out the selected row. The pane grows from three lines up
+// to a share of the height so that the Warning events under a long cause are
+// not cut off; the list keeps the rest.
 func (v *problemsView) renderDetail() {
+	width := v.width
+	if width <= 0 {
+		width = 78
+	}
 	switch line := v.selectedLine(); {
 	case line != nil:
-		v.detail.SetText(tview.Escape(problemsDetail(line, v.snapshot.ReadAt)))
+		text := problemsDetail(line, v.snapshot.ReadAt)
+		limit := 6
+		if v.height > 0 {
+			limit = max(3, min(limit, (v.height-v.headerRows-1)/3))
+		}
+		v.detail.SetText(tview.Escape(text))
+		v.detailRows = max(3, min(limit, problemsWrappedRows(text, width-1)))
+		v.ResizeItem(v.detail, v.detailRows, 0)
 	case v.snapshot != nil:
-		v.detail.SetText(tview.Escape(problemsEmpty(v.snapshot, v.namespace, v.query)))
+		v.detail.SetText(tview.Escape(problemsPack(problemsEmpty(v.snapshot, v.namespace, v.query), width-1)))
 	default:
 		v.detail.SetText("")
 	}
@@ -608,8 +623,8 @@ func (v *problemsView) Draw(screen tcell.Screen) {
 	if ui.DrawTaskSizeNotice(screen, v.Box) {
 		return
 	}
-	if _, _, width, _ := v.GetInnerRect(); width != v.width {
-		v.width = width
+	if _, _, width, height := v.GetInnerRect(); width != v.width || height != v.height {
+		v.width, v.height = width, height
 		v.render()
 	}
 	// A table that once fit keeps tracking its end after the viewport shrinks,

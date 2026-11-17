@@ -167,11 +167,14 @@ func assemble(o *objects, now time.Time, window time.Duration) []Row {
 		return r
 	}
 	workloads := make(map[types.UID]*unstructured.Unstructured)
+	workloadKind := make(map[types.UID]string)
 	for _, kind := range workloadKinds {
 		for i := range o.byKind[kind] {
 			u := &o.byKind[kind][i]
 			if u.GetUID() != "" {
-				workloads[u.GetUID()] = u
+				// The kind comes from the source that was read, not from the
+				// item, which a list response may leave without one.
+				workloads[u.GetUID()], workloadKind[u.GetUID()] = u, kind
 			}
 			if r := classify(kind, u); r != nil {
 				put(r)
@@ -209,7 +212,14 @@ func assemble(o *objects, now time.Time, window time.Duration) []Row {
 			put(r)
 			continue
 		}
-		row := put(&Row{Severity: r.Severity, Kind: parent.GetKind(), Resource: resources[parent.GetKind()],
+		parentKind := workloadKind[owner]
+		// A Job that reports Complete keeps the failed pods of its earlier
+		// attempts. They are history the Job itself has superseded, so they
+		// are not listed as a current problem of the Job.
+		if parentKind == "Job" && condition(parent, "Complete", "True") != nil {
+			continue
+		}
+		row := put(&Row{Severity: r.Severity, Kind: parentKind, Resource: resources[parentKind],
 			Namespace: parent.GetNamespace(), Name: parent.GetName(), UID: parent.GetUID()})
 		row.Children = append(row.Children, *r)
 		row.Severity = min(row.Severity, r.Severity)
@@ -226,7 +236,7 @@ func assemble(o *objects, now time.Time, window time.Duration) []Row {
 		// Deployment that controls it when that ownership was read.
 		if rs, ok := replicaSetNames[group.namespace+"/"+name]; ok && kind == "ReplicaSet" && (group.uid == "" || group.uid == rs.GetUID()) {
 			if parent, ok := workloads[controllerOf(rs)]; ok {
-				kind, name, group.uid = parent.GetKind(), parent.GetName(), parent.GetUID()
+				kind, name, group.uid = workloadKind[parent.GetUID()], parent.GetName(), parent.GetUID()
 			}
 		}
 		key := ident(kind, group.namespace, name)

@@ -176,11 +176,50 @@ func TestProblemsDetailAndFooter(t *testing.T) {
 	for _, width := range []int{118, 78, 58, 30} {
 		footer := problemsFooter(width, true, true)
 		assert.LessOrEqual(t, runewidth.StringWidth(footer), width)
-		assert.True(t, strings.HasPrefix(footer, "Enter open in list"))
+		assert.True(t, strings.HasPrefix(footer, "Enter open"))
 	}
 	assert.Contains(t, problemsFooter(118, true, true), "Space pods")
 	assert.NotContains(t, problemsFooter(118, true, false), "Space pods")
 	assert.Equal(t, "r re-read · Esc back · ? help", problemsFooter(118, false, false), "an empty list offers only keys that do something")
+	// The inner widths of an 80 and a 60 column terminal still name filter and re-read.
+	assert.Equal(t, "Enter open  d desc  l logs  Space pods  / filter  r reread  Esc back  ? help", problemsFooter(78, true, true))
+	assert.Equal(t, "Enter open  d desc  l logs  Space pods  / filter  r reread", problemsFooter(58, true, true))
+}
+
+func TestProblemsPackNeverSplitsAnItemFromItsCount(t *testing.T) {
+	text := "Read at 12:00:00: pods 0 · deployments 0 · replicasets 0 (ownership only) · statefulsets 0 · daemonsets 0 · jobs 0 · pvcs 0 · nodes 1 · warning events 0 (last 1h)"
+	for _, width := range []int{117, 77, 57, 40} {
+		packed := problemsPack(text, width)
+		assert.Equal(t, text, strings.Join(strings.Split(packed, " ·\n"), " · "), "packing only moves line breaks")
+		for _, line := range strings.Split(packed, "\n") {
+			assert.LessOrEqual(t, runewidth.StringWidth(line), width, "width %d: %q", width, line)
+			assert.NotRegexp(t, `^\d`, line, "width %d: a count was separated from its source", width)
+		}
+	}
+	// Prose longer than the pane is left to wrap, and the items after it still pack.
+	packed := problemsPack("No failing resource is reported in namespace default by what was read: pods 0 · deployments 0 · jobs 0", 40)
+	for _, line := range strings.Split(packed, "\n")[1:] {
+		assert.LessOrEqual(t, runewidth.StringWidth(line), 40)
+	}
+	assert.Equal(t, 2, problemsWrappedRows("one\ntwo", 40))
+}
+
+func TestProblemsDetailGrowsToShowWarningEvents(t *testing.T) {
+	app := NewApp(mock.NewMockConfig(t))
+	v := newProblemsView(app)
+	require.NoError(t, v.Init(t.Context()))
+	app.Content.Push(v)
+	v.width, v.height = 58, 18
+	snapshot := problemsTestSnapshot()
+	snapshot.Rows[1].Cause = "Pending · 0/3 nodes are available: 1 node(s) had untolerated taint, 2 Insufficient memory, preemption is not helpful for scheduling"
+	snapshot.Rows[1].Events = []problems.EventNote{{Reason: "FailedScheduling", Count: 7, Last: problemsTestReadAt.Add(-time.Minute)}}
+	v.acceptSnapshot(snapshot)
+	v.table.Select(2, 0)
+	assert.Contains(t, v.detail.GetText(true), "Warning events: FailedScheduling x7")
+	assert.Greater(t, problemsWrappedRows(v.detail.GetText(true), v.width-1), 3, "this row needs more than the minimum three lines")
+	assert.Equal(t, 4, v.detailRows, "the pane grows, bounded by a third of the height left under the header")
+	v.table.Select(3, 0)
+	assert.Equal(t, 3, v.detailRows, "a short row keeps the minimum")
 }
 
 func TestProblemsViewSelectionExpansionAndAvailability(t *testing.T) {

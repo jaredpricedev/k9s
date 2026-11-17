@@ -156,7 +156,9 @@ columns.
 StatefulSet, DaemonSet or Job that controls them, matched by controller UID and
 never by name. The owner's row says how many pods are affected; `Space` (or
 Right/Left) expands and folds them. A pod whose owner could not be read or
-verified stays on its own row.
+verified stays on its own row. The failed pods left behind by earlier attempts
+of a Job that now reports `Complete` are not listed: the Job itself has
+superseded them.
 
 **Keys.** `Enter` opens the resource in its ordinary list, using the same
 navigation as related-resource jumps: the list is narrowed to that resource with
@@ -170,7 +172,13 @@ is abbreviated and the signal count is dropped; below 72 only severity, name and
 cause remain, the kind becomes a prefix of the name and the namespace is left to
 the detail lines under the list, which always give the selected row's full
 identity, complete cause and Warning events. Names are elided before the
-severity word. With `noIcons` the expand markers are `+`, `-` and `|`.
+severity word. With `noIcons` the expand markers are `+`, `-` and `|`. The
+detail lines grow from three up to six (at most a third of the height under the
+header) when a long cause would otherwise push the Warning events out of view;
+a very long event message can still be cut there, and `d` shows it in full. When
+the spelled-out key hints do not fit, the footer switches to shorter labels so
+that `/ filter` and `r reread` stay on show at 80 and 60 columns. Lists of
+sources wrap between sources, never between a source and its count.
 
 **Limits.** Severity and cause are what each object's status and events reported
 at the moment of the read; they are evidence, not a diagnosed root cause, and a

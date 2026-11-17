@@ -423,3 +423,26 @@ func TestCollectDoesNotWaitForAReaderThatNeverAnswers(t *testing.T) {
 		t.Fatal("Collect waited past its deadline")
 	}
 }
+
+func TestFailedAttemptsOfACompletedJobAreNotACurrentProblem(t *testing.T) {
+	failedPod := func(name, job string) unstructured.Unstructured {
+		return owned(object("Pod", "ops", name, map[string]any{"containers": []any{map[string]any{"name": "run"}}},
+			map[string]any{"phase": "Failed"}), "Job", job)
+	}
+	done := object("Job", "ops", "done", nil, map[string]any{"failed": int64(1), "succeeded": int64(1),
+		"conditions": conditions("Complete", "True", "", "")})
+	retrying := object("Job", "ops", "retrying", nil, map[string]any{"failed": int64(1), "active": int64(1)})
+	// A list response may leave its items without a kind; ownership must not
+	// depend on it.
+	delete(retrying.Object, "kind")
+	rows := assemble(&objects{byKind: map[string][]unstructured.Unstructured{
+		"Job": {done, retrying},
+		"Pod": {failedPod("done-a", "done"), failedPod("retrying-a", "retrying")},
+	}}, testNow, EventWindow)
+	if len(rows) != 1 {
+		t.Fatalf("want only the Job that has not completed, got %+v", rows)
+	}
+	if row := rows[0]; row.Kind != "Job" || row.Name != "retrying" || row.Affected() != 1 || row.Resource.Resource != "jobs" {
+		t.Fatalf("row: %+v", row)
+	}
+}
