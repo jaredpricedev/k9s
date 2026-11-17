@@ -99,7 +99,10 @@ In this order:
    SSH. `K9PLUS_CLIPBOARD=native|osc52` narrows this as for other copies.
 3. In every case a small dialog shows what was done, why the browser was not
    launched if it was not, and the whole link, cut exactly at the dialog's
-   width with no indentation so selecting the rows yields the link.
+   width with no indentation so selecting the rows yields the link. The
+   other lines wrap at spaces; an Explore expression that is longer than a
+   row is cut after a comma, a bar or an opening bracket, as on the query
+   pages, never inside a name or a pattern.
 
 Read-only mode starts no local program, so there the link is copied. OSC 52
 cannot be confirmed: the terminal decides whether to accept it (tmux needs

@@ -346,11 +346,15 @@ func hardWrap(text string, width int) []string {
 	return append(out, string(runes))
 }
 
-// wrapText word-wraps escaped text and cuts any row a single long word
-// left wider than width, so no row is ever clipped by the dialog's edge.
+// wrapText wraps text at spaces and cuts any row a single long word left
+// wider than width, so no row is ever clipped by the dialog's edge. A
+// query is one long word in places: it is cut after a comma, a bar or an
+// opening bracket, as the query pages cut it, never inside a name or
+// between the characters of a pattern.
 func wrapText(text string, width int) []string {
 	var out []string
-	for _, row := range tview.WordWrap(tview.Escape(text), width) {
+	for _, row := range graphWrap(text, width, "") {
+		row = tview.Escape(row)
 		if runewidth.StringWidth(row) <= width {
 			out = append(out, row)
 			continue

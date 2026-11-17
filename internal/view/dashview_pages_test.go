@@ -472,7 +472,9 @@ func TestDashboardViewOpensTheSameDashboardInGrafana(t *testing.T) {
 	q.openInGrafana()
 	h = q.app.Content.GetPrimitive(grafanaDialogPage).(*grafanaHandoff)
 	text = handoffText(h, 100)
-	require.Contains(t, text, "Link    Explore metrics · sum by (pod) (puma_queued_connections{namespace=\"gitlab\"")
+	// The selector is one word and moves to the next row whole: it is not
+	// cut inside a name or a pattern.
+	require.Contains(t, text, "Link    Explore metrics · sum by (pod)\n        (puma_queued_connections{namespace=\"gitlab\",pod=~\"gitlab-webservice-default-.+\"})\n")
 	require.Contains(t, text, "datasource prom-main · the expression as it was sent here")
 	require.Contains(t, fake.copied[1], "https://grafana.example.test/explore?")
 	h.close()
