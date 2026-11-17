@@ -48,6 +48,7 @@ func deploymentWhy(dp *appsv1.Deployment) (string, model1.Level) {
 	}
 	st := &dp.Status
 	var unavailable string
+	paused := dp.Spec.Paused
 	for i := range st.Conditions {
 		c := &st.Conditions[i]
 		switch {
@@ -56,6 +57,12 @@ func deploymentWhy(dp *appsv1.Deployment) (string, model1.Level) {
 		case c.Type == appsv1.DeploymentProgressing && c.Status == v1.ConditionFalse:
 			return whyCondition(c.Reason, c.Message), model1.LevelFailing
 		case c.Type == appsv1.DeploymentProgressing && c.Status == v1.ConditionUnknown:
+			// A paused Deployment reports Unknown/DeploymentPaused. That is a
+			// choice someone made, stated below, not a fault of its own.
+			if paused || c.Reason == "DeploymentPaused" {
+				paused = true
+				continue
+			}
 			return whyCondition(c.Reason, c.Message), model1.LevelDegraded
 		case c.Type == appsv1.DeploymentAvailable && c.Status != v1.ConditionTrue && desired > 0:
 			unavailable = whyCondition(c.Reason, c.Message)
@@ -64,11 +71,17 @@ func deploymentWhy(dp *appsv1.Deployment) (string, model1.Level) {
 	if why := whyGeneration(dp.Generation, st.ObservedGeneration); why != "" {
 		return why, model1.LevelProgress
 	}
-	if dp.Spec.Paused && st.UpdatedReplicas < desired {
+	if paused && st.UpdatedReplicas < desired {
 		return fmt.Sprintf("rollout paused, %d of %d updated", st.UpdatedReplicas, desired), model1.LevelDegraded
 	}
 	if unavailable != "" {
 		return unavailable, model1.LevelDegraded
+	}
+	if paused {
+		if st.UnavailableReplicas > 0 {
+			return fmt.Sprintf("paused; %d of %d unavailable", st.UnavailableReplicas, max(desired, st.Replicas)), model1.LevelDegraded
+		}
+		return "paused", model1.LevelNone
 	}
 	if st.UpdatedReplicas < desired {
 		return fmt.Sprintf("rollout: %d of %d updated", st.UpdatedReplicas, desired), model1.LevelProgress

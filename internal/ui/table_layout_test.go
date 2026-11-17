@@ -364,14 +364,37 @@ func TestWhyColumnFitsListsWithoutAStateColumn(t *testing.T) {
 		for _, want := range []string{"ledger-reconcile", "COMPLETIONS", "0/1"} {
 			assert.Contains(t, text, want, "width %d: the cause never displaces completions", width)
 		}
-		if width >= 80 {
-			assert.Contains(t, text, "DeadlineExceeded", "width %d", width)
-			assert.Contains(t, text, "4h", "width %d", width)
-		} else {
-			assert.NotContains(t, text, "WHY", "too narrow to read: the cause is left out, not the state")
+		// A Job counted as failing must show its evidence at every width: the
+		// duration gives way before the cause does.
+		assert.Contains(t, text, "DeadlineExceeded", "width %d", width)
+		assert.Contains(t, text, "4h", "width %d: age stays", width)
+		if width == 60 {
+			assert.NotContains(t, text, "DURATION", "an optional column gives way to the cause")
+		}
+		for _, line := range strings.Split(text, "\n") {
+			assert.LessOrEqual(t, len([]rune(strings.TrimRight(line, " "))), width)
 		}
 		assert.Contains(t, v.GetTitle(), "1 failing", "a failed Job is counted although it has no status column")
 	}
+
+	// A list whose natural columns overflow and whose cause cannot be made
+	// readable keeps every column: nothing is traded for an unreadable cause.
+	wide := model1.Header{{Name: "NAMESPACE"}, {Name: "NAME"}, {Name: "COMPLETIONS"}, {Name: "WHY"}, {Name: "AGE"}}
+	cramped := whyLayoutFixture(t, "batch/v1/jobs", wide, model1.Row{ID: "ops/x", Level: model1.LevelFailing, Fields: model1.Fields{
+		"ops", "a-job-name-long-enough", "0/1", "DeadlineExceeded: Job was active longer than specified deadline", "4h"}})
+	text := drawWhyLayout(t, cramped, 40, 10)
+	assert.NotContains(t, text, "WHY", "too narrow to read: the cause is left out, not the state")
+	assert.Contains(t, text, "NAMESPACE", "nothing is given up for a cause that cannot be shown")
+	assert.Contains(t, text, "a-job-name-long-enough")
+	assert.Contains(t, cramped.GetTitle(), "1 failing")
+
+	// A status word is never lowered by a milder renderer verdict.
+	claims := model1.Header{{Name: "NAMESPACE"}, {Name: "NAME"}, {Name: "STATUS"}, {Name: "WHY"}, {Name: "AGE"}}
+	lost := whyLayoutFixture(t, "v1/persistentvolumeclaims", claims, model1.Row{ID: "ops/data", Level: model1.LevelProgress,
+		Fields: model1.Fields{"ops", "data", "Failed", "generation 2 not yet observed, status is for 1", "4h"}})
+	drawWhyLayout(t, lost, 120, 10)
+	assert.Contains(t, lost.GetTitle(), "1 failing")
+	assert.NotContains(t, lost.GetTitle(), "in progress")
 
 	nodes := model1.Header{{Name: "NAME"}, {Name: "STATUS"}, {Name: "ROLE"}, {Name: "TAINTS"}, {Name: "VERSION"},
 		{Name: "PODS"}, {Name: "CPU"}, {Name: "CPU/A"}, {Name: "%CPU"}, {Name: "MEM"}, {Name: "MEM/A"}, {Name: "%MEM"},

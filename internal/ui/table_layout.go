@@ -287,9 +287,10 @@ func (t *Table) whyWidth(data *model1.TableData) int {
 
 // fitWhyColumns budgets a full-width, non-Pod list that reports a cause. All
 // columns keep their natural width and the cause takes what is left. When
-// that is too little to read, a long name is elided first and then, at full
-// width, optional columns are omitted from the right; identity, state and
-// age always stay. In a split nothing is omitted: the cause is left out.
+// that is too little to read, a long name is elided first and then optional
+// columns are omitted from the right; identity, state and age always stay.
+// When even that leaves too little, nothing is omitted and the cause is left
+// out.
 // The omitted columns return as soon as no row reports a cause, and Ctrl-W
 // shows every column in full at any time.
 func (t *Table) fitWhyColumns(data *model1.TableData, pads MaxyPad, width, why int) {
@@ -332,18 +333,31 @@ func (t *Table) fitWhyColumns(data *model1.TableData, pads MaxyPad, width, why i
 		return left
 	}
 	least := min(why, minWhyWidth)
-	if short := least - room(); short > 0 && available["NAME"]-2 > nameFloor {
-		cols["NAME"] = max(nameFloor, available["NAME"]-2-short)
+	fitName := func(floor int) {
+		cols["NAME"] = available["NAME"]
+		if short := least - room(); short > 0 && available["NAME"]-2 > floor {
+			cols["NAME"] = max(floor, available["NAME"]-2-short)
+		}
 	}
-	// Only a full-width list gives up columns, and never a Job's completions.
+	fitName(nameFloor)
+	// Optional columns give way from the right until the cause reads easily,
+	// never a Job's completions: a row counted as failing with no visible
+	// evidence is worse than a missing duration.
 	easy := min(why, easyWhyWidth)
-	for i := len(order) - 1; i >= 0 && width >= 96 && room() < easy; i-- {
+	for i := len(order) - 1; i >= 0 && room() < easy; i-- {
 		name := order[i]
 		if name == "NAME" || name == "NAMESPACE" || name == "AGE" || name == "COMPLETIONS" ||
 			name == tableWhyColumn || statusColumn(name) {
 			continue
 		}
 		delete(cols, name)
+	}
+	// Last, as in a split list with a state column, a narrow list gives up
+	// the namespace; Ctrl-W and Describe still show it.
+	if _, ok := cols["NAMESPACE"]; ok && width < 96 && room() < least {
+		delete(cols, "NAMESPACE")
+		// The name now leads the row and shares its cells with the marker.
+		fitName(nameFloor + 2)
 	}
 	if room() < least {
 		t.hideWhy = true
@@ -489,9 +503,10 @@ func rowLevel(h model1.Header, re *model1.RowEvent, fallback tcell.Color) status
 		}
 	}
 	// A renderer that read the object's conditions knows more than a count:
-	// its verdict is the row's level, so the summary agrees with WHY.
+	// its verdict replaces the readiness count, so the summary agrees with
+	// WHY. It never lowers what a visible status word already reports.
 	if own := rendererLevel(re.Row.Level); own != levelText {
-		return own
+		return max(own, worst)
 	}
 	if worst == levelText {
 		return ready

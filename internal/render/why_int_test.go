@@ -85,6 +85,33 @@ func TestDeploymentWhy(t *testing.T) {
 			why:   "rollout paused, 1 of 3 updated",
 			level: model1.LevelDegraded,
 		},
+		"paused-and-settled": {
+			// What a cluster reports for a paused Deployment with nothing left
+			// to roll out: stated, but not counted as a problem.
+			dp: appsv1.Deployment{Spec: appsv1.DeploymentSpec{Replicas: int32p(3), Paused: true}, Status: appsv1.DeploymentStatus{
+				Replicas: 3, UpdatedReplicas: 3, AvailableReplicas: 3,
+				Conditions: []appsv1.DeploymentCondition{
+					cond(appsv1.DeploymentAvailable, v1.ConditionTrue, "MinimumReplicasAvailable", "ok"),
+					cond(appsv1.DeploymentProgressing, v1.ConditionUnknown, "DeploymentPaused", "Deployment is paused")}}},
+			why:   "paused",
+			level: model1.LevelNone,
+		},
+		"paused-mid-rollout-with-condition": {
+			dp: appsv1.Deployment{Spec: appsv1.DeploymentSpec{Replicas: int32p(3), Paused: true}, Status: appsv1.DeploymentStatus{
+				Replicas: 3, UpdatedReplicas: 1, AvailableReplicas: 3,
+				Conditions: []appsv1.DeploymentCondition{
+					cond(appsv1.DeploymentProgressing, v1.ConditionUnknown, "DeploymentPaused", "Deployment is paused")}}},
+			why:   "rollout paused, 1 of 3 updated",
+			level: model1.LevelDegraded,
+		},
+		"progress-unknown": {
+			dp: appsv1.Deployment{Spec: appsv1.DeploymentSpec{Replicas: int32p(3)}, Status: appsv1.DeploymentStatus{
+				Replicas: 3, UpdatedReplicas: 3, AvailableReplicas: 3,
+				Conditions: []appsv1.DeploymentCondition{
+					cond(appsv1.DeploymentProgressing, v1.ConditionUnknown, "Stalled", "controller cannot tell")}}},
+			why:   "Stalled: controller cannot tell",
+			level: model1.LevelDegraded,
+		},
 		"some-unavailable": {
 			dp: appsv1.Deployment{Spec: appsv1.DeploymentSpec{Replicas: int32p(3)}, Status: appsv1.DeploymentStatus{
 				Replicas: 3, UpdatedReplicas: 3, AvailableReplicas: 2, UnavailableReplicas: 1}},
