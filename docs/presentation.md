@@ -67,7 +67,7 @@ A Service, an Ingress or a workload that reports no problem keeps a plain border
 | Key | Meaning | Where |
 | --- | --- | --- |
 | `m` | `:graph`. From `:slow` it opens one chart per Pod on the signal that set a Pod apart | rows, `:problems`, `:alerts`, `:timeline`, `:slow`, `:probe` |
-| `t` | `:timeline` | rows, `:problems`, `:alerts`, `:impact`, `:slow`, `:probe` |
+| `t` | `:timeline` | `:problems`, `:alerts`, `:impact`, `:slow`, `:probe` (on a Pod row of the resource list `t` is the upstream Transfer; type `:timeline` there) |
 | `Shift-D` | Grafana hand-off for the selection and the window on screen | every one of them |
 | `Shift-W` | `:slow` | rows, `:probe`, `:graph` |
 | `Shift-B` | `:probe`; opening it sends nothing | rows, `:slow`, `:graph` |
