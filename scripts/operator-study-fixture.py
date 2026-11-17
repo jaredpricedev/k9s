@@ -8,7 +8,7 @@ cluster or cloud credentials are used. See docs/operator-task-study-2026-10-04.m
 
 import argparse
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import importlib.util
 import json
 import os
@@ -56,6 +56,21 @@ class StudyHandler(daily.WorkspaceHandler):
         if self.path.split("?", 1)[0] == "/api/v1/namespaces/ops/events":
             self.record("GET")
             return self.failure(403, "Forbidden", "Synthetic fixture denies ops event reads")
+        # Only the one-page :problems read is denied (it sends neither a
+        # resourceVersion nor a watch), so the DaemonSet list itself still
+        # opens and shows its WHY column.
+        if (self.path.split("?", 1)[0] == "/apis/apps/v1/daemonsets"
+                and "resourceVersion=" not in self.path and "watch=" not in self.path):
+            self.record("GET")
+            return self.failure(403, "Forbidden", "Synthetic fixture denies cluster-wide DaemonSet reads")
+        if self.path.split("?", 1)[0] == "/api/v1/namespaces/apps/events" and "fieldSelector=type%3DWarning" in self.path:
+            # :problems lists Warning events by type; the inherited handler
+            # only serves UID-scoped event reads for this namespace.
+            self.record("GET")
+            items = [deepcopy(o) for o in self.server.objects if o["kind"] == "Event"
+                     and o["metadata"].get("namespace") == "apps" and o.get("type") == "Warning"]
+            return self.reply({"apiVersion": "v1", "kind": "EventList",
+                               "metadata": {"resourceVersion": "100"}, "items": items})
         return super().do_GET()
 
 
@@ -150,6 +165,64 @@ def study_objects(api):
                          ("apps/v1", ("daemonsets", "DaemonSet", True))):
         if entry not in demo.GROUPS[group]:
             demo.GROUPS[group].append(entry)
+    # Cross-kind objects for :problems: a ReplicaSet that ties two failing Pods
+    # to the stalled Deployment by controller UID, a partly ready StatefulSet,
+    # a failed Job, a Pending claim, and Warning events about some of them.
+    earlier = (datetime.now(timezone.utc).replace(microsecond=0) - timedelta(minutes=14)).isoformat().replace("+00:00", "Z")
+
+    def owned(item, kind, name):
+        item["metadata"]["ownerReferences"] = [{
+            "apiVersion": "apps/v1", "kind": kind, "name": name, "uid": "study-" + kind.lower() + "-" + name,
+            "controller": True}]
+        return item
+
+    def event(name, namespace, kind, target, reason, message, count):
+        return {"apiVersion": "v1", "kind": "Event", "metadata": {
+            "name": name, "namespace": namespace, "uid": "study-event-" + name,
+            "resourceVersion": "100", "creationTimestamp": earlier},
+            "involvedObject": {"kind": kind, "name": target, "namespace": namespace,
+                               "uid": "study-" + kind.lower() + "-" + target},
+            "reason": reason, "type": "Warning", "count": count, "firstTimestamp": earlier, "lastTimestamp": now,
+            "message": message}
+
+    def crashing(name, reason, message):
+        return owned(obj("v1", "Pod", name, "apps", {"app": "checkout"},
+                         {"containers": [{"name": "api", "image": "example.test/checkout:v2"}]},
+                         {"phase": "Running" if reason == "CrashLoopBackOff" else "Pending", "conditions": [
+                             {"type": "Ready", "status": "False", "reason": "ContainersNotReady",
+                              "lastTransitionTime": earlier}],
+                          "containerStatuses": [{"name": "api", "ready": False, "restartCount": 6,
+                                                "state": {"waiting": {"reason": reason, "message": message}}}]}),
+                     "ReplicaSet", "checkout-api-6c9f7d")
+
+    api.objects.extend([
+        owned(obj("apps/v1", "ReplicaSet", "checkout-api-6c9f7d", "apps", {"app": "checkout"},
+                  {"replicas": 2}, {"replicas": 2, "readyReplicas": 0}), "Deployment", "checkout-api"),
+        crashing("checkout-api-6c9f7d-x2kq", "CrashLoopBackOff",
+                 "back-off 2m40s restarting failed container=api"),
+        crashing("checkout-api-6c9f7d-p8wm", "ImagePullBackOff",
+                 'Back-off pulling image "example.test/checkout:v2"'),
+        obj("apps/v1", "StatefulSet", "ledger", "ops", {"app": "ledger"},
+            {"replicas": 3}, {"observedGeneration": 2, "replicas": 3, "readyReplicas": 2, "updatedReplicas": 3}),
+        obj("batch/v1", "Job", "nightly-export", "ops", {"app": "export"}, {"backoffLimit": 2},
+            {"failed": 3, "conditions": [{"type": "Failed", "status": "True", "reason": "BackoffLimitExceeded",
+                                          "message": "Job has reached the specified backoff limit",
+                                          "lastTransitionTime": earlier}]}),
+        obj("v1", "PersistentVolumeClaim", "ledger-data-2", "apps", {"app": "ledger"},
+            {"storageClassName": "fast"}, {"phase": "Pending"}),
+        event("ledger-data-2-provisioning", "apps", "PersistentVolumeClaim", "ledger-data-2", "ProvisioningFailed",
+              'storageclass.storage.k8s.io "fast" not found', 9),
+        event("checkout-api-x2kq-backoff", "apps", "Pod", "checkout-api-6c9f7d-x2kq", "BackOff",
+              "Back-off restarting failed container api", 41),
+        event("ingress-sync", "apps", "Service", "checkout-api", "FailedToUpdateEndpointSlices",
+              "Error updating Endpoint Slices for Service apps/checkout-api", 2),
+    ])
+    for resource in (("replicasets", "ReplicaSet", True), ("statefulsets", "StatefulSet", True),
+                     ("daemonsets", "DaemonSet", True)):
+        if resource not in demo.GROUPS["apps/v1"]:
+            demo.GROUPS["apps/v1"].append(resource)
+    if not any(name == "persistentvolumeclaims" for name, _, _ in demo.GROUPS["v1"]):
+        demo.GROUPS["v1"].append(("persistentvolumeclaims", "PersistentVolumeClaim", True))
     # Services are part of the existing core-v1 discovery in the test helpers.
     if not any(name == "services" for name, _, _ in demo.GROUPS["v1"]):
         demo.GROUPS["v1"].append(("services", "Service", True))

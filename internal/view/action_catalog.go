@@ -229,7 +229,7 @@ func investigationActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 }
 
 func workspaceActions(app *App) []ui.ActionDescriptor {
-	var result []ui.ActionDescriptor
+	result := []ui.ActionDescriptor{problemsAction(app)}
 	for _, item := range []struct{ id, label, command string }{
 		{"command.fleet", "Compare two explicit contexts", fleetCommandToken},
 		{"command.workspace", "Saved workspaces", "workspace"},

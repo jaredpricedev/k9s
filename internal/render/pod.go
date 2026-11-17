@@ -279,6 +279,10 @@ func podWhy(spec *v1.PodSpec, st *v1.PodStatus) string {
 	return ""
 }
 
+// PodWhy is podWhy for on-demand views that rank problems across kinds, so
+// the cause phrase stays identical to the Pod list's WHY column.
+func PodWhy(spec *v1.PodSpec, st *v1.PodStatus) string { return podWhy(spec, st) }
+
 func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
