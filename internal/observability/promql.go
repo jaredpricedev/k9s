@@ -60,13 +60,15 @@ type Expr struct {
 // MaxAuthoredQuery bounds the text AuthoredExpr accepts.
 const MaxAuthoredQuery = 4096
 
-// AuthoredExpr wraps PromQL that the owner of a declared source wrote: the
-// query of a Grafana dashboard panel, after its variables were substituted.
-// It is the one exception to building queries from typed parts, and it
-// exists only so that a declared dashboard can be read; never pass text
-// assembled from cluster object names, labels or user input. Values put in
-// place of a dashboard variable must be escaped by the caller (RegexQuote
-// for a regex matcher). Text with a control character, an unsubstituted
+// AuthoredExpr wraps PromQL that a person wrote as a whole: the query of a
+// Grafana dashboard panel written by the owner of a declared source, or the
+// expression the operator typed into :query or saved under a name in their
+// own context configuration, after its variables were substituted. It is
+// the one exception to building queries from typed parts, and it exists
+// only for those two readers; never pass text assembled from cluster object
+// names, labels or anything a source returned. Values put in place of a
+// variable must be escaped by the caller (RegexQuote for a regex
+// matcher). Text with a control character, an unsubstituted
 // "$" variable or more than MaxAuthoredQuery bytes is refused. The source
 // only ever receives it in a GET.
 func AuthoredExpr(text string) Expr {

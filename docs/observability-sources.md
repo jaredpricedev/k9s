@@ -91,6 +91,10 @@ Grafana also accepts:
 What these are used for (`Shift-D`, `:dashboards`, annotations in `:timeline`)
 is described in [grafana-handoff.md](grafana-handoff.md).
 
+`queries` optionally saves PromQL expressions under a name for the `:query`
+bar: `queries: {<name>: {expr, title, unit, legend}}`, at most 32. Saving one
+contacts nothing. See [dashboards.md](dashboards.md).
+
 The file is validated against the context JSON schema. A declaration that
 cannot be used (both `service` and `url`, a malformed reference, a token over
 plain HTTP) is reported in `:sources` and by the feature that needs it; it is
@@ -130,6 +134,10 @@ its place works as before. See [historical-observability.md](historical-observab
 Prometheus source, with fixed query templates and one read per request. See
 [graphs.md](graphs.md).
 
+`v` in `:dashboards` draws a Grafana dashboard's panels in the terminal, and
+`:query` charts a typed or named expression, both from the declared
+Prometheus source and read once per request. See [dashboards.md](dashboards.md).
+
 ## States
 
 Every read returns one state, and features show it in words:
@@ -158,15 +166,23 @@ Every read returns one state, and features show it in words:
   `increase`, `max/min/avg_over_time`, `sum/avg/max/min/count by`, `topk`,
   `histogram_quantile`, `+ - * /`). Names are validated and matcher values are
   always written as escaped string literals, so a Pod or namespace name cannot
-  change the shape of a query. The one exception is the query of a panel on
-  a declared Grafana dashboard, wrapped with `AuthoredExpr` after its
-  variables are substituted: bounded text the dashboard's owner wrote, never
-  text assembled from cluster names (see [request-path.md](request-path.md)).
+  change the shape of a query. The one exception is text a person wrote as a
+  whole, wrapped with `AuthoredExpr` after its variables are substituted: the
+  query of a panel on a dashboard of the declared Grafana, and the expression
+  typed into `:query` or saved under `queries`. It is bounded, and it is never
+  text assembled from cluster names: a name put in place of a variable is
+  escaped for the place it lands in (see [dashboards.md](dashboards.md) and
+  [request-path.md](request-path.md)).
+- When Prometheus rejects a query (HTTP 400 or 422), its own error text is
+  kept, without control characters and at most 400 characters long, so that
+  a typed expression can be corrected. Nothing else of a failed answer is
+  kept.
 - Alertmanager: `GET /api/v2/alerts`, at most 500 alerts kept.
-- Grafana: `GET /api/annotations` (at most 200, window at most seven days) and
-  `GET /api/search` (at most 100 dashboards). Grafana cuts silently at its
-  limit, so a full page is reported `incomplete`. Annotation author identity
-  is not kept.
+- Grafana: `GET /api/annotations` (at most 200, window at most seven days),
+  `GET /api/search` (at most 100 dashboards) and `GET
+  /api/dashboards/uid/<uid>` (one dashboard definition, used whole or not at
+  all). Grafana cuts silently at its limit, so a full page is reported
+  `incomplete`. Annotation author identity is not kept.
 - Labels, annotations and other text are stripped of control characters and
   bounded (32 labels, 256 characters per label value, 1024 per annotation).
 
@@ -175,6 +191,9 @@ Every read returns one state, and features show it in words:
 - `:alerts` reads Alertmanager once and ties each alert to the object its
   labels name; `:problems` and `:timeline` add the same alerts to their own
   single read when Alertmanager is declared. See [alerts.md](alerts.md).
+- `v` in `:dashboards` reads one dashboard definition from Grafana once and
+  its panels from Prometheus; `:query` reads Prometheus only. See
+  [dashboards.md](dashboards.md).
 
 ## For feature code
 

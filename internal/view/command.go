@@ -124,6 +124,7 @@ func (c *Command) updateSuggestionAliases() {
 		slowCommandToken,
 		slowCommandAlias,
 		probeCommandToken,
+		queryCommandToken,
 	}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
@@ -380,6 +381,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.slowCommand()
 	case probeCommandToken:
 		c.probeCommand()
+	case queryCommandToken:
+		c.queryCommand(p.GetLine())
 	default:
 		return false
 	}

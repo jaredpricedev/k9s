@@ -166,6 +166,21 @@
                 }
               }
             },
+            "queries": {
+              "type": "object",
+              "maxProperties": 32,
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["expr"],
+                "properties": {
+                  "title": { "type": "string" },
+                  "expr": { "type": "string", "minLength": 1, "maxLength": 4096 },
+                  "unit": { "enum": ["seconds", "ratio", "perSecond", "count", "bytes", "cores"] },
+                  "legend": { "type": "string" }
+                }
+              }
+            },
             "red": {
               "type": "object",
               "additionalProperties": false,

@@ -296,10 +296,13 @@ from the `:network-review` collector, `networkpath.Collect`; see
 Ingress name and the Pod names a `HopTarget` needs.
 
 `observability.AuthoredExpr` is the one way to send query text that was not
-built from typed parts. It exists for the query of a panel on a Grafana
-dashboard the context declares, after its variables are substituted; it
-refuses control characters, a leftover `$` variable and more than 4096
-bytes. It must not be given text assembled from cluster names or input.
+built from typed parts. It exists for text a person wrote as a whole: the
+query of a panel on a dashboard of the declared Grafana, and the expression
+the operator typed into `:query` or saved under `queries`
+([dashboards.md](dashboards.md)), after its variables are substituted; it
+refuses control characters, a leftover `$` and more than 4096 bytes. It must
+not be given text assembled from cluster names or from anything a source
+returned.
 
 ### Drawing primitives (`internal/chart`)
 

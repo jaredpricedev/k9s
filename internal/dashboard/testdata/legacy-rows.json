@@ -1,0 +1,40 @@
+{
+  "title": "Legacy / API",
+  "uid": "legacy-api",
+  "schemaVersion": 14,
+  "templating": {
+    "list": [
+      {"name": "datasource", "type": "datasource", "query": "prometheus", "current": {"text": "Prometheus", "value": "Prometheus"}},
+      {"name": "cluster", "type": "constant", "query": "prod-eu", "current": {"value": "prod-eu"}},
+      {"name": "namespace", "type": "query", "query": "label_values(kube_pod_info, namespace)", "current": {"text": "shop", "value": "shop"}},
+      {"name": "interval", "type": "interval", "query": "1m,5m,1h", "current": {"text": "5m", "value": "5m"}},
+      {"name": "resolution", "type": "interval", "auto": true, "current": {"text": "auto", "value": "$__auto_interval_resolution"}}
+    ]
+  },
+  "rows": [
+    {
+      "title": "Traffic",
+      "panels": [
+        {
+          "id": 1, "type": "graph", "title": "Requests", "datasource": "$datasource",
+          "yaxes": [{"format": "ops"}, {"format": "short"}],
+          "targets": [
+            {"refId": "A", "expr": "sum(rate(http_requests_total{cluster=\"$cluster\", namespace=\"[[namespace]]\"}[$interval])) by (code)", "legendFormat": "{{ code }}"},
+            {"refId": "B", "expr": "sum(rate(http_requests_total{namespace=\"$namespace\"}[$resolution]))", "legendFormat": "all", "hide": true}
+          ]
+        },
+        {
+          "id": 2, "type": "singlestat", "title": "Latency", "datasource": null, "format": "ms",
+          "targets": [{"refId": "A", "expr": "avg(http_request_duration_ms{namespace=\"$namespace\"})"}]
+        }
+      ]
+    },
+    {
+      "title": "Logs",
+      "panels": [
+        {"id": 3, "type": "graph", "title": "Errors in logs", "datasource": "Loki",
+         "targets": [{"refId": "A", "expr": "sum(count_over_time({namespace=\"$namespace\"} |= \"error\" [5m]))"}]}
+      ]
+    }
+  ]
+}

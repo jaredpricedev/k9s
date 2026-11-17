@@ -48,6 +48,9 @@ type Sources struct {
 	// RequestPath optionally maps the hops of a Service's request path
 	// (ingress, app, dependencies, DNS, network) onto metric names.
 	RequestPath *RequestPath `json:"requestPath,omitempty" yaml:"requestPath,omitempty"`
+	// Queries are PromQL expressions the operator saved under a name for
+	// the :query bar. Saving one contacts nothing.
+	Queries map[string]NamedQuery `json:"queries,omitempty" yaml:"queries,omitempty"`
 }
 
 // Source says how one source is reached. Exactly one of Service and URL is set.

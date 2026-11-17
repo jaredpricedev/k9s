@@ -199,6 +199,9 @@ way to narrow a Grafana with more dashboards than the limit; the header says
 `INCOMPLETE` when the limit was reached. `/` filters the rows already read.
 `Enter` opens or copies the selected link as above and shows the dialog; for a
 `search` row it also shows the YAML that pins it. `r` reads the search again.
+`v` draws the selected dashboard in the terminal instead of opening it: its
+definition is read once from Grafana and its panels' expressions are run
+against the declared Prometheus source ([dashboards.md](dashboards.md)).
 
 If the search is denied, times out or cannot be reached, the header says
 `NOT READ` with the state and reason and points to `:sources`; the declared

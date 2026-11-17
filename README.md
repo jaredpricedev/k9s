@@ -98,6 +98,7 @@ and [Hubble measurements](docs/hubble-performance-2026-10-04.md).
 | Which Pod of a workload or Service is the different one | `p` in `:graph` (one chart per Pod, worst first), `g` regroups by container, revision, node or zone; or `:graph pods` ([docs/graphs.md](docs/graphs.md#which-pod-is-different-p)) |
 | A page that sometimes just waits: which hop of the request path was raised, whether one Pod is the outlier, and when | `Shift-W` on a Service, Ingress, workload or Pod, or `:slow` ([docs/slow-requests.md](docs/slow-requests.md)) |
 | Is one backend slow right now (asks before it sends anything) | `Shift-B` on a Service, workload or Pod, or `:probe`: a timed read-only GET to each Pod's own declared readiness path ([docs/probe.md](docs/probe.md)) |
+| A Grafana dashboard's panels, or any PromQL, drawn in the terminal | `v` on a row of `:dashboards`; `:query`, `:query <name>` or `:query <expression>` ([docs/dashboards.md](docs/dashboards.md)) |
 | Walk one incident | `:problems` → `:alerts` → `t` timeline → `:impact` → `Enter` graph → `Shift-D` Grafana; `m`, `t` and `Shift-D` mean the same in each of these views |
 | Access, capacity, storage, node maintenance | `:access`, `:capacity`, `:storage`; select a Node then `:maintenance` or `o` |
 | Network path / task handoff | Select a Service then `:network-review`; `:taskbook save` / `:taskbook open` |

@@ -150,6 +150,8 @@ type grafanaHandoff struct {
 	body, keys *tview.TextView
 	app        *App
 	target     *grafanaTarget
+	// origin is the selection the target was made from, when known.
+	origin     SelectedResourceTarget
 	links      []grafanaLink
 	current    int
 	outcome    deliveryOutcome
@@ -312,7 +314,7 @@ func (h *grafanaHandoff) keyboard(event *tcell.EventKey) *tcell.EventKey {
 	case 'a':
 		if h.offerList && h.target != nil {
 			h.close()
-			h.app.openDashboards(h.target, "", "")
+			h.app.openDashboards(h.target, h.origin, "", "")
 		}
 	case 's':
 		if h.problem != "" {

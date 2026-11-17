@@ -1,0 +1,537 @@
+{
+ "dashboard": {
+  "annotations": {
+   "list": [
+    {
+     "builtIn": 1,
+     "datasource": {
+      "type": "grafana",
+      "uid": "-- Grafana --"
+     },
+     "enable": true,
+     "hide": true,
+     "iconColor": "rgba(0, 211, 255, 1)",
+     "name": "Annotations & Alerts",
+     "type": "dashboard"
+    }
+   ]
+  },
+  "editable": false,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+   {
+    "datasource": {
+     "type": "prometheus",
+     "uid": "${datasource}"
+    },
+    "description": "",
+    "fieldConfig": {
+     "defaults": {
+      "color": {
+       "mode": "thresholds"
+      },
+      "mappings": [],
+      "thresholds": {
+       "mode": "absolute",
+       "steps": [
+        {
+         "color": "green",
+         "value": null
+        }
+       ]
+      },
+      "unit": "reqps"
+     },
+     "overrides": []
+    },
+    "gridPos": {
+     "h": 4,
+     "w": 6,
+     "x": 0,
+     "y": 0
+    },
+    "id": 1,
+    "options": {
+     "colorMode": "value",
+     "graphMode": "area",
+     "justifyMode": "auto",
+     "reduceOptions": {
+      "calcs": [
+       "lastNotNull"
+      ],
+      "fields": "",
+      "values": false
+     },
+     "textMode": "auto"
+    },
+    "targets": [
+     {
+      "datasource": {
+       "type": "prometheus",
+       "uid": "${datasource}"
+      },
+      "editorMode": "code",
+      "expr": "sum(rate(nginx_ingress_controller_requests{namespace=\"$namespace\", ingress=\"gitlab-webservice-default\"}[$__rate_interval]))",
+      "legendFormat": "requests",
+      "range": true,
+      "refId": "A"
+     }
+    ],
+    "title": "Requests per second",
+    "type": "stat"
+   },
+   {
+    "datasource": {
+     "type": "prometheus",
+     "uid": "${datasource}"
+    },
+    "description": "",
+    "fieldConfig": {
+     "defaults": {
+      "color": {
+       "mode": "thresholds"
+      },
+      "mappings": [],
+      "thresholds": {
+       "mode": "absolute",
+       "steps": [
+        {
+         "color": "green",
+         "value": null
+        },
+        {
+         "color": "red",
+         "value": 0.5
+        }
+       ]
+      },
+      "unit": "reqps"
+     },
+     "overrides": []
+    },
+    "gridPos": {
+     "h": 4,
+     "w": 6,
+     "x": 6,
+     "y": 0
+    },
+    "id": 2,
+    "options": {
+     "colorMode": "value",
+     "graphMode": "area",
+     "justifyMode": "auto",
+     "reduceOptions": {
+      "calcs": [
+       "lastNotNull"
+      ],
+      "fields": "",
+      "values": false
+     },
+     "textMode": "auto"
+    },
+    "targets": [
+     {
+      "datasource": {
+       "type": "prometheus",
+       "uid": "${datasource}"
+      },
+      "editorMode": "code",
+      "expr": "sum(rate(nginx_ingress_controller_requests{namespace=\"$namespace\", ingress=\"gitlab-webservice-default\", status=\"499\"}[$__rate_interval]))",
+      "legendFormat": "499",
+      "range": true,
+      "refId": "A"
+     }
+    ],
+    "title": "499 client closed, per second",
+    "type": "stat"
+   },
+   {
+    "datasource": {
+     "type": "prometheus",
+     "uid": "${datasource}"
+    },
+    "description": "",
+    "fieldConfig": {
+     "defaults": {
+      "color": {
+       "mode": "thresholds"
+      },
+      "mappings": [],
+      "max": 1,
+      "min": 0,
+      "thresholds": {
+       "mode": "absolute",
+       "steps": [
+        {
+         "color": "green",
+         "value": null
+        }
+       ]
+      },
+      "unit": "percentunit"
+     },
+     "overrides": []
+    },
+    "gridPos": {
+     "h": 4,
+     "w": 6,
+     "x": 12,
+     "y": 0
+    },
+    "id": 3,
+    "options": {
+     "reduceOptions": {
+      "calcs": [
+       "lastNotNull"
+      ],
+      "fields": "",
+      "values": false
+     },
+     "showThresholdLabels": false,
+     "showThresholdMarkers": true
+    },
+    "targets": [
+     {
+      "datasource": {
+       "type": "prometheus",
+       "uid": "${datasource}"
+      },
+      "editorMode": "code",
+      "expr": "(sum(rate(nginx_ingress_controller_requests{namespace=\"$namespace\", ingress=\"gitlab-webservice-default\", status=~\"5..\"}[$__rate_interval])) / sum(rate(nginx_ingress_controller_requests{namespace=\"$namespace\", ingress=\"gitlab-webservice-default\"}[$__rate_interval])))",
+      "instant": true,
+      "legendFormat": "5xx",
+      "range": true,
+      "refId": "A"
+     }
+    ],
+    "title": "Share of 5xx",
+    "type": "gauge"
+   },
+   {
+    "datasource": {
+     "type": "prometheus",
+     "uid": "${datasource}"
+    },
+    "description": "",
+    "fieldConfig": {
+     "defaults": {
+      "color": {
+       "mode": "palette-classic"
+      },
+      "custom": {
+       "drawStyle": "line",
+       "fillOpacity": 10,
+       "lineInterpolation": "linear",
+       "lineWidth": 1,
+       "showPoints": "never",
+       "spanNulls": false,
+       "stacking": {
+        "mode": "none"
+       }
+      },
+      "mappings": [],
+      "min": 0,
+      "thresholds": {
+       "mode": "absolute",
+       "steps": [
+        {
+         "color": "green",
+         "value": null
+        }
+       ]
+      },
+      "unit": "reqps"
+     },
+     "overrides": []
+    },
+    "gridPos": {
+     "h": 8,
+     "w": 12,
+     "x": 0,
+     "y": 4
+    },
+    "id": 4,
+    "options": {
+     "legend": {
+      "calcs": [
+       "mean",
+       "max"
+      ],
+      "displayMode": "table",
+      "placement": "bottom"
+     },
+     "tooltip": {
+      "mode": "multi",
+      "sort": "desc"
+     }
+    },
+    "targets": [
+     {
+      "datasource": {
+       "type": "prometheus",
+       "uid": "${datasource}"
+      },
+      "editorMode": "code",
+      "expr": "sum by (status) (rate(nginx_ingress_controller_requests{namespace=\"$namespace\", ingress=\"gitlab-webservice-default\"}[$__rate_interval]))",
+      "legendFormat": "{{status}}",
+      "range": true,
+      "refId": "A"
+     }
+    ],
+    "title": "Requests by status",
+    "type": "timeseries"
+   },
+   {
+    "datasource": {
+     "type": "prometheus",
+     "uid": "${datasource}"
+    },
+    "description": "",
+    "fieldConfig": {
+     "defaults": {
+      "color": {
+       "mode": "palette-classic"
+      },
+      "custom": {
+       "drawStyle": "line",
+       "fillOpacity": 10,
+       "lineInterpolation": "linear",
+       "lineWidth": 1,
+       "showPoints": "never",
+       "spanNulls": false,
+       "stacking": {
+        "mode": "none"
+       }
+      },
+      "mappings": [],
+      "min": 0,
+      "thresholds": {
+       "mode": "absolute",
+       "steps": [
+        {
+         "color": "green",
+         "value": null
+        }
+       ]
+      },
+      "unit": "s"
+     },
+     "overrides": []
+    },
+    "gridPos": {
+     "h": 8,
+     "w": 12,
+     "x": 12,
+     "y": 4
+    },
+    "id": 5,
+    "options": {
+     "legend": {
+      "calcs": [
+       "mean",
+       "max"
+      ],
+      "displayMode": "table",
+      "placement": "bottom"
+     },
+     "tooltip": {
+      "mode": "multi",
+      "sort": "desc"
+     }
+    },
+    "targets": [
+     {
+      "datasource": {
+       "type": "prometheus",
+       "uid": "${datasource}"
+      },
+      "editorMode": "code",
+      "expr": "histogram_quantile(0.99, sum by (le) (rate(nginx_ingress_controller_request_duration_seconds_bucket{namespace=\"$namespace\", ingress=\"gitlab-webservice-default\"}[$__rate_interval])))",
+      "legendFormat": "p99",
+      "range": true,
+      "refId": "A"
+     },
+     {
+      "datasource": {
+       "type": "prometheus",
+       "uid": "${datasource}"
+      },
+      "editorMode": "code",
+      "expr": "histogram_quantile(0.5, sum by (le) (rate(nginx_ingress_controller_request_duration_seconds_bucket{namespace=\"$namespace\", ingress=\"gitlab-webservice-default\"}[$__rate_interval])))",
+      "legendFormat": "p50",
+      "range": true,
+      "refId": "B"
+     }
+    ],
+    "title": "Request duration",
+    "type": "timeseries"
+   },
+   {
+    "datasource": {
+     "type": "prometheus",
+     "uid": "${datasource}"
+    },
+    "description": "",
+    "fieldConfig": {
+     "defaults": {
+      "color": {
+       "mode": "thresholds"
+      },
+      "mappings": [],
+      "thresholds": {
+       "mode": "absolute",
+       "steps": [
+        {
+         "color": "green",
+         "value": null
+        }
+       ]
+      },
+      "unit": "s"
+     },
+     "overrides": []
+    },
+    "gridPos": {
+     "h": 8,
+     "w": 24,
+     "x": 0,
+     "y": 12
+    },
+    "id": 6,
+    "options": {
+     "calculate": false,
+     "cellGap": 1,
+     "yAxis": {
+      "unit": "s"
+     }
+    },
+    "targets": [
+     {
+      "datasource": {
+       "type": "prometheus",
+       "uid": "${datasource}"
+      },
+      "editorMode": "code",
+      "expr": "sum by (le) (rate(nginx_ingress_controller_request_duration_seconds_bucket{namespace=\"$namespace\", ingress=\"gitlab-webservice-default\"}[$__rate_interval]))",
+      "format": "heatmap",
+      "legendFormat": "{{le}}",
+      "range": true,
+      "refId": "A"
+     }
+    ],
+    "title": "Request duration buckets",
+    "type": "heatmap"
+   }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": [
+   "gitlab",
+   "ingress-nginx"
+  ],
+  "templating": {
+   "list": [
+    {
+     "current": {
+      "selected": false,
+      "text": "Prometheus",
+      "value": "prom-main"
+     },
+     "hide": 0,
+     "label": "Data source",
+     "name": "datasource",
+     "query": "prometheus",
+     "type": "datasource"
+    },
+    {
+     "current": {
+      "selected": false,
+      "text": "gitlab",
+      "value": "gitlab"
+     },
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "definition": "label_values(kube_pod_info, namespace)",
+     "includeAll": false,
+     "label": "Namespace",
+     "multi": false,
+     "name": "namespace",
+     "query": {
+      "qryType": 1,
+      "query": "label_values(kube_pod_info, namespace)",
+      "refId": "PrometheusVariableQueryEditor-VariableQuery"
+     },
+     "refresh": 2,
+     "sort": 1,
+     "type": "query"
+    },
+    {
+     "allValue": ".*",
+     "current": {
+      "selected": true,
+      "text": [
+       "All"
+      ],
+      "value": [
+       "$__all"
+      ]
+     },
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${datasource}"
+     },
+     "definition": "label_values(kube_pod_info{namespace=\"$namespace\", pod=~\"gitlab-nginx-ingress-controller-.*\"}, pod)",
+     "includeAll": true,
+     "label": "Pod",
+     "multi": true,
+     "name": "pod",
+     "query": {
+      "qryType": 1,
+      "query": "label_values(kube_pod_info{namespace=\"$namespace\", pod=~\"gitlab-nginx-ingress-controller-.*\"}, pod)",
+      "refId": "PrometheusVariableQueryEditor-VariableQuery"
+     },
+     "refresh": 2,
+     "sort": 1,
+     "type": "query"
+    }
+   ]
+  },
+  "time": {
+   "from": "now-1h",
+   "to": "now"
+  },
+  "timepicker": {
+   "refresh_intervals": [
+    "10s",
+    "30s",
+    "1m",
+    "5m"
+   ]
+  },
+  "timezone": "utc",
+  "title": "GitLab / NGINX ingress",
+  "uid": "gitlab-ingress",
+  "version": 7
+ },
+ "meta": {
+  "canAdmin": false,
+  "canDelete": false,
+  "canEdit": false,
+  "canSave": false,
+  "canStar": true,
+  "created": "2026-10-08T07:20:00Z",
+  "expires": "0001-01-01T00:00:00Z",
+  "folderTitle": "GitLab",
+  "folderUid": "folder-gitlab",
+  "provisioned": true,
+  "provisionedExternalId": "gitlab-nginx-ingress.json",
+  "slug": "gitlab-nginx-ingress",
+  "type": "db",
+  "updated": "2026-11-08T07:20:00Z",
+  "url": "/d/gitlab-ingress/gitlab-nginx-ingress",
+  "version": 7
+ }
+}
