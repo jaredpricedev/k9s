@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/model1"
@@ -264,8 +265,116 @@ func statusColumn(name string) bool {
 	}
 }
 
+// statusLevel orders what a status cell reports, from neutral to failing.
+type statusLevel int
+
+const (
+	levelText statusLevel = iota
+	levelHealthy
+	levelUnknown
+	levelProgress
+	levelWarning
+	levelFailure
+)
+
+// problemsFirst is a session-wide ordering choice: once chosen it follows the
+// operator into every resource list rather than being re-entered per view.
+var problemsFirst atomic.Bool
+
+// tableHealth counts the rows whose status needs attention. It is derived
+// from the same classification that colors the cells, so the summary and the
+// rows can never disagree.
+type tableHealth struct {
+	failing, degraded, progressing int
+}
+
 func (t *Table) statusColor(name, value string, fallback tcell.Color) tcell.Color {
 	p := &t.presentation
+	switch statusLevelOf(name, value, fallback) {
+	case levelFailure:
+		return p.failure
+	case levelWarning:
+		return p.warning
+	case levelProgress:
+		return p.progress
+	case levelUnknown:
+		return p.unknown
+	case levelHealthy:
+		return p.healthy
+	}
+	return p.text
+}
+
+// rowLevel is the state a row reports now. A status word (CrashLoopBackOff,
+// ContainerCreating, Pending) is more specific than a readiness count, so the
+// count decides only when no status column speaks. Restart counts are history
+// and the validation message is free text; neither is counted.
+func rowLevel(h model1.Header, re *model1.RowEvent, fallback tcell.Color) statusLevel {
+	worst, ready := levelText, levelText
+	for c, field := range re.Row.Fields {
+		if c >= len(h) {
+			break
+		}
+		name := h[c].Name
+		if !statusColumn(name) || name == tableRestartsColumn || name == "VALID" {
+			continue
+		}
+		level := statusLevelOf(name, field, fallback)
+		if level < levelProgress {
+			continue
+		}
+		if name == tableReadyColumn {
+			ready = level
+		} else if level > worst {
+			worst = level
+		}
+	}
+	if worst == levelText {
+		return ready
+	}
+	return worst
+}
+
+// ToggleProblemsFirst lists failing, degraded and progressing rows ahead of
+// the rest. The chosen column order is kept inside each group.
+func (t *Table) ToggleProblemsFirst() bool {
+	enabled := !problemsFirst.Load()
+	problemsFirst.Store(enabled)
+	t.Refresh()
+	return enabled
+}
+
+// healthTitle summarizes attention-worthy rows beside the row count. Each
+// part is a count and a word, so it reads the same without color; parts are
+// dropped from the least severe when the frame is too narrow.
+func (t *Table) healthTitle(used int) string {
+	p := &t.presentation
+	var out string
+	add := func(count int, word string, color tcell.Color) {
+		if count == 0 {
+			return
+		}
+		text := fmt.Sprintf("%d %s", count, word)
+		if used+len(text)+3 > t.layoutWidth-4 && t.layoutWidth > 0 {
+			return
+		}
+		used += len(text) + 3
+		tag := "[::b]"
+		if color.Hex() >= 0 {
+			tag = fmt.Sprintf("[#%06x::b]", color.Hex())
+		}
+		out += tag + text + "[-::-] "
+	}
+	add(t.health.failing, "failing", p.failure)
+	add(t.health.degraded, "degraded", p.warning)
+	add(t.health.progressing, "in progress", p.progress)
+	if problemsFirst.Load() && out != "" {
+		out += "· problems first "
+	}
+	return out
+}
+
+func statusLevelOf(name, value string, fallback tcell.Color) statusLevel {
 	v := strings.ToLower(strings.TrimSpace(value))
 	if name == tableReadyColumn {
 		counts := strings.Split(v, "/")
@@ -274,47 +383,47 @@ func (t *Table) statusColor(name, value string, fallback tcell.Color) tcell.Colo
 			total, e2 := strconv.Atoi(counts[1])
 			if e1 == nil && e2 == nil {
 				if total == 0 {
-					return p.unknown
+					return levelUnknown
 				}
 				if ready < total {
-					return p.warning
+					return levelWarning
 				}
-				return p.healthy
+				return levelHealthy
 			}
 		}
 	}
 	if name == tableRestartsColumn {
 		if count, err := strconv.Atoi(v); err == nil {
 			if count > 0 {
-				return p.warning
+				return levelWarning
 			}
-			return p.text
+			return levelText
 		}
 	}
 	if v == "running" && fallback != tcell.ColorDefault && fallback == model1.ErrColor {
-		return p.warning
+		return levelWarning
 	}
 	switch {
 	case strings.Contains(v, "fail"), strings.Contains(v, "error"), strings.Contains(v, "backoff"),
 		strings.Contains(v, "crash"), strings.Contains(v, "oom"), strings.Contains(v, "evict"),
 		v == "false", v == "dropped", v == "denied":
-		return p.failure
+		return levelFailure
 	case strings.Contains(v, "unknown"), v == "n/a", v == "-", v == "<none>", v == "":
-		return p.unknown
+		return levelUnknown
 	case v == "pending", strings.Contains(v, "notready"), v == "noready":
-		return p.warning
+		return levelWarning
 	case strings.Contains(v, "creating"), strings.Contains(v, "initializ"), strings.Contains(v, "reconcil"),
 		strings.Contains(v, "progress"), strings.Contains(v, "connecting"):
-		return p.progress
+		return levelProgress
 	case v == "running", v == "ready", v == "healthy", v == "true", v == "succeeded", v == "completed", v == "forwarded":
-		return p.healthy
+		return levelHealthy
 	}
 	// Legacy renderers still supply resource-specific status classification.
 	if fallback != tcell.ColorDefault && fallback == model1.ErrColor {
-		return p.failure
+		return levelFailure
 	}
 	if fallback != tcell.ColorDefault && fallback == model1.PendingColor {
-		return p.warning
+		return levelWarning
 	}
-	return p.text
+	return levelText
 }

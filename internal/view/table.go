@@ -283,7 +283,17 @@ func (t *Table) bindKeys() {
 		ui.KeyShiftA:           ui.NewKeyAction("Sort Age", t.SortColCmd(ageCol, true), false),
 		ui.KeyShiftS:           ui.NewKeyAction("Sort Status", t.SortColCmd(statusCol, true), false),
 		ui.KeyShiftO:           ui.NewKeyAction("Sort Selected Column", t.sortSelectedColumnCmd, false),
+		ui.KeyShiftX:           ui.NewKeyAction("Sort Problems First", t.problemsFirstCmd, false),
 	})
+}
+
+func (t *Table) problemsFirstCmd(*tcell.EventKey) *tcell.EventKey {
+	if t.Table.ToggleProblemsFirst() {
+		t.app.Flash().Info("Problems first in every list · Shift-X restores column order")
+	} else {
+		t.app.Flash().Info("Column order restored")
+	}
+	return nil
 }
 
 func (t *Table) toggleFaultCmd(*tcell.EventKey) *tcell.EventKey {

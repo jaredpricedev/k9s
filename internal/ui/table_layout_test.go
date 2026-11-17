@@ -227,3 +227,48 @@ func TestPodLayoutReturnsSpareWidthToNames(t *testing.T) {
 		}
 	}
 }
+
+func TestTableSummarizesAndOrdersProblemsFromCellClassification(t *testing.T) {
+	gvr := client.NewGVR("v1/pods")
+	header := model1.Header{{Name: "NAME"}, {Name: "READY"}, {Name: "STATUS"}, {Name: "RESTARTS"}, {Name: "VALID"}}
+	var rows []model1.RowEvent
+	for _, f := range [][]string{
+		{"a-healthy", "1/1", "Running", "9", ""},
+		{"b-starting", "0/1", "ContainerCreating", "0", ""},
+		{"c-crashing", "0/1", "CrashLoopBackOff", "7", ""},
+		{"d-pending", "0/1", "Pending", "0", ""},
+		{"e-healthy", "2/2", "Running", "0", ""},
+	} {
+		rows = append(rows, model1.RowEvent{Row: model1.Row{ID: "ns/" + f[0], Fields: f}})
+	}
+	m := &podLayoutModel{}
+	m.data = model1.NewTableDataFull(gvr, "payments", header, model1.NewRowEventsWithEvts(rows...))
+	v := ui.NewTable(gvr)
+	v.Init(context.WithValue(context.Background(), internal.KeyStyles, config.NewStyles()))
+	v.SetModel(m)
+	v.SetNoIcon(true)
+	v.SetSortCol("NAME", true)
+	v.SetRect(0, 0, 120, 30)
+	v.UpdateUI(v.Update(m.data, true), m.data)
+
+	title := v.GetTitle()
+	for _, want := range []string{"1 failing", "1 degraded", "1 in progress"} {
+		assert.Contains(t, title, want, "restarts and readiness counts alone do not inflate the summary")
+	}
+	assert.NotContains(t, title, "problems first")
+	first, _ := v.GetRowID(1)
+	assert.Equal(t, "ns/a-healthy", first, "column order is the default")
+
+	v.SelectRow(1, 0, true)
+	require.True(t, v.ToggleProblemsFirst())
+	defer v.ToggleProblemsFirst()
+	var order []string
+	for row := 1; row < v.GetRowCount(); row++ {
+		id, _ := v.GetRowID(row)
+		order = append(order, strings.TrimPrefix(id, "ns/"))
+	}
+	assert.Equal(t, []string{"c-crashing", "d-pending", "b-starting", "a-healthy", "e-healthy"}, order,
+		"severity first, then the chosen column order")
+	assert.Contains(t, v.GetTitle(), "problems first", "a changed order is stated in text")
+	assert.Equal(t, "ns/a-healthy", v.GetSelectedItem(), "reordering keeps the selected resource")
+}

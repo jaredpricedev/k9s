@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"reflect"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 
@@ -73,6 +74,7 @@ type Table struct {
 	literalFields      bool
 	layoutWidth        int
 	columnWidths       map[string]int
+	health             tableHealth
 	presentation       tablePresentation
 }
 
@@ -634,19 +636,46 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 	}
 	cdata.Sort(t.getSortCol())
 
-	cdata.RowsRange(func(row int, re model1.RowEvent) bool {
+	// Classify every row once: the counts feed the title summary and, when
+	// chosen, problems are listed first within the current column order.
+	type classified struct {
+		re, ore model1.RowEvent
+		level   statusLevel
+	}
+	color := model1.DefaultColorer
+	if t.colorerFn != nil {
+		color = t.colorerFn
+	}
+	ns := t.GetModel().GetNamespace()
+	rows := make([]classified, 0, cdata.RowCount())
+	t.health = tableHealth{}
+	cdata.RowsRange(func(_ int, re model1.RowEvent) bool {
 		ore, ok := data.FindRow(re.Row.ID)
 		if !ok {
 			slog.Error("Unable to find original row event", slogs.RowID, re.Row.ID)
 			return true
 		}
-		t.buildRow(row+1, re, ore, cdata.Header(), pads)
-		if selectedID != "" && re.Row.ID == selectedID {
-			selectedRow = row + 1
+		level := rowLevel(cdata.Header(), &re, color(ns, cdata.Header(), &re))
+		switch level {
+		case levelFailure:
+			t.health.failing++
+		case levelWarning:
+			t.health.degraded++
+		case levelProgress:
+			t.health.progressing++
 		}
-
+		rows = append(rows, classified{re: re, ore: ore, level: level})
 		return true
 	})
+	if problemsFirst.Load() {
+		sort.SliceStable(rows, func(i, j int) bool { return rows[i].level > rows[j].level })
+	}
+	for index := range rows {
+		t.buildRow(index+1, rows[index].re, rows[index].ore, cdata.Header(), pads)
+		if selectedID != "" && rows[index].re.Row.ID == selectedID {
+			selectedRow = index + 1
+		}
+	}
 
 	if selectedRow >= 0 {
 		t.SelectRow(selectedRow, selectedCol, true)
@@ -957,6 +986,8 @@ func (t *Table) styleTitle() string {
 	} else {
 		title = SkinTitle(fmt.Sprintf(NSTitleFmt, resource, ns, render.AsThousands(rc)), &styles)
 	}
+
+	title += t.healthTitle(tview.TaggedStringWidth(title))
 
 	buff := t.CommittedFilter()
 	if internal.IsLabelSelector(buff) {

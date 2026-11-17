@@ -12,6 +12,12 @@ This actual PTY capture uses synthetic names and a disposable loopback API fixtu
 
 Pod tables reserve full status, readiness and restarts before allocating space to names. Namespace is retained when viewing all namespaces. Metrics, age and node appear when there is room. Names shorten first, and width left over after the other columns are placed is returned to the name. `Ctrl+W` restores the complete column set for horizontal inspection, and resizing recovers the initial column position while preserving selected resource identity.
 
+## Health summary and problems first
+
+A resource list with a status column states how many rows need attention beside its row count, for example `pods(all)[6] 2 failing 1 degraded 1 in progress`. The counts use the same classification that colors the cells. A status word decides a row; a readiness count decides only when no status column speaks; restart counts are history and are not counted. Nothing is added when no row needs attention, and parts are dropped from the least severe when the frame is too narrow.
+
+`Shift+X` lists failing, then degraded, then in-progress rows ahead of the rest, keeping the chosen column order inside each group and the selected resource. The choice applies to every list for the session and the title states `problems first` while it is active.
+
 ## Semantic skin tokens
 
 Existing skins remain supported. An optional `k9s.semantic` object can override `canvas`, `panel`, `text`, `muted`, `focus`, `healthy`, `warning`, `failure`, `progress`, `unknown`, `category`, and `selected`. These tokens also feed inherited prompts, dialogs, help, tables and charts. Runtime updates keep selection and stream state.
