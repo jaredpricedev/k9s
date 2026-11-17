@@ -192,10 +192,16 @@ func TestProblemsPackNeverSplitsAnItemFromItsCount(t *testing.T) {
 		packed := problemsPack(text, width)
 		assert.Equal(t, text, strings.Join(strings.Split(packed, " ·\n"), " · "), "packing only moves line breaks")
 		for _, line := range strings.Split(packed, "\n") {
-			assert.LessOrEqual(t, runewidth.StringWidth(line), width, "width %d: %q", width, line)
+			// The pane wraps on encoded length, so that is what must fit.
+			assert.LessOrEqual(t, len(line), width, "width %d: %q", width, line)
 			assert.NotRegexp(t, `^\d`, line, "width %d: a count was separated from its source", width)
 		}
+		assert.Equal(t, strings.Count(packed, "\n")+1, problemsWrappedRows(packed, width), "width %d: the pane wraps a packed line again", width)
 	}
+	// 116 cells but 122 bytes: it fits a 117 cell pane by sight and still wraps there.
+	seen := "Read at 04:26:07: pods 2 · deployments 0 · replicasets 0 (ownership only) · statefulsets 2 · daemonsets 1 · jobs 3 ·"
+	assert.Equal(t, 116, runewidth.StringWidth(seen))
+	assert.Equal(t, 2, problemsWrappedRows(seen, 117))
 	// Prose longer than the pane is left to wrap, and the items after it still pack.
 	packed := problemsPack("No failing resource is reported in namespace default by what was read: pods 0 · deployments 0 · jobs 0", 40)
 	for _, line := range strings.Split(packed, "\n")[1:] {

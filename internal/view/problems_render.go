@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/derailed/k9s/internal/problems"
 	"github.com/derailed/tview"
@@ -384,6 +385,26 @@ func problemsFooter(width int, rows, pods bool) string {
 	return text
 }
 
+// problemsPaneWidth is the width the header and detail panes charge for
+// text. The text view wraps on encoded length, not on cells, so every " · "
+// costs a byte more than it shows; measuring cells here would let a line that
+// looks as if it fits wrap a second time and push the lines below it (the
+// NOT READ line among them) out of the pane.
+func problemsPaneWidth(text string) int { return len(text) }
+
+// problemsPaneWrap wraps text the way the pane will.
+func problemsPaneWrap(text string, width int) []string {
+	var b strings.Builder
+	for _, r := range text {
+		if r < utf8.RuneSelf {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteString(strings.Repeat("x", utf8.RuneLen(r)))
+	}
+	return tview.WordWrap(b.String(), width)
+}
+
 // problemsPack breaks text at its " · " separators so that an item such as
 // "jobs 0" is never split between its name and its count by word wrap. A
 // single item wider than the pane is left for the pane to wrap.
@@ -396,20 +417,20 @@ func problemsPack(text string, width int) string {
 	for _, paragraph := range strings.Split(text, "\n") {
 		line, used := "", 0
 		for _, item := range strings.Split(paragraph, sep) {
-			size := runewidth.StringWidth(item)
+			size := problemsPaneWidth(item)
 			switch {
 			case line == "":
 				line, used = item, size
-			case used+runewidth.StringWidth(sep)+size+2 <= width: // room for a trailing " ·"
-				line, used = line+sep+item, used+runewidth.StringWidth(sep)+size
+			case used+problemsPaneWidth(sep)+size+problemsPaneWidth(" ·") <= width: // room for a trailing " ·"
+				line, used = line+sep+item, used+problemsPaneWidth(sep)+size
 			default:
 				out = append(out, line+" ·")
 				line, used = item, size
 			}
 			if used > width {
 				// The pane wraps this item; continue from its last wrapped line.
-				if wrapped := tview.WordWrap(line, width); len(wrapped) > 0 {
-					used = runewidth.StringWidth(wrapped[len(wrapped)-1])
+				if wrapped := problemsPaneWrap(line, width); len(wrapped) > 0 {
+					used = len(wrapped[len(wrapped)-1])
 				}
 			}
 		}
@@ -422,7 +443,7 @@ func problemsPack(text string, width int) string {
 func problemsWrappedRows(text string, width int) int {
 	rows := 0
 	for _, line := range strings.Split(text, "\n") {
-		rows += max(1, len(tview.WordWrap(line, width)))
+		rows += max(1, len(problemsPaneWrap(line, width)))
 	}
 	return rows
 }
