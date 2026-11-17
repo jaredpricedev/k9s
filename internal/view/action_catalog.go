@@ -110,6 +110,7 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 	result = append(result, configurationActions(owner, app)...)
 	result = append(result, networkReviewActions(owner, app)...)
 	result = append(result, historyActions(owner, app)...)
+	result = append(result, timelineActions(owner, app)...)
 	result = append(result, workspaceActions(app)...)
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Category != result[j].Category {
