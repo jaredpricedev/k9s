@@ -212,10 +212,21 @@ func Resolve(s *Sources, kind Kind, restConfig RESTConfigFunc) (*Client, Status)
 // DefaultTimeout or the context's, whichever is sooner; the body limit is
 // MaxBytes; redirects are refused.
 func (c *Client) Get(ctx context.Context, path string, query url.Values) ([]byte, Status) {
-	st := Status{Kind: c.kind, Source: c.display, State: StateUnavailable}
-	finish := func(state State, reason string) ([]byte, Status) {
+	body, st, _ := c.get(ctx, path, query)
+	return body, st
+}
+
+// maxRejection bounds what is kept of the body of a rejected request.
+const maxRejection = 4096
+
+// get is Get that also returns the start of the body of an HTTP 400 or 422
+// answer, which is where a source says why it rejected a query. The body of
+// no other failed answer is kept.
+func (c *Client) get(ctx context.Context, path string, query url.Values) (data []byte, st Status, rejection []byte) {
+	st = Status{Kind: c.kind, Source: c.display, State: StateUnavailable}
+	finish := func(state State, reason string) ([]byte, Status, []byte) {
 		st.State, st.Reason, st.ObservedAt = state, reason, c.now().UTC()
-		return nil, st
+		return nil, st, rejection
 	}
 	if !strings.HasPrefix(path, "/") || strings.Contains(path, "..") || strings.ContainsAny(path, "?#\r\n\x00") {
 		return finish(StateUnavailable, "request path refused")
@@ -237,7 +248,7 @@ func (c *Client) Get(ctx context.Context, path string, query url.Values) ([]byte
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	failed := func() ([]byte, Status) {
+	failed := func() ([]byte, Status, []byte) {
 		switch {
 		case errors.Is(ctx.Err(), context.DeadlineExceeded):
 			return finish(StateTimeout, "no answer within the deadline")
@@ -268,6 +279,7 @@ func (c *Client) Get(ctx context.Context, path string, query url.Values) ([]byte
 	case resp.StatusCode >= 300 && resp.StatusCode < 400:
 		return finish(StateUnavailable, code+" redirect refused")
 	case resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnprocessableEntity:
+		rejection = body[:min(len(body), maxRejection)]
 		return finish(StateUnavailable, code+" request rejected")
 	default:
 		return finish(StateUnavailable, code)
@@ -276,7 +288,7 @@ func (c *Client) Get(ctx context.Context, path string, query url.Values) ([]byte
 		return finish(StateIncomplete, "response exceeds the 1 MiB limit")
 	}
 	st.State, st.ObservedAt = StateComplete, c.now().UTC()
-	return body, st
+	return body, st, nil
 }
 
 // Probe makes one small read that shows whether the source answers:

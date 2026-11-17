@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -41,6 +42,30 @@ type PromResult struct {
 	// NotRetained counts series dropped by the series or sample limit;
 	// Rejected counts samples that were not finite, ordered or in window.
 	NotRetained, Rejected int
+	// Error is what the source itself said when it rejected the query (HTTP
+	// 400 or 422), for example a PromQL parse error: its own words, without
+	// control characters and bounded. It can repeat parts of the query that
+	// was sent; it never holds a header, a token or an address.
+	Error string
+}
+
+// maxPromError bounds PromResult.Error in characters.
+const maxPromError = 400
+
+// promRejection reads the error text out of the body of a rejected query.
+func promRejection(body []byte) string {
+	var raw struct {
+		ErrorType string `json:"errorType"`
+		Error     string `json:"error"`
+	}
+	if len(body) == 0 || json.Unmarshal(body, &raw) != nil || raw.Error == "" {
+		return ""
+	}
+	text := strings.Join(strings.Fields(Clean(raw.Error, maxPromError)), " ")
+	if raw.ErrorType != "" {
+		text = Clean(raw.ErrorType, 40) + ": " + text
+	}
+	return text
 }
 
 func promTime(t time.Time) string {
@@ -57,8 +82,8 @@ func (c *Client) Query(ctx context.Context, e Expr, at time.Time) PromResult {
 	if !c.promReady(&res, e) {
 		return res
 	}
-	body, st := c.Get(ctx, "/api/v1/query", url.Values{"query": {res.Query}, "time": {promTime(at)}})
-	res.Status = st
+	body, st, rejection := c.get(ctx, "/api/v1/query", url.Values{"query": {res.Query}, "time": {promTime(at)}})
+	res.Status, res.Error = st, promRejection(rejection)
 	if st.State == StateComplete {
 		c.decodeProm(body, &res)
 	}
@@ -78,11 +103,11 @@ func (c *Client) QueryRange(ctx context.Context, e Expr, start, end time.Time) P
 		return res
 	}
 	res.Step = StepFor(end.Sub(start))
-	body, st := c.Get(ctx, "/api/v1/query_range", url.Values{
+	body, st, rejection := c.get(ctx, "/api/v1/query_range", url.Values{
 		"query": {res.Query}, "start": {promTime(start)}, "end": {promTime(end)},
 		"step": {strconv.FormatFloat(res.Step.Seconds(), 'f', 0, 64)},
 	})
-	res.Status = st
+	res.Status, res.Error = st, promRejection(rejection)
 	if st.State == StateComplete {
 		c.decodeProm(body, &res)
 	}

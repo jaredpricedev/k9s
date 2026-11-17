@@ -20,3 +20,6 @@
 | Profile | A named mapping from the signals of one hop kind to the metric and label names one exporter uses. It fills fixed query shapes and carries no query text. |
 | Not read | A hop, profile or signal for which no reading exists, with the reason (no mapping, nothing pins it to the object, the source refused, or no series matched). It is never drawn as zero and never described as healthy. |
 | Peer outlier | A reading that differs from the same reading of its peers (the other Pods of the Service) over the same window, by a stated rule and with a minimum number of peers. It is a difference, not a cause. |
+| Not drawn | A dashboard panel or query that has no chart on the page, with the reason (its type, its datasource, a variable without a value, a rejected expression, no series matched, a failed read or a limit). It keeps its place and is never an empty plot or a flat line. |
+| Named query | A PromQL expression that `:query` recalls by name: shipped with the application or saved under `queries` in the context configuration. It is text a person wrote as a whole; names from the cluster only ever fill its variables, escaped. |
+| Threshold word | The colour name a dashboard author gave the threshold step a value falls into (green, orange, red). It is the author's rule repeated, not a judgement by this tool. |

@@ -167,6 +167,18 @@ func (a *App) suggestCommand() model.SuggestionFunc {
 		if s == "" {
 			return a.cmdHistory.List()
 		}
+		if strings.HasPrefix(s, queryCommandToken+" ") {
+			// After :query only the names of named queries complete: what
+			// follows is an expression, not a namespace.
+			entries = querySuggestions(declaredSources(a), s)
+			for _, previous := range a.cmdHistory.List() {
+				if suffix, ok := cmd.ShouldAddSuggest(s, previous); ok {
+					entries = append(entries, suffix)
+				}
+			}
+			entries.Sort()
+			return slices.Compact(entries)
+		}
 		for _, alias := range a.command.suggestionAliases() {
 			if suffix, ok := cmd.ShouldAddSuggest(strings.ToLower(s), alias); ok {
 				entries = append(entries, suffix)

@@ -128,7 +128,9 @@ func (r *dashboardRow) searchText() string {
 // bounded Grafana search; nothing is read again until r is pressed.
 type dashboardsView struct {
 	*Details
-	target                 *grafanaTarget
+	target *grafanaTarget
+	// origin is the selection the target was made from.
+	origin                 SelectedResourceTarget
 	grafana                *observability.GrafanaSource
 	sourceLabel            string
 	query, notice, filter  string
@@ -213,6 +215,13 @@ func (v *dashboardsView) bindDashboardKeys() {
 		v.openRow()
 		return nil
 	}, true))
+	v.actions.Add(dashViewKey, ui.NewKeyActionWithOpts("View dashboard here", func(event *tcell.EventKey) *tcell.EventKey {
+		if v.cmdBuff.IsActive() {
+			return event
+		}
+		v.viewRow()
+		return nil
+	}, ui.ActionOpts{Visible: true, Priority: 2}))
 	v.actions.Add(tcell.KeyEscape, ui.NewKeyAction("Back", v.escape, false))
 	v.actions.Add(ui.KeyQ, ui.NewKeyAction("Back", v.escape, false))
 }
@@ -277,6 +286,19 @@ func (v *dashboardsView) openRow() {
 		return
 	}
 	showGrafanaHandoff(v.app, &grafanaHandoff{target: v.target, links: []grafanaLink{row.Link}, deliverNow: true})
+}
+
+// viewRow draws the selected dashboard in the terminal. An Explore row is
+// a link, not a dashboard, and says so.
+func (v *dashboardsView) viewRow() {
+	row := v.selectedRow()
+	switch {
+	case row == nil:
+	case row.UID == "":
+		v.app.Flash().Warn("An Explore row is a link, not a dashboard: select a dashboard row, or chart an expression with :query")
+	default:
+		v.app.openDashboardView(row.UID, row.Title, v.target, v.origin)
+	}
 }
 
 func (v *dashboardsView) Start() {
@@ -404,9 +426,9 @@ func (v *dashboardsView) render() {
 	v.renderHeader()
 	v.renderDetail()
 	width := v.viewWidth()
-	footer := "Enter open or copy the link · / filter · r re-read search · Esc back"
+	footer := "v view here · Enter open or copy the link · / filter · r re-read search · Esc back"
 	if runewidth.StringWidth(footer) > width {
-		footer = "Enter open/copy · / filter · r re-read · Esc back"
+		footer = "v view here · Enter open/copy · / filter · r re-read · Esc"
 	}
 	v.footer.SetText(tview.Escape(ui.Truncate(footer, width)))
 }

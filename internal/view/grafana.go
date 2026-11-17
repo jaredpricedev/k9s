@@ -566,10 +566,10 @@ func (a *App) openGrafanaFor(selected SelectedResourceTarget, owner any) {
 	links := grafanaLinks(sources.Grafana, target)
 	if links[0].Missing {
 		// No dashboard for this kind: the chooser makes one bounded search.
-		a.openDashboards(target, "", "No "+target.Kind+" dashboard is declared · Enter on one shows the pin YAML")
+		a.openDashboards(target, selected, "", "No "+target.Kind+" dashboard is declared · Enter on one shows the pin YAML")
 		return
 	}
-	showGrafanaHandoff(a, &grafanaHandoff{target: target, links: links, deliverNow: true, offerList: true})
+	showGrafanaHandoff(a, &grafanaHandoff{target: target, origin: selected, links: links, deliverNow: true, offerList: true})
 }
 
 func (c *Command) dashboardsCommand(line string) {
@@ -604,11 +604,16 @@ func (a *App) openDashboardsFor(selected SelectedResourceTarget, owner any, quer
 			target.Window = window
 		}
 	}
-	a.openDashboards(target, query, "")
+	a.openDashboards(target, selected, query, "")
 }
 
-func (a *App) openDashboards(target *grafanaTarget, query, notice string) {
+// openDashboards lists dashboards for a target. origin is the selection the
+// target was made from; a dashboard drawn from the list keeps it.
+//
+//nolint:gocritic // The immutable selection is captured by value.
+func (a *App) openDashboards(target *grafanaTarget, origin SelectedResourceTarget, query, notice string) {
 	v := newDashboardsView(a, target, query, notice)
+	v.origin = origin
 	if err := a.inject(v, false); err != nil {
 		a.Flash().Err(err)
 	}

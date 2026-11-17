@@ -1,0 +1,66 @@
+{
+  "meta": {"folderTitle": "Platform"},
+  "dashboard": {
+    "uid": "odd-cases",
+    "title": "Odd cases",
+    "schemaVersion": 41,
+    "templating": {
+      "list": [
+        {"name": "ds", "type": "datasource", "query": "prometheus", "current": {"value": "prom-main"}},
+        {"name": "logs", "type": "datasource", "query": "loki", "current": {"value": "loki-main"}},
+        {"name": "namespace", "type": "query", "includeAll": false, "multi": false,
+         "query": {"qryType": 1, "query": "label_values(kube_pod_info, namespace)"}, "current": {"value": "shop"}},
+        {"name": "pod", "type": "query", "includeAll": true, "multi": true, "current": {"value": ["$__all"]},
+         "query": {"qryType": 1, "query": "label_values(kube_pod_info{namespace=\"$namespace\"}, pod)"}},
+        {"name": "status", "type": "custom", "includeAll": true, "multi": true, "query": "2..,4..,5..",
+         "options": [{"value": "$__all"}, {"value": "2.."}, {"value": "4.."}, {"value": "5.."}],
+         "current": {"value": ["4..", "5.."]}},
+        {"name": "team", "type": "custom", "includeAll": true, "multi": true,
+         "options": [{"value": "$__all"}, {"value": "a"}, {"value": "b"}], "current": {"value": "$__all"}},
+        {"name": "job", "type": "textbox", "query": "api", "current": {"value": "api.v2"}},
+        {"name": "filters", "type": "adhoc"},
+        {"name": "empty", "type": "query", "query": "label_values(up, job)", "current": {}}
+      ]
+    },
+    "panels": [
+      {"id": 10, "type": "row", "title": "Collapsed", "collapsed": true, "gridPos": {"h": 1, "w": 24, "x": 0, "y": 20},
+       "panels": [
+         {"id": 11, "type": "timeseries", "title": "Inside a collapsed row", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 21}, "repeat": "pod",
+          "datasource": {"type": "prometheus", "uid": "${ds}"}, "fieldConfig": {"defaults": {"unit": "bytes"}},
+          "targets": [{"refId": "A", "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"$namespace\"})"}]}
+       ]},
+      {"id": 2, "type": "timeseries", "title": "All pods without allValue", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+       "datasource": {"type": "prometheus", "uid": "${ds}"}, "fieldConfig": {"defaults": {"unit": "wibble"}},
+       "targets": [{"refId": "A", "expr": "sum(up{namespace=\"$namespace\", pod=~\"$pod\"})"}]},
+      {"id": 1, "type": "timeseries", "title": "By status", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+       "datasource": {"type": "prometheus", "uid": "${ds}"}, "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": "100"}},
+       "targets": [
+         {"refId": "A", "expr": "sum by (status) (rate(http_requests_total{namespace=\"$namespace\", status=~\"${status:regex}\", job=\"$job\"}[$__rate_interval]))"},
+         {"refId": "B", "expr": "sum(rate(http_requests_total{team=~\"$team\", job=~\"$job\"}[$__interval])) / $__range_s"}
+       ]},
+      {"id": 3, "type": "stat", "title": "Mixed sources", "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8},
+       "datasource": {"type": "datasource", "uid": "-- Mixed --"},
+       "fieldConfig": {"defaults": {"unit": "short", "min": 0, "max": 200,
+         "thresholds": {"mode": "percentage", "steps": [{"color": "green", "value": null}, {"color": "#EAB839", "value": 50}, {"color": "dark-red", "value": 80}]}}},
+       "options": {"reduceOptions": {"calcs": ["max"]}},
+       "targets": [
+         {"refId": "A", "expr": "sum(up{namespace=\"$namespace\"})", "datasource": {"type": "prometheus", "uid": "${ds}"}},
+         {"refId": "B", "expr": "sum(count_over_time({namespace=\"$namespace\"}[5m]))", "datasource": {"type": "loki", "uid": "${logs}"}}
+       ]},
+      {"id": 4, "type": "bargauge", "title": "Uses an empty variable", "gridPos": {"h": 4, "w": 6, "x": 6, "y": 8},
+       "datasource": {"type": "prometheus", "uid": "${ds}"},
+       "targets": [{"refId": "A", "expr": "sum by (job) (up{job=~\"$empty\"})"}]},
+      {"id": 5, "gridPos": {"h": 4, "w": 6, "x": 12, "y": 8}, "libraryPanel": {"uid": "lib-1", "name": "Shared SLO panel"}},
+      {"id": 6, "type": "piechart", "title": "Share by team", "gridPos": {"h": 4, "w": 6, "x": 18, "y": 8},
+       "datasource": {"type": "prometheus", "uid": "${ds}"}, "targets": [{"refId": "A", "expr": "sum by (team) (up)"}]},
+      {"id": 7, "type": "gauge", "title": "Unknown variable", "gridPos": {"h": 4, "w": 6, "x": 0, "y": 12},
+       "datasource": {"type": "prometheus", "uid": "${ds}"},
+       "targets": [{"refId": "A", "expr": "sum(up{cluster=\"$cluster\"})"}]},
+      {"id": 8, "type": "timeseries", "title": "SQL panel", "gridPos": {"h": 4, "w": 6, "x": 6, "y": 12},
+       "datasource": {"type": "postgres", "uid": "pg"}, "targets": [{"refId": "A", "rawSql": "select 1"}]},
+      {"id": 9, "type": "timeseries", "title": "Regex anchor", "gridPos": {"h": 4, "w": 6, "x": 12, "y": 12},
+       "datasource": {"type": "prometheus", "uid": "${ds}"},
+       "targets": [{"refId": "A", "expr": "sum(up{job=~\"api|^$\"})"}]}
+    ]
+  }
+}
