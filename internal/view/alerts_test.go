@@ -175,7 +175,7 @@ func TestAlertsHeaderStatesSourceTimeCountsAndWhatWasNotRead(t *testing.T) {
 func TestAlertsDetailAndReportNameEveryFieldAndNeverClaimACause(t *testing.T) {
 	groups, lines := alertsTestLines(true)
 	names := map[string]string{"fp-KubeNodeNotReady": "KubeNodeNotReady"}
-	head, body := alertsDetail(&lines[0], alertsTestReadAt, names)
+	head, body := alertsDetail(&lines[0], alertsTestReadAt, names, 0)
 	assert.Equal(t, "CheckoutHighErrorRate · critical · firing for 9m", head)
 	for _, want := range []string{
 		"Deployment apps/checkout-api · mapped from labels namespace + deployment",
@@ -186,18 +186,22 @@ func TestAlertsDetailAndReportNameEveryFieldAndNeverClaimACause(t *testing.T) {
 	} {
 		assert.Contains(t, body, want)
 	}
+	// In a pane too narrow for both, the link starts its own row instead of
+	// being broken in the middle.
+	_, narrow := alertsDetail(&lines[0], alertsTestReadAt, names, 77)
+	assert.Contains(t, narrow, "Began 2026-11-17 11:51:00Z\nRunbook: https://runbooks.example.test/CheckoutHighErrorRate\n")
 
-	head, body = alertsDetail(&lines[2], alertsTestReadAt, names)
+	head, body = alertsDetail(&lines[2], alertsTestReadAt, names, 0)
 	assert.Equal(t, "KubePodNotReady · warning · firing for 7m · 2 alerts", head)
 	assert.Contains(t, body, "Deployment apps/checkout-api: the same alert on 2 pods (checkout-api-7d9f8c6b5d-p8wm, checkout-api-7d9f8c6b5d-x2x9q)")
 	assert.Contains(t, body, "Folded by owner references")
 
-	_, body = alertsDetail(&lines[4], alertsTestReadAt, names)
+	_, body = alertsDetail(&lines[4], alertsTestReadAt, names, 0)
 	assert.Contains(t, body, "Not mapped to an object: its labels name no namespace, workload, pod or node.")
-	head, body = alertsDetail(&lines[6], alertsTestReadAt, names)
+	head, body = alertsDetail(&lines[6], alertsTestReadAt, names, 0)
 	assert.Contains(t, head, "inhibited for 16m")
 	assert.Contains(t, body, "Inhibited by KubeNodeNotReady (fp-KubeNodeNotReady): it is held but does not notify.")
-	_, body = alertsDetail(&lines[7], alertsTestReadAt, names)
+	_, body = alertsDetail(&lines[7], alertsTestReadAt, names, 0)
 	assert.Contains(t, body, "Silenced by silence silence-1")
 
 	item := &groups[2].Items[0]

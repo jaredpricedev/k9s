@@ -735,7 +735,7 @@ func (v *alertsView) renderDetail() {
 	}
 	switch line := v.selectedLine(); {
 	case line != nil && v.snapshot != nil:
-		head, body := alertsDetail(line, v.snapshot.ReadAt, v.names)
+		head, body := alertsDetail(line, v.snapshot.ReadAt, v.names, width-1)
 		limit := 8
 		if v.height > 0 {
 			limit = max(4, min(limit, (v.height-v.headerRows-1)*2/5))

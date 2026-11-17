@@ -423,8 +423,9 @@ outer:
 }
 
 // alertsDetail is the pane under the list. The head line is returned apart so
-// the caller can embolden it; the rest is plain text.
-func alertsDetail(line *alertsLine, readAt time.Time, names map[string]string) (head, body string) {
+// the caller can embolden it; the rest is plain text. width is the pane width
+// in cells, or 0 when the text is not laid out for a pane.
+func alertsDetail(line *alertsLine, readAt time.Time, names map[string]string, width int) (head, body string) {
 	group := line.group
 	age := problemsFor(alertsLineSince(line), readAt)
 	head = fmt.Sprintf("%s · %s · %s", group.Name, group.Severity, group.State)
@@ -467,7 +468,13 @@ func alertsDetail(line *alertsLine, readAt time.Time, names map[string]string) (
 	}
 	when := "Began " + alertsStamp(item.Alert.StartsAt)
 	if runbook := item.Runbook(); runbook != "" {
-		when += " · runbook " + runbook
+		// A link that would be broken across two rows starts its own row,
+		// where it has the whole width before it has to wrap.
+		if joined := when + " · runbook " + runbook; width <= 0 || runewidth.StringWidth(joined) <= width {
+			when = joined
+		} else {
+			when += "\nRunbook: " + runbook
+		}
 	}
 	lines = append(lines, when, "Labels: "+strings.Join(alertsSortedPairs(item.Alert.Labels, "alertname"), " · "))
 	if item.Alert.GeneratorURL != "" {

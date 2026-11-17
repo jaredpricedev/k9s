@@ -174,7 +174,13 @@ run on; or, for a namespace timeline, every object in that namespace.
 - A 403 from the Kubernetes API server (no permission to use the service
   proxy) and a 403 from Alertmanager itself both read `denied (HTTP 403)`.
 - Generator and runbook links are shown and copied as text. URL userinfo is
-  removed before a link is retained, and a link is never opened by k9+.
+  removed before a link is retained, and a link is never opened by k9+. The
+  same removal applies to a URL written inside any label or annotation value
+  (for example a probe's `instance` label), so `scheme://user:password@host`
+  is kept as `scheme://host`. A credential placed anywhere else in alert text,
+  such as a token in a query string, is not recognized and is shown as sent.
+- In the detail pane a runbook link that does not fit beside the start time
+  starts its own row. A link longer than the pane still wraps.
 - The synthetic fixture (`scripts/operator-study-fixture.py`) serves ten
   alerts: the checkout-api error-rate, latency, crash-loop, rollout and
   pod-not-ready alerts, two node alerts on worker-b (one inhibited by the

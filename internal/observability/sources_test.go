@@ -317,7 +317,8 @@ func TestAlertsKeepSuppressionAndBoundText(t *testing.T) {
 "annotations":{"summary":"Pod is crash\u001b[31m looping","runbook_url":"https://runbooks.example.test/x","description":%q},
 "startsAt":"2026-01-01T00:00:00Z","endsAt":"2026-01-01T00:10:00Z","updatedAt":"2026-01-01T00:05:00Z","generatorURL":"http://user:SECRET@prom/graph",
 "receivers":[{"name":"oncall"}],"status":{"state":"active","silencedBy":[],"inhibitedBy":[]}},
-{"fingerprint":"f2","labels":{"alertname":"Watchdog"},"annotations":{},"status":{"state":"suppressed","silencedBy":["s1"],"inhibitedBy":["f1"]}}]`,
+{"fingerprint":"f2","labels":{"alertname":"Watchdog","instance":"https://probe:SECRET@site.test/health"},
+"annotations":{"runbook":"see https://ops:SECRET@wiki.test/r first","description":"mail oncall@example.test"},"status":{"state":"suppressed","silencedBy":["s1"],"inhibitedBy":["f1"]}}]`,
 			strings.Repeat("d", 5000))
 	}))
 	defer server.Close()
@@ -336,10 +337,15 @@ func TestAlertsKeepSuppressionAndBoundText(t *testing.T) {
 	require.Equal(t, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), a.StartsAt)
 	require.Equal(t, []string{"oncall"}, a.Receivers)
 	require.NotContains(t, fmt.Sprintf("%+v", res), "SECRET")
+	require.NotContains(t, fmt.Sprintf("%+v", res.Alerts), "SECRET", "no retained alert field holds the credential")
 	require.Equal(t, "http://prom/graph", a.GeneratorURL, "the generator link is kept as text without its userinfo")
 	require.Equal(t, "https://runbooks.example.test/x", a.Annotations["runbook_url"])
 	require.Empty(t, cleanLink("http://user:SECRET@[bad/graph"), "a link that cannot be parsed and may hold a credential is dropped")
 	require.Equal(t, "see the wiki", cleanLink(" see the wiki "), "plain text in a link field is kept")
+	// A credential can ride in any text, not only in a field named as a link.
+	require.Equal(t, "https://site.test/health", res.Alerts[1].Labels["instance"])
+	require.Equal(t, "see https://wiki.test/r first", res.Alerts[1].Annotations["runbook"])
+	require.Equal(t, "mail oncall@example.test", res.Alerts[1].Annotations["description"], "an address that is not URL userinfo is kept")
 	require.True(t, res.Alerts[1].Silenced())
 	require.True(t, res.Alerts[1].Inhibited())
 	require.False(t, a.Silenced())
