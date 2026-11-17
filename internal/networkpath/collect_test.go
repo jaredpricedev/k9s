@@ -82,6 +82,35 @@ func TestNetworkPathJoinsOnlyExplicitNamespaceAndVerifiedSources(t *testing.T) {
 	}
 }
 
+func TestNetworkPathPodCarriesPlacementAndTimesOutsideRetainedEvidence(t *testing.T) {
+	scope, dyn := pathFixture(t)
+	pod, err := dyn.Resource(gvr(PodGVR)).Namespace("apps").Get(t.Context(), "api-a", metav1.GetOptions{})
+	require.NoError(t, err)
+	created := time.Date(2026, 11, 15, 8, 0, 0, 0, time.UTC)
+	pod.SetCreationTimestamp(metav1.NewTime(created))
+	require.NoError(t, unstructured.SetNestedField(pod.Object, "worker-a", "spec", "nodeName"))
+	pod.Object["status"] = map[string]any{"phase": "Running", "podIP": "10.1.0.2",
+		"conditions": []any{map[string]any{"type": "Ready", "status": "True", "lastTransitionTime": "2026-11-17T07:51:30Z"}},
+		"containerStatuses": []any{
+			map[string]any{"name": "api", "restartCount": int64(2), "lastState": map[string]any{"terminated": map[string]any{"finishedAt": "2026-11-17T07:40:00Z"}}},
+			map[string]any{"name": "sidecar", "restartCount": int64(1), "lastState": map[string]any{"terminated": map[string]any{"finishedAt": "not a time"}}},
+		}}
+	_, err = dyn.Resource(gvr(PodGVR)).Namespace("apps").Update(t.Context(), pod, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	s, err := Collect(t.Context(), dyn, scope)
+	require.NoError(t, err)
+	require.Len(t, s.Pods, 1)
+	got := s.Pods[0]
+	require.Equal(t, "worker-a", got.Node)
+	require.Equal(t, created, got.Created)
+	require.Equal(t, time.Date(2026, 11, 17, 7, 51, 30, 0, time.UTC), got.ReadySince)
+	require.EqualValues(t, 3, got.Restarts, "restarts are summed over containers")
+	require.Equal(t, time.Date(2026, 11, 17, 7, 40, 0, 0, time.UTC), got.LastRestart, "a malformed time is ignored, never guessed")
+	for _, field := range []string{"ReadySince", "LastRestart", "Restarts", "2026-11-15T08:00:00Z", "2026-11-17T07:51:30Z"} {
+		require.NotContains(t, s.Evidence(nil), field, "the shape of retained evidence is unchanged")
+	}
+}
+
 func TestNetworkPathReplacedServiceAndSelectorlessScopeNeverBroadenPodRead(t *testing.T) {
 	scope, dyn := pathFixture(t)
 	scope.Service.UID = "replaced"

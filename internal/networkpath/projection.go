@@ -56,6 +56,16 @@ func text(object map[string]any, path ...string) string {
 	return safe(v)
 }
 
+// timeAt reads an RFC 3339 time; the zero time means absent or malformed.
+func timeAt(object map[string]any, path ...string) time.Time {
+	value, _, _ := unstructured.NestedString(object, path...)
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return time.Time{}
+	}
+	return parsed.UTC()
+}
+
 func stringsAt(object map[string]any, path ...string) []string {
 	v, _, _ := unstructured.NestedStringSlice(object, path...)
 	result := make([]string, 0, min(32, len(v)))
@@ -122,6 +132,20 @@ func (s *Snapshot) projectPod(object *unstructured.Unstructured, at time.Time) {
 	for _, raw := range conditions[:min(32, len(conditions))] {
 		if c, ok := raw.(map[string]any); ok && text(c, "type") == "Ready" {
 			p.Ready = scalar(c, "status")
+			p.ReadySince = timeAt(c, "lastTransitionTime")
+		}
+	}
+	p.Node, p.Created = text(object.Object, "spec", "nodeName"), object.GetCreationTimestamp().UTC()
+	statuses, _, _ := unstructured.NestedSlice(object.Object, "status", "containerStatuses")
+	for _, raw := range statuses[:min(32, len(statuses))] {
+		status, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		count, _, _ := unstructured.NestedInt64(status, "restartCount")
+		p.Restarts += count
+		if ended := timeAt(status, "lastState", "terminated", "finishedAt"); ended.After(p.LastRestart) {
+			p.LastRestart = ended
 		}
 	}
 	if len(s.Pods) >= MaxRelated {

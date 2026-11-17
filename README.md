@@ -95,6 +95,7 @@ and [Hubble measurements](docs/hubble-performance-2026-10-04.md).
 | The Grafana dashboard for the selection, at the incident's time range | `Shift-D` on a Pod, workload, Node or namespace; `:dashboards` lists the rest |
 | Did the last rollout make it worse, in numbers | Select a Deployment, StatefulSet, DaemonSet or Pod, then `:impact` ([docs/impact.md](docs/impact.md)) |
 | Usage against limits over time, drawn in the terminal | `m` on a Pod, workload or Node, or `:graph` ([docs/graphs.md](docs/graphs.md)) |
+| A page that sometimes just waits: which hop of the request path was raised, whether one Pod is the outlier, and when | `Shift-W` on a Service, Ingress, workload or Pod, or `:slow` ([docs/slow-requests.md](docs/slow-requests.md)) |
 | Walk one incident | `:problems` → `:alerts` → `t` timeline → `:impact` → `Enter` graph → `Shift-D` Grafana; `m`, `t` and `Shift-D` mean the same in each of these views |
 | Access, capacity, storage, node maintenance | `:access`, `:capacity`, `:storage`; select a Node then `:maintenance` or `o` |
 | Network path / task handoff | Select a Service then `:network-review`; `:taskbook save` / `:taskbook open` |
