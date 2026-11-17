@@ -19,6 +19,7 @@ import (
 	"github.com/mattn/go-runewidth"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -247,6 +248,35 @@ func TestIncidentWindowComesFromTheObjectsOwnStatus(t *testing.T) {
 		require.Equal(t, now.Add(-time.Hour), w.From)
 		require.Equal(t, "last hour: pod status reports no fault", w.Reason)
 	}
+
+	// A Ready pod whose only retained exit is days old has no open fault:
+	// the old exit does not stretch the range over days.
+	recovered := &corev1.Pod{Status: corev1.PodStatus{Phase: corev1.PodRunning,
+		Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue, LastTransitionTime: at(70 * time.Hour)}},
+		ContainerStatuses: []corev1.ContainerStatus{{RestartCount: 1, LastTerminationState: corev1.ContainerState{
+			Terminated: &corev1.ContainerStateTerminated{ExitCode: 137, FinishedAt: at(72 * time.Hour)}}}}}}
+	w = podWindow(recovered, now)
+	require.Equal(t, now.Add(-time.Hour), w.From)
+	require.Equal(t, "last hour: no pod condition is False; the last container exit was 3d ago", w.Reason)
+	// The same exit a few hours ago still sets the range.
+	recovered.Status.ContainerStatuses[0].LastTerminationState.Terminated.FinishedAt = at(3 * time.Hour)
+	require.Equal(t, now.Add(-3*time.Hour-10*time.Minute), podWindow(recovered, now).From)
+
+	// Job: a failing run starts at the Job's own start; without a recent
+	// start, at its Failed condition; a Job that is not failing has no range.
+	jobStart := at(25 * time.Minute)
+	job := &batchv1.Job{Status: batchv1.JobStatus{StartTime: &jobStart, Failed: 3, Conditions: []batchv1.JobCondition{
+		{Type: batchv1.JobFailed, Status: corev1.ConditionTrue, Reason: "BackoffLimitExceeded", LastTransitionTime: at(5 * time.Minute)}}}}
+	w = jobWindow(job, now)
+	require.Equal(t, now.Add(-35*time.Minute), w.From)
+	require.Contains(t, w.Reason, "10m before the failing Job's start")
+	job.Status.StartTime = nil
+	w = jobWindow(job, now)
+	require.Equal(t, now.Add(-15*time.Minute), w.From)
+	require.Contains(t, w.Reason, "the Job's Failed condition")
+	job.Status.Conditions[0].LastTransitionTime = metav1.Time{}
+	require.Equal(t, "last hour: the failing Job's status carries no usable time", jobWindow(job, now).Reason)
+	require.Equal(t, "last hour: Job status reports no failure", jobWindow(&batchv1.Job{Status: batchv1.JobStatus{Succeeded: 1, StartTime: &jobStart}}, now).Reason)
 
 	// Deployment: the rollout that came shortly before the fault.
 	deployment := &appsv1.Deployment{Status: appsv1.DeploymentStatus{Conditions: []appsv1.DeploymentCondition{
@@ -770,7 +800,7 @@ func TestDashboardsListsDeclaredThenExploreThenSearchAndOpensOnEnter(t *testing.
 	h = v.app.Content.GetPrimitive(grafanaDialogPage).(*grafanaHandoff)
 	text := handoffText(h, 96)
 	for _, want := range []string{"Link    Dashboard · checkout-slo · Checkout / Service SLO", "Not declared, so no variable is filled.", "To pin it, add this to the context config:",
-		"cl-1/ct-1-1/config.yaml", "  k9s:\n    observability:\n      grafana:\n        dashboards:\n          pod: {uid: checkout-slo, namespaceVar: namespace, podVar: pod}",
+		"cl-1/ct-1-1/config.yaml", "  k9s:\n    observability:\n      grafana:\n        dashboards:\n          pod:\n            uid: checkout-slo\n            namespaceVar: namespace\n            podVar: pod",
 		"Nothing is written for you."} {
 		require.Contains(t, text, want)
 	}
@@ -779,7 +809,15 @@ func TestDashboardsListsDeclaredThenExploreThenSearchAndOpensOnEnter(t *testing.
 	require.Equal(t, "o open · c copy · y copy YAML · Esc close", keys[0])
 	require.Nil(t, h.keyboard(tcell.NewEventKey(tcell.KeyRune, 'y', tcell.ModNone)))
 	require.Equal(t, observability.PinSnippet("pod", "checkout-slo")+"\n", fake.copied[2])
-	require.Contains(t, handoffText(h, 96), "Result  YAML copied to the clipboard.")
+	// The result names what was copied, whichever clipboard took it.
+	require.Contains(t, handoffText(h, 96), "Result  YAML snippet, not the link: Copied to the clipboard.")
+	// With every link key offered, a scrolling 60-column dialog still names
+	// each key instead of cutting the line off.
+	wide := &grafanaHandoff{target: h.target, offerList: true, links: []grafanaLink{
+		{Name: "Dashboard", URL: "https://grafana.example.test/d/x?" + strings.Repeat("a=b&", 200)}, {Name: "Explore metrics"}, {Name: "Explore logs"}}}
+	showGrafanaHandoff(v.app, wide)
+	require.Contains(t, drawnText(t, wide, 60, 16), "Up/Dn  o open  c copy  e metrics  l logs  a all  Esc")
+	wide.close()
 	// A long dialog on a short screen keeps its keys visible and says it scrolls.
 	frame := drawnText(t, h, 60, 16)
 	require.Contains(t, frame, "Up/Down scroll · o open · c copy · y YAML · Esc")

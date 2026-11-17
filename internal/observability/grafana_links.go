@@ -243,9 +243,12 @@ func PinSnippet(kind, uid string) string {
 	if !known || !grafanaUID.MatchString(uid) {
 		return ""
 	}
-	parts := []string{"uid: " + uid}
+	// One key per row: every row stays short, so a narrow dialog shows the
+	// whole snippet instead of clipping a flow mapping at its edge.
+	const indent = "\n          "
+	out := "k9s:\n  observability:\n    grafana:\n      dashboards:\n        " + kind + ":" + indent + "uid: " + uid
 	for _, v := range vars {
-		parts = append(parts, v[0]+": "+v[1])
+		out += indent + v[0] + ": " + v[1]
 	}
-	return "k9s:\n  observability:\n    grafana:\n      dashboards:\n        " + kind + ": {" + strings.Join(parts, ", ") + "}"
+	return out
 }

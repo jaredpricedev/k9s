@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func linkGrafana() *GrafanaSource {
@@ -213,11 +214,27 @@ func TestExploreLinksCarryTheEscapedQueryDatasourceAndRange(t *testing.T) {
 }
 
 func TestPinSnippetDeclaresOneDashboardAndRefusesABadUID(t *testing.T) {
-	require.Equal(t, "k9s:\n  observability:\n    grafana:\n      dashboards:\n        pod: {uid: checkout-slo, namespaceVar: namespace, podVar: pod}",
+	// One key per row, so no row is wider than a 60-column dialog can show.
+	require.Equal(t, "k9s:\n  observability:\n    grafana:\n      dashboards:\n        pod:\n          uid: checkout-slo\n          namespaceVar: namespace\n          podVar: pod",
 		PinSnippet(DashboardPod, "checkout-slo"))
-	require.Contains(t, PinSnippet(DashboardWorkload, "w"), "workload: {uid: w, namespaceVar: namespace, workloadVar: workload}")
-	require.Contains(t, PinSnippet(DashboardNode, "n"), "node: {uid: n, nodeVar: node}")
-	require.Contains(t, PinSnippet(DashboardNamespace, "n"), "namespace: {uid: n, namespaceVar: namespace}")
+	require.Contains(t, PinSnippet(DashboardWorkload, "w"), "workload:\n          uid: w\n          namespaceVar: namespace\n          workloadVar: workload")
+	require.Contains(t, PinSnippet(DashboardNode, "n"), "node:\n          uid: n\n          nodeVar: node")
+	require.Contains(t, PinSnippet(DashboardNamespace, "n"), "namespace:\n          uid: n\n          namespaceVar: namespace")
+	for _, kind := range DashboardKinds {
+		for _, row := range strings.Split(PinSnippet(kind, "checkout-slo"), "\n") {
+			require.LessOrEqual(t, len(row), 50, row)
+		}
+	}
+	// The snippet parses as the declaration it claims to be.
+	var parsed struct {
+		K9s struct {
+			Observability struct {
+				Grafana GrafanaSource `yaml:"grafana"`
+			} `yaml:"observability"`
+		} `yaml:"k9s"`
+	}
+	require.NoError(t, yaml.Unmarshal([]byte(PinSnippet(DashboardWorkload, "checkout-slo")), &parsed))
+	require.Equal(t, Dashboard{UID: "checkout-slo", NamespaceVar: "namespace", WorkloadVar: "workload"}, parsed.K9s.Observability.Grafana.Dashboards[DashboardWorkload])
 	require.Empty(t, PinSnippet("cluster", "x"))
 	require.Empty(t, PinSnippet(DashboardPod, "x: y}\nk9s"))
 

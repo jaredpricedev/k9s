@@ -14,6 +14,7 @@ import (
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -146,6 +147,10 @@ func podWindow(pod *corev1.Pod, now time.Time) grafanaWindow {
 		return anchoredWindow(now, pod.Status.StartTime.Time, fmt.Sprintf("pod start (%d restarts since)", restarts))
 	}
 	switch {
+	case !lastExit.IsZero() && notReady.IsZero() && now.Sub(lastExit) > 24*time.Hour:
+		// No condition is False and the only exit the status retains is
+		// old: that is history, not an open fault, so it sets no range.
+		return defaultGrafanaWindow(now, "no pod condition is False; the last container exit was "+grafanaSpan(now.Sub(lastExit))+" ago")
 	case !lastExit.IsZero() && (notReady.IsZero() || !notReady.Before(lastExit)):
 		return anchoredWindow(now, lastExit, "the last container exit")
 	case !notReady.IsZero():
@@ -203,6 +208,32 @@ func nodeWindow(n *corev1.Node, now time.Time) grafanaWindow {
 		return defaultGrafanaWindow(now, "Node conditions report no fault")
 	}
 	return anchoredWindow(now, fault, "a failing Node condition")
+}
+
+// jobWindow starts at the Job's own start when that run is failing, because
+// the whole run is the incident; otherwise at the moment its Failed
+// condition reports.
+func jobWindow(j *batchv1.Job, now time.Time) grafanaWindow {
+	var failed time.Time
+	failing := j.Status.Failed > 0
+	for i := range j.Status.Conditions {
+		c := &j.Status.Conditions[i]
+		if (c.Type == batchv1.JobFailed || c.Type == batchv1.JobFailureTarget) && c.Status == corev1.ConditionTrue {
+			failing = true
+			failed = earliest(failed, c.LastTransitionTime.Time)
+		}
+	}
+	if !failing {
+		return defaultGrafanaWindow(now, "Job status reports no failure")
+	}
+	if start := j.Status.StartTime; start != nil && !start.IsZero() && !start.After(now) && now.Sub(start.Time) <= 24*time.Hour &&
+		(failed.IsZero() || !failed.Before(start.Time)) {
+		return anchoredWindow(now, start.Time, "the failing Job's start")
+	}
+	if failed.IsZero() {
+		return defaultGrafanaWindow(now, "the failing Job's status carries no usable time")
+	}
+	return anchoredWindow(now, failed, "the Job's Failed condition")
 }
 
 // grafanaTarget is what a hand-off is about: a dashboard kind, the names
@@ -340,6 +371,10 @@ func applyGrafanaObject(out *grafanaTarget, raw map[string]any, now time.Time) {
 			}
 		}
 		out.Window = defaultGrafanaWindow(now, "this kind's status carries no fault time")
+		var job batchv1.Job
+		if out.Resource == "jobs" && convert(raw, &job) == nil {
+			out.Window = jobWindow(&job, now)
+		}
 	default:
 		out.Window = defaultGrafanaWindow(now, "this kind's status carries no fault time")
 	}

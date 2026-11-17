@@ -295,7 +295,12 @@ func (h *grafanaHandoff) keyboard(event *tcell.EventKey) *tcell.EventKey {
 	case 'y':
 		if link != nil && link.Snippet != "" {
 			copied, line := h.delivery.copy(link.Snippet + "\n")
-			h.outcome = deliveryOutcome{Copied: copied, Lines: []string{strings.Replace(line, "Copied", "YAML copied", 1)}}
+			// Say what went to the clipboard: after y it is not the link,
+			// whichever clipboard took it.
+			if copied {
+				line = "YAML snippet, not the link: " + line
+			}
+			h.outcome = deliveryOutcome{Copied: copied, Lines: []string{line}}
 			h.refresh()
 		}
 	case 'd':
@@ -442,7 +447,11 @@ func (h *grafanaHandoff) text(width int) (body []string, keys [2]string) {
 			out = append(out, tview.Escape(row))
 		}
 		for _, row := range strings.Split(link.Snippet, "\n") {
-			out = append(out, "  "+tview.Escape(row))
+			// A row wider than the dialog (a 64-character UID at 60
+			// columns) continues on the next row; it is never clipped.
+			for _, part := range hardWrap("  "+row, width) {
+				out = append(out, tview.Escape(part))
+			}
 		}
 		out = append(out, plain("The variable names are the usual ones; check the dashboard's own. Nothing is written for you.", p.Muted, false)...)
 	}
@@ -496,6 +505,9 @@ func (h *grafanaHandoff) Draw(screen tcell.Screen) {
 	keys := prefix + h.keyLine[1]
 	if long := prefix + h.keyLine[0]; runewidth.StringWidth(long) <= inner {
 		keys = long
+	} else if runewidth.StringWidth(keys) > inner {
+		// Tightest form: every key stays named instead of being cut off.
+		keys = strings.ReplaceAll(strings.Replace(keys, "Up/Down scroll", "Up/Dn", 1), " · ", "  ")
 	}
 	p := h.app.Styles.Semantic()
 	h.keys.SetText(handoffTag(p.Muted, false) + tview.Escape(ui.Truncate(keys, inner)) + "[-:-:-]")
@@ -507,7 +519,7 @@ func (h *grafanaHandoff) Draw(screen tcell.Screen) {
 // searchLink is the link of a dashboard that Grafana returned but the
 // context does not declare: its variables are unknown, so none is filled.
 func searchLink(g *observability.GrafanaSource, hit *observability.DashboardHit, t *grafanaTarget) grafanaLink {
-	link := grafanaLink{Name: "Dashboard", Detail: hit.UID + " · " + hit.Title}
+	link := grafanaLink{Name: "Dashboard", Detail: safeProviderText(observability.Clean(hit.UID, 64) + " · " + hit.Title)}
 	if t.Kind != "" {
 		link.Snippet = observability.PinSnippet(t.Kind, hit.UID)
 	}

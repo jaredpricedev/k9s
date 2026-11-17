@@ -50,7 +50,13 @@ from the object already held by the list (no request is made):
 - Pod: its start time when it has restarted more than once and started within
   the last 24 hours, because pod status keeps only the latest exit and every
   restart is after the start. Otherwise the earlier of the last container exit
-  and the earliest condition that is False.
+  and the earliest condition that is False. A pod with no False condition
+  whose only retained exit is more than 24 hours old has no open fault, so it
+  gets the last hour and the dialog says how old that exit is.
+- Job: the Job's own start when the run is failing (failed pods, or a Failed
+  or FailureTarget condition) and started within the last 24 hours; otherwise
+  the time of its Failed condition. A Job that is not failing gets the last
+  hour.
 - Deployment: the last rollout progress (`Progressing.lastUpdateTime`) when it
   came within an hour before the fault, otherwise the fault (Available=False,
   Progressing=False or ReplicaFailure=True). With no fault, a rollout in the
@@ -122,7 +128,9 @@ The Loki datasource is never queried by k9+.
 press `Enter`: the link opens without variables, because the variable names of
 an undeclared dashboard are unknown, and the dialog shows the YAML that
 declares it for that kind, with the path of the context configuration file.
-`y` copies the YAML. The proposed variable names are the usual ones
+The YAML has one key per row so a 60-column dialog shows all of it. `y` copies
+the YAML, and the result line then says the snippet, not the link, is on the
+clipboard. The proposed variable names are the usual ones
 (`namespace`, `pod`, `workload`, `node`); check them against the dashboard.
 Nothing is written for you.
 
@@ -219,8 +227,8 @@ Everything else is the existing declaration: `publicURL`, `datasource` and
   dashboard that accepts the Kubernetes name.
 - The workload a Pod belongs to is not filled on a `pod` or `workload`
   dashboard link built from a Pod; open the workload itself for that.
-- StatefulSet, DaemonSet, Job and CronJob status carries no fault time, so
-  their range is the last hour.
+- StatefulSet, DaemonSet, ReplicaSet and CronJob status carries no fault time,
+  so their range is the last hour.
 - The incident range is a starting point from one object's status. It is not a
   claim about when the fault began; `:timeline` is the view for that.
 - Organization selection (`orgId`) is not set; Grafana uses your current one.

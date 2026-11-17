@@ -114,7 +114,7 @@ func dashboardRows(g *observability.GrafanaSource, t *grafanaTarget, hits []obse
 	}
 	sort.SliceStable(found, func(i, j int) bool { return dashboardScore(found[i], words) > dashboardScore(found[j], words) })
 	for _, hit := range found {
-		rows = append(rows, dashboardRow{Origin: originSearch, For: "-", Title: hit.Title, UID: hit.UID, Folder: hit.FolderTitle,
+		rows = append(rows, dashboardRow{Origin: originSearch, For: "-", Title: hit.Title, UID: safeProviderText(observability.Clean(hit.UID, 64)), Folder: hit.FolderTitle,
 			Tags: hit.Tags, Link: searchLink(g, hit, t)})
 	}
 	return rows
