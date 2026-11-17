@@ -23,7 +23,7 @@ func TestSemanticPaletteContrastIncluding256ColorQuantization(t *testing.T) {
 		palette[i] = tcell.PaletteColor(i)
 	}
 	for _, fg := range []config.Color{p.Text, p.Muted, p.Focus, p.Healthy, p.Warning, p.Failure, p.Progress, p.Unknown, p.Category} {
-		for _, bg := range []config.Color{p.Canvas, p.Panel, p.Selected} {
+		for _, bg := range []config.Color{p.Canvas, p.Panel, p.Selected, p.Band} {
 			assert.GreaterOrEqual(t, config.ContrastRatio(fg.Color(), bg.Color()), 4.5, "%s on %s", fg, bg)
 			assert.GreaterOrEqual(t, config.ContrastRatio(tcell.FindColor(fg.Color(), palette), tcell.FindColor(bg.Color(), palette)), 4.5, "256-color %s on %s", fg, bg)
 		}
@@ -78,6 +78,33 @@ func TestSemanticSkinsFallbackAndRuntimeReset(t *testing.T) {
 	assert.Equal(t, s.Body().BgColor, p.Canvas)
 	assert.Equal(t, s.K9s.Views.Yaml.KeyColor, p.Category)
 	assert.Equal(t, config.DefaultSemanticPalette(), (*config.Styles)(nil).Semantic())
+}
+
+// The band behind an episode has no legacy field. The stock surfaces get the
+// stock band, a skin that names one keeps it, and any other skin gets its own
+// panel, so a band is never a stock colour on a canvas it was not made for.
+func TestSemanticBandFollowsTheSkin(t *testing.T) {
+	s := config.NewStyles()
+	d := config.DefaultSemanticPalette()
+	assert.Equal(t, d.Band, s.Semantic().Band)
+	assert.NotEqual(t, s.Semantic().Selected, s.Semantic().Band, "a band is not a selection")
+	assert.NotEqual(t, s.Semantic().Canvas, s.Semantic().Band)
+
+	require.NoError(t, s.Load("../../skins/monochrome.yaml", false))
+	assert.Equal(t, config.Color("#1a1a1a"), s.Semantic().Band)
+	require.NoError(t, s.Load("../../skins/high-contrast.yaml", false))
+	assert.Equal(t, config.Color("#161616"), s.Semantic().Band)
+
+	require.NoError(t, s.Load("../../skins/black-and-wtf.yaml", false))
+	p := s.Semantic()
+	assert.Equal(t, p.Panel, p.Band, "a skin without the token shades with its own panel")
+
+	s.Reset(false)
+	assert.Equal(t, d.Band, s.Semantic().Band)
+	s.K9s.Semantic.Band = "#102030"
+	before := s.Semantic().Band
+	s.K9s.Semantic.Invert()
+	assert.NotEqual(t, before, s.Semantic().Band, "the light theme switch reaches the band")
 }
 
 func TestLegacyLowContrastFocusPairsAreRepaired(t *testing.T) {

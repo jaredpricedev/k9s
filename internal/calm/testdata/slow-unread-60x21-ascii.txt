@@ -1,0 +1,19 @@
+Slow requests  Service gitlab-we... | last 1h  14:57 | 33/35
+
+  No stall in the last 1h in what was read.
+  2 of 35 queries were not answered; nothing is known about
+  those.               Nothing found is not proof of health.
+
+  QUIET
+  ingress  clients gave up (499)  0%    ....................
+  pods hx4mt, 2bq7k, 8wzpd  respons...  ....................
+
+  NOT READ
+  postgresql  no latency metric found   xxxxxxxxxxxxxxxxxxxx
+  dns  query timed out after 10s        xxxxxxxxxxxxxxxxxxxx
+                                        +---------+--------+
+  UTC                                 14:00     14:30
+
+  next  B probe the pods now  m compare the pods
+
+  Up/Down row | Left/Right time | 1-4 window | Esc back

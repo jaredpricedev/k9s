@@ -1,0 +1,18 @@
+Slow requests  Service gitlab-webservice-default · last 1h                                           read 14:57 · 33 of 35 queries
+
+  No stall in the last 1h in what was read. 2 of 35 queries were not answered; nothing is known about those.
+  Nothing found is not proof of health.
+
+  QUIET
+  ingress                   clients gave up (499)  0%  ···········································································
+  pods hx4mt, 2bq7k, 8wzpd  response time p99  0.35s   ···········································································
+
+  NOT READ
+  postgresql                no latency metric found    ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+  dns                       query timed out after 10s  ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+                                                       ┬───────────┬────────────┬───────────┬────────────┬───────────┬───────────┬
+  UTC                                                14:00       14:10        14:20       14:30        14:40       14:50       15:00
+
+  next  B probe the pods now    m compare the pods    Enter open hx4mt    D open in Grafana
+
+  ↑↓ row · ←→ time · 1-4 window · a show every signal · s queries · Esc back

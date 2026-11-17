@@ -23,7 +23,8 @@
             "progress": {"type": "string"},
             "unknown": {"type": "string"},
             "category": {"type": "string"},
-            "selected": {"type": "string"}
+            "selected": {"type": "string"},
+            "band": {"type": "string"}
           }
         },
         "body": {

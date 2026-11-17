@@ -1,0 +1,21 @@
+Slow requests  Service gitlab-webservice-default · last 1h         14:57 · 35/35
+  3 stalls: clients gave up waiting at 14:08, 14:27 and 14:53, for 2 to 4
+  minutes each.
+  Each time, pod hx4mt was CPU-throttled and had no free threads. Nothing else
+  lines up.                                 Overlap in time, not proof of cause.
+
+                                                  stalls    ▼▼     ▼▼        ▼▼
+  LINES UP WITH THE STALLS
+  ingress    clients gave up (499)  6.3%   of requests   ▁▁▁██▁▁▁▁▁██▁▁▁▁▁▁▁▁██▁
+> pod hx4mt  response time p99      47.9s  peers 0.35s   ▁▁▁██▁▁▁▁▁██▁▁▁▁▁▁▁▁██▁
+             CPU throttled          88%    peers 1%      ▁▁▁██▁▁▁▁▁██▁▁▁▁▁▁▁▁██▁
+             free threads           0      of 4          ▁▁▁██▁▁▁▁▁██▁▁▁▁▁▁▁▁██▁
+             not ready              twice  up to 3m      ▁▁▁██▁▁▁▁▁██▁▁▁▁▁▁▁▁▁▁▁
+  DIFFERS, BUT NOT DURING A STALL
+  network    packets dropped        0.4/s  to pod 2bq7k  ▁▁▁▁▁▁▁█▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+                                                         ┬──━━─────━┯────────━━┬
+  UTC                                                  14:00      14:30
+  QUIET  pods 2bq7k, 8wzpd · postgresql · redis · gitaly · dns
+
+  next  B probe the pods now  m compare the pods  Enter open hx4mt
+  ↑↓ row · ←→ time · 1-4 window · a show every signal · s queries · Esc back

@@ -26,6 +26,11 @@ type SemanticPalette struct {
 	Unknown  Color `json:"unknown,omitempty" yaml:"unknown,omitempty"`
 	Category Color `json:"category,omitempty" yaml:"category,omitempty"`
 	Selected Color `json:"selected,omitempty" yaml:"selected,omitempty"`
+	// Band is the surface behind the columns of an episode (a stall, a
+	// rollout, a fault window) in the incident views. It is quieter than
+	// Selected, and is never the only sign of an episode: a marker row and
+	// the time axis carry it too.
+	Band Color `json:"band,omitempty" yaml:"band,omitempty"`
 }
 
 // DefaultSemanticPalette is the stock presentation, also usable before an App
@@ -36,6 +41,7 @@ func DefaultSemanticPalette() SemanticPalette {
 		Muted: "#a5b0aa", Focus: "#79c7d4", Healthy: "#8fce88",
 		Warning: "#e7bd73", Failure: "#ef8278", Progress: "#91b8ec",
 		Unknown: "#a5b0aa", Category: "#b6a3df", Selected: "#1c292f",
+		Band: "#16202a",
 	}
 }
 
@@ -68,13 +74,22 @@ func (s *Styles) Semantic() SemanticPalette {
 	p.Unknown = resolve(p.Unknown, p.Muted, d.Unknown)
 	p.Category = resolve(p.Category, s.K9s.Views.Yaml.KeyColor, d.Category)
 	p.Selected = resolve(p.Selected, s.Table().CursorBgColor, d.Selected)
+	if p.Band == "" {
+		// No legacy field means a band. On the stock surfaces it is the
+		// stock band; on any other canvas it is that skin's panel, the one
+		// surface a legacy skin already pairs with its text.
+		p.Band = p.Panel
+		if p.Canvas == d.Canvas && p.Panel == d.Panel {
+			p.Band = d.Band
+		}
+	}
 	return p
 }
 
 // Invert keeps semantic overrides in step with the legacy light theme switch.
 func (p *SemanticPalette) Invert() {
 	for _, color := range []*Color{&p.Canvas, &p.Panel, &p.Text, &p.Muted, &p.Focus,
-		&p.Healthy, &p.Warning, &p.Failure, &p.Progress, &p.Unknown, &p.Category, &p.Selected} {
+		&p.Healthy, &p.Warning, &p.Failure, &p.Progress, &p.Unknown, &p.Category, &p.Selected, &p.Band} {
 		*color = color.InvertColor()
 	}
 }

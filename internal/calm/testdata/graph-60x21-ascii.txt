@@ -1,0 +1,21 @@
+Graph  Pod checkout-api-7d9f8c6... | last 15m  15:00 | 10/10
+  Memory reached its 256Mi limit 6 times.
+  The container restarted after each.
+  Order in time, not proof of cause.
+
+  MEMORY  254Mi now  at limit   - limit 256Mi   . request 12
+     288Mi +       -----*----**----*----**---**----**
+     144Mi +        **** ********** ********** **** *
+     128Mi +       ..................................
+         0 +        |
+                    |
+  ALSO              |
+  restarts  xxxxxxxxx....^....^.....^....^.....^....^  6
+  CPU       xxxxxxxx:::::::::::::::::::::::::::::::::  340m
+  network   xxxxxxxx:::::::::::::::::::::::::::::::::  9kB/s
+            +-------R----+-------------+------------+
+  UTC     14:45        14:50         14:55        15:00
+  R rollout to rev 2 at 14:48 | memory limit changed 512M...
+
+  next  n next chart (CPU)  a all charts  t what changed
+  Left/Right time | 1 15m  2 1h  3 6h  4 24h | Esc back

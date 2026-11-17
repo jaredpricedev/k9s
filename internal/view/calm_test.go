@@ -1,0 +1,122 @@
+// SPDX-License-Identifier: Apache-2.0
+// Modified for k9+; see NOTICE.
+
+package view
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/derailed/k9s/internal/calm"
+	"github.com/derailed/k9s/internal/chart"
+	"github.com/derailed/k9s/internal/config"
+	"github.com/derailed/k9s/internal/slowpath"
+	"github.com/derailed/k9s/internal/slowpath/slowtest"
+	"github.com/derailed/k9s/internal/ui"
+	"github.com/derailed/tcell/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// The two keys of the calm layout are free in every incident view, or
+// already mean what the layout says. A view that takes one of them for
+// something else fails here.
+func TestCalmKeysAreFreeOrMeanTheSameInEveryIncidentView(t *testing.T) {
+	slow := slowViewFixture(t)
+	slow.accept(slowStoryRead(&slowtest.Story{}, time.Hour))
+	probeV, _ := probeViewFixture(t)
+	probeV.acceptPlan(probeTestPlan(), nil)
+	graph, _, _, _ := compareViewFixture(t, hangTarget)
+	dash := dashViewFixture(t, dashSpec{Board: true})
+	impactV := impactViewFixture(t)
+	views := map[string]*ui.KeyActions{"slow": slow.actions, "probe": probeV.actions, "graph": graph.actions, "dash": dash.actions, "impact": impactV.actions}
+
+	require.Equal(t, ui.KeyA, calmDetailKey)
+	require.Equal(t, ui.KeyN, calmNextChartKey)
+	require.Equal(t, tcell.KeyTab, calmNextChartAltKey)
+	require.Equal(t, calm.DetailKey, string(rune(calmDetailKey)), "the key the kit names on the page is the key the views bind")
+	require.Equal(t, calm.NextChartKey, string(rune(calmNextChartKey)))
+	require.Equal(t, calm.NextChartAltKey, tcell.KeyNames[calmNextChartAltKey])
+
+	for name, actions := range views {
+		// a: all detail, or nothing yet.
+		if got := walkKey(actions, calmDetailKey); got != "" {
+			assert.Equal(t, calmDetailLabel, got, "%s: a", name)
+		}
+		// Tab: the next chart or panel, or nothing yet.
+		if got := walkKey(actions, calmNextChartAltKey); got != "" {
+			assert.Contains(t, []string{calmNextChartLabel, "Next panel"}, got, "%s: Tab", name)
+		}
+	}
+	// n: the next of what the view steps through. That is the chart where
+	// a view steps through nothing else, and stays the episode in :slow
+	// and the rollout in :impact.
+	for name, want := range map[string][]string{
+		"graph":  {calmNextChartLabel, "Next signal"},
+		"dash":   {calmNextChartLabel, ""},
+		"probe":  {""},
+		"slow":   {"Cursor to next episode"},
+		"impact": {"Next (later) rollout"},
+	} {
+		assert.Contains(t, want, walkKey(views[name], calmNextChartKey), "%s: n", name)
+	}
+}
+
+func TestCalmPaletteIsTheSemanticPalette(t *testing.T) {
+	stock := calmPalette(config.DefaultSemanticPalette())
+	assert.Equal(t, calm.Palette{Text: "#e1e7e3", Muted: "#a5b0aa", Accent: "#79c7d4", Warn: "#e7bd73",
+		Fail: "#ef8278", Info: "#91b8ec", Mark: "#b6a3df", Band: "#16202a"}, stock)
+
+	// A colour the terminal owns adds no tag, and without a band colour
+	// the marker row and the axis carry the bands alone.
+	owned := config.DefaultSemanticPalette()
+	owned.Text, owned.Band = config.DefaultColor, config.DefaultColor
+	palette := calmPalette(owned)
+	assert.Empty(t, palette.Text)
+	assert.Empty(t, palette.Band)
+
+	// The monochrome skin is one foreground; the band is still a surface.
+	styles := config.NewStyles()
+	require.NoError(t, styles.Load("../../skins/monochrome.yaml", false))
+	mono := calmPalette(styles.Semantic())
+	assert.Equal(t, mono.Text, mono.Fail)
+	assert.Equal(t, mono.Text, mono.Warn)
+	assert.Equal(t, "#1a1a1a", mono.Band)
+}
+
+// A strip puts a sample where the request-path views say its rule held:
+// over the step that ends at it. So what slowpath.Crossings calls an
+// episode and what a strip draws over its rule are the same columns, at
+// any width.
+func TestCalmStripsLineUpWithTheEpisodesOfSlowpath(t *testing.T) {
+	start := time.Date(2026, 11, 17, 14, 0, 0, 0, time.UTC)
+	step := time.Minute
+	var points []chart.Point
+	for minute := 1; minute <= 60; minute++ {
+		v := 0.3
+		if minute >= 9 && minute <= 11 || minute >= 28 && minute <= 31 || minute == 54 {
+			v = 40
+		}
+		points = append(points, chart.Point{T: start.Add(time.Duration(minute) * step), V: v})
+	}
+	rule := slowpath.Rule{Worse: slowpath.WorseHigh, Always: 1}
+	episodes := slowpath.Crossings(points, rule, step, slowpath.Lookback{})
+	require.Equal(t, []chart.Interval{
+		{Start: start.Add(8 * step), End: start.Add(11 * step)},
+		{Start: start.Add(27 * step), End: start.Add(31 * step)},
+		{Start: start.Add(53 * step), End: start.Add(54 * step)},
+	}, episodes, "a raised sample stands for the step that ends at it")
+
+	bands := calm.Bands{Label: "stalls", Episodes: episodes}
+	strip := calm.Levels(points, func(v float64) bool { return rule.Crosses(v, 0.3) })
+	for _, width := range []int{12, 24, 60, 73, 120, 200} {
+		frame := chart.Frame{Start: start, End: start.Add(time.Hour), Step: step, Width: width}
+		line := []rune(calm.StripLine(strip, "", bands, frame, calm.Options{}))
+		line = []rune(strings.NewReplacer("[-:-:d]", "", "[-:-:-]", "").Replace(string(line)))
+		require.Len(t, line, width)
+		for col, in := range bands.Columns(frame) {
+			assert.Equal(t, in, line[col] != '▁', "width %d, column %d: %q", width, col, string(line))
+		}
+	}
+}

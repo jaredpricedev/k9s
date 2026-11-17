@@ -12,6 +12,8 @@ Help is one scrollable key/action list at every width, grouped into resource key
 
 Forms keep the native tview Form fields, callbacks, focus and keyboard behavior. Labels stack below 80 columns. The focused field scrolls into view and Cancel/Save remain visible. PgUp/PgDn expose long guidance or validation details. Operational errors show the literal cause and recovery instruction without cow art. Callers can supply an explicit recovery action; failed command dialogs restore the exact command for editing and never retry automatically.
 
+The incident views (`:slow`, `:graph`, `:probe`, `:impact`, a drawn dashboard, `:query`) follow the calm layout, whose order of what a smaller screen gives up is one for all of them and is stated in [presentation.md](presentation.md#what-a-smaller-screen-gives-up).
+
 ## Verification
 
 Native tcell frame/state checks exercise 120×34, 80×24, 60×24, 40×16 forms and 40×12 investigation content, plus one size below the minimum. Checks cover long/CJK/combining values, monochrome/no-icons meaning, available and unavailable actions, stable coverage selection, editable command recovery, retained investigation query/scroll/evidence, provider status/date budgets, and staged A/B semantics. Existing safe collection/stream/export tests remain in the combined suite.

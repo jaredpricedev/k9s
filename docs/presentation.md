@@ -73,22 +73,118 @@ A Service, an Ingress or a workload that reports no problem keeps a plain border
 | `Shift-B` | `:probe`; opening it sends nothing | rows, `:slow`, `:graph` |
 | `1` to `4` | Window 15m, 1h, 6h, 24h (`:impact`: `1` to `5`, the width compared on each side of a rollout) | `:graph`, `:slow`, dashboards, `:query`, `:timeline` |
 | `Left` / `Right`, with `Shift` ten steps, `Home` / `End` | The time cursor | `:graph`, `:slow`, a zoomed panel |
-| `n` / `Shift-N` | Next / previous of what the view steps through: episodes, signals, rollouts | `:slow`, `:graph`, `:impact` |
+| `n` / `Shift-N` | Next / previous of what the view steps through: episodes in `:slow`, rollouts in `:impact`, signals in `:graph`. Where a view steps through nothing else, that is its chart: the next strip becomes the main chart | `:slow`, `:graph`, `:impact`; free for the next chart in a dashboard and `:query` |
+| `Tab` / `Shift-Tab` | Next / previous main chart or panel. It is the next-chart key that is free in every one of these views, and the only one in `:slow` and `:impact`, where `n` steps through episodes and rollouts | a dashboard (next panel) today; bound to nothing else in `:slow`, `:probe`, `:graph`, `:impact` |
+| `a` | All detail: every signal and the detail table the view had before the calm layout. One press shows it, the next returns to the calm layout, which is the default | every view laid out the calm way (see below); bound to nothing else in `:slow`, `:probe`, `:graph`, `:impact`, a dashboard |
 | `r` | Read again. In `:probe` it is the one read there is: it sends the requests, after a confirmation | every one of them |
 | `s` | The queries or sources behind the page | `:graph`, `:slow`, dashboards, `:query`, `:timeline` |
 | `p` | One chart per Pod | `:graph` only |
 | `b` | Chart style: filled areas and solid lines (the default), or braille dots, which are finer and harder to read. One press switches, the next returns; the choice holds for the session in every view named here | `:graph` (overlaid, per Pod and regrouped), `:slow`, dashboards, `:query` |
 | `+` / `_` | More / fewer requests per Pod | `:probe` only; the digits stay windows |
 
-`TestHangViewsShareOneKeyboard` holds the views to this table. The palette and `?` list each command once under Inspect and name the key that opens it on the same entry (`Slow requests: which hop (Shift-W)`).
+`TestHangViewsShareOneKeyboard` holds the views to this table, and `TestCalmKeysAreFreeOrMeanTheSameInEveryIncidentView` keeps `a`, `n` and `Tab` from being taken for anything else. The palette and `?` list each command once under Inspect and name the key that opens it on the same entry (`Slow requests: which hop (Shift-W)`).
+
+## Calm layout: the standard for incident views
+
+The incident views (`:slow`, `:graph` and its per-Pod page, `:probe`, `:impact`, a drawn dashboard, `:query`) answer one question each, and a page of theirs is laid out so that the answer and what it rests on can be told apart at a glance. Eight rules are the standard for every one of them. They are implemented once, in `internal/calm`, and a view that follows the standard builds its page from that kit instead of writing lines of its own. A view that has not been moved to it yet shows the page it had, and binds neither `a` nor the next-chart key.
+
+1. **The answer comes first.** One or two plain sentences at the top say what was found; the first is bold. The evidential caveat (`Overlap in time, not proof of cause.`) is dim, at the right of the last line when it fits and on a line of its own when not. Everything below is evidence. The sentences state only what the data supports. When nothing was found they say how much was read, and when a source was not read they say exactly that: `calm.Nothing` and `calm.Unread` are the two forms.
+2. **A thing and its timeline are one row.** Subject, what is measured, the one number that matters and its time strip are one line on a shared time axis. There is no table to match up by eye with a separate "when it happened" block.
+3. **Episodes are bands.** A stall, a rollout or a fault window is a shaded band of columns running down through every row, and is marked on a marker row above the block (`▼`, `v` with `noIcons`) and drawn heavy on the axis below it (`━`, `=`). Colour is never the only signal: without a band colour the marker row and the axis carry the bands alone.
+4. **One colour per subject.** The outlier Pod is one colour everywhere on the screen: its name, its number and what is over its rule in its strip. Quiet things are dim. Colours come from the semantic palette only, one token per role (see the table below).
+5. **Rows are grouped by meaning.** A short label in capitals, a blank row before it: `LINES UP WITH THE STALLS`, `DIFFERS, BUT NOT DURING A STALL`, `QUIET`, `NOT READ`. A quiet thing is one dim line. Whitespace separates; there are no borders or boxes.
+6. **One main chart.** A page has at most one chart at full size. Everything else is a one-row strip on the same axis, and one key makes the next strip the main chart.
+7. **Two lines of keys at most.** A `next` line names the three or four likely actions in words; one dim line names the rest, ending with the way out. The key hints the application draws at the top of the screen are not touched.
+8. **Nothing is lost.** `a` shows all the detail the view had before: every signal, the detail table. `s` still shows the queries, the rules and the sample counts. The calm layout is the default.
+
+An annotated page, as `:slow` reads at 104 columns (the reference page `calmtest.Slow`, invented data):
+
+```text
+Slow requests  Service gitlab-webservice-default · last 1h               read 14:57 · 35 of 35 queries   title: view, object, window; how much was read
+  3 stalls: clients gave up waiting at 14:08, 14:27 and 14:53, for 2 to 4 minutes each.                 1  the answer, bold
+  Each time, pod hx4mt was CPU-throttled and had no free threads. Nothing else lines up.                1  plain
+  Overlap in time, not proof of cause.                                                                  1  the caveat, dim
+
+                                                  stalls       ▼▼▼           ▼▼▼▼               ▼▼▼     3  marker row: the bands without colour
+
+  LINES UP WITH THE STALLS                                                                              5  a group: what the verdict rests on
+  ingress    clients gave up (499)  6.3%   of requests   ▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁  2  subject, what, number, comparison, strip
+
+> pod hx4mt  response time p99      47.9s  peers 0.35s   ▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁  4  one colour for hx4mt; > is the selected row
+             CPU throttled          88%    peers 1%      ▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁     the subject is written once per run of rows
+             free threads           0      of 4          ▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁
+             not ready              twice  up to 3m      ▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+
+  DIFFERS, BUT NOT DURING A STALL                                                                       5  a secondary group: folds to one line first
+  network    packets dropped        0.4/s  to pod 2bq7k  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁█▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁     its own colour: it is not the outlier
+
+  QUIET                                                                                                 5  read, and nothing to show: one dim line each
+  pods 2bq7k, 8wzpd            response time p99  0.35s  ·············································
+  postgresql · redis · gitaly  latency, errors  normal   ·············································
+  dns                          lookup time p99  6ms      ·············································
+                                                         ┬─────━━━──┬────────━━┯━─────────┬─────━━━──┬  3  the shared axis: heavy under a band
+  UTC                                                  14:00      14:15      14:30      14:45      15:00
+
+  next  B probe the pods now    m compare the pods    Enter open hx4mt    D open in Grafana             7  the likely actions, in words
+  ↑↓ row · ←→ time · 1-4 window · a show every signal · s queries · Esc back                            7, 8  the rest, dim; a is all detail
+```
+
+The band is the background of the columns under each `▼`, from the marker row down to the row above the axis: the three blocks of every row above stand inside it. `internal/calm/testdata` holds this page, the Pod graph and the Pod comparison as pinned text in the areas a view is given in terminals of 132×36, 80×24 and 60×24.
+
+### What a strip draws
+
+Each glyph means one thing on every page:
+
+| Glyph | `noIcons` | Meaning |
+| --- | --- | --- |
+| `▁` | `_` | sampled, and not over its rule: the quiet baseline |
+| `▂` to `█` | `.:-=+*#` | over its rule; the height is the value, never lower than one step above the baseline, so it reads without colour |
+| `▲` | `^` | an event, such as a restart |
+| `·` | `.` | read, and nothing happened: event strips and quiet lines |
+| `×` | `x` | no sample. Missing data is never drawn as quiet |
+| `▼` | `v` | an episode, on the marker row |
+| `┊` | `\|` | a labelled moment, such as a rollout; its key is on the axis and one line under it says what it was |
+| `┆` and `^` | `:` and `^` | the cursor, through the rows and on the axis |
+
+A sample stands for the step that ends at it, as the request-path rules state when a rule held (`slowpath.Crossings`). Strips, bands and the main chart are all drawn that way, so a strip that is over its rule during an episode stands inside the band, at any width. The clock labels are UTC and say so once.
+
+### What a smaller screen gives up
+
+Every calm page gives up room in the same order, and only as far as the screen needs. `calm.Lay` decides it and reports what it gave up; whatever is no longer on the screen at all is named in one line that starts with the key that shows it (`not shown at this size (a shows all): …`).
+
+1. The strips shorten. When they would fall under 20 columns the text beside them gives way: the text of the quiet lines is shortened, then the comparison beside the number (`peers 0.35s`) is left out, then what is measured is shortened and marked with `…`. The strips then narrow to 12 columns.
+2. The blank rows around the verdict and the keys go.
+3. The quiet and the not-read groups fold to one line each (`QUIET  pods 2bq7k, 8wzpd · dns`), under the axis.
+4. The blank rows between subjects and before groups go; then the secondary groups fold to one line each; then the second key line goes.
+5. The last blank rows go; then the last rows of the primary groups are left out and counted.
+6. The folded lines of the quiet and secondary groups are left out. The line of a not-read group never is.
+7. Below 12 columns of strip the strips are left out and the rows are written as text.
+8. The primary groups are left out from the last: a page with a main chart ends as the chart alone on its axis, a page of rows as its first group. The `next` line is the last thing to go. A screen with no room even for that shows the title, as much of the verdict as fits, and the key for all detail.
+
+A view is given 80×21 in an 80×24 terminal: the application keeps two rows at the top and one at the bottom. There the three reference pages keep every row and every strip. `:slow` folds `QUIET` to one line and gives up its blank rows; the Pod graph keeps its chart at five rows over its three strips; the Pod comparison gives up its blank rows and its second key line. At 60 columns `:slow` leaves the comparison column out and shortens what is measured, with strips of 20 columns, and the Pod comparison leaves the last peer row of two signals out and says so. Under 41 columns `:slow` has no room for strips: its rows are written as text, and the page says that the time strips are not shown.
+
+### Colours
+
+| Role | Semantic token | Used for |
+| --- | --- | --- |
+| text | `text` | names and values; the verdict |
+| muted, dim | `muted` | labels and quiet rows; dim is the same token with the dim attribute: the caveat, the baseline, the second key line |
+| accent | `focus` | the view name, a neutral group label, the selection marker |
+| warn | `warning` | the episode markers and the axis under them, the word `next`, what lines up, a read that is not complete |
+| fail | `failure` | the subject that stands out: the outlier Pod |
+| info | `progress` | a subject that differs without lining up |
+| mark | `category` | a labelled moment: the guide, its key, its legend |
+| band | `band` | the background of the columns of an episode |
+
+For a view: build a `calm.Page`, plan it with `calm.Lay(&page, width, height, calmOptions(app))` and draw `calm.Render(&page, &plan, opts).Lines()`. `internal/calm/calmtest` has the three reference pages to model one on. Text handed to the kit is plain; the kit escapes it and writes the tags, each naming foreground, background and attributes, because tview reads a tag as a whole. A layout change adds no request: the kit only draws what a view has already read.
 
 ## Semantic skin tokens
 
-Existing skins remain supported. An optional `k9s.semantic` object can override `canvas`, `panel`, `text`, `muted`, `focus`, `healthy`, `warning`, `failure`, `progress`, `unknown`, `category`, and `selected`. These tokens also feed inherited prompts, dialogs, help, tables and charts. Runtime updates keep selection and stream state.
+Existing skins remain supported. An optional `k9s.semantic` object can override `canvas`, `panel`, `text`, `muted`, `focus`, `healthy`, `warning`, `failure`, `progress`, `unknown`, `category`, `selected`, and `band`. These tokens also feed inherited prompts, dialogs, help, tables and charts. Runtime updates keep selection and stream state.
 
 Open native dialogs update their bodies, fields, choices and focused buttons without resetting edits. Dismissal, replacement and view teardown release their listeners. The pinned terminal widget keeps native form border titles aqua; list dialog titles follow the skin.
 
-Omitted tokens fall back to existing fields: canvas/text use body colors, panel uses dialog background, muted/unknown use completed status, focus uses focused border, healthy/warning/failure/progress use modify/pending/error/add status colors, category uses YAML key color, and selected uses the table cursor background. Explicit terminal-default colors remain owned by the terminal. On custom RGB surfaces, insufficiently contrasting foregrounds are adjusted toward black or white while retaining hue where possible.
+Omitted tokens fall back to existing fields: canvas/text use body colors, panel uses dialog background, muted/unknown use completed status, focus uses focused border, healthy/warning/failure/progress use modify/pending/error/add status colors, category uses YAML key color, and selected uses the table cursor background. `band`, the surface behind the columns of an episode in the incident views, has no existing field: on the stock canvas and panel it is the stock band (`#16202a`), and a skin that changes either gets its own panel colour instead, so a band is never a stock colour on a canvas it was not made for. Explicit terminal-default colors remain owned by the terminal. On custom RGB surfaces, insufficiently contrasting foregrounds are adjusted toward black or white while retaining hue where possible.
 
 The bundled `high-contrast` and `monochrome` skins provide additional presentations. Enable `k9s.ui.noIcons` for text-only identity and ASCII selection/mark/sort/change indicators. All presentations keep explicit status labels and action access.
 
