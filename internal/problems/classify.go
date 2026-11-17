@@ -5,9 +5,11 @@ package problems
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
+	"github.com/derailed/k9s/internal/model1"
 	"github.com/derailed/k9s/internal/render"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -139,112 +141,144 @@ func podCondition(st *v1.PodStatus, kind v1.PodConditionType) *v1.PodCondition {
 	return nil
 }
 
-func classifyDeployment(u *unstructured.Unstructured, f *finding) {
-	if c := condition(u, "Progressing", "False"); c != nil {
-		f.add(Failing, conditionPhrase(c, "Progressing=False"), transition(c))
+// The cause phrases below are the ones each kind's list shows in its WHY
+// column (render.StatusWhy), so a resource reads the same in both places.
+// What this list adds is what it lacks columns for: the count or state that
+// leads the cause, how bad it ranks, and since when.
+
+var restatedCount = regexp.MustCompile(`^\d+ of \d+ (unavailable|not ready)$`)
+
+// why appends the kind's WHY phrase. A phrase that only restates the count
+// already leading the cause is dropped. It reports false when the status
+// could not be decoded.
+func (f *finding) why(kind string, u *unstructured.Unstructured, fallback string, since time.Time) bool {
+	phrase, level, ok := render.StatusWhy(kind, u)
+	if !ok {
+		f.add(Degraded, "status could not be decoded", time.Time{})
+		f.weak = true
+		return false
 	}
-	if c := condition(u, "ReplicaFailure", "True"); c != nil {
-		f.add(Failing, conditionPhrase(c, "ReplicaFailure"), transition(c))
+	severity := Progressing
+	switch level {
+	case model1.LevelNone:
+		return true
+	case model1.LevelFailing:
+		severity = Failing
+	case model1.LevelDegraded:
+		severity = Degraded
 	}
-	desired := number(u, 1, "spec", "replicas")
-	available := number(u, 0, "status", "availableReplicas")
-	if available < desired {
-		severity := Degraded
-		if available == 0 {
-			severity = Failing
-		}
-		f.add(severity, fmt.Sprintf("%d of %d available", available, desired), transition(condition(u, "Available", "False")))
+	if phrase == "" {
+		phrase = fallback
+	}
+	if phrase == "" || (f.found && restatedCount.MatchString(phrase)) {
+		return true
+	}
+	if severity != Failing {
+		since = time.Time{}
+	}
+	f.add(severity, phrase, since)
+	return true
+}
+
+// short leads the cause with a count the row has no column for; none ready
+// ranks as failing.
+func (f *finding) short(have, want int64, word string, since time.Time) {
+	if have >= want {
 		return
 	}
-	paused, _, _ := unstructured.NestedBool(u.Object, "spec", "paused")
-	if updated := number(u, 0, "status", "updatedReplicas"); !paused && (updated < desired || unobserved(u)) {
-		f.add(Progressing, fmt.Sprintf("rollout: %d of %d updated", updated, desired), time.Time{})
+	severity := Degraded
+	if have == 0 {
+		severity = Failing
 	}
+	f.add(severity, fmt.Sprintf("%d of %d %s", have, want, word), since)
+}
+
+func classifyDeployment(u *unstructured.Unstructured, f *finding) {
+	f.short(number(u, 0, "status", "availableReplicas"), number(u, 1, "spec", "replicas"), "available",
+		transition(condition(u, "Available", "False")))
+	stalled := condition(u, "ReplicaFailure", "True")
+	if stalled == nil {
+		stalled = condition(u, "Progressing", "False")
+	}
+	f.why("Deployment", u, "Progressing=False", transition(stalled))
 }
 
 func classifyStatefulSet(u *unstructured.Unstructured, f *finding) {
-	desired := number(u, 1, "spec", "replicas")
-	ready := number(u, 0, "status", "readyReplicas")
-	if ready < desired {
-		severity := Degraded
-		if ready == 0 {
-			severity = Failing
-		}
-		f.add(severity, fmt.Sprintf("%d of %d ready", ready, desired), time.Time{})
-		return
-	}
-	current, _, _ := unstructured.NestedString(u.Object, "status", "currentRevision")
-	update, _, _ := unstructured.NestedString(u.Object, "status", "updateRevision")
-	if updated := number(u, 0, "status", "updatedReplicas"); (update != "" && current != update && updated < desired) || unobserved(u) {
-		f.add(Progressing, fmt.Sprintf("rollout: %d of %d updated", updated, desired), time.Time{})
-	}
+	f.short(number(u, 0, "status", "readyReplicas"), number(u, 1, "spec", "replicas"), "ready", time.Time{})
+	f.why("StatefulSet", u, "", time.Time{})
 }
 
 func classifyDaemonSet(u *unstructured.Unstructured, f *finding) {
-	desired := number(u, 0, "status", "desiredNumberScheduled")
-	ready := number(u, 0, "status", "numberReady")
-	if ready < desired {
-		severity := Degraded
-		if ready == 0 {
-			severity = Failing
-		}
-		f.add(severity, fmt.Sprintf("%d of %d ready", ready, desired), time.Time{})
-	}
-	if stray := number(u, 0, "status", "numberMisscheduled"); stray > 0 {
-		f.add(Degraded, fmt.Sprintf("%d misscheduled", stray), time.Time{})
-	}
-	if updated := number(u, 0, "status", "updatedNumberScheduled"); !f.found && (updated < desired || unobserved(u)) {
-		f.add(Progressing, fmt.Sprintf("rollout: %d of %d updated", updated, desired), time.Time{})
-	}
+	f.short(number(u, 0, "status", "numberReady"), number(u, 0, "status", "desiredNumberScheduled"), "ready", time.Time{})
+	f.why("DaemonSet", u, "", time.Time{})
 }
 
 func classifyJob(u *unstructured.Unstructured, f *finding) {
-	for _, kind := range []string{"Failed", "FailureTarget"} {
-		if c := condition(u, kind, "True"); c != nil {
-			f.add(Failing, conditionPhrase(c, "Failed"), transition(c))
-			return
-		}
+	failed := condition(u, "Failed", "True")
+	if failed == nil {
+		failed = condition(u, "FailureTarget", "True")
 	}
-	if failed := number(u, 0, "status", "failed"); failed > 0 && condition(u, "Complete", "True") == nil {
-		f.add(Degraded, plural(int(failed), "failed pod")+"; not marked Failed", time.Time{})
-	}
+	f.why("Job", u, "Failed", transition(failed))
 }
 
 func classifyClaim(u *unstructured.Unstructured, f *finding) {
 	phase, _, _ := unstructured.NestedString(u.Object, "status", "phase")
-	switch phase {
-	case "Lost":
-		f.add(Failing, "Lost", time.Time{})
+	phrase, level, ok := render.StatusWhy("PersistentVolumeClaim", u)
+	switch {
+	case !ok:
+		f.why("PersistentVolumeClaim", u, "", time.Time{})
+	case phase == "Lost":
+		f.add(Failing, phrase, time.Time{})
 		f.weak = true
-	case "Pending":
+	case phase == "Pending" && phrase != "":
 		// Pending is a claim's first phase and is never re-entered, so creation
-		// time is when this state began.
-		f.add(Degraded, "Pending", u.GetCreationTimestamp().Time)
+		// time is when this state began. The phrase says what is missing, not
+		// why, so a Warning event may still be quoted beside it.
+		f.add(Degraded, phrase, u.GetCreationTimestamp().Time)
 		f.weak = true
-	}
-	for _, kind := range []string{"Resizing", "FileSystemResizePending"} {
-		if c := condition(u, kind, "True"); c != nil {
-			f.add(Progressing, conditionPhrase(c, kind), transition(c))
+	case phrase != "":
+		// A condition on a bound claim (a resize under way or refused).
+		severity := Progressing
+		if level >= model1.LevelDegraded {
+			severity = Degraded
 		}
+		f.add(severity, phrase, time.Time{})
 	}
 }
 
 func classifyNode(u *unstructured.Unstructured, f *finding) {
+	// The state word stands in for the STATUS column this list does not have.
 	ready := condition(u, "Ready", "")
 	switch status, _ := ready["status"].(string); {
 	case ready == nil:
 		f.add(Degraded, "no Ready condition reported", time.Time{})
 		f.weak = true
 	case status == "False":
-		f.add(Failing, "NotReady · "+conditionPhrase(ready, "Ready=False"), transition(ready))
+		f.add(Failing, "NotReady", transition(ready))
 	case status != "True":
-		f.add(Failing, "Ready unknown · "+conditionPhrase(ready, "Ready=Unknown"), transition(ready))
+		f.add(Failing, "Ready unknown", transition(ready))
 	}
-	for _, kind := range []string{"MemoryPressure", "DiskPressure", "PIDPressure", "NetworkUnavailable"} {
+	phrase, level, ok := render.StatusWhy("Node", u)
+	if !ok || level == model1.LevelNone || phrase == "" {
+		return
+	}
+	if level == model1.LevelFailing && f.found {
+		// One finding: the state and what the kubelet says about it.
+		f.parts[0] += " · " + phrase
+		return
+	}
+	var since time.Time
+	for _, kind := range []string{"NetworkUnavailable", "MemoryPressure", "DiskPressure", "PIDPressure"} {
 		if c := condition(u, kind, "True"); c != nil {
-			f.add(Degraded, kind+" · "+conditionPhrase(c, "True"), transition(c))
+			since = transition(c)
+			break
 		}
 	}
+	severity := Degraded
+	if level == model1.LevelFailing {
+		severity = Failing
+	}
+	f.add(severity, phrase, since)
 }
 
 // condition returns the named condition; an empty status matches any status.

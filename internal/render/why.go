@@ -11,6 +11,8 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // The functions in this file state, in one short phrase, the evidence an
@@ -221,9 +223,9 @@ func jobWhy(job *batchv1.Job) (string, model1.Level) {
 	}
 	if st.Failed > 0 {
 		if job.Spec.BackoffLimit != nil {
-			return fmt.Sprintf("%d pod failures, backoff limit %d", st.Failed, *job.Spec.BackoffLimit), model1.LevelDegraded
+			return fmt.Sprintf("%s, backoff limit %d", podFailures(st.Failed), *job.Spec.BackoffLimit), model1.LevelDegraded
 		}
-		return fmt.Sprintf("%d pod failures", st.Failed), model1.LevelDegraded
+		return podFailures(st.Failed), model1.LevelDegraded
 	}
 	return "", model1.LevelNone
 }
@@ -290,4 +292,69 @@ func serviceWhy(svc *v1.Service) (string, model1.Level) {
 		return "no load balancer ingress assigned", model1.LevelDegraded
 	}
 	return "", model1.LevelNone
+}
+
+func podFailures(n int32) string {
+	if n == 1 {
+		return "1 pod failure"
+	}
+	return fmt.Sprintf("%d pod failures", n)
+}
+
+// StatusWhy returns the phrase and level the list for kind shows in its WHY
+// column, for callers that hold the object as read rather than as a list row
+// (the :problems list). ok is false when the kind has no WHY column or the
+// object could not be decoded; Pods have PodWhy.
+func StatusWhy(kind string, u *unstructured.Unstructured) (why string, level model1.Level, ok bool) {
+	decode := func(into any) bool {
+		return runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, into) == nil
+	}
+	switch kind {
+	case "Deployment":
+		var o appsv1.Deployment
+		if ok = decode(&o); ok {
+			why, level = deploymentWhy(&o)
+		}
+	case "StatefulSet":
+		var o appsv1.StatefulSet
+		if ok = decode(&o); ok {
+			why, level = statefulSetWhy(&o)
+		}
+	case "DaemonSet":
+		var o appsv1.DaemonSet
+		if ok = decode(&o); ok {
+			why, level = daemonSetWhy(&o)
+		}
+	case "ReplicaSet":
+		var o appsv1.ReplicaSet
+		if ok = decode(&o); ok {
+			why, level = replicaSetWhy(&o)
+		}
+	case "Job":
+		var o batchv1.Job
+		if ok = decode(&o); ok {
+			why, level = jobWhy(&o)
+		}
+	case "CronJob":
+		var o batchv1.CronJob
+		if ok = decode(&o); ok {
+			why, level = cronJobWhy(&o)
+		}
+	case "PersistentVolumeClaim":
+		var o v1.PersistentVolumeClaim
+		if ok = decode(&o); ok {
+			why, level = pvcWhy(&o)
+		}
+	case "Node":
+		var o v1.Node
+		if ok = decode(&o); ok {
+			why, level = nodeWhy(&o)
+		}
+	case "Service":
+		var o v1.Service
+		if ok = decode(&o); ok {
+			why, level = serviceWhy(&o)
+		}
+	}
+	return why, level, ok
 }

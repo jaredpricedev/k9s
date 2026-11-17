@@ -110,37 +110,53 @@ func TestClassifyReadsOnlyWhatTheStatusReports(t *testing.T) {
 		{"partly available", "Deployment", object("Deployment", "a", "d", map[string]any{"replicas": int64(3)},
 			map[string]any{"availableReplicas": int64(2), "updatedReplicas": int64(3)}), Degraded, "2 of 3 available", 0},
 		{"nothing available", "Deployment", object("Deployment", "a", "d", map[string]any{"replicas": int64(3)},
-			map[string]any{"conditions": conditions("Available", "False", "MinimumReplicasUnavailable", "")}), Failing, "0 of 3 available", 2 * time.Hour},
+			map[string]any{"conditions": conditions("Available", "False", "MinimumReplicasUnavailable", "")}), Failing, "0 of 3 available · MinimumReplicasUnavailable", 2 * time.Hour},
 		{"rolling out", "Deployment", object("Deployment", "a", "d", map[string]any{"replicas": int64(3)},
 			map[string]any{"availableReplicas": int64(3), "updatedReplicas": int64(1)}), Progressing, "rollout: 1 of 3 updated", 0},
 		{"progressing true is normal", "Deployment", object("Deployment", "a", "d", map[string]any{"replicas": int64(1)},
 			map[string]any{"availableReplicas": int64(1), "updatedReplicas": int64(1), "conditions": conditions("Progressing", "True", "NewReplicaSetAvailable", "")}), 0, "", 0},
+		{"unread spec says the same as the Deployment list", "Deployment", func() unstructured.Unstructured {
+			u := object("Deployment", "a", "d", map[string]any{"replicas": int64(2)},
+				map[string]any{"observedGeneration": int64(1), "availableReplicas": int64(0), "updatedReplicas": int64(2)})
+			u.SetGeneration(2)
+			return u
+		}(), Failing, "0 of 2 available · generation 2 not yet observed, status is for 1", 0},
+		{"paused with nothing left to roll out", "Deployment", object("Deployment", "a", "d", map[string]any{"replicas": int64(1), "paused": true},
+			map[string]any{"availableReplicas": int64(1), "updatedReplicas": int64(1)}), 0, "", 0},
 		{"scaled to zero", "Deployment", object("Deployment", "a", "d", map[string]any{"replicas": int64(0)}, map[string]any{}), 0, "", 0},
 
 		{"statefulset partly ready", "StatefulSet", object("StatefulSet", "a", "s", map[string]any{"replicas": int64(3)},
-			map[string]any{"readyReplicas": int64(2)}), Degraded, "2 of 3 ready", 0},
+			map[string]any{"replicas": int64(3), "readyReplicas": int64(2)}), Degraded, "2 of 3 ready", 0},
 		{"daemonset none ready", "DaemonSet", object("DaemonSet", "a", "s", nil,
-			map[string]any{"desiredNumberScheduled": int64(4), "numberReady": int64(0)}), Failing, "0 of 4 ready", 0},
+			map[string]any{"desiredNumberScheduled": int64(4), "currentNumberScheduled": int64(4), "updatedNumberScheduled": int64(4),
+				"numberReady": int64(0), "numberUnavailable": int64(4)}), Failing, "0 of 4 ready", 0},
+		{"statefulset mid rollout", "StatefulSet", object("StatefulSet", "a", "s", map[string]any{"replicas": int64(3)},
+			map[string]any{"replicas": int64(3), "readyReplicas": int64(1), "updatedReplicas": int64(1),
+				"currentRevision": "s-1", "updateRevision": "s-2"}), Degraded, "1 of 3 ready · rollout: 1 of 3 updated", 0},
+		{"daemonset count is not restated", "DaemonSet", object("DaemonSet", "a", "s", nil,
+			map[string]any{"desiredNumberScheduled": int64(3), "currentNumberScheduled": int64(3), "updatedNumberScheduled": int64(3),
+				"numberReady": int64(2), "numberUnavailable": int64(1)}), Degraded, "2 of 3 ready", 0},
 		{"daemonset healthy", "DaemonSet", object("DaemonSet", "a", "s", nil,
-			map[string]any{"desiredNumberScheduled": int64(4), "numberReady": int64(4), "updatedNumberScheduled": int64(4)}), 0, "", 0},
+			map[string]any{"desiredNumberScheduled": int64(4), "currentNumberScheduled": int64(4), "numberReady": int64(4),
+				"updatedNumberScheduled": int64(4)}), 0, "", 0},
 
 		{"failed job", "Job", object("Job", "a", "j", nil, map[string]any{"failed": int64(3),
 			"conditions": conditions("Failed", "True", "BackoffLimitExceeded", "reached the backoff limit")}),
 			Failing, "BackoffLimitExceeded: reached the backoff limit", 2 * time.Hour},
 		{"retrying job", "Job", object("Job", "a", "j", nil, map[string]any{"failed": int64(1), "active": int64(1)}),
-			Degraded, "1 failed pod; not marked Failed", 0},
+			Degraded, "1 pod failure", 0},
 		{"complete job with earlier failures", "Job", object("Job", "a", "j", nil, map[string]any{"failed": int64(1),
 			"conditions": conditions("Complete", "True", "", "")}), 0, "", 0},
 
-		{"pending claim names no cause", "PersistentVolumeClaim", object("PersistentVolumeClaim", "a", "c", nil, map[string]any{"phase": "Pending"}), Degraded, "Pending", 0},
+		{"pending claim names no cause", "PersistentVolumeClaim", object("PersistentVolumeClaim", "a", "c", nil, map[string]any{"phase": "Pending"}), Degraded, "no volume bound, no storage class set", 0},
 		{"bound claim", "PersistentVolumeClaim", object("PersistentVolumeClaim", "a", "c", nil, map[string]any{"phase": "Bound"}), 0, "", 0},
 
 		{"node not ready", "Node", object("Node", "", "n", nil, map[string]any{"conditions": conditions("Ready", "False", "KubeletNotReady", "runtime down")}),
-			Failing, "NotReady · KubeletNotReady: runtime down", 2 * time.Hour},
+			Failing, "NotReady · runtime down", 2 * time.Hour},
 		{"node lost contact", "Node", object("Node", "", "n", nil, map[string]any{"conditions": conditions("Ready", "Unknown", "NodeStatusUnknown", "")}),
 			Failing, "Ready unknown · NodeStatusUnknown", 2 * time.Hour},
 		{"node under pressure", "Node", object("Node", "", "n", nil, map[string]any{"conditions": append(conditions("Ready", "True", "", ""),
-			conditions("DiskPressure", "True", "KubeletHasDiskPressure", "")...)}), Degraded, "DiskPressure · KubeletHasDiskPressure", 2 * time.Hour},
+			conditions("DiskPressure", "True", "KubeletHasDiskPressure", "")...)}), Degraded, "DiskPressure", 2 * time.Hour},
 		{"ready node", "Node", object("Node", "", "n", nil, map[string]any{"conditions": conditions("Ready", "True", "KubeletReady", "")}), 0, "", 0},
 	}
 	for _, c := range cases {
@@ -199,7 +215,7 @@ func TestAssembleFoldsPodsIntoTheirControllerByUID(t *testing.T) {
 	if top.Signals != 6 {
 		t.Fatalf("signals = %d, want 6", top.Signals)
 	}
-	if got := top.Summary(); !strings.HasPrefix(got, "2 pods affected · ProgressDeadlineExceeded") {
+	if got := top.Summary(); !strings.HasPrefix(got, "2 pods affected · 0 of 2 available · ProgressDeadlineExceeded") {
 		t.Fatalf("summary %q", got)
 	}
 	if len(top.Events) != 1 || top.Events[0].Reason != "FailedCreate" {
@@ -249,7 +265,7 @@ func TestWarningEventsAreEvidenceNotStatus(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("rows: %+v", rows)
 	}
-	if rows[0].Cause != "Pending · event ProvisioningFailed x11: storageclass not found" || rows[0].Signals != 2 {
+	if rows[0].Cause != "no volume bound, no storage class set · event ProvisioningFailed x11: storageclass not found" || rows[0].Signals != 2 {
 		t.Fatalf("a status without a reason should quote its event, labelled as one: %+v", rows[0])
 	}
 	service := rows[1]

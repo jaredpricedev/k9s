@@ -143,10 +143,13 @@ which were not; it never calls the destination healthy.
 namespace/name, a cause phrase and, when the status carries a transition time,
 how long the state has lasted at the time of the read (`FOR`; `-` when the
 status does not say). Pod causes are the same STATUS word and `WHY` phrase as the
-Pod list. Other kinds use their own status only: Deployment conditions and
-available replicas, StatefulSet and DaemonSet ready counts, Job `Failed`
-conditions and failed-pod counts, claim phase, and Node `Ready` and pressure
-conditions. When a status names a state but no reason (a `Pending` claim, for
+Pod list. Other kinds use their own status only, and say it in the same words
+as the [`WHY` column](presentation.md) of their own list: a Deployment,
+StatefulSet or DaemonSet leads with its available or ready count (this list has
+no `READY` column) followed by its `WHY` phrase, unless that phrase would only
+restate the count; a Job, a claim and a Node's conditions read exactly as in
+their lists, with `NotReady` or `Ready unknown` standing in for a Node's
+`STATUS`. When a status names a state but no reason (a `Pending` claim, for
 example), the most frequent Warning event is quoted beside it and labelled
 `event`. Rows are ordered by severity, then by the number of signals (status
 findings, affected pods and distinct Warning reasons), shown as `SIG` from 100
@@ -183,15 +186,19 @@ sources wrap between sources, never between a source and its count.
 **Limits.** Severity and cause are what each object's status and events reported
 at the moment of the read; they are evidence, not a diagnosed root cause, and a
 row's absence is not proof of health. Objects beyond the first 500 of a kind are
-not classified. Cordoned nodes, paused Deployments, suspended Jobs, CronJobs,
+not classified. A node that is only cordoned, a Deployment paused with nothing
+left to roll out and a suspended Job are not listed; a Deployment paused partway
+through a rollout is listed as degraded, as in its own list. CronJobs, Services,
 custom resources and metrics are not examined. A Warning event about an earlier
 UID of a current name is listed separately as an earlier identity. Kinds named
 only by an event and unknown to the view cannot be opened with `Enter`.
 
 `scripts/operator-study-fixture.py` serves synthetic objects for every row type
 (a stalled Deployment with two failing pods behind a ReplicaSet, a partly ready
-StatefulSet, a failed Job, a Pending claim and Warning events) and denies the
-cluster-wide DaemonSet list and `ops` events so the `NOT READ` line can be seen.
+StatefulSet, a failed Job, a Pending claim and Warning events) and denies this
+view's cluster-wide DaemonSet read and `ops` events so the `NOT READ` line can
+be seen; the DaemonSet list itself still opens.
+
 ## Timeline: what changed, and in what order
 
 `:timeline` (also **Timeline: what changed, in order** in `Ctrl-O`) answers the
