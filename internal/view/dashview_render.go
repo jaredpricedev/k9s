@@ -75,12 +75,17 @@ type dashRender struct {
 
 func (r *dashRender) words(text string) string { return graphWords(text, r.pg.ASCII) }
 
-func (r *dashRender) fit(text string, width int) string {
-	if r.pg.ASCII {
+// dashFit cuts text to a width. With plain characters the cut is marked
+// "...", and the width is measured after the page's signs were replaced, so
+// that a line never grows past the width by being made plain.
+func dashFit(text string, width int, ascii bool) string {
+	if ascii {
 		return runewidth.Truncate(graphWords(text, true), max(width, 0), "...")
 	}
 	return graphFit(text, width)
 }
+
+func (r *dashRender) fit(text string, width int) string { return dashFit(text, width, r.pg.ASCII) }
 
 func (r *dashRender) plain(color, text string) {
 	r.lines = append(r.lines, graphPaint(color, r.fit(text, r.width)))
@@ -108,7 +113,7 @@ func (s *dashSnapshot) title() string {
 }
 
 // headline is the first line: what is drawn, the window and the step.
-func (s *dashSnapshot) headline(width int) string {
+func (s *dashSnapshot) headline(width int, ascii bool) string {
 	end := s.End.UTC().Format("15:04Z")
 	if s.End.Second() != 0 {
 		end = graphClock(s.End)
@@ -121,7 +126,7 @@ func (s *dashSnapshot) headline(width int) string {
 	if runewidth.StringWidth(prefix+title+tail) > width {
 		prefix = ""
 	}
-	return prefix + graphFit(title, width-runewidth.StringWidth(prefix)-runewidth.StringWidth(tail)) + tail
+	return prefix + dashFit(title, width-runewidth.StringWidth(prefix)-runewidth.StringWidth(tail), ascii) + tail
 }
 
 // failure describes a page on which nothing can be drawn, or returns nil.
@@ -137,6 +142,10 @@ func (s *dashSnapshot) failure() []string {
 			at = " at " + graphClock(st.ObservedAt)
 		}
 		const nothing = "Nothing is drawn: a read that failed is not a reading of zero and says nothing about the workload."
+		verb := "was"
+		if strings.HasPrefix(what, "all ") {
+			verb = "were"
+		}
 		switch st.State {
 		case observability.StateNotConfigured:
 			return []string{"No " + name + " source is declared for this context, so nothing was asked.",
@@ -144,7 +153,7 @@ func (s *dashSnapshot) failure() []string {
 		case observability.StateDenied:
 			return []string{name + " DENIED " + what + reason + at + ".", nothing, point}
 		case observability.StateTimeout:
-			return []string{name + " TIMEOUT: " + what + " was not answered in time" + reason + at + ".", "Nothing is drawn. Press r to ask again, or open :sources."}
+			return []string{name + " TIMEOUT: " + what + " " + verb + " not answered in time" + reason + at + ".", "Nothing is drawn. Press r to ask again, or open :sources."}
 		case observability.StateAbsent:
 			if name == "Grafana" {
 				return []string{"Grafana ABSENT: it has no dashboard with this UID, or it is not visible to these credentials" + reason + at + ".",
@@ -152,7 +161,7 @@ func (s *dashSnapshot) failure() []string {
 			}
 			return []string{name + " ABSENT: the declared source was not found" + reason + at + ".", "Nothing is drawn. " + point}
 		case observability.StateIncomplete:
-			return []string{name + " INCOMPLETE: " + what + " was cut" + reason + at + ".",
+			return []string{name + " INCOMPLETE: " + what + " " + verb + " cut" + reason + at + ".",
 				"A dashboard definition is read whole or not at all, so nothing is drawn. Shift-D opens it in Grafana."}
 		}
 		return []string{name + " " + strings.ToUpper(string(st.State)) + ": " + what + " failed" + reason + at + ".", "Nothing is drawn. " + point}
@@ -173,6 +182,20 @@ func (s *dashSnapshot) failure() []string {
 		what := fmt.Sprintf("all %d queries", t.Asked)
 		if t.Asked == 1 {
 			what = "the query"
+		}
+		const again = "Nothing is drawn. Press r to ask again, or open :sources."
+		switch {
+		case t.Mixed:
+			// Reads that failed in different ways are counted, not summed up
+			// under the name of one of them.
+			return []string{fmt.Sprintf("Prometheus answered none of the %d queries: %s.", t.Asked, t.Failures),
+				"Nothing is drawn: a read that failed is not a reading of zero and says nothing about the workload.", point}
+		case t.Worst.State == "":
+			unsent := fmt.Sprintf("none of the %d queries could be sent", t.Asked)
+			if t.Asked == 1 {
+				unsent = "the query could not be sent"
+			}
+			return []string{fmt.Sprintf("Prometheus NOT READ: %s before the page's %s deadline ended.", unsent, graphSpan(dashDeadline)), again}
 		}
 		return explain("Prometheus", t.Worst, what)
 	}
@@ -224,7 +247,7 @@ func (s *dashSnapshot) statusParts(first, last, level int) []string {
 		answered += fmt.Sprintf(", %d rejected", t.Rejected)
 	}
 	if t.Failed > 0 {
-		answered += fmt.Sprintf(", %d %s", t.Failed, t.Worst.State)
+		answered += ", " + t.Failures
 	}
 	parts = append(parts, answered)
 	switch {
@@ -276,6 +299,8 @@ func dashFooter(width int, zoom, single, query, ascii bool) string {
 			"←/→ cursor · ↑/↓ panel · 1 15m  2 1h  3 6h  4 24h · r re-read · s queries · Shift-D Grafana · Esc grid",
 			"←/→ cursor · ↑/↓ panel · 1-4 window · r re-read · s queries · Esc grid",
 			"←/→ cursor · ↑/↓ panel · 1-4 window · r read · Esc grid",
+			// Short enough for 60 columns when the arrows are written out.
+			"←/→ cursor · ↑/↓ panel · 1-4 · r · Esc grid",
 		}
 	default:
 		forms = []string{
@@ -283,6 +308,8 @@ func dashFooter(width int, zoom, single, query, ascii bool) string {
 			"←/→ ↑/↓ panel · Enter zoom · 1-4 window · r re-read · s queries · Shift-D Grafana · Esc",
 			"←/→ ↑/↓ panel · Enter zoom · 1-4 window · r re-read · s queries · Esc",
 			"←/→ panel · Enter zoom · 1-4 window · r read · s queries",
+			// Short enough for 60 columns when the arrows are written out.
+			"Tab panel · Enter zoom · 1-4 window · r read · s queries",
 		}
 	}
 	for _, text := range forms {
@@ -305,7 +332,7 @@ func renderDash(s *dashSnapshot, pg *dashPage) []string {
 		r.plain("", "Reading once…")
 		return r.lines
 	}
-	r.lines = append(r.lines, graphBold(r.c.Title, r.fit(s.headline(r.width), r.width)))
+	r.lines = append(r.lines, graphBold(r.c.Title, r.fit(s.headline(r.width, pg.ASCII), r.width)))
 	if failure := s.failure(); failure != nil {
 		if pg.Busy != "" {
 			r.plain(r.c.Muted, pg.Busy)
@@ -329,7 +356,7 @@ func renderDash(s *dashSnapshot, pg *dashPage) []string {
 		} else if s.Grafana.Source != "" {
 			source = "grafana via " + s.Grafana.Source
 		}
-		r.lines = append(r.lines, "", graphPaint(r.c.Muted, graphFit("Source: "+source, r.width)), "",
+		r.lines = append(r.lines, "", graphPaint(r.c.Muted, r.fit("Source: "+source, r.width)), "",
 			graphPaint(r.c.Muted, r.words("r re-read · Shift-D Grafana · Esc back")))
 		return r.lines
 	}
@@ -417,6 +444,18 @@ func (r *dashRender) legend(index int, panel *chart.Panel, f chart.Frame, at tim
 	p := &r.s.Dash.Panels[index]
 	data := r.data(index)
 	entries := make([]chart.Entry, 0, len(data.Lines)+1)
+	if at.IsZero() {
+		// A chart drawn from some of its queries says first which ones are
+		// missing: a limit line alone would look like usage of nothing. The
+		// zoomed panel states each in full.
+		for _, state := range data.States {
+			entries = append(entries, chart.Entry{Name: "query " + dashShortState(state)})
+		}
+		for _, state := range data.Incomplete {
+			ref, _, _ := strings.Cut(state, ": ")
+			entries = append(entries, chart.Entry{Name: "query " + ref + " incomplete"})
+		}
+	}
 	for k := range data.Lines {
 		series := &panel.Series[k]
 		entry := chart.Entry{Name: data.Lines[k].Name, Color: series.Color}
@@ -457,6 +496,18 @@ func (r *dashRender) legend(index int, panel *chart.Panel, f chart.Frame, at tim
 		entries = append(entries, chart.Entry{Name: fmt.Sprintf("+%d series not drawn", data.Cut)})
 	}
 	return entries
+}
+
+// dashShortState shortens "A: denied (HTTP 403): nothing was read" to
+// "A denied" for a legend; the zoomed panel and the s page keep every word.
+func dashShortState(state string) string {
+	ref, rest, _ := strings.Cut(state, ": ")
+	for _, stop := range []string{" (", ": "} {
+		if at := strings.Index(rest, stop); at >= 0 {
+			rest = rest[:at]
+		}
+	}
+	return ref + " " + rest
 }
 
 func (r *dashRender) titleOf(index int) string {
@@ -525,7 +576,7 @@ func (r *dashRender) span(index int) (low, high float64) {
 	switch {
 	case p.HasMax && p.Max*p.Unit.Scale > low:
 		return low, p.Max * p.Unit.Scale
-	case p.Unit.Chart == chart.Ratio:
+	case p.Unit.Chart == chart.Ratio && low < 1:
 		return low, 1
 	}
 	for k := range data.Lines {
@@ -576,7 +627,28 @@ func (r *dashRender) valueTile(index, width int) []string {
 			tail += "  " + dashStepText(p, v.Step)
 		}
 		level := r.c.level(v.Step.Level)
-		out = append(out, "  "+graphBold(level, r.fit(value, inner))+graphPaint(level, r.fit(tail, inner-runewidth.StringWidth(value))))
+		// A gauge has no line for the window's minimum and maximum. When the
+		// window held a value in another step than the one shown, the value
+		// line says so: "3.8% green" alone would hide a burst into red.
+		peak := ""
+		if p.Kind == dashboard.KindGauge && v.HasMaxLvl {
+			peak = " · max " + p.Unit.Chart.Format(v.Max) + " " + v.MaxStep.Word
+			if runewidth.StringWidth(value+tail+peak) > inner {
+				// The step's word matters more than where the step starts.
+				tail = ""
+				if v.Word != "" {
+					tail = " " + v.Word
+				}
+				tail += " " + v.Step.Word
+			}
+		}
+		used := runewidth.StringWidth(value)
+		text := "  " + graphBold(level, r.fit(value, inner)) + graphPaint(level, r.fit(tail, inner-used))
+		used += runewidth.StringWidth(r.fit(tail, inner-used))
+		if peak != "" {
+			text += graphPaint(r.c.level(v.MaxStep.Level), r.fit(peak, inner-used))
+		}
+		out = append(out, text)
 		spark := chart.Spark(chart.SparkValues(line.Points, r.frame(inner)), chart.SparkOptions{ASCII: r.pg.ASCII, Color: r.c.Data[0], GapColor: r.c.Axis})
 		if p.Kind == dashboard.KindGauge {
 			of := " of " + p.Unit.Chart.Format(high)
@@ -1208,6 +1280,8 @@ func dashReport(s *dashSnapshot) string {
 	b.WriteString("\nREADING THE PAGE\n")
 	b.WriteString("  A panel is drawn when its type is " + dashboard.DrawnTypes + " and its query is a Prometheus expression.\n")
 	b.WriteString("  A value in a legend is a sample, not an interpolation. No series matched means the query answered and matched nothing: missing data, not a zero.\n")
+	fmt.Fprintf(&b, "  One sample is read per step (%s here). Something shorter than the step can fall between two samples and not show, and a rate over $__rate_interval (%s here) flattens a short burst: a flat line in a long window is not proof that nothing happened. A shorter window (1, 2) has a shorter step.\n",
+		graphSpan(s.Step), graphSpan(s.Plan.Bindings.Rate))
 	b.WriteString("  A threshold word (green, orange, red) is the name the dashboard author gave the step; it is the author's rule, not a finding.\n")
 	return b.String()
 }

@@ -298,8 +298,12 @@ func ShortNames(names []string) []string {
 		if n < 2 {
 			continue
 		}
+		// The last rule only makes the choice the same on every draw: two
+		// groups of names with equally long starts are otherwise picked in
+		// map order.
 		switch {
-		case best == "", n > counts[best], n == counts[best] && len(prefix) > len(best):
+		case best == "", n > counts[best], n == counts[best] && len(prefix) > len(best),
+			n == counts[best] && len(prefix) == len(best) && prefix < best:
 			best = prefix
 		}
 	}

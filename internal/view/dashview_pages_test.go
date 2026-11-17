@@ -487,6 +487,9 @@ func TestQueryIsRegisteredAsCommandPaletteEntryAndCompletesNames(t *testing.T) {
 	}
 	require.NotNil(t, found)
 	require.Equal(t, ":query", found.Shortcut)
+	// The palette gives a label 40 cells; a longer one is cut mid-word.
+	require.Equal(t, "Query: chart PromQL or a named query", found.Label)
+	require.LessOrEqual(t, len(found.Label), 40)
 	require.Equal(t, ui.ActionInspect, found.Category)
 	require.Empty(t, found.UnavailableReason)
 	command := NewCommand(v.app)
@@ -522,9 +525,21 @@ func TestQueryIsRegisteredAsCommandPaletteEntryAndCompletesNames(t *testing.T) {
 	require.Equal(t, `sum(rate(http_requests_total{namespace="$namespace"}[5m]))`, v.spec.Query.Expr)
 	require.Contains(t, v.text.GetText(true), "Query · typed expression · last 1h")
 	require.Equal(t, "gitlab-webservice-default", v.SelectedResource().Name)
+	// The page of one query is its zoomed panel: Enter is not offered as a
+	// key that would do nothing. The board offers it again.
+	enterShown := func() bool {
+		for _, hint := range v.Hints() {
+			if hint.Description == "Zoom panel" {
+				return hint.Visible
+			}
+		}
+		return false
+	}
+	require.False(t, enterShown())
 	command.queryCommand("QUERY")
 	require.True(t, v.spec.Board)
 	require.False(t, v.zoom)
+	require.True(t, enterShown())
 
 	// e puts the expression back into the prompt.
 	command.queryCommand("query   up{job=\"x\"}")

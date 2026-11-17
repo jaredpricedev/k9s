@@ -48,7 +48,7 @@ for Deployment gitlab/gitlab-webservice-default · namespace=gitlab (selection) 
   ⠉⠉⠉⠉⠉⠙⠚⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠙⠒⠚⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠙⠚⠉⠉⠉⠉    ⣀⣀⣀⣀⣰⠚⠙⢲⣀⣀⣀⣀⣀⣀⣀⣀⣀⣠⠼⠉⠙⢲⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣠⠴⠲⢤⣀⣀⣀
   min 24.7/s  max 37/s                          min 346ms  max 47.9s (red)
   Puma threads in use                           CPU throttled, worst pod
-  37.5%  green                                  3.81%  green
+  37.5%  green                                  3.81%  green · max 87.7% red
   ━━━━━━━━━━━━━───────────────────── of 100%    ━───────────────────────────────── of 100%
   ⠲⠤⠴⠚⠉⠉⠹⠴⠒⠒⠲⠤⠴⠒⠒⠒⠲⠴⠚⠉⠙⠲⠤⠴⠒⠒⠲⠤⠴⠒⠒⠲⠤⠴⠒⠚⠉⠹⠴⠒⠒⠒    ⣀⣀⣀⣀⣰⠚⠉⠹⢤⣀⣀⣀⣀⣀⣀⣀⣀⣰⠚⠉⠉⠹⢤⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣀⣠⠼⠙⢲⣀⣀⣀
   Request duration p99 by pod                        Requests by pod  a …2bq7k 13.3/s
@@ -89,7 +89,7 @@ Panel 1 of 11 · stat · A sum(rate(http_requests_total{namespace="gitlab", pod=
 | --- | --- |
 | `timeseries`, `graph` | A line chart over the window. Each series is one continuous line that ends in its letter; with several lines the letter repeats along the line. The legend names each line by the panel's `legendFormat` (`{{label}}` is replaced) or, without one, by the labels that differ, and gives the line's last sample. |
 | `stat`, `singlestat` | The value by the panel's reducer (`lastNotNull`, `last`, `first`, `mean`, `max`, `min`, `sum`), the threshold word, a thin sparkline of the window and the window's minimum and maximum. |
-| `gauge` | The value, the threshold word, a thin bar against the panel's `min` and `max`, and the sparkline. |
+| `gauge` | The value, the threshold word, a thin bar against the panel's `min` and `max`, and the sparkline. When the window's maximum falls into another threshold step than the value, the value line adds it: `3.82%  green · max 87.7% red`. |
 | `bargauge` | One row per series: name, bar and value. A `stat` or `gauge` whose query returns several series is drawn the same way. |
 | `row` | A section line. Panels inside a collapsed row are drawn like any other. |
 
@@ -183,9 +183,13 @@ The reasons are:
 every variable, and everything that was not drawn with its reason.
 
 When the definition cannot be read (denied, absent, timeout, over 1 MiB, not
-a dashboard), or no Prometheus source can be asked, or every query failed
-alike, the page says which source failed and how, draws nothing, and points
-to `:sources`.
+a dashboard), or no Prometheus source can be asked, or no query was
+answered, the page says which source failed and how, draws nothing, and
+points to `:sources`. Queries that failed in different ways are counted by
+state (`Prometheus answered none of the 11 queries: 8 timeout, 3 not read`).
+One read of a page has 45 seconds in all; a query that could not be sent
+before that is `not read`, and `r` reads again. On such a page `Shift-D`
+still offers the dashboard, or for a query page the expression in Explore.
 
 ### Keys
 
@@ -221,7 +225,7 @@ puts the expression back into the prompt to change it; a `:query` typed while
 a query page is open replaces what the page draws and keeps its selection.
 `Shift-D` opens Grafana Explore with the expression as it was sent, when the
 Grafana declaration has `publicURL` and `datasource`. The command is also
-"Query: chart a PromQL expression or a named query" in the `Ctrl-O` palette.
+"Query: chart PromQL or a named query" in the `Ctrl-O` palette.
 
 Variables in an expression:
 
@@ -299,7 +303,13 @@ for a section, `=` and `-` for a bar, the chart package's plain line glyphs,
 - Thresholds are named, not interpreted; a dashboard without thresholds gets
   no word.
 - The fixed step ladder applies (15s for 15m, 30s for 1h, 5m for 6h, 15m for
-  24h); a panel's own `interval` or `maxDataPoints` is not used.
+  24h); a panel's own `interval` or `maxDataPoints` is not used. One sample
+  is read per step, so something shorter than the step can fall between two
+  samples of a gauge and not show at all, and a rate over
+  `$__rate_interval` (20m at 6h, 1h at 24h) flattens a short burst. A flat
+  line in the 6h or 24h window is therefore not proof that nothing happened:
+  a stall of a few minutes is looked for in the 15m and 1h windows. The `s`
+  page states the step and the rate interval of the read.
 - An expression with a literal `$` after substitution is not sent.
 - Only expressions of timeseries, graph, stat, gauge and bargauge panels are
   read; logs, traces and SQL are not.

@@ -152,7 +152,9 @@ func loadDash(ctx context.Context, q graphQuerier, d *dashboard.Dashboard, spec 
 func dashStateWord(res *observability.PromResult) string {
 	switch {
 	case res.State == "":
-		return dashNotRead
+		// Planned and never sent: the deadline of the whole page ended while
+		// earlier queries were still being answered.
+		return dashNotRead + ": the page's " + graphSpan(dashDeadline) + " deadline ended first; r reads again"
 	case res.Error != "":
 		// The source's own words, cleaned and bounded by the client.
 		return "expression failed: " + safeProviderText(res.Error)
@@ -274,13 +276,37 @@ type dashTally struct {
 	Asked, Failed, Empty, Incomplete int
 	// Rejected counts queries the source refused as written.
 	Rejected int
-	// Worst is one failed answer, shown when every read failed alike.
+	// Worst is the failed answer the page names when every read failed: the
+	// first one, in panel order, of the state most reads failed with.
 	Worst observability.Status
+	// Mixed says the failed reads did not all fail the same way.
+	Mixed bool
+	// Failures words the failed reads by state: "2 denied, 1 timeout".
+	Failures string
 }
 
+// dashStateName words the state of a read that drew nothing. A query that
+// was never sent has no state: the page's deadline ended first.
+func dashStateName(state observability.State) string {
+	if state == "" {
+		return dashNotRead
+	}
+	return string(state)
+}
+
+// tally counts the answers. It walks them in a fixed order, so that the
+// same read is always described in the same words.
 func (s *dashSnapshot) tally() dashTally {
 	var t dashTally
+	keys := make([]string, 0, len(s.Results))
 	for key := range s.Results {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	counts := map[observability.State]int{}
+	first := map[observability.State]observability.Status{}
+	var states []observability.State
+	for _, key := range keys {
 		res := s.Results[key]
 		t.Asked++
 		switch {
@@ -288,13 +314,26 @@ func (s *dashSnapshot) tally() dashTally {
 			t.Rejected++
 		case !res.OK():
 			t.Failed++
-			t.Worst = res.Status
+			if counts[res.State] == 0 {
+				states = append(states, res.State)
+				first[res.State] = res.Status
+			}
+			counts[res.State]++
 		case graphSamples(&res) == 0:
 			t.Empty++
 		}
 		if res.State == observability.StateIncomplete {
 			t.Incomplete++
 		}
+	}
+	sort.SliceStable(states, func(a, b int) bool { return counts[states[a]] > counts[states[b]] })
+	parts := make([]string, 0, len(states))
+	for _, state := range states {
+		parts = append(parts, fmt.Sprintf("%d %s", counts[state], dashStateName(state)))
+	}
+	t.Failures, t.Mixed = strings.Join(parts, ", "), len(states) > 1
+	if len(states) > 0 {
+		t.Worst = first[states[0]]
 	}
 	return t
 }
@@ -319,14 +358,18 @@ func (s *dashSnapshot) uses(name string) bool {
 		for j := range s.Dash.Panels[i].Targets {
 			expr := s.Dash.Panels[i].Targets[j].Expr
 			for _, form := range []string{"$" + name, "${" + name, "[[" + name} {
-				at := strings.Index(expr, form)
-				if at < 0 {
-					continue
-				}
-				// $pod is not a use of $po.
-				end := at + len(form)
-				if end == len(expr) || !(expr[end] == '_' || expr[end] >= '0' && expr[end] <= '9' || expr[end] >= 'a' && expr[end] <= 'z' || expr[end] >= 'A' && expr[end] <= 'Z') {
-					return true
+				// Every occurrence is looked at: $pod is not a use of $po, and
+				// a $pod_name earlier in the text does not hide a later $pod.
+				for from := 0; ; {
+					at := strings.Index(expr[from:], form)
+					if at < 0 {
+						break
+					}
+					end := from + at + len(form)
+					if end == len(expr) || !(expr[end] == '_' || expr[end] >= '0' && expr[end] <= '9' || expr[end] >= 'a' && expr[end] <= 'z' || expr[end] >= 'A' && expr[end] <= 'Z') {
+						return true
+					}
+					from = end
 				}
 			}
 		}

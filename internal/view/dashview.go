@@ -169,7 +169,6 @@ func (v *dashView) Init(ctx context.Context) error {
 	v.actions.Bulk(ui.KeyMap{
 		ui.KeyR:          ui.NewKeyAction("Re-read", do(v.refresh), true),
 		ui.KeyS:          ui.NewKeyActionWithOpts("Queries and what was not drawn", do(v.toggleReport), ui.ActionOpts{Visible: true, Priority: 3}),
-		tcell.KeyEnter:   ui.NewKeyAction("Zoom panel", do(v.toggleZoom), true),
 		tcell.KeyLeft:    ui.NewKeyAction("Previous panel or cursor earlier", v.moveCmd(-1, false), true),
 		tcell.KeyRight:   ui.NewKeyAction("Next panel or cursor later", v.moveCmd(1, false), true),
 		tcell.KeyUp:      ui.NewKeyAction("Panel above", v.moveCmd(-1, true), true),
@@ -185,8 +184,23 @@ func (v *dashView) Init(ctx context.Context) error {
 	if v.spec.isQuery() {
 		v.actions.Add(dashEditKey, ui.NewKeyAction("Edit the expression", do(v.editQuery), true))
 	}
+	v.bindZoom()
 	v.render()
 	return nil
+}
+
+// bindZoom binds Enter only where it does something: the page of one query
+// is already its zoomed panel. The compact key line names every bound
+// Enter, shown or not, so the key is unbound there rather than hidden.
+func (v *dashView) bindZoom() {
+	if v.spec.isQuery() && !v.spec.Board {
+		v.actions.Delete(tcell.KeyEnter)
+		return
+	}
+	v.actions.Add(tcell.KeyEnter, ui.NewKeyAction("Zoom panel", func(*tcell.EventKey) *tcell.EventKey {
+		v.toggleZoom()
+		return nil
+	}, true))
 }
 
 func (v *dashView) single() bool {
@@ -304,6 +318,12 @@ func (v *dashView) setQuery(spec *dashSpec) {
 	v.spec = *spec
 	v.zoom, v.report = !spec.Board, false
 	v.snapshot, v.selected, v.first, v.atEnd = nil, -1, 0, true
+	// The board zooms on Enter, the page of one query does not: the hints
+	// follow what the page now is.
+	v.bindZoom()
+	if v.app.Content != nil && v.app.Content.Top() == v {
+		v.app.Menu().HydrateMenu(v.Hints())
+	}
 	v.refresh()
 }
 
@@ -361,14 +381,32 @@ func (v *dashView) openInGrafana() {
 	showGrafanaHandoff(v.app, &grafanaHandoff{target: &target, links: []grafanaLink{link}, deliverNow: true})
 }
 
-// sentExpr is the expression of the selected panel as it was sent.
+// sentExpr is the expression of the selected panel as it was sent. A page
+// that drew nothing has no selection (every read was denied, say); the
+// first expression that was sent then stands for it, so that Explore stays
+// reachable exactly when the terminal cannot draw.
 func (v *dashView) sentExpr() (observability.Expr, bool) {
-	if v.snapshot == nil || v.snapshot.Dash == nil || v.selected < 0 || v.selected >= len(v.snapshot.Plan.Panels) {
+	if v.snapshot == nil || v.snapshot.Dash == nil {
 		return observability.Expr{}, false
 	}
-	for _, q := range v.snapshot.Plan.Panels[v.selected].Queries {
-		if q.Sent() {
-			return q.Expr, true
+	panels := v.snapshot.Plan.Panels
+	first := func(index int) (observability.Expr, bool) {
+		for _, q := range panels[index].Queries {
+			if q.Sent() {
+				return q.Expr, true
+			}
+		}
+		return observability.Expr{}, false
+	}
+	if v.selected >= 0 && v.selected < len(panels) {
+		return first(v.selected)
+	}
+	for index := range panels {
+		if panels[index].NotDrawn != "" {
+			continue
+		}
+		if expr, ok := first(index); ok {
+			return expr, true
 		}
 	}
 	return observability.Expr{}, false
@@ -380,7 +418,10 @@ func (v *dashView) Start() {
 	v.app.Styles.RemoveListener(v)
 	v.app.Styles.AddListener(v)
 	v.StylesChanged(v.app.Styles)
-	if v.snapshot == nil && v.busy == "" {
+	// Leaving the page cancels a read. Coming back to a page without a read
+	// of its window asks once more: it would otherwise say "Reading" with
+	// nothing in flight.
+	if (v.snapshot == nil || v.snapshot.Window != v.window) && v.busy == "" {
 		v.refresh()
 	}
 }
@@ -520,9 +561,9 @@ func (v *dashView) render() {
 			busy = v.reading(v.window)
 		}
 		lines = []string{
-			graphBold(page.Colors.Title, graphFit(v.spec.noun()+" · "+safeProviderText(subject)+" · last "+graphSpan(v.window), width)),
-			graphPaint(page.Colors.Muted, graphFit(graphWords(busy, ascii), width)),
-			graphPaint(page.Colors.Muted, graphFit("Esc cancels and goes back.", width)),
+			graphBold(page.Colors.Title, dashFit(v.spec.noun()+" · "+safeProviderText(subject)+" · last "+graphSpan(v.window), width, ascii)),
+			graphPaint(page.Colors.Muted, dashFit(busy, width, ascii)),
+			graphPaint(page.Colors.Muted, dashFit("Esc cancels and goes back.", width, ascii)),
 		}
 	} else {
 		lines = renderDash(v.snapshot, page)
@@ -637,7 +678,8 @@ func (a *App) openQuery(spec dashSpec, selected SelectedResourceTarget) { //noli
 func queryActions(owner actionOwner, app *App) []ui.ActionDescriptor {
 	selected := grafanaSelection(owner, app.Config.ActiveContextName())
 	return []ui.ActionDescriptor{{
-		ID: "command.query", Label: "Query: chart a PromQL expression or a named query", Category: ui.ActionInspect,
+		// Short enough to stand whole in the palette's label column.
+		ID: "command.query", Label: "Query: chart PromQL or a named query", Category: ui.ActionInspect,
 		Shortcut: ":" + queryCommandToken, Discoverable: true, UnavailableReason: dashAvailability(app),
 		Handler: func(*tcell.EventKey) *tcell.EventKey { app.openQuery(dashSpec{Board: true}, selected); return nil },
 	}}

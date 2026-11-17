@@ -367,6 +367,12 @@ func TestLegendNames(t *testing.T) {
 	require.Equal(t, []string{"api-1", "api-2"}, ShortNames([]string{"api-1", "api-2"}), "a short common start is kept")
 	require.Equal(t, []string{"gitlab-webservice-default-6f9c7d5b84-2bq7k"}, ShortNames([]string{"gitlab-webservice-default-6f9c7d5b84-2bq7k"}))
 	require.Equal(t, []string{"200", "499"}, ShortNames([]string{"200", "499"}))
+	// Two groups with equally long starts: the same one is shortened on
+	// every draw, whatever order a map yields them in.
+	for range 50 {
+		require.Equal(t, []string{"payments-api-aaaaa", "payments-api-bbbbb", "…ccccc", "…ddddd"}, ShortNames([]string{
+			"payments-api-aaaaa", "payments-api-bbbbb", "checkout-api-ccccc", "checkout-api-ddddd"}))
+	}
 }
 
 func lineText(d *Dashboard, lines []Line) []string {
