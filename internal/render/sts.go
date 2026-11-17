@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package render
 
@@ -23,6 +24,7 @@ var defaultSTSHeader = model1.Header{
 	model1.HeaderColumn{Name: "SERVICE"},
 	model1.HeaderColumn{Name: "CONTAINERS", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "IMAGES", Attrs: model1.Attrs{Wide: true}},
+	model1.HeaderColumn{Name: "WHY"},
 	model1.HeaderColumn{Name: "LABELS", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "VALID", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "AGE", Attrs: model1.Attrs{Time: true}},
@@ -67,6 +69,8 @@ func (s StatefulSet) defaultRow(raw *unstructured.Unstructured, r *model1.Row) e
 	if sts.Spec.Replicas != nil {
 		desired = *sts.Spec.Replicas
 	}
+	why, level := statefulSetWhy(&sts)
+	r.Level = level
 	r.ID = client.MetaFQN(&sts.ObjectMeta)
 	r.Fields = model1.Fields{
 		sts.Namespace,
@@ -77,6 +81,7 @@ func (s StatefulSet) defaultRow(raw *unstructured.Unstructured, r *model1.Row) e
 		na(sts.Spec.ServiceName),
 		podContainerNames(&sts.Spec.Template.Spec, true),
 		podImageNames(&sts.Spec.Template.Spec, true),
+		why,
 		mapToStr(sts.Labels),
 		AsStatus(s.diagnose(desired, sts.Status.Replicas, sts.Status.ReadyReplicas)),
 		ToAge(sts.GetCreationTimestamp()),

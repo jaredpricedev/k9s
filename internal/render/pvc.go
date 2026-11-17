@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package render
 
@@ -21,6 +22,7 @@ var defaultPVCHeader = model1.Header{
 	model1.HeaderColumn{Name: "CAPACITY", Attrs: model1.Attrs{Capacity: true}},
 	model1.HeaderColumn{Name: "ACCESS MODES"},
 	model1.HeaderColumn{Name: "STORAGECLASS"},
+	model1.HeaderColumn{Name: "WHY"},
 	model1.HeaderColumn{Name: "LABELS", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "VALID", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "AGE", Attrs: model1.Attrs{Time: true}},
@@ -82,6 +84,8 @@ func (p PersistentVolumeClaim) defaultRow(raw *unstructured.Unstructured, r *mod
 		}
 	}
 
+	why, level := pvcWhy(&pvc)
+	r.Level = level
 	r.ID = client.MetaFQN(&pvc.ObjectMeta)
 	r.Fields = model1.Fields{
 		pvc.Namespace,
@@ -91,6 +95,7 @@ func (p PersistentVolumeClaim) defaultRow(raw *unstructured.Unstructured, r *mod
 		capacity,
 		accessModes,
 		class,
+		why,
 		mapToStr(pvc.Labels),
 		AsStatus(p.diagnose(string(phase))),
 		ToAge(pvc.GetCreationTimestamp()),

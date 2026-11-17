@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package render
 
@@ -24,6 +25,7 @@ var defaultDPHeader = model1.Header{
 	model1.HeaderColumn{Name: "READY", Attrs: model1.Attrs{Align: tview.AlignRight}},
 	model1.HeaderColumn{Name: "UP-TO-DATE", Attrs: model1.Attrs{Align: tview.AlignRight}},
 	model1.HeaderColumn{Name: "AVAILABLE", Attrs: model1.Attrs{Align: tview.AlignRight}},
+	model1.HeaderColumn{Name: "WHY"},
 	model1.HeaderColumn{Name: "LABELS", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "VALID", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "AGE", Attrs: model1.Attrs{Time: true}},
@@ -88,6 +90,8 @@ func (d Deployment) defaultRow(raw *unstructured.Unstructured, r *model1.Row) er
 	if dp.Spec.Replicas != nil {
 		desired = *dp.Spec.Replicas
 	}
+	why, level := deploymentWhy(&dp)
+	r.Level = level
 	r.ID = client.MetaFQN(&dp.ObjectMeta)
 	r.Fields = model1.Fields{
 		dp.Namespace,
@@ -96,6 +100,7 @@ func (d Deployment) defaultRow(raw *unstructured.Unstructured, r *model1.Row) er
 		strconv.Itoa(int(dp.Status.AvailableReplicas)) + "/" + strconv.Itoa(int(desired)),
 		strconv.Itoa(int(dp.Status.UpdatedReplicas)),
 		strconv.Itoa(int(dp.Status.AvailableReplicas)),
+		why,
 		mapToStr(dp.Labels),
 		AsStatus(d.diagnose(dp.Status.Replicas, dp.Status.AvailableReplicas)),
 		ToAge(dp.GetCreationTimestamp()),

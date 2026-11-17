@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package render
 
@@ -25,6 +26,7 @@ var defaultSVCHeader = model1.Header{
 	model1.HeaderColumn{Name: "EXTERNAL-IP"},
 	model1.HeaderColumn{Name: "SELECTOR", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "PORTS", Attrs: model1.Attrs{Wide: false}},
+	model1.HeaderColumn{Name: "WHY"},
 	model1.HeaderColumn{Name: "LABELS", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "VALID", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "AGE", Attrs: model1.Attrs{Time: true}},
@@ -65,6 +67,8 @@ func (s Service) defaultRow(raw *unstructured.Unstructured, r *model1.Row) error
 		return err
 	}
 
+	why, level := serviceWhy(&svc)
+	r.Level = level
 	r.ID = client.MetaFQN(&svc.ObjectMeta)
 	r.Fields = model1.Fields{
 		svc.Namespace,
@@ -74,6 +78,7 @@ func (s Service) defaultRow(raw *unstructured.Unstructured, r *model1.Row) error
 		toIPs(svc.Spec.Type, getSvcExtIPS(&svc)),
 		mapToStr(svc.Spec.Selector),
 		ToPorts(svc.Spec.Ports),
+		why,
 		mapToStr(svc.Labels),
 		AsStatus(s.diagnose()),
 		ToAge(svc.GetCreationTimestamp()),

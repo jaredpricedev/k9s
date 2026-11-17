@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package render
 
@@ -27,6 +28,7 @@ var defaultCJHeader = model1.Header{
 	model1.HeaderColumn{Name: "SELECTOR", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "CONTAINERS", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "IMAGES", Attrs: model1.Attrs{Wide: true}},
+	model1.HeaderColumn{Name: "WHY"},
 	model1.HeaderColumn{Name: "LABELS", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "VALID", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "AGE", Attrs: model1.Attrs{Time: true}},
@@ -74,6 +76,8 @@ func (CronJob) defaultRow(raw *unstructured.Unstructured, r *model1.Row) error {
 		lastScheduled = ToAge(*cj.Status.LastScheduleTime)
 	}
 
+	why, level := cronJobWhy(&cj)
+	r.Level = level
 	r.ID = client.MetaFQN(&cj.ObjectMeta)
 	r.Fields = model1.Fields{
 		cj.Namespace,
@@ -86,6 +90,7 @@ func (CronJob) defaultRow(raw *unstructured.Unstructured, r *model1.Row) error {
 		jobSelector(&cj.Spec.JobTemplate.Spec),
 		podContainerNames(&cj.Spec.JobTemplate.Spec.Template.Spec, true),
 		podImageNames(&cj.Spec.JobTemplate.Spec.Template.Spec, true),
+		why,
 		mapToStr(cj.Labels),
 		"",
 		ToAge(cj.GetCreationTimestamp()),

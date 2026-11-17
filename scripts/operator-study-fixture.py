@@ -95,6 +95,61 @@ def study_objects(api):
              "containerStatuses": [{"name": "api", "ready": True, "restartCount": 0,
                                    "state": {"running": {"startedAt": now}}}]}),
     ])
+    # One object per list that reports a cause in its own status, so the WHY
+    # column and the list summary can be seen for every workload kind.
+    def node(name, conditions, unschedulable=False):
+        value = obj("v1", "Node", name, "", {"kubernetes.io/role": "worker"},
+                    {"unschedulable": unschedulable},
+                    {"conditions": conditions, "nodeInfo": {"kubeletVersion": "v1.33.1", "architecture": "arm64"}})
+        del value["metadata"]["namespace"]
+        return value
+
+    pod_template = {"metadata": {"labels": {"app": "study"}},
+                    "spec": {"containers": [{"name": "main", "image": "example.test/study:v1"}]}}
+    api.objects.extend([
+        node("worker-b", [
+            {"type": "MemoryPressure", "status": "Unknown", "reason": "NodeStatusUnknown"},
+            {"type": "Ready", "status": "Unknown", "reason": "NodeStatusUnknown",
+             "message": "Kubelet stopped posting node status."}], unschedulable=True),
+        node("worker-c", [
+            {"type": "DiskPressure", "status": "True", "reason": "KubeletHasDiskPressure",
+             "message": "kubelet has disk pressure"},
+            {"type": "Ready", "status": "True", "reason": "KubeletReady", "message": "kubelet is posting ready status"}]),
+        obj("batch/v1", "Job", "report-export", "ops", {"app": "study"},
+            {"backoffLimit": 6, "completions": 1, "template": pod_template},
+            {"active": 1, "failed": 2, "startTime": now}),
+        obj("batch/v1", "Job", "ledger-reconcile", "ops", {"app": "study"},
+            {"backoffLimit": 2, "completions": 1, "activeDeadlineSeconds": 600, "template": pod_template},
+            {"failed": 1, "startTime": now, "conditions": [
+                {"type": "Failed", "status": "True", "reason": "DeadlineExceeded",
+                 "message": "Job was active longer than specified deadline"}]}),
+        obj("apps/v1", "StatefulSet", "ledger-db", "ops", {"app": "study"},
+            {"replicas": 3, "serviceName": "ledger-db", "selector": {"matchLabels": {"app": "study"}},
+             "template": pod_template},
+            {"observedGeneration": 2, "replicas": 3, "readyReplicas": 1, "updatedReplicas": 1,
+             "currentRevision": "ledger-db-7c9", "updateRevision": "ledger-db-5f4"}),
+        obj("apps/v1", "DaemonSet", "log-agent", "ops", {"app": "study"},
+            {"selector": {"matchLabels": {"app": "study"}}, "template": pod_template},
+            {"observedGeneration": 2, "desiredNumberScheduled": 3, "currentNumberScheduled": 3,
+             "updatedNumberScheduled": 3, "numberReady": 2, "numberAvailable": 2, "numberUnavailable": 1}),
+        obj("v1", "PersistentVolumeClaim", "ledger-data", "ops", {"app": "study"},
+            {"accessModes": ["ReadWriteOnce"], "storageClassName": "fast-ssd",
+             "resources": {"requests": {"storage": "20Gi"}}},
+            {"phase": "Pending"}),
+        obj("v1", "PersistentVolumeClaim", "archive-data", "ops", {"app": "study"},
+            {"accessModes": ["ReadWriteOnce"], "storageClassName": "standard", "volumeName": "pv-archive-01",
+             "resources": {"requests": {"storage": "5Gi"}}},
+            {"phase": "Bound", "accessModes": ["ReadWriteOnce"], "capacity": {"storage": "5Gi"}}),
+        obj("v1", "Service", "public-gateway", "ops", {"app": "study"},
+            {"type": "LoadBalancer", "clusterIP": "10.0.0.40", "selector": {"app": "study"},
+             "ports": [{"name": "https", "port": 443, "targetPort": 8443}]},
+            {"loadBalancer": {}}),
+    ])
+    for group, entry in (("v1", ("persistentvolumeclaims", "PersistentVolumeClaim", True)),
+                         ("apps/v1", ("statefulsets", "StatefulSet", True)),
+                         ("apps/v1", ("daemonsets", "DaemonSet", True))):
+        if entry not in demo.GROUPS[group]:
+            demo.GROUPS[group].append(entry)
     # Services are part of the existing core-v1 discovery in the test helpers.
     if not any(name == "services" for name, _, _ in demo.GROUPS["v1"]):
         demo.GROUPS["v1"].append(("services", "Service", True))

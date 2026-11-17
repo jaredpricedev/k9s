@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright Authors of K9s
+// Modified for k9+; see NOTICE.
 
 package render
 
@@ -41,6 +42,7 @@ var defaultRSHeader = model1.Header{
 	model1.HeaderColumn{Name: "CONTAINERS", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "IMAGES", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "SELECTOR", Attrs: model1.Attrs{Wide: true}},
+	model1.HeaderColumn{Name: "WHY"},
 	model1.HeaderColumn{Name: "VALID", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "AGE", Attrs: model1.Attrs{Time: true}},
 }
@@ -78,6 +80,8 @@ func (r ReplicaSet) defaultRow(raw *unstructured.Unstructured, row *model1.Row) 
 		cos, imgs = append(cos, cc[i].Name), append(imgs, cc[i].Image)
 	}
 
+	why, level := replicaSetWhy(&rs)
+	row.Level = level
 	row.ID = client.MetaFQN(&rs.ObjectMeta)
 	row.Fields = model1.Fields{
 		rs.Namespace,
@@ -89,6 +93,7 @@ func (r ReplicaSet) defaultRow(raw *unstructured.Unstructured, row *model1.Row) 
 		strings.Join(cos, ","),
 		strings.Join(imgs, ","),
 		mapToStr(rs.Labels),
+		why,
 		AsStatus(r.diagnose(&rs)),
 		ToAge(rs.GetCreationTimestamp()),
 	}

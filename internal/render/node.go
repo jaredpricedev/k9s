@@ -59,6 +59,7 @@ var defaultNOHeader = model1.Header{
 	model1.HeaderColumn{Name: "GPU/C", Attrs: model1.Attrs{Align: tview.AlignRight, MX: true}},
 	model1.HeaderColumn{Name: "SH-GPU/A", Attrs: model1.Attrs{Align: tview.AlignRight, MX: true}},
 	model1.HeaderColumn{Name: "SH-GPU/C", Attrs: model1.Attrs{Align: tview.AlignRight, MX: true}},
+	model1.HeaderColumn{Name: "WHY"},
 	model1.HeaderColumn{Name: "LABELS", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "VALID", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "AGE", Attrs: model1.Attrs{Time: true}},
@@ -139,6 +140,8 @@ func (n Node) defaultRow(nwm *NodeWithMetrics, r *model1.Row) error {
 	if pc := nwm.PodCount; pc == -1 {
 		podCount = NAValue
 	}
+	why, level := nodeWhy(&no)
+	r.Level = level
 	r.ID = client.FQN("", no.Name)
 	r.Fields = model1.Fields{
 		no.Name,
@@ -162,6 +165,7 @@ func (n Node) defaultRow(nwm *NodeWithMetrics, r *model1.Row) error {
 		toMu(c.gpu),
 		toMu(a.gpuShared),
 		toMu(c.gpuShared),
+		why,
 		mapToStr(no.Labels),
 		AsStatus(n.diagnose(statuses)),
 		ToAge(no.GetCreationTimestamp()),
