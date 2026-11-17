@@ -37,7 +37,7 @@ func TestNextStepMapsStatusEvidenceToChecks(t *testing.T) {
 		"completed pod": {"pods", pod, model1.Fields{"a", "0/1", "Completed", ""}, "", false},
 		"starting without a message is progress, not a problem": {"pods", pod, model1.Fields{"a", "0/1", "ContainerCreating", ""}, "", false},
 		"back-off after OOMKilled": {"pods", pod, model1.Fields{"a", "0/1", "CrashLoopBackOff", "api: last OOMKilled exit 137"},
-			"next: api: last exit 137: killed (SIGKILL), memory limit (OOMKilled) · p previous logs · :pressure limit vs usage", true},
+			"next: api: last exit 137: killed (SIGKILL), out of memory (OOMKilled) · p previous logs · :pressure limit vs usage", true},
 		"back-off after exit 1": {"pods", pod, model1.Fields{"a", "0/1", "CrashLoopBackOff", "last Error exit 1"},
 			"next: last exit 1: the application's own error · p previous logs · d describe for events", true},
 		"exit 2 now": {"pods", pod, model1.Fields{"a", "0/1", "Error", "Error exit 2"},
@@ -68,12 +68,16 @@ func TestNextStepMapsStatusEvidenceToChecks(t *testing.T) {
 			"next: Unschedulable: resources, per the scheduler · :capacity requests vs allocatable · d describe for the scheduler message", false},
 		"unschedulable for taints and affinity": {"pods", pod, model1.Fields{"a", "0/1", "Pending",
 			"0/3 nodes are available: 1 node(s) had untolerated taint {dedicated: gpu}, 2 node(s) didn't match Pod's node affinity/selector."},
-			"next: Unschedulable: taints + affinity/selector, per the scheduler · :capacity requests vs allocatable · d describe for the scheduler message", false},
+			"next: Unschedulable: taints + affinity/selector, per the scheduler · d describe for the scheduler message · :capacity", false},
+		"unschedulable for topology spread and cordon": {"pods", pod, model1.Fields{"a", "0/1", "Pending",
+			"0/3 nodes are available: 1 node(s) were unschedulable, 2 node(s) didn't match pod topology spread constraints."},
+			"next: Unschedulable: topology spread + cordoned nodes, per the scheduler · d describe for the scheduler message · :capacity", false},
+		"a terminating pod gets no readiness hint": {"pods", pod, model1.Fields{"a", "0/1", "Terminating", "running, not ready"}, "", false},
 		"unschedulable for an unbound claim": {"pods", pod, model1.Fields{"a", "0/1", "Pending",
 			"0/3 nodes are available: pod has unbound immediate PersistentVolumeClaims."},
 			"next: Unschedulable: volumes, per the scheduler · :storage claim binding · d describe for the scheduler message", false},
 		"unschedulable without a named constraint": {"pods", pod, model1.Fields{"a", "0/1", "Pending", "0/3 nodes are available."},
-			"next: Unschedulable: scheduler names no constraint here · :capacity requests vs allocatable · d describe for the scheduler message", false},
+			"next: Unschedulable: see the scheduler message · d describe for the scheduler message · :capacity", false},
 		"pending with nothing reported": {"pods", pod, model1.Fields{"a", "0/1", "Pending", ""},
 			"next: Pending: no scheduler message reported · d describe for events", false},
 		"creating blocked on a mount": {"pods", pod, model1.Fields{"a", "0/1", "ContainerCreating", `MountVolume.SetUp failed for volume "data"`},
@@ -109,10 +113,10 @@ func TestNextStepFitDropsLeastImportantPartsAndNeverWraps(t *testing.T) {
 		ascii bool
 		e     string
 	}{
-		{120, false, "next: api: last exit 137: killed (SIGKILL), memory limit (OOMKilled) · p previous logs · :pressure limit vs usage"},
-		{120, true, "next: api: last exit 137: killed (SIGKILL), memory limit (OOMKilled) | p previous logs | :pressure limit vs usage"},
-		{100, false, "next: api: last exit 137: killed (SIGKILL), memory limit (OOMKilled) · p previous logs · :pressure"},
-		{90, false, "next: api: last exit 137: killed (SIGKILL), memory limit (OOMKilled) · p previous logs"},
+		{120, false, "next: api: last exit 137: killed (SIGKILL), out of memory (OOMKilled) · p previous logs · :pressure limit vs usage"},
+		{120, true, "next: api: last exit 137: killed (SIGKILL), out of memory (OOMKilled) | p previous logs | :pressure limit vs usage"},
+		{100, false, "next: api: last exit 137: killed (SIGKILL), out of memory (OOMKilled) · p previous logs · :pressure"},
+		{90, false, "next: api: last exit 137 OOMKilled · p previous logs · :pressure limit vs usage"},
 		{80, false, "next: api: last exit 137 OOMKilled · p previous logs · :pressure limit vs usage"},
 		{66, false, "next: api: last exit 137 OOMKilled · p previous logs · :pressure"},
 		{52, false, "next: api: last exit 137 OOMKilled · p previous logs"},
@@ -138,12 +142,12 @@ func TestNextStepKeepsOnlyRunnableChecks(t *testing.T) {
 		require.Len(t, checks, 2)
 		return checks[:1]
 	})
-	assert.Equal(t, "next: last exit 137: killed (SIGKILL), memory limit (OOMKilled) · p previous logs", nextStepText(got.fit(200, false)))
+	assert.Equal(t, "next: last exit 137: killed (SIGKILL), out of memory (OOMKilled) · p previous logs", nextStepText(got.fit(200, false)))
 
 	pull := podNextStep("ImagePullBackOff", "x").available(func([]NextCheck) []NextCheck { return nil })
 	assert.Equal(t, "next: ImagePullBackOff: image not pulled · check the image name and pull secret", nextStepText(pull.fit(200, false)),
 		"advice without a key stays; the unavailable key is not printed")
 
 	none := step.available(func([]NextCheck) []NextCheck { return nil })
-	assert.Equal(t, "next: last exit 137: killed (SIGKILL), memory limit (OOMKilled)", nextStepText(none.fit(200, false)))
+	assert.Equal(t, "next: last exit 137: killed (SIGKILL), out of memory (OOMKilled)", nextStepText(none.fit(200, false)))
 }

@@ -146,7 +146,7 @@ func decodeExit(e exitEvidence) (long, short string) {
 	var meaning string
 	switch {
 	case oom:
-		meaning = "killed (SIGKILL), memory limit (OOMKilled)"
+		meaning = "killed (SIGKILL), out of memory (OOMKilled)"
 	case signal == 9:
 		meaning = "killed (SIGKILL), usually the memory limit or the node"
 	case signal == 15:
@@ -214,13 +214,16 @@ func podNextStep(status, why string) NextStep {
 	case "CrashLoopBackOff":
 		return step("CrashLoopBackOff: no previous exit reported", reason, logsCheck(true), checkDescribe("for events"))
 	case "OOMKilled":
-		return step("OOMKilled: killed (SIGKILL), memory limit", reason, logsCheck(false), pressureCheck())
+		return step("OOMKilled: killed (SIGKILL), out of memory", reason, logsCheck(false), pressureCheck())
 	case "Evicted":
 		return step("Evicted by the node", reason, checkDescribe("for the eviction message"), commandCheck("capacity", "node allocatable"))
+	case "Terminating":
+		// Deletion is in progress; a readiness or exit hint would misread it.
+		return NextStep{}
 	case "Pending":
 		if strings.Contains(lower, "nodes are available") || strings.Contains(lower, "nodes available") {
-			evidence, check := unschedulable(lower)
-			return step(evidence, "Unschedulable", check, checkDescribe("for the scheduler message"))
+			evidence, checks := unschedulable(lower)
+			return step(evidence, "Unschedulable", checks...)
 		}
 		if why == "" {
 			return step("Pending: no scheduler message reported", "Pending", checkDescribe("for events"))
@@ -247,9 +250,10 @@ func podNextStep(status, why string) NextStep {
 	return NextStep{}
 }
 
-// unschedulable repeats which constraint the scheduler message names. When
-// the message names none it says so; it never picks one.
-func unschedulable(message string) (string, NextCheck) {
+// unschedulable repeats which constraints the scheduler message names. A
+// message with none it recognizes points at the message; it never picks one.
+// The capacity review leads only when the message names resources.
+func unschedulable(message string) (string, []NextCheck) {
 	var kinds []string
 	add := func(kind string, words ...string) {
 		for _, w := range words {
@@ -261,16 +265,23 @@ func unschedulable(message string) (string, NextCheck) {
 	}
 	add("resources", "insufficient", "too many pods")
 	add("taints", "taint")
-	add("affinity/selector", "affinity", "node selector", "nodeselector", "didn't match")
+	add("affinity/selector", "affinity", "node selector", "nodeselector")
+	add("topology spread", "topology spread")
 	add("volumes", "persistentvolumeclaim", "volume")
-	check := commandCheck("capacity", "requests vs allocatable")
+	add("cordoned nodes", "were unschedulable")
+	add("host ports", "free ports")
+	describe := checkDescribe("for the scheduler message")
 	if len(kinds) == 0 {
-		return "Unschedulable: scheduler names no constraint here", check
+		return "Unschedulable: see the scheduler message", []NextCheck{describe, commandCheck("capacity", "")}
 	}
-	if kinds[0] == "volumes" {
-		check = commandCheck("storage", "claim binding")
+	evidence := "Unschedulable: " + strings.Join(kinds, " + ") + ", per the scheduler"
+	switch kinds[0] {
+	case "resources":
+		return evidence, []NextCheck{commandCheck("capacity", "requests vs allocatable"), describe}
+	case "volumes":
+		return evidence, []NextCheck{commandCheck("storage", "claim binding"), describe}
 	}
-	return "Unschedulable: " + strings.Join(kinds, " + ") + ", per the scheduler", check
+	return evidence, []NextCheck{describe, commandCheck("capacity", "")}
 }
 
 func claimNextStep(status string) NextStep {
@@ -341,9 +352,11 @@ type nextStepPart struct {
 }
 
 // fit lays the step out in at most width cells. It drops, in order, the
-// details from the last check back, then trailing checks, and only then the decoded evidence wording. Below a
-// usable width, or when even evidence and one check cannot fit, it returns
-// nothing: a clipped instruction is worse than none.
+// details from the last check back, then the decoded evidence wording in
+// favour of the short evidence, and only then trailing checks, so a narrower
+// frame never hides a check before it has shortened the prose. Below a usable
+// width, or when even evidence and one check cannot fit, it returns nothing:
+// a clipped instruction is worse than none.
 func (s NextStep) fit(width int, ascii bool) []nextStepPart {
 	if s.Empty() || width < nextStepMinWidth {
 		return nil
@@ -382,8 +395,8 @@ func (s NextStep) fit(width int, ascii bool) []nextStepPart {
 		short = s.Evidence
 	}
 	least := min(1, len(s.Checks))
-	for _, evidence := range []string{s.Evidence, short} {
-		for n := len(s.Checks); n >= least; n-- {
+	for n := len(s.Checks); n >= least; n-- {
+		for _, evidence := range []string{s.Evidence, short} {
 			for details := n; details >= 0; details-- {
 				if parts := build(evidence, s.Checks[:n], details); fits(parts) {
 					return parts

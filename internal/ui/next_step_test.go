@@ -59,7 +59,7 @@ func TestNextStepLineSitsOnTheFrameEdgeAndNeverMovesRows(t *testing.T) {
 	v.SelectRow(1, 0, true)
 	lines := drawNextStep(t, v, 100)
 	assert.Equal(t, before[:9], lines[:9], "guidance must not move or change any table row")
-	assert.Contains(t, lines[9], " next: last exit 137: killed (SIGKILL), memory limit (OOMKilled) · p previous logs · :pressure ")
+	assert.Contains(t, lines[9], " next: last exit 137: killed (SIGKILL), out of memory (OOMKilled) · p previous logs · :pressure ")
 	assert.True(t, strings.HasPrefix(lines[9], "└─ next") && strings.HasSuffix(lines[9], "─┘"), lines[9])
 
 	// A healthy selection leaves the border as it was.
@@ -77,7 +77,7 @@ func TestNextStepLineSitsOnTheFrameEdgeAndNeverMovesRows(t *testing.T) {
 	// Checks the view cannot run are not printed; the evidence remains.
 	v.SetNextStepFilter(func([]ui.NextCheck) []ui.NextCheck { return nil })
 	line := drawNextStep(t, v, 100)[9]
-	assert.Contains(t, line, " next: last exit 137: killed (SIGKILL), memory limit (OOMKilled) ─")
+	assert.Contains(t, line, " next: last exit 137: killed (SIGKILL), out of memory (OOMKilled) ─")
 	assert.NotContains(t, line, "previous logs")
 }
 
