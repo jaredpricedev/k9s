@@ -24,6 +24,20 @@ Pod lists add a `WHY` column: one phrase taken from the Pod status for a pod tha
 
 While a list is open it remembers up to eight samples of each row's `CPU` and `MEM` values, taken at most every two seconds, and draws them as a sparkline before the number, scaled from zero to that row's maximum. `RESTARTS` shows the restarts gained since the list was opened as `+N`. This is session memory, not cluster history: it starts empty, is never stored, ignores unavailable values and is dropped when the resource leaves the list. With `noIcons`, the sparkline is replaced by `+`, `-` or `=` comparing the newest sample with the oldest. Sorting, filtering and export use the unchanged values.
 
+## Next step line
+
+When the selected row of a resource list reports a problem, the bottom edge of the table frame carries one line: `next:`, the status evidence decoded, then the checks that open more evidence, each with the key or typed command that this view really runs. For example `next: api: last exit 137: killed (SIGKILL), memory limit (OOMKilled) · p previous logs · :pressure limit vs usage`. A healthy selection leaves the border plain. The line is drawn on the frame, so it never moves a row and never touches the flash line.
+
+The line is derived only from fields the list already holds (`STATUS`, `READY` and the pod `WHY` phrase); moving the selection reads nothing from the cluster. Exit codes are decoded by convention: 137 is SIGKILL (the memory limit when the status says `OOMKilled`, otherwise "usually the memory limit or the node"), 143 is SIGTERM (a normal stop or a failed graceful shutdown), 139 is a segfault, 126 and 127 are a command that is not executable or not found in the image, 1 and 2 are the application's own error. Other signals are named by number and other codes are called application-defined. Scheduling guidance repeats which constraint the scheduler message names (resources, taints, affinity/selector, volumes) and says so when it names none. The wording is evidence plus a proposed check, never a diagnosis.
+
+Covered states: pod exits and back-offs, image pull failures, container configuration and start errors, eviction, unschedulable and other Pending pods, a pod blocked while creating (only when the kubelet reports a message), running but not ready; a Pending or Lost PersistentVolumeClaim; a Deployment or StatefulSet with fewer ready replicas than desired; a NotReady node. Other resources and states show no line rather than a generic one.
+
+Every key and command is checked against the action registry behind `Ctrl-O` for the selected row before it is printed. A check that is unbound in the view, unavailable for the selection, or disabled by read-only mode is left out; the evidence stays. The mapping itself only proposes reads (logs, describe, review commands).
+
+When the line does not fit it drops the explanatory detail from the last check back, then trailing checks, then the decoded wording in favour of the short evidence (`last exit 137 OOMKilled`). If evidence and one check still do not fit, or the frame leaves fewer than 40 cells, nothing is shown; the line never wraps or clips. Width is measured in terminal cells. Evidence is bold in the warning or failure token and shortcuts are bold in the focus token, but the words carry the meaning; with `noIcons` the separator is `|` instead of `·`.
+
+Limits: the guidance is only as current as the list row. It parses the `WHY` phrase, so a custom view that removes `STATUS` or `WHY` from pods loses the corresponding detail. It reports the first failing container, as `WHY` does. A deployment line is based on the ready count alone and does not read conditions such as `ProgressDeadlineExceeded`; `:rollout` shows those. There is no setting to turn the line off.
+
 ## Semantic skin tokens
 
 Existing skins remain supported. An optional `k9s.semantic` object can override `canvas`, `panel`, `text`, `muted`, `focus`, `healthy`, `warning`, `failure`, `progress`, `unknown`, `category`, and `selected`. These tokens also feed inherited prompts, dialogs, help, tables and charts. Runtime updates keep selection and stream state.

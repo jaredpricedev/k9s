@@ -79,6 +79,10 @@ type Table struct {
 	trends             map[string]*rowTrend
 	trendAt            time.Time
 	presentation       tablePresentation
+	nextStepOK         func([]NextCheck) []NextCheck
+	nextStepData       *model1.TableData
+	nextStepID         string
+	nextStep           NextStep
 }
 
 // NewTable returns a new table view.
@@ -618,6 +622,7 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 	// the row index changes the selected object when a watched field is sorted.
 	selectedID, _ := t.GetRowID(t.GetSelectedRowIndex())
 	_, selectedCol := t.GetSelection()
+	t.nextStepData, t.nextStepID = data, ""
 	selectedRow := -1
 	pads := make(MaxyPad, cdata.HeaderCount())
 	computeMaxColumns(pads, t.getSortCol().Name, cdata, t.getLiteralFields())
