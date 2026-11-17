@@ -18,6 +18,7 @@ import (
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
+	"github.com/mattn/go-runewidth"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -334,7 +335,7 @@ func TestGraphNoIconsPageIsASCII(t *testing.T) {
 	for _, r := range text {
 		require.True(t, r < 128 || r == '·', "%q is neither ASCII nor the shared separator", r)
 	}
-	for _, want := range []string{"= limit 256Mi", ". request 128Mi", "restarts |", "^", "Left/Right cursor", "Pod apps/che...", "order, not cause"} {
+	for _, want := range []string{"= limit 256Mi", ". request 128Mi", "restarts |", "^", "Left/Right cursor", "Pod apps/checkout...7d9f8c6b5d-x2x9q", "10/10 ok · 2 no data · 2/3 charts Up/Down", "order, not cause"} {
 		require.Contains(t, text, want)
 	}
 }
@@ -454,14 +455,21 @@ func TestGraphRestartEventsAreRisesBetweenNeighbouringSamples(t *testing.T) {
 	at := func(m int) time.Time { return graphNow.Add(time.Duration(m) * time.Minute) }
 	res := &observability.PromResult{Series: []observability.PromSeries{{Samples: []observability.Sample{
 		{Timestamp: at(0), Value: 2}, {Timestamp: at(1), Value: 2}, {Timestamp: at(2), Value: 3}, {Timestamp: at(3), Value: 5},
-		// A hole: the rise across it has no known time and is not marked.
+		// A hole: the rise across it has no known time and is not marked,
+		// but it did happen inside the window and is counted.
 		{Timestamp: at(10), Value: 9}, {Timestamp: at(11), Value: 9},
 		// A counter that falls (a replaced Pod) is not a restart.
 		{Timestamp: at(12), Value: 0},
 	}}}}
-	events, rise := graphRestartEvents(res, time.Minute)
+	events, rise, measured := graphRestartEvents(res, time.Minute)
 	require.Equal(t, []time.Time{at(2), at(3)}, events)
-	require.InDelta(t, 3.0, rise, 0)
+	require.InDelta(t, 7.0, rise, 0)
+	require.True(t, measured)
+
+	one := &observability.PromResult{Series: []observability.PromSeries{{Samples: []observability.Sample{{Timestamp: at(0), Value: 6}}}}}
+	_, rise, measured = graphRestartEvents(one, time.Minute)
+	require.Zero(t, rise)
+	require.False(t, measured, "one sample cannot show a rise")
 }
 
 func graphObject(apiVersion, kind, name string, created time.Time, mutate func(*unstructured.Unstructured)) *unstructured.Unstructured {
@@ -567,9 +575,15 @@ func TestGraphViewReadsOnceMovesTheCursorAndChangesWindowOnRequest(t *testing.T)
 
 	queries, _ := v.actions.Get(ui.KeyS)
 	queries.Action(nil)
+	// The report is wrapped to the view's width on plain text, so a query
+	// is cut after a comma and its brackets are never taken for markup.
 	report := v.text.GetText(true)
-	require.Contains(t, report, "sum by (pod) (max_over_time(container_memory_working_set_bytes{namespace=\"apps\",pod=\"checkout-api-7d9f8c6b5d-x2x9q\"")
-	require.Contains(t, report, "Each query is one bounded GET (8s, 32 series, 4096 samples). Nothing is polled; r reads again.")
+	require.Contains(t, report, "  sum by (pod) (max_over_time(container_memory_working_set_bytes{\n")
+	require.Contains(t, report, "    namespace=\"apps\",pod=\"checkout-api-7d9f8c6b5d-x2x9q\",container!=\"\",\n    container!=\"POD\"}")
+	require.Contains(t, strings.Join(strings.Fields(report), " "), "Each query is one bounded GET (8s, 32 series, 4096 samples). Nothing is polled; r reads again.")
+	for _, line := range strings.Split(report, "\n") {
+		require.LessOrEqual(t, runewidth.StringWidth(strings.ReplaceAll(line, "[]", "]")), 80, line)
+	}
 	require.Contains(t, report, "F, when shown, is the first rise of the restart counter inside the window.")
 	queries.Action(nil)
 
@@ -642,4 +656,66 @@ func TestGraphIsRegisteredAsCommandPaletteEntryAndListKey(t *testing.T) {
 	}
 	_, ok := parseGraphWindow("7d")
 	require.False(t, ok)
+}
+
+func TestGraphWrapKeepsEveryCharacterAndBrackets(t *testing.T) {
+	query := `  count by (pod) (max_over_time(kube_pod_info{namespace="apps",created_by_kind="ReplicaSet",created_by_name=~"checkout-api-[a-z0-9]{5,10}"}[3600s]))`
+	for _, width := range []int{120, 80, 60, 40} {
+		lines := graphWrap(query, width, "  ")
+		joined := ""
+		for i, line := range lines {
+			require.LessOrEqual(t, runewidth.StringWidth(line), width, line)
+			if i > 0 {
+				require.True(t, strings.HasPrefix(line, "    "), "continuation lines are indented: %q", line)
+			}
+			joined += strings.TrimSpace(line)
+		}
+		require.Equal(t, strings.ReplaceAll(strings.TrimSpace(query), " ", ""), strings.ReplaceAll(joined, " ", ""), "width %d", width)
+		if width >= 60 {
+			require.Contains(t, strings.Join(lines, "\n"), "[a-z0-9]", "width %d", width)
+		}
+	}
+	require.Equal(t, []string{"one two three four", "five"}, graphWrap("one two three four five", 20, ""))
+	require.Equal(t, []string{"a", "", "b"}, graphWrap("a\n\nb", 20, ""))
+}
+
+func TestGraphNarrowStatusKeepsTheChartCountAndNamesAPodWithoutSamples(t *testing.T) {
+	dp := &graphTarget{Context: "ct-1-1", Kind: "Deployment", Namespace: "apps", Name: "checkout-api"}
+	pods := []string{"checkout-api-6c8d7f9b5-k4m2t", "checkout-api-7d9f8c6b5d-p8wm", "checkout-api-7d9f8c6b5d-x2x9q"}
+	fake := &graphFake{pods: pods, rules: []graphRule{
+		// The image of p8wm never pulled: it has no usage samples at all.
+		{contains: "container_memory_working_set_bytes", by: []string{pods[0], pods[2]}, value: func(string, time.Time) (float64, bool) {
+			return 200 * graphMi, true
+		}},
+	}}
+	snapshot := loadGraph(t.Context(), fake, dp, time.Hour, graphNow)
+	wide := graphPlainLines(t, renderGraph(snapshot, &graphPage{Width: 120, Height: 30, Cursor: 120}), 120)
+	require.Contains(t, wide, "MEMORY  a k4m2t 200Mi  b x2x9q 200Mi  c p8wm no data")
+	for _, width := range []int{60, 50, 44} {
+		text := graphPlainLines(t, renderGraph(snapshot, &graphPage{Width: width, Height: 20}), width)
+		require.Regexp(t, `\d/3 charts ↑↓`, text, "width %d", width)
+		require.Contains(t, text, "3 pods", "width %d", width)
+	}
+}
+
+func TestGraphScrollNeverHidesAChartThatFits(t *testing.T) {
+	snapshot := loadGraph(t.Context(), graphStory(), graphPod, time.Hour, graphNow)
+	page := &graphPage{Width: 120, Height: 40, First: 2}
+	text := graphPlainLines(t, renderGraph(snapshot, page), 120)
+	require.Zero(t, page.First, "all three charts fit, so none is scrolled away")
+	require.Contains(t, text, "MEMORY")
+	require.NotContains(t, text, "charts (")
+}
+
+func TestGraphLongWindowsEndWithinAMinuteOfTheRead(t *testing.T) {
+	now := time.Date(2026, 11, 17, 6, 27, 23, 0, time.UTC)
+	for _, window := range graphWindows {
+		start, end, step := graphFrameTimes(now, window)
+		require.LessOrEqual(t, now.Sub(end), time.Minute, "%s: the newest minutes are inside the window", graphSpan(window))
+		require.False(t, end.After(now), "nothing is asked about the future")
+		require.Equal(t, window, end.Sub(start))
+		require.Zero(t, window%step)
+	}
+	_, end, _ := graphFrameTimes(now, 24*time.Hour)
+	require.Equal(t, time.Date(2026, 11, 17, 6, 27, 0, 0, time.UTC), end)
 }

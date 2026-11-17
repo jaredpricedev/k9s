@@ -231,7 +231,6 @@ func (v *graphView) scrollCmd(delta int) ui.ActionHandler {
 
 func (v *graphView) toggleReport() {
 	v.report = !v.report
-	v.text.SetWrap(v.report).SetWordWrap(v.report)
 	v.render()
 	v.text.ScrollToBeginning()
 }
@@ -340,7 +339,17 @@ func (v *graphView) render() {
 		return
 	}
 	if v.report {
-		v.text.SetText(tview.Escape(graphReport(v.snapshot) + "\ns or Esc returns to the charts · r re-read"))
+		// Wrapped here, on plain text: the queries hold brackets, which the
+		// text view's own wrapping would take for markup.
+		width := v.width
+		if width <= 0 {
+			width = 80
+		}
+		text := graphReport(v.snapshot) + "\ns or Esc returns to the charts · r re-read"
+		if v.app.Config.K9s.UI.NoIcons {
+			text = graphWords(text, true)
+		}
+		v.text.SetText(tview.Escape(strings.Join(graphWrap(text, width, "  "), "\n")))
 		return
 	}
 	width, height := v.width, v.height
@@ -360,6 +369,8 @@ func (v *graphView) render() {
 		}
 	} else {
 		lines = renderGraph(v.snapshot, page)
+		// The page settles the scroll position: a chart that fits is shown.
+		v.first = page.First
 	}
 	v.text.SetText(strings.Join(lines, "\n"))
 	v.text.ScrollToBeginning()

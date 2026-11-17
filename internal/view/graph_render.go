@@ -163,12 +163,25 @@ func (s *graphSnapshot) panels(colors graphColors) []graphPanel {
 				continue
 			}
 			sort.SliceStable(res.Series, func(a, b int) bool { return res.Series[a].Labels[sp.By] < res.Series[b].Labels[sp.By] })
+			answered := make(map[string]bool, len(res.Series))
 			for k := range res.Series {
 				name := res.Series[k].Labels[sp.By]
+				answered[name] = true
 				if sp.By == "pod" && short[name] != "" {
 					name = short[name]
 				}
 				add(sp, name, graphPoints(res.Series[k].Samples), "")
+			}
+			if sp.By != "pod" {
+				continue
+			}
+			// A Pod that was asked for and has no samples is named, so a
+			// missing line is not read as a Pod that does not exist.
+			asked := s.Pods[:len(s.Pods)-min(s.PodsOmitted, len(s.Pods))]
+			for _, pod := range asked {
+				if !answered[pod] {
+					add(sp, short[pod], nil, graphNoData)
+				}
 			}
 		}
 		if _, drawn := panel.Chart.Max(); !drawn {
@@ -276,7 +289,12 @@ func (s *graphSnapshot) headline(width int) string {
 	if width < 72 {
 		tail = fmt.Sprintf(" · %s to %s · step %s", graphSpan(s.Window), end, graphSpan(s.Step))
 	}
-	return "Graph · " + graphMiddle(s.Target.Label(), width-len("Graph · ")-runewidth.StringWidth(tail)) + tail
+	label, prefix := s.Target.Label(), "Graph · "
+	if runewidth.StringWidth(prefix+label+tail) > width {
+		// The breadcrumb already names the view; the object matters more.
+		prefix = ""
+	}
+	return prefix + graphMiddle(label, width-runewidth.StringWidth(prefix)-runewidth.StringWidth(tail)) + tail
 }
 
 // failure describes a page on which nothing can be drawn, or returns nil.
@@ -328,11 +346,25 @@ func (s *graphSnapshot) failure() []string {
 // statusLine is the second line: when, and how the reads went. The compact
 // form keeps every fact and drops only words.
 func (s *graphSnapshot) statusLine(shown, total int, compact bool) string {
+	level := 0
+	if compact {
+		level = 1
+	}
+	return strings.Join(s.statusParts(shown, total, level), " · ")
+}
+
+// statusParts are the facts of the status line. Level 1 and 2 use fewer
+// words for narrow pages; no level drops a fact.
+func (s *graphSnapshot) statusParts(shown, total, level int) []string {
+	compact := level > 0
 	t := s.tally()
 	parts := []string{"read " + graphClock(s.ReadAt)}
 	answered := fmt.Sprintf("%d of %d queries answered", t.Asked-t.Failed, t.Asked)
 	if compact {
 		answered = fmt.Sprintf("%d/%d answered", t.Asked-t.Failed, t.Asked)
+	}
+	if level > 1 {
+		answered = fmt.Sprintf("%d/%d ok", t.Asked-t.Failed, t.Asked)
 	}
 	if t.Failed > 0 {
 		answered += fmt.Sprintf(", %d %s", t.Failed, t.Worst.State)
@@ -364,7 +396,80 @@ func (s *graphSnapshot) statusLine(shown, total int, compact bool) string {
 			parts = append(parts, fmt.Sprintf("%d of %d charts (↑/↓)", shown, total))
 		}
 	}
-	return strings.Join(parts, " · ")
+	return parts
+}
+
+// graphJoinLines joins parts with a separator onto as few lines as fit the
+// width. A part is never split between lines.
+func graphJoinLines(parts []string, sep string, width int) []string {
+	var lines []string
+	for _, part := range parts {
+		if n := len(lines); n > 0 && runewidth.StringWidth(lines[n-1]+sep+part) <= width {
+			lines[n-1] += sep + part
+			continue
+		}
+		lines = append(lines, part)
+	}
+	return lines
+}
+
+// graphWrap wraps plain text to the width at spaces. A word longer than a
+// line (a PromQL text) is cut after a comma where it can be, else at the
+// width; continuation lines carry the indent. It never interprets markup.
+func graphWrap(text string, width int, indent string) []string {
+	width = max(width, 20)
+	var lines []string
+	for _, paragraph := range strings.Split(text, "\n") {
+		lead := paragraph[:len(paragraph)-len(strings.TrimLeft(paragraph, " "))]
+		line := lead
+		empty := true
+		emit := func() {
+			lines = append(lines, strings.TrimRight(line, " "))
+			line, empty = lead+indent, true
+		}
+		for _, word := range strings.Fields(paragraph) {
+			for {
+				room := width - runewidth.StringWidth(line)
+				if !empty {
+					room--
+				}
+				if runewidth.StringWidth(word) <= room {
+					if !empty {
+						line += " "
+					}
+					line += word
+					empty = false
+					break
+				}
+				if !empty && runewidth.StringWidth(word) <= width-runewidth.StringWidth(lead+indent) {
+					emit()
+					continue
+				}
+				// The word is longer than any line: fill this one and cut.
+				if !empty {
+					if room < 8 {
+						emit()
+						continue
+					}
+					line += " "
+				}
+				head := runewidth.Truncate(word, max(room, 1), "")
+				if head == "" {
+					head = string([]rune(word)[:1])
+				}
+				if cut := strings.LastIndex(head, ","); cut > 0 && len(head) < len(word) {
+					head = head[:cut+1]
+				} else if cut := strings.LastIndexAny(head, "{("); cut > 0 && len(head) < len(word) {
+					head = head[:cut+1]
+				}
+				line += head
+				word = word[len(head):]
+				emit()
+			}
+		}
+		lines = append(lines, strings.TrimRight(line, " "))
+	}
+	return lines
 }
 
 // graphMarkLines names the axis marks on one or two lines. The wording
@@ -463,7 +568,7 @@ func renderGraph(s *graphSnapshot, pg *graphPage) []string {
 			if i == 0 {
 				color = c.Failure
 			}
-			for _, wrapped := range tview.WordWrap(line, width) {
+			for _, wrapped := range graphWrap(line, width, "") {
 				plain(color, wrapped)
 			}
 		}
@@ -473,10 +578,10 @@ func renderGraph(s *graphSnapshot, pg *graphPage) []string {
 	}
 
 	panels := s.panels(c)
-	first := min(max(pg.First, 0), len(panels)-1)
+	first := 0
 	restarts, hasStrip := s.Results[graphResultKey("", "restarts")]
 	hasStrip = hasStrip && s.Plan.Restarts != nil
-	events, rise := graphRestartEvents(&restarts, s.Step)
+	events, rise, measured := graphRestartEvents(&restarts, s.Step)
 	marks := append([]graphMark(nil), s.Marks...)
 	if len(events) > 0 {
 		marks = append(marks, graphMark{Key: 'F', T: events[0], Label: "first restart", Origin: "first rise of kube_pod_container_status_restarts_total in the window"})
@@ -509,22 +614,64 @@ func renderGraph(s *graphSnapshot, pg *graphPage) []string {
 		}
 	}
 	markLines := graphMarkLines(marks, frame, width)
-	fixed := 2 + 2 + 2 // headline and status, axis, cursor line and keys
+	fixed := 1 + 2 + 2 // headline, axis, cursor line and keys
 	if hasStrip {
 		fixed++
 	}
 	fixed += len(markLines)
-	budget := pg.Height - fixed
-	// Another chart is added only while each keeps a readable height; a
-	// single chart may shrink to the minimum.
-	shown, used := 0, 0
-	for i := first; i < len(panels); i++ {
-		if shown > 0 && used+len(legends[i])+graphMinRows > budget-(shown+1)*(graphGoodRows-graphMinRows) {
+	// fill reports how many charts fit from a first chart on. Another chart
+	// is added only while each keeps a readable height; a single chart may
+	// shrink to the minimum.
+	fill := func(first, budget int) (shown, used int) {
+		for i := first; i < len(panels); i++ {
+			if shown > 0 && used+len(legends[i])+graphMinRows > budget-(shown+1)*(graphGoodRows-graphMinRows) {
+				break
+			}
+			used += len(legends[i]) + graphMinRows
+			shown++
+		}
+		return shown, used
+	}
+	var (
+		status      []string
+		shown, used int
+		budget      int
+	)
+	// The status line names how many charts are shown, and its own height
+	// decides how many fit: lay out for one line first, then for two.
+	for statusRows := 1; statusRows <= 2; statusRows++ {
+		budget = pg.Height - fixed - statusRows
+		first = min(max(pg.First, 0), len(panels)-1)
+		shown, used = fill(first, budget)
+		// Scrolling never hides a chart that would still fit above.
+		for first > 0 && first+shown == len(panels) {
+			if more, moreUsed := fill(first-1, budget); more == shown+1 {
+				first, shown, used = first-1, more, moreUsed
+				continue
+			}
 			break
 		}
-		used += len(legends[i]) + graphMinRows
-		shown++
+		for level := range 3 {
+			parts := s.statusParts(shown, len(panels), level)
+			if pg.Busy != "" {
+				parts[0] = pg.Busy + " · shown: " + parts[0]
+			}
+			for i := range parts {
+				parts[i] = graphWords(parts[i], pg.ASCII)
+			}
+			if status = graphJoinLines(parts, " · ", width); len(status) == 1 {
+				break
+			}
+		}
+		if len(status) <= statusRows {
+			break
+		}
 	}
+	if len(status) > 2 {
+		// Past two lines the tail is cut, visibly.
+		status = append(status[:1], strings.Join(status[1:], " · "))
+	}
+	pg.First = first
 	rows := make([]int, shown)
 	spare := budget - used
 	for i := range rows {
@@ -540,15 +687,9 @@ func renderGraph(s *graphSnapshot, pg *graphPage) []string {
 			}
 		}
 	}
-
-	status := s.statusLine(shown, len(panels), false)
-	if pg.Busy != "" {
-		status = pg.Busy + " · shown: " + status
+	for _, line := range status {
+		plain(c.Muted, line)
 	}
-	if runewidth.StringWidth(status) > width {
-		status = s.statusLine(shown, len(panels), true)
-	}
-	plain(c.Muted, status)
 	for i := range shown {
 		panel := &panels[first+i]
 		lines = append(lines, legends[first+i]...)
@@ -594,7 +735,12 @@ func renderGraph(s *graphSnapshot, pg *graphPage) []string {
 			if found {
 				count = chart.Count.Format(total)
 			}
-			readout += fmt.Sprintf(" · restarts %s, +%s in window", count, chart.Count.Format(rise))
+			if measured {
+				readout += fmt.Sprintf(" · restarts %s, +%s in window", count, chart.Count.Format(rise))
+			} else {
+				// One sample cannot show a rise; that is not "+0".
+				readout += fmt.Sprintf(" · restarts %s, rise not known (1 sample)", count)
+			}
 		}
 	}
 	plain("", readout)
@@ -610,7 +756,7 @@ func graphReport(s *graphSnapshot) string {
 	}
 	fmt.Fprintf(&b, "Graph of %s · READ ONLY · %s\n", s.Target.Label(), s.Target.Context)
 	fmt.Fprintf(&b, "Window: %s to %s (last %s, UTC)\n", s.Start.UTC().Format("2006-01-02 15:04:05Z"), s.End.UTC().Format("2006-01-02 15:04:05Z"), graphSpan(s.Window))
-	fmt.Fprintf(&b, "Step: %s, so at most %d points per series. The window end is aligned to the step.\n", graphSpan(s.Step), int(s.Window/s.Step)+1)
+	fmt.Fprintf(&b, "Step: %s, so at most %d points per series. The window ends at most one minute before the read.\n", graphSpan(s.Step), int(s.Window/s.Step)+1)
 	fmt.Fprintf(&b, "Read began: %s · Source: prometheus via %s\n", graphClock(s.ReadAt), s.Source)
 	fmt.Fprintf(&b, "Each query is one bounded GET (%s, %d series, %d samples). Nothing is polled; r reads again.\n",
 		graphSpan(observability.DefaultTimeout), observability.MaxSeries, observability.MaxSamples)

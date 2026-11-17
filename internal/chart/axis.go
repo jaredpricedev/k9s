@@ -4,6 +4,7 @@
 package chart
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -85,13 +86,18 @@ func Axis(f Frame, gutter int, marks []Mark, o Options) []string {
 		copy(labels[start:], []rune(t.UTC().Format("15:04")))
 		free = start + clockWidth + 1
 	}
-	for _, mark := range marks {
+	// Two marks in one column sit side by side, earlier to the left: the
+	// latest is placed first and keeps its column.
+	ordered := append([]Mark(nil), marks...)
+	sort.SliceStable(ordered, func(a, b int) bool { return ordered[a].T.After(ordered[b].T) })
+	for _, mark := range ordered {
 		if col, ok := f.Col(mark.T); ok && mark.Key != 0 {
-			// Two marks in one column sit side by side, earlier to the left.
 			for col > 0 && axis[col] != line && axis[col] != tick {
 				col--
 			}
-			axis[col] = mark.Key
+			if axis[col] == line || axis[col] == tick {
+				axis[col] = mark.Key
+			}
 		}
 	}
 	pad := strings.Repeat(" ", gutter+1)

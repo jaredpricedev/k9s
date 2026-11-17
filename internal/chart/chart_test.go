@@ -330,3 +330,15 @@ func TestLegendWrapsAndCountsWhatDoesNotFit(t *testing.T) {
 	require.Equal(t, []string{"T  a [red[] 1"}, escaped)
 	require.Nil(t, Legend("T", entries, 0, 2, nil))
 }
+
+func TestAxisMarksInOneColumnKeepTheirOrderInTime(t *testing.T) {
+	// At 24h one column is many minutes wide: a rollout and a later exit
+	// share it, and the earlier one must stay to the left.
+	f := frame(24*time.Hour, 15*time.Minute, 48)
+	end := t0.Add(24 * time.Hour)
+	rollout, exit := Mark{Key: 'R', T: end.Add(-12 * time.Minute)}, Mark{Key: 'X', T: end.Add(-2 * time.Minute)}
+	for _, marks := range [][]Mark{{rollout, exit}, {exit, rollout}} {
+		axis := Axis(f, 3, marks, Options{Cursor: -1})[0]
+		require.True(t, strings.HasSuffix(axis, "RX"), axis)
+	}
+}

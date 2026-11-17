@@ -147,7 +147,14 @@ window's name.
 ## Limits
 
 - Windows are 15m, 1h, 6h and 24h, with steps of 15s, 30s, 5m and 15m. The
-  window end is aligned to the step, so it can be up to one step old.
+  window end is aligned to the step, and to the minute for the 6h and 24h
+  windows, so it is never more than one minute before the read.
+- The restart count "+N in window" is the rise between the first and last
+  sample of each Pod's counter. A rise across a hole is counted but has no
+  mark, because its time is not known; with a single sample the page says the
+  rise is not known rather than "+0".
+- A Pod of a workload that was asked for and returned no usage samples is
+  listed in the legend as "no data"; it is not left out.
 - One page is ten GETs for a Pod, eleven for a workload drawn per Pod,
   fifteen for a folded workload and eight for a Node, four at a time, each bounded as described in
   observability-sources.md (8 s, 1 MiB, 32 series, 4096 samples), and all

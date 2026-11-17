@@ -316,11 +316,18 @@ type graphMark struct {
 
 func graphResultKey(panel, series string) string { return panel + "/" + series }
 
-// graphFrameTimes aligns the window end to the step, so that samples fall
-// on round clock times and a re-read within one step asks the same grid.
+// graphEndAlign is the coarsest alignment of a window end. A long window
+// has a long step; aligning its end to that step would leave out up to a
+// quarter of an hour before now, which is when a fresh incident happened.
+const graphEndAlign = time.Minute
+
+// graphFrameTimes aligns the window end to the step, and for long steps to
+// the minute, so that samples fall on round clock times, a re-read within
+// that time asks the same grid, and the window never ends more than a
+// minute before the read.
 func graphFrameTimes(now time.Time, window time.Duration) (start, end time.Time, step time.Duration) {
 	step = observability.StepFor(window)
-	end = now.UTC().Truncate(step)
+	end = now.UTC().Truncate(min(step, graphEndAlign))
 	return end.Add(-window), end, step
 }
 
@@ -419,20 +426,25 @@ func graphSamples(res *observability.PromResult) int {
 }
 
 // graphRestartEvents returns the times the restart counter rose between
-// two neighbouring samples, and the total rise.
-func graphRestartEvents(res *observability.PromResult, step time.Duration) (events []time.Time, total float64) {
+// two neighbouring samples, and the total rise between the first and last
+// sample of each series. A rise across a hole counts towards the total but
+// has no known time, so it gets no mark. measured is false when no series
+// has two samples: one sample cannot show a rise, and that is not "+0".
+func graphRestartEvents(res *observability.PromResult, step time.Duration) (events []time.Time, total float64, measured bool) {
 	for i := range res.Series {
 		samples := res.Series[i].Samples
 		for j := 1; j < len(samples); j++ {
-			if samples[j].Timestamp.Sub(samples[j-1].Timestamp) > step+step/2 {
+			measured = true
+			rise := samples[j].Value - samples[j-1].Value
+			if rise <= 0 {
 				continue
 			}
-			if rise := samples[j].Value - samples[j-1].Value; rise > 0 {
+			total += rise
+			if samples[j].Timestamp.Sub(samples[j-1].Timestamp) <= step+step/2 {
 				events = append(events, samples[j].Timestamp)
-				total += rise
 			}
 		}
 	}
 	sort.Slice(events, func(a, b int) bool { return events[a].Before(events[b]) })
-	return events, total
+	return events, total, measured
 }
