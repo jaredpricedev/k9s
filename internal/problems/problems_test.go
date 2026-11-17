@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/dynamic/fake"
 	ktesting "k8s.io/client-go/testing"
 )
@@ -415,14 +416,37 @@ func TestCollectNamesEveryMissingSource(t *testing.T) {
 	}
 }
 
+// stuckNodes never answers a Node list until released. It blocks before the
+// fake client is entered: the fake runs its reactors under one lock, so a
+// reactor that blocks there also holds up whichever other lists start after
+// it, and the test then fails or passes by goroutine order.
+type stuckNodes struct {
+	dynamic.Interface
+	release <-chan struct{}
+}
+
+func (s stuckNodes) Resource(resource schema.GroupVersionResource) dynamic.NamespaceableResourceInterface {
+	inner := s.Interface.Resource(resource)
+	if resource.Resource != "nodes" {
+		return inner
+	}
+	return stuckResource{NamespaceableResourceInterface: inner, release: s.release}
+}
+
+type stuckResource struct {
+	dynamic.NamespaceableResourceInterface
+	release <-chan struct{}
+}
+
+func (s stuckResource) List(ctx context.Context, options metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+	<-s.release
+	return s.NamespaceableResourceInterface.List(ctx, options)
+}
+
 func TestCollectDoesNotWaitForAReaderThatNeverAnswers(t *testing.T) {
-	reader := testReader(waitingPod("apps", "api", "CrashLoopBackOff", ""))
 	release := make(chan struct{})
 	defer close(release)
-	reader.PrependReactor("list", "nodes", func(ktesting.Action) (bool, runtime.Object, error) {
-		<-release
-		return false, nil, nil
-	})
+	reader := stuckNodes{Interface: testReader(waitingPod("apps", "api", "CrashLoopBackOff", "")), release: release}
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	done := make(chan Snapshot, 1)

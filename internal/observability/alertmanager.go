@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -31,6 +33,38 @@ type Alert struct {
 	EndsAt      time.Time
 	UpdatedAt   time.Time
 	Receivers   []string
+	// GeneratorURL is the rule's expression link as sent, with any URL
+	// userinfo removed. It is text to show; it is never contacted.
+	GeneratorURL string
+}
+
+// cleanLink bounds a link taken from a source and removes URL userinfo, so a
+// credential embedded in it is never shown or retained.
+func cleanLink(raw string) string {
+	raw = Clean(strings.TrimSpace(raw), maxText)
+	u, err := url.Parse(raw)
+	switch {
+	case err != nil && strings.Contains(raw, "@"):
+		return ""
+	case err == nil && u.User != nil:
+		u.User = nil
+		return u.String()
+	}
+	return raw
+}
+
+// embeddedUserinfo matches the userinfo of a URL written inside other text.
+var embeddedUserinfo = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)[^/?#@\s]*@`)
+
+// scrubUserinfo removes URL userinfo wherever a URL appears in text: a label
+// such as a probe's instance, or an annotation that quotes a link. A field
+// named as a link is not the only place a credential can ride. The rest of
+// the text is kept as it was sent.
+func scrubUserinfo(text string) string {
+	if !strings.Contains(text, "@") {
+		return text
+	}
+	return embeddedUserinfo.ReplaceAllString(text, "$1")
 }
 
 // Name returns the alertname label.
@@ -84,14 +118,15 @@ func (c *Client) Alerts(ctx context.Context, q AlertQuery) AlertsResult {
 		return res
 	}
 	var raw []struct {
-		Fingerprint string
-		Labels      map[string]string
-		Annotations map[string]string
-		StartsAt    time.Time
-		EndsAt      time.Time
-		UpdatedAt   time.Time
-		Receivers   []struct{ Name string }
-		Status      struct {
+		Fingerprint  string
+		Labels       map[string]string
+		Annotations  map[string]string
+		StartsAt     time.Time
+		EndsAt       time.Time
+		UpdatedAt    time.Time
+		Receivers    []struct{ Name string }
+		GeneratorURL string
+		Status       struct {
 			State       string
 			SilencedBy  []string
 			InhibitedBy []string
@@ -109,9 +144,16 @@ func (c *Client) Alerts(ctx context.Context, q AlertQuery) AlertsResult {
 		r := &raw[i]
 		a := Alert{Fingerprint: Clean(r.Fingerprint, 64), Labels: cleanLabels(r.Labels), Annotations: make(map[string]string),
 			State: Clean(r.Status.State, 32), StartsAt: r.StartsAt.UTC(), EndsAt: r.EndsAt.UTC(), UpdatedAt: r.UpdatedAt.UTC()}
-		for k := range cleanLabels(r.Annotations) {
-			a.Annotations[k] = Clean(r.Annotations[k], maxText)
+		for k, v := range a.Labels {
+			a.Labels[k] = scrubUserinfo(v)
 		}
+		for k := range cleanLabels(r.Annotations) {
+			a.Annotations[k] = scrubUserinfo(Clean(r.Annotations[k], maxText))
+			if strings.HasSuffix(strings.ToLower(k), "url") {
+				a.Annotations[k] = scrubUserinfo(cleanLink(r.Annotations[k]))
+			}
+		}
+		a.GeneratorURL = scrubUserinfo(cleanLink(r.GeneratorURL))
 		for _, id := range r.Status.SilencedBy {
 			a.SilencedBy = append(a.SilencedBy, Clean(id, 64))
 		}

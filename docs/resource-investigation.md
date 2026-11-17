@@ -119,7 +119,10 @@ STARTTLS, revocation check, in-pod probe or automatic remediation is provided.
 `:problems` (also "Problems across kinds, ranked" in the `Ctrl-O` action palette)
 answers "what is broken here right now?" in one ranked list, with no setup. It is
 the instant counterpart of the [daily workspace](daily-workspace.md): it needs no
-saved scope, writes no file and keeps no history.
+saved scope, writes no file and keeps no history. When the context declares an
+Alertmanager, its alerts are one more source of the same read: see
+[alerts.md](alerts.md#alerts-in-problems). Undeclared, nothing is contacted and
+the header does not mention alerts.
 
 **What it reads.** The viewing destination: the active namespace, or all
 namespaces when the app is viewing all. Opening the view performs one bounded
@@ -202,7 +205,9 @@ be seen; the DaemonSet list itself still opens.
 ## Timeline: what changed, and in what order
 
 `:timeline` (also **Timeline: what changed, in order** in `Ctrl-O`) answers the
-first question of an incident. With a Pod, Deployment, ReplicaSet, StatefulSet,
+first question of an incident. When the context declares an Alertmanager, the
+start of each alert about the scope is one more kind of entry
+([alerts.md](alerts.md#alerts-in-timeline)). With a Pod, Deployment, ReplicaSet, StatefulSet,
 DaemonSet or Job selected it follows that workload and what it depends on. With
 nothing suitable selected it covers the active namespace, and `:timeline <ns>`
 names a namespace directly. It needs one namespace: in all-namespaces mode with

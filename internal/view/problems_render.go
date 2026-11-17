@@ -172,8 +172,11 @@ func problemsFor(since, readAt time.Time) string {
 // problemsMatch is a literal, case-insensitive filter: every token must occur
 // in the row's severity, kind, namespace, name or cause.
 func problemsMatch(row *problems.Row, query string) bool {
-	text := strings.ToLower(strings.Join([]string{row.Severity.String(), row.Kind, problemsKindLabel(row.Kind, true),
-		row.Namespace, row.Name, row.Cause}, " "))
+	parts := []string{row.Severity.String(), row.Kind, problemsKindLabel(row.Kind, true), row.Namespace, row.Name, row.Cause}
+	for i := range row.Alerts {
+		parts = append(parts, "alert", row.Alerts[i].Name)
+	}
+	text := strings.ToLower(strings.Join(parts, " "))
 	for _, token := range strings.Fields(strings.ToLower(query)) {
 		if !strings.Contains(text, token) {
 			return false
@@ -218,7 +221,7 @@ func problemsCounts(rows []problems.Row) string {
 		counts[rows[i].Severity]++
 	}
 	var parts []string
-	for _, severity := range []problems.Severity{problems.Failing, problems.Degraded, problems.Progressing, problems.Warned} {
+	for _, severity := range []problems.Severity{problems.Failing, problems.Alerting, problems.Degraded, problems.Progressing, problems.Warned} {
 		if counts[severity] > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", counts[severity], severity))
 		}
@@ -275,11 +278,19 @@ func problemsHeader(snapshot *problems.Snapshot, namespace, status string, width
 	if width >= 100 {
 		read += problemsSourceList(snapshot, true) + " (last " + problemsWindow(snapshot.Window) + ")"
 	} else {
-		objects := 0
+		objects, alerted := 0, ""
 		for _, source := range snapshot.Sources {
+			if source.Name == problems.AlertsSource {
+				// Alerts are not Kubernetes objects and are counted apart.
+				if source.State == problems.StateComplete || source.State == problems.StateIncomplete {
+					alerted = " · " + problemsPlural(source.Count, "alert")
+				}
+				continue
+			}
 			objects += source.Count
 		}
-		read += fmt.Sprintf("%d of %d sources complete, %s", len(snapshot.Sources)-len(gaps), len(snapshot.Sources), problemsPlural(objects, "object"))
+		read += fmt.Sprintf("%d of %d sources complete, %s%s", len(snapshot.Sources)-len(gaps), len(snapshot.Sources),
+			problemsPlural(objects, "object"), alerted)
 	}
 	lines = append(lines, read)
 	if len(gaps) > 0 {
@@ -339,6 +350,10 @@ func problemsDetail(line *problemsLine, readAt time.Time) string {
 		cause = "The status reports no reason."
 	}
 	text := head + "\n" + cause
+	if row.FromAlert {
+		// The cause of an alert-only row is the alert, spelled out below.
+		text = head
+	}
 	if len(row.Events) > 0 {
 		var notes []string
 		for _, note := range row.Events {
@@ -349,6 +364,36 @@ func problemsDetail(line *problemsLine, readAt time.Time) string {
 			notes = append(notes, item)
 		}
 		text += "\nWarning events: " + strings.Join(notes, " · ")
+	}
+	if len(row.Alerts) > 0 {
+		text += "\n" + problemsAlerts(row, readAt)
+	}
+	return text
+}
+
+// problemsAlerts names the Alertmanager alerts about a row. An alert is what
+// Alertmanager reported at the read; it is worded apart from the status.
+func problemsAlerts(row *problems.Row, readAt time.Time) string {
+	notes := make([]string, 0, len(row.Alerts))
+	for i := range row.Alerts {
+		note := &row.Alerts[i]
+		item := fmt.Sprintf("%s (%s, %s", note.Name, note.Severity, note.State)
+		if age := problemsFor(note.Since, readAt); age != "-" {
+			item += " " + age
+		}
+		item += ")"
+		if note.Pod != "" {
+			item += " on pod " + note.Pod
+		}
+		// Summaries are kept while they fit the pane; :alerts has them all.
+		if note.Summary != "" && len(row.Alerts) <= 2 {
+			item += " " + note.Summary
+		}
+		notes = append(notes, item)
+	}
+	text := "Alerts: " + strings.Join(notes, " · ")
+	if row.Severity == problems.Alerting {
+		text += "\nListed as alerting: its own status, where it was read, reports no problem. :alerts shows each alert in full."
 	}
 	return text
 }

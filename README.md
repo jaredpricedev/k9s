@@ -87,6 +87,7 @@ and [Hubble measurements](docs/hubble-performance-2026-10-04.md).
 | --- | --- |
 | Browse pods / deployments / logs | `:pods`, `:deployments`, `l` |
 | Everything broken in the viewing namespace, ranked across kinds, no setup | `:problems` |
+| What is paging, tied to the objects it is about (declared Alertmanager) | `:alerts` |
 | Saved scopes / daily queue / scoped search | `:workspace` / `:daily` / `:inventory` |
 | Application activity / reviewed changes | `:activity` / `:review /path/to/manifest.yaml`, then `b` or `:changeset` |
 | Scheduled job review | `:job-review` |
