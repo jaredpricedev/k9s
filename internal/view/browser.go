@@ -792,6 +792,9 @@ func (b *Browser) refreshActions() {
 	if _, ok := graphKinds[b.GVR().String()]; ok {
 		aa.Add(ui.KeyM, graphKeyAction(b.app, b))
 	}
+	if _, ok := slowKinds[b.GVR().String()]; ok {
+		aa.Add(slowKey, slowKeyAction(b.app, b))
+	}
 	for _, f := range b.bindKeysFn {
 		f(aa)
 	}

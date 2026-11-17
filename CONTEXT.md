@@ -20,3 +20,5 @@
 | Profile | A named mapping from the signals of one hop kind to the metric and label names one exporter uses. It fills fixed query shapes and carries no query text. |
 | Not read | A hop, profile or signal for which no reading exists, with the reason (no mapping, nothing pins it to the object, the source refused, or no series matched). It is never drawn as zero and never described as healthy. |
 | Peer outlier | A reading that differs from the same reading of its peers (the other Pods of the Service) over the same window, by a stated rule and with a minimum number of peers. It is a difference, not a cause. |
+| Raised | A sample that crosses the stated rule of its signal, measured against the signal's own usual level (its median) in the window. A signal that is never raised is quiet, which is not health. |
+| Episode | A stretch of time in which the first raised signal on a request path was over its rule; stretches closer than two samples are one episode. Other signals overlap an episode or do not: that is order in time, not cause. |

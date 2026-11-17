@@ -122,6 +122,15 @@ type Pod struct {
 	IPs          []string
 	Ready, Phase string
 	Labels       map[string]string `json:"-"`
+	// Node, Created, ReadySince, Restarts and LastRestart come from the same
+	// Pod object, for a view that places the Pod in time (:slow). They are
+	// not part of retained evidence, whose shape is unchanged. A zero time
+	// means the object did not report it.
+	Node        string    `json:"-"`
+	Created     time.Time `json:"-"`
+	ReadySince  time.Time `json:"-"`
+	Restarts    int64     `json:"-"`
+	LastRestart time.Time `json:"-"`
 }
 
 type Coverage struct {

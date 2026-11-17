@@ -14,6 +14,10 @@ built for these views, and the synthetic scenario used to exercise them.
 It is a foundation: the declaration, the resolver and the primitives exist;
 the views that use them are described in their own pages when they land.
 
+`:slow` reads every hop of one Service's path with these profiles, applies a
+stated rule to each signal and shows when the rules were crossed:
+[slow-requests.md](slow-requests.md).
+
 ## What is never done
 
 - Declaring a request path contacts nothing. Resolving a hop builds query

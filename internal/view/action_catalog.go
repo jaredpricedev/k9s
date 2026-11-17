@@ -115,11 +115,13 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 	result = append(result, timelineActions(owner, app)...)
 	result = append(result, graphActions(owner, app)...)
 	result = append(result, impactActions(owner, app)...)
+	result = append(result, slowActions(owner, app)...)
 	result = append(result, workspaceActions(app)...)
 	// A view may bind a key to a command the catalog already lists. The
 	// palette and help then show the command once, with its key named.
 	result = foldKeyIntoCommand(result, ui.KeyM, "Graph", "resource.graph")
 	result = foldKeyIntoCommand(result, ui.KeyT, "Timeline", "resource.timeline")
+	result = foldKeyIntoCommand(result, slowKey, slowTitle, "resource.slow")
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Category != result[j].Category {
 			return ui.ActionCategoryOrder(result[i].Category) < ui.ActionCategoryOrder(result[j].Category)
