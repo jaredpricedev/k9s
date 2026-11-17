@@ -28,6 +28,7 @@ var resources = map[string]schema.GroupVersionResource{
 	"PersistentVolumeClaim":   {Version: "v1", Resource: "persistentvolumeclaims"},
 	"PersistentVolume":        {Version: "v1", Resource: "persistentvolumes"},
 	"Node":                    {Version: "v1", Resource: "nodes"},
+	"Namespace":               {Version: "v1", Resource: "namespaces"},
 	"Event":                   {Version: "v1", Resource: "events"},
 	"Service":                 {Version: "v1", Resource: "services"},
 	"ConfigMap":               {Version: "v1", Resource: "configmaps"},

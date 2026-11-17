@@ -115,6 +115,7 @@ func (c *Command) updateSuggestionAliases() {
 		jobReviewCommandToken, maintenanceCommandToken, accessCommandName, taskbookCommandName,
 		activityCommand, networkReviewCommandToken, changeSetCommandToken, "security-review", dependencyReviewCommandToken,
 		problemsCommandToken,
+		alertsCommandToken,
 		timelineCommandToken,
 		sourcesCommandToken,
 	}
@@ -343,6 +344,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.maintenanceCommand()
 	case historyCommand:
 		c.historyReviewCommand()
+	case alertsCommandToken:
+		c.alertsCommand()
 	case sourcesCommandToken:
 		c.sourcesCommand()
 	case "security-review":

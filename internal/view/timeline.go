@@ -133,8 +133,22 @@ func (a *App) openTimeline(target SelectedResourceTarget, argument string) {
 	}
 	readers := &timeline.Readers{Objects: objects, Metadata: meta}
 	v := newTimelineView(a, scope, note)
+	// When the context declares an Alertmanager, its alerts are read once
+	// beside the Kubernetes reads and placed in the same order. Undeclared,
+	// nothing is contacted and the timeline does not mention alerts.
+	readAlerts, declared := alertsReader(a, false)
 	v.loader = func(ctx context.Context) (*timeline.Snapshot, error) {
-		return timeline.Collect(ctx, readers, scope, time.Now())
+		if !declared {
+			return timeline.Collect(ctx, readers, scope, time.Now())
+		}
+		wait := alertsBeside(ctx, readAlerts)
+		snapshot, err := timeline.Collect(ctx, readers, scope, time.Now())
+		if err != nil || snapshot == nil {
+			return snapshot, err
+		}
+		observed := wait()
+		snapshot.AddAlerts(observed.Status, observed.Items)
+		return snapshot, nil
 	}
 	if err := a.inject(v, false); err != nil {
 		a.Flash().Err(err)

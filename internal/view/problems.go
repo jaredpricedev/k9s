@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/derailed/k9s/internal/alerts"
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/model"
@@ -41,6 +42,8 @@ type problemsView struct {
 	contextName, namespace string
 	snapshot               *problems.Snapshot
 	collect                func(context.Context, dynamic.Interface, string, time.Time) problems.Snapshot
+	// alertsReader resolves the optional alert read; tests replace it.
+	alertsReader           func() (func(context.Context) alerts.Snapshot, bool)
 	lines                  []problemsLine
 	expanded               map[string]bool
 	query, status          string
@@ -96,6 +99,7 @@ func newProblemsView(a *App) *problemsView {
 		prompt: tview.NewInputField(), contextName: a.Config.ActiveContextName(), namespace: namespace,
 		collect: problems.Collect, expanded: make(map[string]bool), destinationRevision: a.Config.DestinationRevision(),
 	}
+	v.alertsReader = func() (func(context.Context) alerts.Snapshot, bool) { return alertsReader(a, false) }
 	v.table.SetSelectable(true, false).SetFixed(1, 0).SetEvaluateAllRows(true)
 	v.header.SetDynamicColors(true).SetWrap(true).SetWordWrap(true)
 	v.detail.SetDynamicColors(true).SetWrap(true).SetWordWrap(true)
@@ -442,13 +446,31 @@ func (v *problemsView) refresh() {
 		return
 	}
 	generation, namespace := v.generation, v.namespace
+	// Resolved here, on the draw goroutine, without contacting anything. When
+	// the context declares no Alertmanager the read below is the Kubernetes
+	// one alone and the header does not mention alerts.
+	var readAlerts func(context.Context) alerts.Snapshot
+	alertsDeclared := false
+	if v.alertsReader != nil {
+		readAlerts, alertsDeclared = v.alertsReader()
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	v.cancel, v.loading = cancel, true
 	v.status = fmt.Sprintf("reading each source once (%s each, %s in total)...", problems.ReadTimeout, problems.TotalDeadline)
 	v.render()
 	go func() {
 		defer cancel()
+		var waitAlerts func() alerts.Snapshot
+		if alertsDeclared {
+			bounded, stop := context.WithTimeout(ctx, problems.TotalDeadline)
+			defer stop()
+			waitAlerts = alertsBeside(bounded, readAlerts)
+		}
 		snapshot := v.collect(ctx, reader, namespace, time.Now())
+		if waitAlerts != nil {
+			observed := waitAlerts()
+			problemsAddAlerts(&snapshot, &observed)
+		}
 		if ctx.Err() != nil || !v.app.IsRunning() {
 			return
 		}
@@ -487,7 +509,7 @@ func (v *problemsView) severityColor(severity problems.Severity) tcell.Color {
 	p := v.app.Styles.Semantic()
 	color := p.Unknown
 	switch severity {
-	case problems.Failing:
+	case problems.Failing, problems.Alerting:
 		color = p.Failure
 	case problems.Degraded:
 		color = p.Warning

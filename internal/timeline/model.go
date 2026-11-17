@@ -39,7 +39,7 @@ func (s Source) Tag() string {
 }
 
 func (s Source) rank() int {
-	for index, source := range []Source{SourceCondition, SourceEvent, SourceRestart, SourceNode, SourceAutoscaler, SourceRollout, SourceConfig} {
+	for index, source := range []Source{SourceCondition, SourceAlert, SourceEvent, SourceRestart, SourceNode, SourceAutoscaler, SourceRollout, SourceConfig} {
 		if s == source {
 			return index
 		}
@@ -130,6 +130,10 @@ type Snapshot struct {
 	// placed in the order.
 	Untimed []string
 	Notes   []string
+
+	// scoped holds "Kind/name" of what the scope covers, and "Node/name" of
+	// the nodes its pods run on, for sources added after the collection.
+	scoped map[string]bool
 }
 
 // Relation places an entry against the first failing signal.

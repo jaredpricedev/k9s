@@ -105,6 +105,7 @@ wait:
 		collected.byKind[s.kind] = lists[index]
 	}
 	snapshot.Rows = assemble(&collected, now, EventWindow)
+	snapshot.owners = collected.owners
 	recent := 0
 	for i := range lists[last] {
 		if _, ok := recentWarning(&lists[last][i], now, EventWindow); ok {

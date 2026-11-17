@@ -436,7 +436,7 @@ def smoke_sources(base):
     assert sum(1 for a in alerts if a["status"]["silencedBy"]) == 1
     assert sum(1 for a in alerts if a["status"]["inhibitedBy"]) == 1
     scoped = named_get(base, alertmanager + "/api/v2/alerts?filter=" + quote('namespace="apps"'))
-    assert len(scoped) == 3, [a["labels"]["alertname"] for a in scoped]
+    assert len(scoped) == 6, [a["labels"]["alertname"] for a in scoped]
     assert named_get(base, grafana + "/api/health")["database"] == "ok"
     assert {d["uid"] for d in named_get(base, grafana + "/api/search?type=dash-db")} >= {"k8s-pod", "k8s-node"}
     notes = named_get(base, grafana + "/api/annotations?from=%d&to=%d&tags=deploy" % ((now - 3600) * 1000, now * 1000))

@@ -31,10 +31,16 @@ const (
 	// Warned means only a recent Warning event names the resource; its own
 	// status, where it was read, reports no problem.
 	Warned
+	// Alerting means only a firing Alertmanager alert names the resource; its
+	// own status, where it was read, reports no problem. Its place in the
+	// ranking comes from Row.rank, not from this value.
+	Alerting
 )
 
 func (s Severity) String() string {
 	switch s {
+	case Alerting:
+		return "alerting"
 	case Failing:
 		return "failing"
 	case Degraded:
@@ -84,6 +90,10 @@ type Row struct {
 	Signals   int
 	Events    []EventNote
 	Children  []Row // affected pods owned (by controller UID) by this resource
+	// Alerts are the Alertmanager alerts that name this resource, when that
+	// source is declared. FromAlert marks a row that only an alert lists.
+	Alerts    []AlertNote
+	FromAlert bool
 
 	own    int  // findings in the resource's own status
 	weak   bool // the status names a state but no reason
@@ -97,6 +107,10 @@ type Snapshot struct {
 	Window    time.Duration
 	Sources   []Source
 	Rows      []Row
+
+	// owners maps every pod that was read to the workload row that would
+	// list it, so an alert on a pod can be shown on its workload.
+	owners map[string]string
 }
 
 // Gaps returns the sources that were not read completely.
@@ -147,6 +161,7 @@ func plural(n int, noun string) string {
 type objects struct {
 	byKind map[string][]unstructured.Unstructured
 	events []unstructured.Unstructured
+	owners map[string]string // filled by assemble: pod identity -> workload identity
 }
 
 var workloadKinds = []string{"Deployment", "StatefulSet", "DaemonSet", "Job"}
@@ -200,14 +215,20 @@ func assemble(o *objects, now time.Time, window time.Duration) []Row {
 	for i := range o.byKind["Pod"] {
 		u := &o.byKind["Pod"][i]
 		r := classify("Pod", u)
-		if r == nil {
-			continue
-		}
 		owner := controllerOf(u)
 		if rs, ok := replicaSets[owner]; ok && owner != "" {
 			owner = controllerOf(rs)
 		}
 		parent, ok := workloads[owner]
+		if ok && owner != "" {
+			if o.owners == nil {
+				o.owners = make(map[string]string)
+			}
+			o.owners[ident("Pod", u.GetNamespace(), u.GetName())] = ident(workloadKind[owner], parent.GetNamespace(), parent.GetName())
+		}
+		if r == nil {
+			continue
+		}
 		if !ok || owner == "" {
 			put(r)
 			continue
@@ -306,8 +327,8 @@ func sortRows(rows []Row) {
 	sort.SliceStable(rows, func(i, j int) bool {
 		a, b := &rows[i], &rows[j]
 		switch {
-		case a.Severity != b.Severity:
-			return a.Severity < b.Severity
+		case a.rank() != b.rank():
+			return a.rank() < b.rank()
 		case a.Signals != b.Signals:
 			return a.Signals > b.Signals
 		case rank(a.Kind) != rank(b.Kind):

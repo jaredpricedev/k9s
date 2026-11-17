@@ -335,6 +335,13 @@ func Collect(ctx context.Context, readers *Readers, scope *Scope, now time.Time)
 	for name := range secrets {
 		inScope["Secret/"+name] = true
 	}
+	snapshot.scoped = make(map[string]bool, len(inScope)+len(nodes))
+	for key := range inScope {
+		snapshot.scoped[key] = true
+	}
+	for name := range nodes {
+		snapshot.scoped["Node/"+name] = true
+	}
 	if wholeNamespace {
 		inScope = nil
 	}

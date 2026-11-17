@@ -148,6 +148,12 @@ Every read returns one state, and features show it in words:
 - Labels, annotations and other text are stripped of control characters and
   bounded (32 labels, 256 characters per label value, 1024 per annotation).
 
+## Features that read a declared source
+
+- `:alerts` reads Alertmanager once and ties each alert to the object its
+  labels name; `:problems` and `:timeline` add the same alerts to their own
+  single read when Alertmanager is declared. See [alerts.md](alerts.md).
+
 ## For feature code
 
 Views call `observabilitySource(app, kind)` (internal/view/sources.go) to
