@@ -257,6 +257,16 @@ func (v *alertsView) SelectedResource() SelectedResourceTarget {
 	return SelectedResourceTarget{Context: v.contextName, GVR: client.NewGVR(target.Resource), Namespace: target.Namespace, Name: target.Name}
 }
 
+// GrafanaWindow starts a hand-off shortly before the selected alert began,
+// the one time this view knows. A folded row has no single start.
+func (v *alertsView) GrafanaWindow() (grafanaWindow, bool) {
+	line := v.selectedLine()
+	if line == nil || line.item == nil || line.item.Alert.StartsAt.IsZero() {
+		return grafanaWindow{}, false
+	}
+	return anchoredWindow(time.Now(), line.item.Alert.StartsAt, "the alert began"), true
+}
+
 func (v *alertsView) availability(key tcell.Key) string {
 	if !v.destinationCurrent() {
 		return "Destination changed; reopen :alerts"
@@ -265,7 +275,8 @@ func (v *alertsView) availability(key tcell.Key) string {
 	switch key {
 	case ui.KeyR:
 		return alertsUnavailable(v.app)
-	case ui.KeyS:
+	case ui.KeyZ, grafanaKey:
+		// The Grafana hand-off always answers: its dialog says why not.
 		return ""
 	case ui.KeySpace:
 		if line == nil || !line.group.Folded() {
@@ -291,6 +302,9 @@ func (v *alertsView) availability(key tcell.Key) string {
 	if key == ui.KeyT && target.Namespace == "" {
 		return "A timeline follows a namespaced workload; Enter opens this " + strings.ToLower(v.selectedTarget().Kind)
 	}
+	if key == ui.KeyM {
+		return graphAvailability(v.app, target)
+	}
 	return ""
 }
 
@@ -306,7 +320,9 @@ func (v *alertsView) makeActions() *ui.KeyActions {
 		{ui.KeyD, "fields", "All labels, annotations and links", true},
 		{ui.KeyC, "copy", "Copy runbook URL", true},
 		{ui.KeySpace, "expand", "Expand / fold alerts of one workload", true},
-		{ui.KeyS, "suppressed", "Show / hide silenced and inhibited", false},
+		{ui.KeyM, "graph", "Graph the alerted object", true},
+		{grafanaKey, "grafana", grafanaKeyLabel, true},
+		{ui.KeyZ, "suppressed", "Show / hide silenced and inhibited", false},
 		{ui.KeySlash, "filter", "Filter alerts", false},
 		{ui.KeyR, "reread", "Re-read now (no polling)", false},
 	} {
@@ -339,7 +355,7 @@ func (v *alertsView) key(e *tcell.EventKey) *tcell.EventKey {
 		return v.app.PrevCmd(e)
 	case e.Key() == tcell.KeyEnter:
 		key = tcell.KeyEnter
-	case e.Key() == tcell.KeyRune && strings.ContainsRune("tdcsr/ ", e.Rune()):
+	case e.Key() == tcell.KeyRune && strings.ContainsRune("tdczr/ mD", e.Rune()):
 		key = tcell.Key(e.Rune())
 	case e.Key() == tcell.KeyRight || e.Key() == tcell.KeyLeft:
 		if line := v.selectedLine(); line != nil && !line.child && line.group.Folded() && v.expanded[line.group.Key()] != (e.Key() == tcell.KeyRight) {
@@ -371,7 +387,11 @@ func (v *alertsView) key(e *tcell.EventKey) *tcell.EventKey {
 		v.copyLink()
 	case ui.KeySpace:
 		v.toggle()
-	case ui.KeyS:
+	case ui.KeyM:
+		v.app.openGraph(v.SelectedResource(), 0)
+	case grafanaKey:
+		v.app.openGrafana(v)
+	case ui.KeyZ:
 		v.hideSuppressed = !v.hideSuppressed
 		v.render()
 	case ui.KeyR:

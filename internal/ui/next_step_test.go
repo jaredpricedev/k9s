@@ -59,7 +59,7 @@ func TestNextStepLineSitsOnTheFrameEdgeAndNeverMovesRows(t *testing.T) {
 	v.SelectRow(1, 0, true)
 	lines := drawNextStep(t, v, 100)
 	assert.Equal(t, before[:9], lines[:9], "guidance must not move or change any table row")
-	assert.Contains(t, lines[9], " next: last exit 137: killed (SIGKILL), out of memory (OOMKilled) · p previous logs · :pressure ")
+	assert.Contains(t, lines[9], " next: last exit 137 OOMKilled · p previous logs · :pressure limit vs usage · :graph ")
 	assert.True(t, strings.HasPrefix(lines[9], "└─ next") && strings.HasSuffix(lines[9], "─┘"), lines[9])
 
 	// A healthy selection leaves the border as it was.
@@ -68,7 +68,7 @@ func TestNextStepLineSitsOnTheFrameEdgeAndNeverMovesRows(t *testing.T) {
 
 	// Narrower frames drop detail, then disappear instead of wrapping.
 	v.SelectRow(1, 0, true)
-	assert.Contains(t, drawNextStep(t, v, 80)[9], " next: last exit 137 OOMKilled · p previous logs · :pressure limit vs usage ")
+	assert.Contains(t, drawNextStep(t, v, 80)[9], " next: last exit 137 OOMKilled · p previous logs · :pressure · :graph ")
 	assert.Contains(t, drawNextStep(t, v, 60)[9], " next: last exit 137 OOMKilled · p previous logs ")
 	narrow := drawNextStep(t, v, 44)
 	assert.NotContains(t, strings.Join(narrow, "\n"), "next:")
@@ -86,7 +86,7 @@ func TestNextStepLineUsesASCIISeparatorsWithoutIcons(t *testing.T) {
 	v.SetNextStepFilter(func(checks []ui.NextCheck) []ui.NextCheck { return checks })
 	v.SelectRow(1, 0, true)
 	line := drawNextStep(t, v, 100)[9]
-	assert.Contains(t, line, "(OOMKilled) | p previous logs | :pressure ")
+	assert.Contains(t, line, " OOMKilled | p previous logs | :pressure limit vs usage | :graph ")
 	assert.NotContains(t, line, "·")
 }
 

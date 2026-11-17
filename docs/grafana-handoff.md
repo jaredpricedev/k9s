@@ -24,7 +24,8 @@ annotations in `:timeline`, and a dashboard list (`:dashboards`).
 ## Open in Grafana: Shift-D
 
 `Shift-D` is bound in the Pod, Deployment, StatefulSet, DaemonSet, ReplicaSet,
-Job, CronJob, Node and namespace lists and in `:timeline`. The same action is
+Job, CronJob, Node and namespace lists and in `:timeline`, `:problems`,
+`:alerts`, `:graph` and `:impact`. The same action is
 **Open in Grafana** in the `Ctrl-O` palette and in `?` help for any view with a
 selection; there it states the reason when it is unavailable.
 
@@ -72,7 +73,15 @@ the last seven days and says so.
 
 From `:timeline` the range is the timeline's own window, ending at its capture
 time instead of `now`, so the dashboard shows what the timeline shows. A view
-with its own window can do the same by implementing `GrafanaWindow`.
+with its own window can do the same by implementing `GrafanaWindow`:
+
+- `:graph` gives its window (last 15m, 1h, 6h or 24h, ending at `now`).
+- `:impact` gives the start of the before window to the end of the after
+  window.
+- `:alerts` starts ten minutes before the selected alert began; a folded row
+  has no single start and uses the object's own status.
+- `:problems` starts ten minutes before the time the row's status reports
+  (the FOR column). A row without a time says so and gives the last hour.
 
 ### Delivery
 

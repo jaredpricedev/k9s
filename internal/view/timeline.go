@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -253,7 +254,10 @@ func (v *timelineView) bindTimelineKeys() {
 	v.actions.Add(ui.Key0, ui.NewKeyAction("Window all read", idle(func() { v.setWindow(0) }), true))
 	v.actions.Add(ui.KeyR, ui.NewKeyAction("Re-read timeline", idle(v.refresh), true))
 	v.actions.Add(ui.KeyS, ui.NewKeyAction("Sources and limits", idle(v.toggleSources), true))
-	v.actions.Add(ui.KeyM, ui.NewKeyAction("Mark reference moment", idle(v.markReference), true))
+	// m is the graph key everywhere a row names an object, so the reference
+	// mark is on x here.
+	v.actions.Add(ui.KeyX, ui.NewKeyAction("Mark reference moment", idle(v.markReference), true))
+	v.actions.Add(ui.KeyM, ui.NewKeyAction("Graph", idle(v.openGraph), true))
 	v.actions.Add(grafanaKey, grafanaKeyAction(v.app, func() actionOwner { return v }, func() bool { return !v.cmdBuff.IsActive() }))
 	v.actions.Add(tcell.KeyEnter, ui.NewKeyAction("Open resource", func(*tcell.EventKey) *tcell.EventKey {
 		if v.cmdBuff.IsActive() {
@@ -330,6 +334,19 @@ func (v *timelineView) toggleSources() {
 	if v.active {
 		v.app.SetFocus(v)
 	}
+}
+
+// openGraph draws the focused entry's object, or the timeline's own scope,
+// over the timeline's window when :graph offers that window.
+func (v *timelineView) openGraph() {
+	if v.showSources {
+		return
+	}
+	window := time.Duration(0)
+	if slices.Contains(graphWindows, v.window) {
+		window = v.window
+	}
+	v.app.openGraph(v.SelectedResource(), window)
 }
 
 // markReference lets the user choose the moment entries are compared with.
@@ -498,12 +515,12 @@ func (v *timelineView) render() {
 		v.text.SetText("No observation yet.")
 	}
 	width := v.viewWidth()
-	footer := "Enter open · / filter · 1 15m  2 1h  3 6h  4 24h  0 all · m mark · s sources · r re-read · Shift-D Grafana · Esc back"
+	footer := "Enter open · / filter · 1 15m  2 1h  3 6h  4 24h  0 all · x mark · m graph · s sources · r re-read · Shift-D Grafana · Esc back"
 	if tview.TaggedStringWidth(footer) > width {
-		footer = "Enter open · / filter · 1 15m  2 1h  3 6h  4 24h  0 all · m mark · s sources · r re-read · Esc back"
+		footer = "Enter open · / filter · 1 15m  2 1h  3 6h  4 24h  0 all · x mark · m graph · s sources · r re-read · Esc back"
 	}
 	if tview.TaggedStringWidth(footer) > width {
-		footer = "Enter open · / filter · 1-4,0 window · m mark · s sources · r read · Esc"
+		footer = "Enter open · / filter · 1-4,0 · x mark · m graph · s sources · r read · Esc"
 	}
 	if tview.TaggedStringWidth(footer) > width {
 		footer = "Enter open · / filter · 1-4 window · s sources · r read"

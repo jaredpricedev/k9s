@@ -483,10 +483,11 @@ func graphObject(apiVersion, kind, name string, created time.Time, mutate func(*
 
 func TestGraphMarksComeFromTheObjectsOwnTimes(t *testing.T) {
 	created := graphNow.Add(-12 * time.Minute).Truncate(time.Second)
+	controller := true
 	owned := func(revision string) func(*unstructured.Unstructured) {
 		return func(u *unstructured.Unstructured) {
 			u.SetAnnotations(map[string]string{graphRevisionKey: revision})
-			u.SetOwnerReferences([]metav1.OwnerReference{{Kind: "Deployment", Name: "checkout-api"}})
+			u.SetOwnerReferences([]metav1.OwnerReference{{Kind: "Deployment", Name: "checkout-api", Controller: &controller}})
 		}
 	}
 	pod := graphObject("v1", "Pod", graphPod.Name, created, func(u *unstructured.Unstructured) {
@@ -495,14 +496,15 @@ func TestGraphMarksComeFromTheObjectsOwnTimes(t *testing.T) {
 			"reason": "OOMKilled", "exitCode": int64(137), "finishedAt": graphNow.Add(-2 * time.Minute).Format(time.RFC3339)}}}}}
 	})
 	dial := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
-		client.RsGVR.GVR(): "ReplicaSetList", client.PodGVR.GVR(): "PodList"},
+		client.RsGVR.GVR(): "ReplicaSetList", client.PodGVR.GVR(): "PodList", client.DpGVR.GVR(): "DeploymentList"},
 		pod,
 		graphObject("apps/v1", "ReplicaSet", "checkout-api-6c8d7f9b5", created.Add(-72*time.Hour), owned("1")),
 		graphObject("apps/v1", "ReplicaSet", "checkout-api-7d9f8c6b5d", created, owned("2")),
 		graphObject("apps/v1", "ReplicaSet", "other-5f4", graphNow, func(u *unstructured.Unstructured) {
 			u.SetAnnotations(map[string]string{graphRevisionKey: "9"})
-			u.SetOwnerReferences([]metav1.OwnerReference{{Kind: "Deployment", Name: "other"}})
-		}))
+			u.SetOwnerReferences([]metav1.OwnerReference{{Kind: "Deployment", Name: "other", Controller: &controller}})
+		}),
+		graphObject("apps/v1", "Deployment", "checkout-api", created.Add(-96*time.Hour), nil))
 
 	marks, note := graphMarksFrom(t.Context(), dial, graphPod)
 	require.Empty(t, note)
@@ -515,6 +517,9 @@ func TestGraphMarksComeFromTheObjectsOwnTimes(t *testing.T) {
 	marks, _ = graphMarksFrom(t.Context(), dial, &graphTarget{Kind: "Deployment", Namespace: "apps", Name: "checkout-api"})
 	require.Len(t, marks, 1)
 	require.Equal(t, "rollout rev 2", marks[0].Label, "the newest revision this Deployment owns, not another Deployment's")
+	require.Equal(t, "creation time of ReplicaSet checkout-api-7d9f8c6b5d (revision 2)", marks[0].Origin, "the same revision read :impact uses")
+	_, note = graphMarksFrom(t.Context(), dial, &graphTarget{Kind: "Deployment", Namespace: "apps", Name: "gone"})
+	require.Contains(t, note, "revision history was not read")
 
 	marks, note = graphMarksFrom(t.Context(), dial, &graphTarget{Kind: "Pod", Namespace: "apps", Name: "gone"})
 	require.Empty(t, marks)

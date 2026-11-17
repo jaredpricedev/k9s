@@ -82,7 +82,7 @@ func TestAlertsListSectionsFoldingAndSuppressedToggle(t *testing.T) {
 	}, got, "silenced and inhibited alerts are listed as such, and an unmapped alert is not dropped")
 
 	_, hidden := alertsTestLines(false)
-	assert.Len(t, hidden, 5, "s hides the alerts that are not notifying and their heading")
+	assert.Len(t, hidden, 5, "z hides the alerts that are not notifying and their heading")
 
 	expanded := alertsLines(groups, map[string]bool{groups[2].Key(): true}, "", true)
 	require.Len(t, expanded, 10)
@@ -148,7 +148,7 @@ func TestAlertsHeaderStatesSourceTimeCountsAndWhatWasNotRead(t *testing.T) {
 	assert.Len(t, narrow, 2, "below 100 columns the standing reminder gives its row to the list")
 	assert.Contains(t, narrow[0], "5 firing (2 critical, 2 warning, 1 none) · 2 not notifying · 1 unmapped")
 	assert.Contains(t, narrow[1], "service monitoring/alertmanager:9093")
-	assert.Contains(t, alertsHeader(snapshot, source, "", 2, 118)[0], "2 not notifying, hidden (s shows)")
+	assert.Contains(t, alertsHeader(snapshot, source, "", 2, 118)[0], "2 not notifying, hidden (z shows)")
 
 	snapshot.NotRetained = 12
 	snapshot.Owners = alerts.OwnerRead{State: alerts.OwnersDenied, Asked: 2, Detail: "pod metadata read is not permitted"}
@@ -169,7 +169,7 @@ func TestAlertsHeaderStatesSourceTimeCountsAndWhatWasNotRead(t *testing.T) {
 	assert.Contains(t, alertsHeader(quiet, source, "", 0, 118)[0], "Alertmanager holds no alert")
 	assert.Contains(t, alertsEmpty(quiet, "", 0), "not a health check")
 	assert.Contains(t, alertsEmpty(snapshot, "zzz", 0), `No alert matches filter "zzz"`)
-	assert.Contains(t, alertsEmpty(snapshot, "", 2), "2 alerts silenced or inhibited are hidden; s shows them")
+	assert.Contains(t, alertsEmpty(snapshot, "", 2), "2 alerts silenced or inhibited are hidden; z shows them")
 }
 
 func TestAlertsDetailAndReportNameEveryFieldAndNeverClaimACause(t *testing.T) {
@@ -223,12 +223,15 @@ func TestAlertsDetailAndReportNameEveryFieldAndNeverClaimACause(t *testing.T) {
 }
 
 func TestAlertsFooterKeepsFilterAndRereadAtEveryWidth(t *testing.T) {
-	assert.Equal(t, "Enter open · t timeline · d all fields · c copy runbook · Space expand · s silenced · / filter · r re-read · Esc back",
-		alertsFooter(118, true, true))
+	assert.Equal(t, "Enter open · t timeline · d all fields · m graph · Shift-D Grafana · c copy runbook · Space expand · z silenced · / filter · r re-read · Esc back",
+		alertsFooter(158, true, true))
+	assert.Equal(t, "Enter open  t timeline  d fields  m graph  D Grafana  c copy  Space fold  z silenced  / filter  r reread  Esc",
+		alertsFooter(118, true, true), "a 120 column terminal names the graph and the Grafana hand-off")
+	assert.Equal(t, "Enter open  t timeline  d fields  m graph  z silenced  / filter  r reread  Esc", alertsFooter(78, true, true))
 	for _, width := range []int{58, 78} {
 		footer := alertsFooter(width, true, true)
 		assert.LessOrEqual(t, runewidth.StringWidth(footer), width)
-		for _, hint := range []string{"Enter open", "s silenced", "/ filter", "r reread", "Esc"} {
+		for _, hint := range []string{"Enter open", "z silenced", "/ filter", "r reread", "Esc"} {
 			assert.Contains(t, footer, hint, "width %d", width)
 		}
 		assert.NotContains(t, footer, "…")
@@ -294,10 +297,10 @@ func TestAlertsViewSelectionExpansionAndAvailability(t *testing.T) {
 	assert.Contains(t, v.availability(tcell.KeyEnter), "labels name no Kubernetes object")
 	assert.Empty(t, v.availability(ui.KeyD), "every field of an unmapped alert can still be read")
 
-	v.key(tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModNone))
+	v.key(tcell.NewEventKey(tcell.KeyRune, 'z', tcell.ModNone))
 	require.Len(t, v.lines, 5)
-	assert.Contains(t, v.header.GetText(true), "2 not notifying, hidden (s shows)")
-	v.key(tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModNone))
+	assert.Contains(t, v.header.GetText(true), "2 not notifying, hidden (z shows)")
+	v.key(tcell.NewEventKey(tcell.KeyRune, 'z', tcell.ModNone))
 	require.Len(t, v.lines, 8)
 
 	v.SetFilter("worker-b", false)

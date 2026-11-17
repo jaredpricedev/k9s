@@ -182,8 +182,10 @@ func TestProblemsDetailAndFooter(t *testing.T) {
 	assert.NotContains(t, problemsFooter(118, true, false), "Space pods")
 	assert.Equal(t, "r re-read · Esc back · ? help", problemsFooter(118, false, false), "an empty list offers only keys that do something")
 	// The inner widths of an 80 and a 60 column terminal still name filter and re-read.
-	assert.Equal(t, "Enter open  d desc  l logs  Space pods  / filter  r reread  Esc back  ? help", problemsFooter(78, true, true))
-	assert.Equal(t, "Enter open  d desc  l logs  Space pods  / filter  r reread", problemsFooter(58, true, true))
+	// The timeline and graph keys outlast Space and help; describe, logs, filter, re-read and Esc outlast them.
+	assert.Equal(t, "Enter open  d desc  l logs  t time  m graph  D Grafana  Space pods  / filter  r reread  Esc back  ? help", problemsFooter(118, true, true))
+	assert.Equal(t, "Enter open  d desc  l logs  t time  m graph  / filter  r reread  Esc back", problemsFooter(78, true, true))
+	assert.Equal(t, "Enter open  d desc  l logs  / filter  r reread  Esc back", problemsFooter(58, true, true))
 }
 
 func TestProblemsPackNeverSplitsAnItemFromItsCount(t *testing.T) {

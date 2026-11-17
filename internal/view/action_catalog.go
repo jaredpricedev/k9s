@@ -116,6 +116,10 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 	result = append(result, graphActions(owner, app)...)
 	result = append(result, impactActions(owner, app)...)
 	result = append(result, workspaceActions(app)...)
+	// A view may bind a key to a command the catalog already lists. The
+	// palette and help then show the command once, with its key named.
+	result = foldKeyIntoCommand(result, ui.KeyM, "Graph", "resource.graph")
+	result = foldKeyIntoCommand(result, ui.KeyT, "Timeline", "resource.timeline")
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Category != result[j].Category {
 			return ui.ActionCategoryOrder(result[i].Category) < ui.ActionCategoryOrder(result[j].Category)
@@ -123,6 +127,26 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 		return result[i].Label < result[j].Label
 	})
 	return result
+}
+
+// foldKeyIntoCommand removes the entry a view's key binding produced when its
+// label starts with word and the typed command id is listed too, and names the
+// key on the command's entry. The command keeps its own availability reason.
+func foldKeyIntoCommand(actions []ui.ActionDescriptor, key tcell.Key, word, id string) []ui.ActionDescriptor {
+	bound, command := -1, -1
+	for i := range actions {
+		switch {
+		case actions[i].ID == id:
+			command = i
+		case actions[i].Key == key && strings.HasPrefix(actions[i].Label, word):
+			bound = i
+		}
+	}
+	if bound < 0 || command < 0 {
+		return actions
+	}
+	actions[command].Label += " (" + tcell.KeyNames[key] + ")"
+	return append(actions[:bound], actions[bound+1:]...)
 }
 
 func changeReviewActions(owner actionOwner, app *App) []ui.ActionDescriptor {

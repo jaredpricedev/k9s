@@ -170,7 +170,11 @@ superseded them.
 navigation as related-resource jumps: the list is narrowed to that resource with
 it selected, and `Esc` returns to the problems list exactly as it was read,
 restoring the viewing namespace the jump changed. `d` describes, `l` opens logs
-for a Pod row, `/` filters by words that must all occur in the severity, kind,
+for a Pod row, `t` opens `:timeline` for the row's object, `m` opens `:graph`
+for it ([graphs.md](graphs.md); refused with the reason when no Prometheus
+source is declared or the kind has no graph), `Shift-D` is the Grafana hand-off
+with a range that starts shortly before the time in the FOR column
+([grafana-handoff.md](grafana-handoff.md)), `/` filters by words that must all occur in the severity, kind,
 namespace, name or cause, and `Esc` clears a filter before it leaves the view.
 
 **Narrow terminals.** From 100 columns all columns are shown. Below 100 the kind
@@ -258,13 +262,16 @@ drawn under it and every other entry is labelled as so long before or after.
 Changes are marked `◆` (`*`), other failing signals `!`. A change listed under
 the rule **preceded** the fault. That is an ordering. The view never says one
 entry caused another, and the earliest warning in a namespace may belong to an
-older, unrelated problem: **m** makes the selected entry the reference moment
-instead, and **m** on it again returns to the first failing signal.
+older, unrelated problem: **x** makes the selected entry the reference moment
+instead, and **x** on it again returns to the first failing signal. (The mark
+was on **m** before `:graph` existed; **m** is now the graph key in every view
+whose rows name an object.)
 
 Keys: **Enter** opens the entry's resource in its list; **/** filters by text;
 **1**, **2**, **3**, **4** narrow the window to the last 15m, 1h, 6h or 24h
 before capture and **0** shows everything read; **s** shows sources and limits;
-**r** reads again; **Shift-D** opens the Grafana dashboard for the timeline's
+**m** opens `:graph` for the focused entry's object, or for the timeline's
+own workload, over the timeline's window; **r** reads again; **Shift-D** opens the Grafana dashboard for the timeline's
 scope with the timeline's window; **Esc** clears the filter, then goes back. Narrowing,
 filtering and marking work on the retained observation and read nothing.
 

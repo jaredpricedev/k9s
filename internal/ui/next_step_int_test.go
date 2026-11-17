@@ -37,13 +37,13 @@ func TestNextStepMapsStatusEvidenceToChecks(t *testing.T) {
 		"completed pod": {"pods", pod, model1.Fields{"a", "0/1", "Completed", ""}, "", false},
 		"starting without a message is progress, not a problem": {"pods", pod, model1.Fields{"a", "0/1", "ContainerCreating", ""}, "", false},
 		"back-off after OOMKilled": {"pods", pod, model1.Fields{"a", "0/1", "CrashLoopBackOff", "api: last OOMKilled exit 137"},
-			"next: api: last exit 137: killed (SIGKILL), out of memory (OOMKilled) · p previous logs · :pressure limit vs usage", true},
+			"next: api: last exit 137: killed (SIGKILL), out of memory (OOMKilled) · p previous logs · :pressure limit vs usage · :graph memory vs limit over time", true},
 		"back-off after exit 1": {"pods", pod, model1.Fields{"a", "0/1", "CrashLoopBackOff", "last Error exit 1"},
 			"next: last exit 1: the application's own error · p previous logs · d describe for events", true},
 		"exit 2 now": {"pods", pod, model1.Fields{"a", "0/1", "Error", "Error exit 2"},
 			"next: exit 2: the application's own error · l logs · d describe for events", true},
 		"exit 137 without an OOM reason names both usual senders": {"pods", pod, model1.Fields{"a", "0/1", "CrashLoopBackOff", "last Error exit 137"},
-			"next: last exit 137: killed (SIGKILL), usually the memory limit or the node · p previous logs · :pressure limit vs usage", true},
+			"next: last exit 137: killed (SIGKILL), usually the memory limit or the node · p previous logs · :pressure limit vs usage · :graph memory vs limit over time", true},
 		"exit 143": {"pods", pod, model1.Fields{"a", "0/1", "CrashLoopBackOff", "last Error exit 143"},
 			"next: last exit 143: SIGTERM, a normal stop or a failed graceful shutdown · p previous logs · d describe for events", true},
 		"exit 139": {"pods", pod, model1.Fields{"a", "0/1", "CrashLoopBackOff", "last Error exit 139"},
@@ -53,7 +53,7 @@ func TestNextStepMapsStatusEvidenceToChecks(t *testing.T) {
 		"exit 127": {"pods", pod, model1.Fields{"a", "0/1", "CrashLoopBackOff", "last ContainerCannotRun exit 127"},
 			"next: last exit 127: command not found in the image · d describe for the command and image · p previous logs", true},
 		"reported signal": {"pods", pod, model1.Fields{"a", "0/1", "Error", "Error signal 9"},
-			"next: signal 9: killed (SIGKILL), usually the memory limit or the node · l logs · :pressure limit vs usage", true},
+			"next: signal 9: killed (SIGKILL), usually the memory limit or the node · l logs · :pressure limit vs usage · :graph memory vs limit over time", true},
 		"unlisted exit code is not decoded further": {"pods", pod, model1.Fields{"a", "0/1", "Error", "Error exit 42"},
 			"next: exit 42: application-defined error · l logs · d describe for events", true},
 		"back-off with no previous exit": {"pods", pod, model1.Fields{"a", "0/1", "CrashLoopBackOff", "back-off 5m0s restarting failed container"},
@@ -90,7 +90,7 @@ func TestNextStepMapsStatusEvidenceToChecks(t *testing.T) {
 			"next: Pending: claim not bound · :storage bind and provisioning stages · d describe for events", false},
 		"bound claim": {"persistentvolumeclaims", claim, model1.Fields{"data", "Bound"}, "", false},
 		"deployment short of ready": {"deployments", workload, model1.Fields{"api", "1/3"},
-			"next: ready 1/3 · :rollout conditions and replicas · Enter pods · d describe for events", false},
+			"next: ready 1/3 · :rollout conditions and replicas · :impact before vs after the rollout · Enter pods · d describe for events", false},
 		"deployment ready": {"deployments", workload, model1.Fields{"api", "3/3"}, "", false},
 		"node not ready": {"nodes", claim, model1.Fields{"n1", "NotReady,SchedulingDisabled"},
 			"next: NotReady: node condition · d describe for conditions and events", true},
@@ -113,11 +113,13 @@ func TestNextStepFitDropsLeastImportantPartsAndNeverWraps(t *testing.T) {
 		ascii bool
 		e     string
 	}{
-		{120, false, "next: api: last exit 137: killed (SIGKILL), out of memory (OOMKilled) · p previous logs · :pressure limit vs usage"},
-		{120, true, "next: api: last exit 137: killed (SIGKILL), out of memory (OOMKilled) | p previous logs | :pressure limit vs usage"},
-		{100, false, "next: api: last exit 137: killed (SIGKILL), out of memory (OOMKilled) · p previous logs · :pressure"},
-		{90, false, "next: api: last exit 137 OOMKilled · p previous logs · :pressure limit vs usage"},
-		{80, false, "next: api: last exit 137 OOMKilled · p previous logs · :pressure limit vs usage"},
+		{150, false, "next: api: last exit 137: killed (SIGKILL), out of memory (OOMKilled) · p previous logs · :pressure limit vs usage · :graph memory vs limit over time"},
+		// A check outlasts prose: the details go first, then the decoded wording.
+		{120, false, "next: api: last exit 137: killed (SIGKILL), out of memory (OOMKilled) · p previous logs · :pressure · :graph"},
+		{120, true, "next: api: last exit 137: killed (SIGKILL), out of memory (OOMKilled) | p previous logs | :pressure | :graph"},
+		{100, false, "next: api: last exit 137 OOMKilled · p previous logs · :pressure limit vs usage · :graph"},
+		{90, false, "next: api: last exit 137 OOMKilled · p previous logs · :pressure limit vs usage · :graph"},
+		{80, false, "next: api: last exit 137 OOMKilled · p previous logs · :pressure · :graph"},
 		{66, false, "next: api: last exit 137 OOMKilled · p previous logs · :pressure"},
 		{52, false, "next: api: last exit 137 OOMKilled · p previous logs"},
 		{45, false, ""},
@@ -139,7 +141,7 @@ func TestNextStepFitDropsLeastImportantPartsAndNeverWraps(t *testing.T) {
 func TestNextStepKeepsOnlyRunnableChecks(t *testing.T) {
 	step := podNextStep("CrashLoopBackOff", "last OOMKilled exit 137")
 	got := step.available(func(checks []NextCheck) []NextCheck {
-		require.Len(t, checks, 2)
+		require.Len(t, checks, 3, "logs, :pressure and :graph are asked about")
 		return checks[:1]
 	})
 	assert.Equal(t, "next: last exit 137: killed (SIGKILL), out of memory (OOMKilled) · p previous logs", nextStepText(got.fit(200, false)))

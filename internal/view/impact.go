@@ -6,7 +6,6 @@ package view
 import (
 	"context"
 	"errors"
-	"slices"
 	"strings"
 	"time"
 
@@ -23,9 +22,6 @@ import (
 const (
 	impactCommandToken = "impact"
 	impactTitle        = "Impact"
-	// impactGraphCommand is opened for a signal only when this build
-	// registers it; :impact does not depend on it.
-	impactGraphCommand = "graph"
 	// impactDeadline covers the three bounded Kubernetes reads and the
 	// range reads, which run a few at a time.
 	impactDeadline = 45 * time.Second
@@ -265,29 +261,60 @@ func (v *impactView) bindImpactKeys() {
 	v.actions.Add(ui.KeyP, ui.NewKeyAction("Previous (earlier) rollout", do(func() { v.step(1) }), true))
 	v.actions.Add(ui.KeyN, ui.NewKeyAction("Next (later) rollout", do(func() { v.step(-1) }), true))
 	v.actions.Add(ui.KeyT, ui.NewKeyAction("Timeline of this workload", do(v.openTimeline), true))
-	// Enter is bound only when this build has a graph command; otherwise
-	// the key is left without any action or hint.
-	v.actions.Delete(tcell.KeyEnter)
-	if v.graphAvailable() {
-		v.actions.Add(tcell.KeyEnter, ui.NewKeyAction("Graph this workload", do(v.openGraph), true))
-	}
+	v.actions.Add(tcell.KeyEnter, ui.NewKeyAction("Graph the selected signal", do(v.openGraph), true))
+	v.actions.Add(grafanaKey, grafanaKeyAction(v.app, func() actionOwner { return v }, nil))
 	back := func(event *tcell.EventKey) *tcell.EventKey { return v.app.PrevCmd(event) }
 	v.actions.Add(tcell.KeyEscape, ui.NewKeyAction("Back", back, false))
 	v.actions.Add(ui.KeyQ, ui.NewKeyAction("Back", back, false))
 }
 
-// graphAvailable reports whether this build's command table knows a graph
-// command. It is asked each time, so the key does nothing rather than fail
-// when the command is absent.
-func (v *impactView) graphAvailable() bool {
-	return v.app.command != nil && slices.Contains(v.app.command.suggestionAliases(), impactGraphCommand)
+// impactGraphPanels names the :graph chart that draws each signal. A signal
+// that is absent has no chart there: HTTP series and readiness are not drawn.
+var impactGraphPanels = map[string]string{
+	impact.SigMemory: "memory", impact.SigMemLimit: "memory",
+	impact.SigCPU: "cpu", impact.SigThrottled: "cpu",
+	// Restarts are a strip under every chart, so the first chart shows them.
+	impact.SigRestarts: "memory",
 }
 
+// impactGraphWindow is the narrowest :graph window that reaches back to the
+// start of the before window, so both compared ranges are on the chart.
+func impactGraphWindow(read *impactRead, now time.Time) time.Duration {
+	if read == nil || read.report == nil || read.report.Windows.Before.Start.IsZero() {
+		return 0
+	}
+	need := now.Sub(read.report.Windows.Before.Start)
+	for _, window := range graphWindows {
+		if window >= need {
+			return window
+		}
+	}
+	return graphWindows[len(graphWindows)-1]
+}
+
+// openGraph opens :graph for the workload over a window that holds the
+// comparison, scrolled to the chart of the selected signal. When :graph has
+// no chart for the signal it says so instead of implying one.
 func (v *impactView) openGraph() {
-	if !v.graphAvailable() || !v.contextCurrent() {
+	if !v.contextCurrent() {
+		v.app.Flash().Warn("Context changed; reopen :impact")
 		return
 	}
-	v.app.gotoResource(impactGraphCommand, "", false, true)
+	panel := impactGraphPanels[v.focused]
+	if outcome := v.focusedOutcome(); outcome != nil && panel == "" {
+		v.app.Flash().Infof(":graph draws no chart for %s", outcome.Signal.Phrase)
+	}
+	v.app.openGraphAt(v.SelectedResource(), impactGraphWindow(v.read, time.Now()), panel)
+}
+
+// GrafanaWindow hands both compared ranges to a Grafana link.
+func (v *impactView) GrafanaWindow() (grafanaWindow, bool) {
+	if v.read == nil || v.read.report == nil || v.read.report.Windows.Before.Start.IsZero() {
+		return grafanaWindow{}, false
+	}
+	w := &v.read.report.Windows
+	return grafanaWindow{From: w.Before.Start, To: w.After.End,
+		Reason: "the compared windows, " + impact.Dur(w.Width) + " each side of " + v.read.report.Rollout.Label()}, true
 }
 
 func (v *impactView) openTimeline() {

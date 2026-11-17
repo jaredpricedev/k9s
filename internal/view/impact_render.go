@@ -107,13 +107,11 @@ func (v *impactView) render() {
 	v.renderRows()
 	v.renderDetail()
 	width := v.viewWidth()
-	enter := ""
-	if v.graphAvailable() {
-		enter = "Enter graph · "
-	}
+	enter := "Enter graph · "
 	v.footer.SetText(tview.Escape(impactFit(width,
 		enter+"t timeline · 1 5m  2 15m  3 30m  4 1h  5 3h · p earlier  n later rollout · r re-read · Esc back",
 		enter+"t timeline · 1-5 window · p/n rollout · r re-read · Esc back",
+		"Enter graph · t timeline · 1-5 · p/n rollout · r read · Esc",
 		"t timeline · 1-5 window · p/n rollout · r read · Esc")))
 }
 

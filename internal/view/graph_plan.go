@@ -14,6 +14,7 @@ import (
 
 	"github.com/derailed/k9s/internal/chart"
 	"github.com/derailed/k9s/internal/client"
+	"github.com/derailed/k9s/internal/impact"
 	"github.com/derailed/k9s/internal/observability"
 )
 
@@ -102,8 +103,9 @@ type graphPlan struct {
 }
 
 // graphRateWindow is the range a rate is taken over: four steps, and never
-// less than two minutes so that two scrapes fall inside it.
-func graphRateWindow(step time.Duration) time.Duration { return max(4*step, 2*time.Minute) }
+// less than two minutes so that two scrapes fall inside it. It is the rule
+// :impact uses, so a rate reads the same in both views.
+func graphRateWindow(step time.Duration) time.Duration { return impact.RateWindowFor(step) }
 
 // graphPeakWindow is the range a peak is taken over: one step, so that a
 // spike between two drawn points is not lost.

@@ -26,7 +26,8 @@ Nothing is read until the view is opened. The view never refreshes on a timer.
 | `1` `2` `3` `4` `5` | Window on each side: 5m, 15m, 30m (default), 1h, 3h |
 | `p` / `n` | Previous (earlier) / next (later) retained rollout |
 | `t` | Open `:timeline` for the same workload |
-| `Enter` | Open `:graph` for the workload, only in a build that has that command; otherwise the key is unbound and no hint is shown |
+| `Enter` | Open `:graph` for the workload over the narrowest graph window that reaches back to the start of the before window, scrolled to the chart of the selected signal (memory signals and restarts: MEMORY; CPU signals: CPU). For a signal `:graph` does not draw (request rate, errors, latency, readiness) a message says so and the graph opens at the top |
+| `Shift-D` | Grafana hand-off for the workload, with the range from the start of the before window to the end of the after window ([grafana-handoff.md](grafana-handoff.md)) |
 | `Up` / `Down` | Select a signal; the pane below states its numbers, rule, sample counts and exact queries |
 | `Esc` | Back |
 
@@ -209,7 +210,9 @@ adds that error ratio and latency are not like-for-like.
 - Prometheus retention bounds how far back `p` is useful.
 - A 403 from the API server's service proxy and a 403 from Prometheus itself
   both read `denied`.
-- `Enter` passes the workload to `:graph`, not the selected signal.
+- `:graph` draws memory, CPU, network and restarts only, so `Enter` on an
+  HTTP or readiness signal cannot show that signal as a chart. Rates use the
+  same range rule in both views (four steps, at least two minutes).
 
 ## Synthetic fixture
 

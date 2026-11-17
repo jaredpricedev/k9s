@@ -57,6 +57,13 @@ func logsCheck(previous bool) NextCheck {
 
 func pressureCheck() NextCheck { return commandCheck("pressure", "limit vs usage") }
 
+// graphCheck and impactCheck name the two Prometheus-backed views. The view's
+// filter drops them when no Prometheus source is declared for the context,
+// so the line never names a check that would be refused.
+func graphCheck() NextCheck { return commandCheck("graph", "memory vs limit over time") }
+
+func impactCheck() NextCheck { return commandCheck("impact", "before vs after the rollout") }
+
 func checkDescribe(detail string) NextCheck { return keyCheck(KeyD, "describe", detail) }
 
 // nextStepFor derives guidance from the fields the list already holds, so a
@@ -196,7 +203,7 @@ func podNextStep(status, why string) NextStep {
 		}
 		switch {
 		case e.reason == "OOMKilled", signal == 9:
-			return step(long, short, logs, pressureCheck())
+			return step(long, short, logs, pressureCheck(), graphCheck())
 		case !e.signal && (e.code == 126 || e.code == 127):
 			return step(long, short, checkDescribe("for the command and image"), logs)
 		}
@@ -214,7 +221,7 @@ func podNextStep(status, why string) NextStep {
 	case "CrashLoopBackOff":
 		return step("CrashLoopBackOff: no previous exit reported", reason, logsCheck(true), checkDescribe("for events"))
 	case "OOMKilled":
-		return step("OOMKilled: killed (SIGKILL), out of memory", reason, logsCheck(false), pressureCheck())
+		return step("OOMKilled: killed (SIGKILL), out of memory", reason, logsCheck(false), pressureCheck(), graphCheck())
 	case "Evicted":
 		return step("Evicted by the node", reason, checkDescribe("for the eviction message"), commandCheck("capacity", "node allocatable"))
 	case "Terminating":
@@ -301,7 +308,7 @@ func workloadNextStep(ready string) NextStep {
 		return NextStep{}
 	}
 	return NextStep{Evidence: "ready " + ready, Short: "ready " + ready, Level: levelWarning,
-		Checks: []NextCheck{commandCheck("rollout", "conditions and replicas"), keyCheck(tcell.KeyEnter, "pods", ""), checkDescribe("for events")}}
+		Checks: []NextCheck{commandCheck("rollout", "conditions and replicas"), impactCheck(), keyCheck(tcell.KeyEnter, "pods", ""), checkDescribe("for events")}}
 }
 
 func nodeNextStep(status string) NextStep {

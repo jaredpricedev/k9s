@@ -271,7 +271,7 @@ func alertsCounts(items []alerts.Item, compact, hidden bool) string {
 			word  string
 		}{counts.Silenced + counts.Inhibited + counts.Unprocessed, "not notifying"}
 		if hidden {
-			tally[0].word += ", hidden (s shows)"
+			tally[0].word += ", hidden (z shows)"
 		}
 	}
 	if compact {
@@ -362,7 +362,7 @@ func alertsEmpty(snapshot *alerts.Snapshot, query string, hidden int) string {
 	case query != "" && len(snapshot.Items) > 0:
 		return fmt.Sprintf("No alert matches filter %q. %d are hidden; Esc clears the filter.", query, len(snapshot.Items))
 	case hidden > 0:
-		return fmt.Sprintf("No alert is firing. %s silenced or inhibited %s hidden; s shows them.", problemsPlural(hidden, "alert"),
+		return fmt.Sprintf("No alert is firing. %s silenced or inhibited %s hidden; z shows them.", problemsPlural(hidden, "alert"),
 			map[bool]string{true: "is", false: "are"}[hidden == 1])
 	}
 	return "Alertmanager answered and holds no alert at this moment.\n" +
@@ -561,11 +561,11 @@ func alertsFooter(width int, rows, folded bool) string {
 	hints := []hint{{"r re-read", "r reread", 9}}
 	if rows {
 		hints = []hint{{"Enter open", "Enter open", 5}, {"t timeline", "t timeline", 4}, {"d all fields", "d fields", 3},
-			{"c copy runbook", "c copy", 1}}
+			{"m graph", "m graph", 3}, {"Shift-D Grafana", "D Grafana", 2}, {"c copy runbook", "c copy", 1}}
 		if folded {
 			hints = append(hints, hint{"Space expand", "Space fold", 2})
 		}
-		hints = append(hints, hint{"s silenced", "s silenced", 6}, hint{"/ filter", "/ filter", 7}, hint{"r re-read", "r reread", 8})
+		hints = append(hints, hint{"z silenced", "z silenced", 6}, hint{"/ filter", "/ filter", 7}, hint{"r re-read", "r reread", 8})
 	}
 	hints = append(hints, hint{"Esc back", "Esc", 9})
 	long := make([]string, 0, len(hints))

@@ -244,6 +244,18 @@ func (v *problemsView) SelectedResource() SelectedResourceTarget {
 	return SelectedResourceTarget{Context: v.contextName, GVR: client.NewGVR(gvr), Namespace: row.Namespace, Name: row.Name, UID: row.UID}
 }
 
+// GrafanaWindow starts a hand-off shortly before the moment the selected
+// row's own status reports. The row was read by :problems, so the range does
+// not depend on the object being in a list cache. A row without a time gives
+// none, and the hand-off states its default.
+func (v *problemsView) GrafanaWindow() (grafanaWindow, bool) {
+	line := v.selectedLine()
+	if line == nil || line.row.Since.IsZero() {
+		return grafanaWindow{}, false
+	}
+	return anchoredWindow(time.Now(), line.row.Since, "the row's status changed"), true
+}
+
 func (v *problemsView) availability(key tcell.Key) string {
 	if !v.destinationCurrent() {
 		return "Destination changed; reopen :problems"
@@ -258,9 +270,23 @@ func (v *problemsView) availability(key tcell.Key) string {
 		}
 		return ""
 	}
+	if key == grafanaKey {
+		// The Grafana hand-off always answers: its dialog says why not.
+		return ""
+	}
 	target := v.SelectedResource()
 	if err := target.Err(); err != nil {
 		return err.Error()
+	}
+	if key == ui.KeyT {
+		_, _, err := timelineScope(target, v.app.Config.ActiveNamespace(), "")
+		if err != nil {
+			return err.Error()
+		}
+		return ""
+	}
+	if key == ui.KeyM {
+		return graphAvailability(v.app, target)
 	}
 	if key == ui.KeyL && target.GVR != client.PodGVR {
 		if line.row.Affected() > 0 {
@@ -281,6 +307,9 @@ func (v *problemsView) makeActions() *ui.KeyActions {
 		{tcell.KeyEnter, "open", "Open in its resource list", true},
 		{ui.KeyD, "describe", "Describe", true},
 		{ui.KeyL, "logs", "Pod logs", true},
+		{ui.KeyT, "timeline", "Timeline: what changed, in order", true},
+		{ui.KeyM, "graph", "Graph: usage vs limits over time", true},
+		{grafanaKey, "grafana", grafanaKeyLabel, true},
 		{ui.KeySpace, "expand", "Expand / fold affected pods", true},
 		{ui.KeySlash, "filter", "Filter rows", false},
 		{ui.KeyR, "reread", "Re-read now (no polling)", false},
@@ -314,7 +343,7 @@ func (v *problemsView) key(e *tcell.EventKey) *tcell.EventKey {
 		return v.app.PrevCmd(e)
 	case e.Key() == tcell.KeyEnter:
 		key = tcell.KeyEnter
-	case e.Key() == tcell.KeyRune && strings.ContainsRune("dlr/ ", e.Rune()):
+	case e.Key() == tcell.KeyRune && strings.ContainsRune("dlr/ tmD", e.Rune()):
 		key = tcell.Key(e.Rune())
 	case e.Key() == tcell.KeyRight || e.Key() == tcell.KeyLeft:
 		if line := v.selectedLine(); line != nil && !line.child && line.row.Affected() > 0 && v.expanded[line.row.Key()] != (e.Key() == tcell.KeyRight) {
@@ -345,6 +374,12 @@ func (v *problemsView) key(e *tcell.EventKey) *tcell.EventKey {
 		if err := v.app.dailyWorkspaceOpenLogs(v.SelectedResource()); err != nil {
 			v.app.Flash().Err(err)
 		}
+	case ui.KeyT:
+		v.app.openTimeline(v.SelectedResource(), "")
+	case ui.KeyM:
+		v.app.openGraph(v.SelectedResource(), 0)
+	case grafanaKey:
+		v.app.openGrafana(v)
 	case ui.KeySpace:
 		v.toggle()
 	case ui.KeyR:

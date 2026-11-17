@@ -13,6 +13,7 @@ import (
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
+	"github.com/derailed/k9s/internal/impact"
 	"github.com/derailed/k9s/internal/observability"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
@@ -25,10 +26,7 @@ import (
 const (
 	graphCommandToken = "graph"
 	graphTitle        = "Graph"
-	// graphReplicaSetLimit bounds the one ReplicaSet list behind a
-	// Deployment's rollout mark.
-	graphReplicaSetLimit = 200
-	graphRevisionKey     = "deployment.kubernetes.io/revision"
+	graphRevisionKey  = "deployment.kubernetes.io/revision"
 )
 
 // graphView draws charts for one object from the declared Prometheus
@@ -47,6 +45,8 @@ type graphView struct {
 	busy          string
 	cursor, first int
 	atEnd, report bool
+	// focus names the chart to scroll to when the first read arrives.
+	focus         string
 	width, height int
 }
 
@@ -78,6 +78,14 @@ func (c *Command) graphCommand(line string) {
 
 //nolint:gocritic // The view owns a captured selection independently of navigation.
 func (a *App) openGraph(target SelectedResourceTarget, window time.Duration) {
+	a.openGraphAt(target, window, "")
+}
+
+// openGraphAt opens the graph with the named chart scrolled into view, for
+// a caller that arrives about one signal. An unknown name changes nothing.
+//
+//nolint:gocritic // The view owns a captured selection independently of navigation.
+func (a *App) openGraphAt(target SelectedResourceTarget, window time.Duration, focus string) {
 	target.Context = a.Config.ActiveContextName()
 	t, err := graphTargetFor(target)
 	if err != nil {
@@ -89,6 +97,7 @@ func (a *App) openGraph(target SelectedResourceTarget, window time.Duration) {
 	sources, restConfig := declaredSources(a), kubeRESTConfig(a)
 	objects, objectNote := graphObjectReader(a, t)
 	v := newGraphView(a, t, window)
+	v.focus = focus
 	v.load = func(ctx context.Context, window time.Duration) *graphSnapshot {
 		now := time.Now()
 		source, st := observability.Resolve(sources, observability.KindPrometheus, restConfig)
@@ -156,6 +165,13 @@ func (v *graphView) SelectedResource() SelectedResourceTarget {
 	return SelectedResourceTarget{Context: v.target.Context, GVR: client.NewGVR(v.target.Resource), Namespace: v.target.Namespace, Name: v.target.Name}
 }
 
+// GrafanaWindow hands the graph's own window to a Grafana link, so the
+// dashboard opens on the range the charts show.
+func (v *graphView) GrafanaWindow() (grafanaWindow, bool) {
+	now := time.Now()
+	return grafanaWindow{From: now.Add(-v.window), To: now, Live: true, Reason: "the graph's window, last " + graphSpan(v.window)}, true
+}
+
 func (v *graphView) Init(ctx context.Context) error {
 	if err := v.Details.Init(ctx); err != nil {
 		return err
@@ -179,14 +195,13 @@ func (v *graphView) Init(ctx context.Context) error {
 		ui.KeyS:         ui.NewKeyAction("Queries and gaps", do(v.toggleReport), true),
 		tcell.KeyLeft:   ui.NewKeyAction("Cursor earlier", v.moveCmd(-1), true),
 		tcell.KeyRight:  ui.NewKeyAction("Cursor later", v.moveCmd(1), true),
-		ui.KeyH:         ui.NewKeyAction("Cursor earlier", v.moveCmd(-1), false),
-		ui.KeyL:         ui.NewKeyAction("Cursor later", v.moveCmd(1), false),
 		tcell.KeyHome:   ui.NewKeyAction("Cursor to window start", v.moveCmd(-1<<20), false),
 		tcell.KeyEnd:    ui.NewKeyAction("Cursor to window end", v.moveCmd(1<<20), false),
 		tcell.KeyUp:     ui.NewKeyAction("Previous chart", v.scrollCmd(-1), true),
 		tcell.KeyDown:   ui.NewKeyAction("Next chart", v.scrollCmd(1), true),
 		tcell.KeyEscape: ui.NewKeyAction("Back", v.escape, false),
 		ui.KeyQ:         ui.NewKeyAction("Back", v.escape, false),
+		grafanaKey:      grafanaKeyAction(v.app, func() actionOwner { return v }, nil),
 	})
 	v.render()
 	return nil
@@ -318,6 +333,14 @@ func (v *graphView) accept(snapshot *graphSnapshot) {
 	}
 	v.cursor = min(v.cursor, last)
 	v.first = min(v.first, max(len(snapshot.Plan.Panels)-1, 0))
+	if v.focus != "" {
+		for index := range snapshot.Plan.Panels {
+			if snapshot.Plan.Panels[index].ID == v.focus {
+				v.first = index
+			}
+		}
+		v.focus = ""
+	}
 	v.snapshot = snapshot
 	v.render()
 }
@@ -424,29 +447,25 @@ func graphMarksFrom(ctx context.Context, dial dynamic.Interface, t *graphTarget)
 		if exit, ok := graphLastExit(pod); ok {
 			marks = append(marks, exit)
 		}
-	case "Deployment":
-		list, err := replicaSets.List(ctx, metav1.ListOptions{Limit: graphReplicaSetLimit})
+	case impact.KindDeployment, impact.KindStatefulSet, impact.KindDaemonSet:
+		// The rollout time comes from the same bounded revision read
+		// :impact uses, so both views name the same moment.
+		history, err := impact.ReadHistory(ctx, dial, impact.Workload{Kind: t.Kind, Namespace: t.Namespace, Name: t.Name})
 		if err != nil {
-			return nil, "ReplicaSets were not read, so no rollout time is marked."
+			return nil, "The revision history was not read, so no rollout time is marked."
 		}
-		var newest *unstructured.Unstructured
-		best := -1
-		for i := range list.Items {
-			rs := &list.Items[i]
-			owned := false
-			for _, owner := range rs.GetOwnerReferences() {
-				owned = owned || (owner.Kind == "Deployment" && owner.Name == t.Name)
+		if n := len(history.Revisions); n > 0 {
+			latest := &history.Revisions[n-1]
+			revision, what := strconv.FormatInt(latest.Number, 10), "ControllerRevision"
+			if t.Kind == impact.KindDeployment {
+				what = "ReplicaSet"
 			}
-			if revision, err := strconv.Atoi(rs.GetAnnotations()[graphRevisionKey]); owned && err == nil && revision > best {
-				best, newest = revision, rs
+			if !latest.Created.IsZero() {
+				marks = append(marks, graphMark{Key: 'R', T: latest.Created.UTC(), Label: "rollout rev " + revision,
+					Origin: "creation time of " + what + " " + latest.Name + " (revision " + revision + ")"})
 			}
 		}
-		if newest != nil {
-			rollout(newest)
-		}
-		if list.GetContinue() != "" {
-			note = fmt.Sprintf("Only the first %d ReplicaSets of the namespace were read; a newer revision may exist.", graphReplicaSetLimit)
-		}
+		note = history.Incomplete
 	case "ReplicaSet":
 		if rs, err := replicaSets.Get(ctx, t.Name, metav1.GetOptions{}); err == nil {
 			rollout(rs)

@@ -346,17 +346,33 @@ func TestImpactKeysReadOnlyOnRequestAndDiscardLateReplies(t *testing.T) {
 	require.False(t, v.loading)
 
 	_, bound := v.actions.Get(tcell.KeyEnter)
-	require.False(t, bound, "Enter does nothing when the build has no graph command")
-	require.NotContains(t, v.footer.GetText(true), "Enter")
-	withGraph := impactViewFixture(t)
-	withGraph.app.command = NewCommand(withGraph.app)
-	aliases := []string{impactGraphCommand}
-	withGraph.app.command.suggestionCatalog.Store(&aliases)
-	withGraph.bindImpactKeys()
-	withGraph.render()
-	_, bound = withGraph.actions.Get(tcell.KeyEnter)
+	require.True(t, bound, "Enter opens :graph for the selected signal")
+	require.Contains(t, v.footer.GetText(true), "Enter graph")
+	_, bound = v.actions.Get(grafanaKey)
 	require.True(t, bound)
-	require.Contains(t, withGraph.footer.GetText(true), "Enter graph")
+}
+
+func TestImpactHandsItsSignalAndWindowToTheGraph(t *testing.T) {
+	now := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+	read := &impactRead{report: &impact.Report{Windows: impact.Windows{Before: impact.Span{Start: now.Add(-40 * time.Minute)}}}}
+	require.Equal(t, time.Hour, impactGraphWindow(read, now), "the narrowest graph window that holds both compared ranges")
+	read.report.Windows.Before.Start = now.Add(-10 * time.Minute)
+	require.Equal(t, 15*time.Minute, impactGraphWindow(read, now))
+	read.report.Windows.Before.Start = now.Add(-72 * time.Hour)
+	require.Equal(t, 24*time.Hour, impactGraphWindow(read, now), "an old rollout gets the widest window, not a wider one")
+	require.Zero(t, impactGraphWindow(nil, now))
+
+	plan := buildGraphPlan(&graphTarget{Kind: "Deployment", Namespace: "apps", Name: "checkout-api"}, []string{"a"}, time.Minute)
+	charts := map[string]bool{}
+	for index := range plan.Panels {
+		charts[plan.Panels[index].ID] = true
+	}
+	for signal, panel := range impactGraphPanels {
+		require.True(t, charts[panel], "signal %s names a chart :graph draws", signal)
+	}
+	for _, signal := range []string{impact.SigRequests, impact.SigErrors, impact.SigP95, impact.SigReady} {
+		require.Empty(t, impactGraphPanels[signal], ":graph draws no chart for %s, so none is promised", signal)
+	}
 }
 
 func TestImpactTargetsWorkloadsAndIsRegistered(t *testing.T) {

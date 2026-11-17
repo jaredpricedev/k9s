@@ -34,7 +34,7 @@ The list has up to three parts, in this order:
    are listed, never dropped. A `Watchdog` alert normally lands here.
 3. **silenced or inhibited: not notifying**: alerts Alertmanager holds but is
    not notifying about. They are dimmed, carry their state word, and sit under
-   that heading so the state is readable without color and at any width. `s`
+   that heading so the state is readable without color and at any width. `z`
    hides or shows this part; the header then says how many are hidden.
 
 Below 100 columns the summary column is dropped and kinds use their short
@@ -98,7 +98,9 @@ when their workload is known; an unmapped alert is never folded with another.
 | `d` | Every field of the selected alert as scrollable text: all labels, all annotations, start, update and end times, generator URL, runbook URL, receivers and fingerprint. |
 | `c` | Copy the runbook URL to the clipboard (the generator URL when there is no runbook). The link is never opened or contacted. |
 | `Space` | Expand or fold a row that folds several alerts. |
-| `s` | Hide or show silenced and inhibited alerts. |
+| `m` | Open `:graph` for the mapped object (Pod, workload or Node), when a Prometheus source is declared. |
+| `Shift-D` | Grafana hand-off for the mapped object, starting shortly before the selected alert began. See [grafana-handoff.md](grafana-handoff.md). |
+| `z` | Hide or show silenced and inhibited alerts. (`s` is "sources and limits" in `:timeline` and `:graph`, so it is not reused here.) |
 | `/` | Filter. Every word must occur in the name, severity, state, object, workload, summary or a `label=value` pair. `Esc` clears it. |
 | `r` | Read again. |
 
@@ -115,7 +117,7 @@ could not be read.
 - **Source answered with no alerts**: the pane says Alertmanager holds no
   alert at that moment and that this is what its rules reported, not a health
   check. A rule that does not exist cannot fire.
-- **Filter matches nothing**, or **everything is hidden by `s`**: the pane
+- **Filter matches nothing**, or **everything is hidden by `z`**: the pane
   says how many alerts are hidden and which key shows them.
 
 ## Alerts in `:problems`

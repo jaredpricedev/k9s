@@ -402,16 +402,20 @@ func problemsAlerts(row *problems.Row, readAt time.Time) string {
 // spelled-out hints do not fit, shorter labels are used so that filter and
 // re-read stay on show at 80 and 60 columns.
 func problemsFooter(width int, rows, pods bool) string {
-	type hint struct{ long, short string }
-	hints := []hint{{"r re-read", "r reread"}}
-	if rows {
-		hints = []hint{{"Enter open in list", "Enter open"}, {"d describe", "d desc"}, {"l logs", "l logs"}}
-		if pods {
-			hints = append(hints, hint{"Space pods", "Space pods"})
-		}
-		hints = append(hints, hint{"/ filter", "/ filter"}, hint{"r re-read", "r reread"})
+	type hint struct {
+		long, short string
+		keep        int // higher outlasts lower
 	}
-	hints = append(hints, hint{"Esc back", "Esc back"}, hint{"? help", "? help"})
+	hints := []hint{{"r re-read", "r reread", 8}}
+	if rows {
+		hints = []hint{{"Enter open in list", "Enter open", 9}, {"d describe", "d desc", 6}, {"l logs", "l logs", 6},
+			{"t timeline", "t time", 5}, {"m graph", "m graph", 4}, {"Shift-D Grafana", "D Grafana", 3}}
+		if pods {
+			hints = append(hints, hint{"Space pods", "Space pods", 2})
+		}
+		hints = append(hints, hint{"/ filter", "/ filter", 8}, hint{"r re-read", "r reread", 8})
+	}
+	hints = append(hints, hint{"Esc back", "Esc back", 7}, hint{"? help", "? help", 1})
 	long := make([]string, 0, len(hints))
 	for _, h := range hints {
 		long = append(long, h.long)
@@ -419,15 +423,17 @@ func problemsFooter(width int, rows, pods bool) string {
 	if text := strings.Join(long, " · "); runewidth.StringWidth(text) <= width {
 		return text
 	}
-	text := ""
-	for _, h := range hints {
-		next := strings.TrimPrefix(text+"  "+h.short, "  ")
-		if runewidth.StringWidth(next) > width {
-			break
+	for floor := 0; ; floor++ {
+		parts := make([]string, 0, len(hints))
+		for _, h := range hints {
+			if h.keep > floor {
+				parts = append(parts, h.short)
+			}
 		}
-		text = next
+		if text := strings.Join(parts, "  "); runewidth.StringWidth(text) <= width || len(parts) <= 1 {
+			return runewidth.Truncate(text, max(width, 0), "…")
+		}
 	}
-	return text
 }
 
 // problemsPaneWidth is the width the header and detail panes charge for

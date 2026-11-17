@@ -8,8 +8,19 @@ seen against a limit when metrics-server is denied or absent.
 It opens on demand: `m` on a Pod, Deployment, StatefulSet, DaemonSet,
 ReplicaSet or Node list, `:graph` (or `:graph 15m|1h|6h|24h`) with such an
 object selected, or "Graph: usage vs limits over time" in the Ctrl-O palette.
-A view that exposes a selected resource, such as `:timeline`, graphs it the
-same way through `:graph` or the palette.
+`m` is the same key in `:problems`, `:alerts` and `:timeline`, where it graphs
+the object of the selected row (in `:timeline`, the focused entry's object or
+the timeline's own workload, over the timeline's window). In `:impact`,
+`Enter` opens the graph over a window that holds both compared ranges,
+scrolled to the chart of the selected signal: Memory peak and Memory/limit
+open on MEMORY, CPU usage and CPU throttled on CPU. Request rate, error
+ratio, latency and readiness have no chart here, and `:impact` says so
+instead of implying one. Where no Prometheus source is declared, `m` answers
+with that reason and reads nothing, and the "next:" line of a list never
+names `:graph`.
+
+`Shift-D` on the graph hands the same object to Grafana with the graph's own
+window ([grafana-handoff.md](grafana-handoff.md)).
 
 ## What is never done
 
@@ -46,7 +57,7 @@ Cursor 05:19:00Z (window end) · restarts 6, +6 in window
   lines alternate solid and dotted; a limit, allocatable amount or size is a
   `─` level; a request is a `┄` level. Colour repeats this and is never the
   only difference.
-- The value after each name is the sample at the cursor. `←`/`→` (or `h`/`l`)
+- The value after each name is the sample at the cursor. `←`/`→`
   move the cursor one step of the sample grid, with Shift ten steps, and
   Home/End jump to the window edges. Nothing is interpolated: `–` means there
   is no sample at the cursor (with `last 05:03` or `first 05:07` when the
@@ -118,16 +129,20 @@ counted on the page as NOT READ.
 
 Marks are moments read from the objects themselves, plus one from the data:
 
-- `R rollout rev N`: the creation time of the ReplicaSet that owns the Pod,
-  or of the Deployment's newest-revision ReplicaSet (one list of at most 200
-  ReplicaSets in the namespace), when it carries a revision annotation.
+- `R rollout rev N`: the creation time of the ReplicaSet that owns the Pod;
+  or, for a Deployment, StatefulSet or DaemonSet, of its newest retained
+  revision. That is the bounded revision read `:impact` makes
+  ([impact.md](impact.md): one Get and one list of at most 200 ReplicaSets or
+  ControllerRevisions, matched by controller UID), so both views name the
+  same rollout moment. When the list was cut by its limit the page says a
+  later rollout may be missing.
 - `X last exit <reason> (<code>)`: the most recent
   `lastState.terminated.finishedAt` among the Pod's containers.
 - `F first restart`: the first rise of the restart counter inside the window.
 
 A mark outside the window is listed with "(before window)" and not placed.
 The line ends with "order, not cause"; that caveat is kept when space is
-short. StatefulSets, DaemonSets and Nodes have no object mark.
+short. Nodes have no object mark.
 
 ## States
 
