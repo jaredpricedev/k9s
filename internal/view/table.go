@@ -289,9 +289,9 @@ func (t *Table) bindKeys() {
 
 func (t *Table) problemsFirstCmd(*tcell.EventKey) *tcell.EventKey {
 	if t.Table.ToggleProblemsFirst() {
-		t.app.Flash().Info("Problems first in every list · Shift-X restores column order")
+		t.app.Flash().Info("Problems first in every list")
 	} else {
-		t.app.Flash().Info("Column order restored")
+		t.app.Flash().Info("Column order only in every list · Shift-X lists problems first")
 	}
 	return nil
 }

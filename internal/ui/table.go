@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/derailed/k9s/internal"
 	"github.com/derailed/k9s/internal/client"
@@ -75,6 +76,8 @@ type Table struct {
 	layoutWidth        int
 	columnWidths       map[string]int
 	health             tableHealth
+	trends             map[string]*rowTrend
+	trendAt            time.Time
 	presentation       tablePresentation
 }
 
@@ -618,6 +621,8 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 	selectedRow := -1
 	pads := make(MaxyPad, cdata.HeaderCount())
 	computeMaxColumns(pads, t.getSortCol().Name, cdata, t.getLiteralFields())
+	t.recordTrends(data, time.Now())
+	t.trendPads(cdata, pads)
 	t.fitColumns(cdata, pads)
 	t.Clear()
 	fg := t.styles.Table().Header.FgColor.Color()
@@ -667,7 +672,7 @@ func (t *Table) UpdateUI(cdata, data *model1.TableData) {
 		rows = append(rows, classified{re: re, ore: ore, level: level})
 		return true
 	})
-	if problemsFirst.Load() {
+	if problemsFirstEnabled() {
 		sort.SliceStable(rows, func(i, j int) bool { return rows[i].level > rows[j].level })
 	}
 	for index := range rows {
@@ -745,6 +750,9 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 			field += delta
 		}
 
+		if t.styles != nil {
+			field = t.trendField(re.Row.ID, h[c].Name, field)
+		}
 		if h[c].Decorator != nil {
 			field = h[c].Decorator(field)
 		}
@@ -767,7 +775,7 @@ func (t *Table) buildRow(r int, re, ore model1.RowEvent, h model1.Header, pads M
 		cell.SetTextColor(cellColor)
 		if width := t.columnWidths[h[c].Name]; width > 0 {
 			cell.SetMaxWidth(width).SetExpansion(0)
-			if h[c].Name == "NAME" || h[c].Name == "NAMESPACE" || h[c].Name == "NODE" {
+			if h[c].Name == "NAME" || h[c].Name == "NAMESPACE" || h[c].Name == "NODE" || h[c].Name == tableWhyColumn {
 				// Draw reserves two cells for the selection/mark marker. Keep
 				// the elision visible rather than clipping it behind the marker.
 				if col == 0 && t.semanticSelection {

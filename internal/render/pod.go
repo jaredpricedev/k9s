@@ -74,6 +74,7 @@ var defaultPodHeader = model1.Header{
 	model1.HeaderColumn{Name: "NODE"},
 	model1.HeaderColumn{Name: "SERVICE-ACCOUNT", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "NOMINATED NODE", Attrs: model1.Attrs{Wide: true}},
+	model1.HeaderColumn{Name: "WHY"},
 	model1.HeaderColumn{Name: "READINESS GATES", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "QOS", Attrs: model1.Attrs{Wide: true}},
 	model1.HeaderColumn{Name: "LABELS", Attrs: model1.Attrs{Wide: true}},
@@ -199,6 +200,7 @@ func (p *Pod) defaultRow(pwm *PodWithMetrics, row *model1.Row) error {
 		na(spec.NodeName),
 		na(spec.ServiceAccountName),
 		asNominated(st.NominatedNodeName),
+		podWhy(spec, &st),
 		asReadinessGate(spec, &st),
 		p.mapQOS(st.QOSClass),
 		mapToStr(pwm.Raw.GetLabels()),
@@ -207,6 +209,78 @@ func (p *Pod) defaultRow(pwm *PodWithMetrics, row *model1.Row) error {
 	}
 
 	return nil
+}
+
+// podWhy states, in one short phrase, the evidence the Pod API reports for a
+// pod that is not running cleanly: the previous exit behind a back-off, a
+// waiting or scheduling message, or the container that is not ready. It is
+// empty for a healthy pod and never guesses beyond the reported status.
+func podWhy(spec *v1.PodSpec, st *v1.PodStatus) string {
+	if st.Reason != "" && st.Message != "" {
+		return oneLine(st.Message)
+	}
+	prefix := func(name string) string {
+		if len(spec.Containers)+len(spec.InitContainers) > 1 {
+			return name + ": "
+		}
+		return ""
+	}
+	exit := func(t *v1.ContainerStateTerminated) string {
+		reason := t.Reason
+		if reason == "" {
+			reason = "exited"
+		}
+		if t.Signal != 0 {
+			return fmt.Sprintf("%s signal %d", reason, t.Signal)
+		}
+		return fmt.Sprintf("%s exit %d", reason, t.ExitCode)
+	}
+	starting := ""
+	for _, statuses := range [][]v1.ContainerStatus{st.InitContainerStatuses, st.ContainerStatuses} {
+		for i := range statuses {
+			cs := &statuses[i]
+			switch {
+			case cs.State.Waiting != nil:
+				w := cs.State.Waiting
+				if w.Reason == "ContainerCreating" || w.Reason == "PodInitializing" {
+					if starting == "" && w.Message != "" {
+						starting = prefix(cs.Name) + oneLine(w.Message)
+					}
+					continue
+				}
+				if t := cs.LastTerminationState.Terminated; t != nil {
+					return prefix(cs.Name) + "last " + exit(t)
+				}
+				if w.Message != "" {
+					return prefix(cs.Name) + oneLine(w.Message)
+				}
+				return prefix(cs.Name) + w.Reason
+			case cs.State.Terminated != nil && cs.State.Terminated.ExitCode != 0:
+				return prefix(cs.Name) + exit(cs.State.Terminated)
+			}
+		}
+	}
+	if starting != "" {
+		return starting
+	}
+	for i := range st.Conditions {
+		c := &st.Conditions[i]
+		if c.Type == v1.PodScheduled && c.Status == v1.ConditionFalse && c.Message != "" {
+			return oneLine(c.Message)
+		}
+	}
+	if st.Phase == v1.PodRunning {
+		for i := range st.ContainerStatuses {
+			if cs := &st.ContainerStatuses[i]; cs.State.Running != nil && !cs.Ready {
+				return prefix(cs.Name) + "running, not ready"
+			}
+		}
+	}
+	return ""
+}
+
+func oneLine(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // Healthy checks component health.

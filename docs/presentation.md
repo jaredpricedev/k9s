@@ -16,7 +16,13 @@ Pod tables reserve full status, readiness and restarts before allocating space t
 
 A resource list with a status column states how many rows need attention beside its row count, for example `pods(all)[6] 2 failing 1 degraded 1 in progress`. The counts use the same classification that colors the cells. A status word decides a row; a readiness count decides only when no status column speaks; restart counts are history and are not counted. Nothing is added when no row needs attention, and parts are dropped from the least severe when the frame is too narrow.
 
-`Shift+X` lists failing, then degraded, then in-progress rows ahead of the rest, keeping the chosen column order inside each group and the selected resource. The choice applies to every list for the session and the title states `problems first` while it is active.
+Failing, then degraded, then in-progress rows are listed ahead of the rest by default, keeping the chosen column order inside each group and the selected resource. The title states `problems first` while a list has rows needing attention. `Shift+X` switches every list to plain column order for the session, and back.
+
+## Cause and trend
+
+Pod lists add a `WHY` column: one phrase taken from the Pod status for a pod that is not running cleanly — the previous exit behind a back-off (`api: last OOMKilled exit 137`), a waiting or scheduling message, an eviction message, or the container that is running but not ready. It reports status evidence only and is empty for a healthy pod. The column is shown from 96 columns when at least one row has a cause; it claims a readable minimum, lets age and usage be placed, then grows into unused width. `Ctrl+W` always shows it in full.
+
+While a list is open it remembers up to eight samples of each row's `CPU` and `MEM` values, taken at most every two seconds, and draws them as a sparkline before the number, scaled from zero to that row's maximum. `RESTARTS` shows the restarts gained since the list was opened as `+N`. This is session memory, not cluster history: it starts empty, is never stored, ignores unavailable values and is dropped when the resource leaves the list. With `noIcons`, the sparkline is replaced by `+`, `-` or `=` comparing the newest sample with the oldest. Sorting, filtering and export use the unchanged values.
 
 ## Semantic skin tokens
 

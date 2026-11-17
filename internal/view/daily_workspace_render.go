@@ -351,6 +351,20 @@ func (w *dailyWorkspace) renderHeader() {
 	if width < 70 {
 		status = fmt.Sprintf("%s · gaps %d · findings %d", age, gaps, len(w.snapshot.Findings))
 	}
+	// Counts describe an observation. Before one exists, "0 findings" would
+	// read as a clean result, so the status states what is missing instead.
+	if w.snapshot.ObservedAt.IsZero() {
+		status = "No observation yet · r reads this scope · nothing is known until then"
+		if width < 70 {
+			status = "No observation yet · r reads this scope"
+		}
+		if w.scope.Name == "" {
+			status = "No observation yet · a scope must exist before anything is read"
+			if width < 70 {
+				status = "No observation yet · create a scope first"
+			}
+		}
+	}
 	if w.mode == dailyWorkspaceHistoryMode {
 		status = w.historyStatus(width)
 	}
@@ -360,6 +374,12 @@ func (w *dailyWorkspace) renderHeader() {
 	notice := w.notice
 	if notice == "" && gaps > 0 {
 		notice = "Partial coverage · 3 opens gaps; quiet is not health"
+	}
+	if notice == "" && w.scope.Name == "" {
+		notice = "n new scope · Enter opens a saved one"
+		if w.mode == dailyWorkspaceScopesMode && len(w.rows) == 0 && w.query == "" {
+			notice = "n creates your first scope"
+		}
 	}
 	if notice == "" {
 		notice = "Retained scope · v shows exact scope and row"
@@ -390,6 +410,10 @@ func (w *dailyWorkspace) renderFooter() {
 	}
 	if width < 50 {
 		hints = "Enter details · / search · ? help"
+	}
+	// With nothing saved, only the keys that can do something are offered.
+	if w.mode == dailyWorkspaceScopesMode && len(w.rows) == 0 && w.query == "" {
+		hints = "n new scope · Esc back · ? help"
 	}
 	w.footer.SetText(tview.Escape(hints))
 }
@@ -435,6 +459,19 @@ func (w *dailyWorkspace) renderDetail() {
 	}
 	if w.mode == dailyWorkspaceHistoryMode || w.mode == dailyWorkspaceActivityMode {
 		w.detail.SetText("No retained observations yet. r reads this explicit scope; reopening starts a new window. Prior history is unavailable.")
+		return
+	}
+	if w.scope.Name == "" {
+		// Three short lines that fit the detail pane without wrapping.
+		text := "A scope is a saved set of namespaces and resource kinds in one context.\n" +
+			"1. n names it and chooses what it covers   2. r reads it once, on request\n" +
+			"3. Daily lists what needs attention; Coverage lists what could not be read"
+		if w.viewportWidth > 0 && w.viewportWidth < 80 {
+			text = "A scope saves namespaces and kinds to check.\n" +
+				"n creates one, then r reads it on request.\n" +
+				"Daily: problems. Coverage: unread sources."
+		}
+		w.detail.SetText(text)
 		return
 	}
 	w.detail.SetText("Scope observations include workload health, jobs, quotas, PVCs and certificate metadata when enabled. " +

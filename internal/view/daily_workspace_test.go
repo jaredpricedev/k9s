@@ -431,3 +431,30 @@ func TestDailyWorkspaceAllFormButtonsRemainVisibleAtLaptopAndDeskSizes(t *testin
 		}
 	}
 }
+
+func TestDailyWorkspaceFirstRunStatesOnlyWhatIsKnown(t *testing.T) {
+	w := dailyWorkspaceFixture()
+	w.scope = workspace.Scope{}
+	w.snapshot = workspace.Snapshot{}
+	w.rows = nil
+	w.mode = dailyWorkspaceScopesMode
+	w.viewportWidth = 120
+	w.renderHeader()
+	w.renderDetail()
+	w.renderFooter()
+	header := w.header.GetText(true)
+	if strings.Contains(header, "0 findings") || strings.Contains(header, "Retained scope") {
+		t.Fatalf("an unread, unsaved scope must not report counts or retention: %q", header)
+	}
+	for _, want := range []string{"No observation yet", "n creates your first scope"} {
+		if !strings.Contains(header, want) {
+			t.Fatalf("header %q lacks %q", header, want)
+		}
+	}
+	if detail := w.detail.GetText(true); !strings.Contains(detail, "A scope is a saved set") || strings.Count(strings.TrimSpace(detail), "\n") > 2 {
+		t.Fatalf("first-run explanation must fit the three-line pane: %q", detail)
+	}
+	if footer := w.footer.GetText(true); strings.Contains(footer, "refresh") || !strings.Contains(footer, "n new scope") {
+		t.Fatalf("footer offers keys that do nothing here: %q", footer)
+	}
+}

@@ -16,14 +16,14 @@ import (
 	"github.com/derailed/tview"
 )
 
-const tableReadyColumn, tableRestartsColumn = "READY", "RESTARTS"
+const tableReadyColumn, tableRestartsColumn, tableWhyColumn = "READY", "RESTARTS", "WHY"
 
 // tablePresentation resolves expensive RGB/contrast work once per skin change.
 // Ordinary refreshes and draws only look up the already resolved colors.
 type tablePresentation struct {
 	canvas, selected, text, healthy, warning, failure, progress, unknown tcell.Color
 	focus                                                                tcell.Color
-	marker, deltaPrefix                                                  string
+	marker, deltaPrefix, trendPrefix                                     string
 	selectedColors                                                       map[tcell.Color]tcell.Color
 }
 
@@ -48,6 +48,10 @@ func (t *Table) resolvePresentation(styles *config.Styles) {
 	}
 	v.marker = fmt.Sprintf("[%s::b]> [-::]", focusName)
 	v.deltaPrefix = fmt.Sprintf("[%s::b]", p.Progress.String())
+	v.trendPrefix = "[::]"
+	if muted := config.ReadableForeground(p.Muted.Color(), v.canvas); muted.Hex() >= 0 {
+		v.trendPrefix = fmt.Sprintf("[#%06x::]", muted.Hex())
+	}
 }
 
 func (t *Table) selectedForeground(color tcell.Color) tcell.Color {
@@ -104,35 +108,66 @@ func (t *Table) fitColumns(data *model1.TableData, pads MaxyPad) {
 	reserve("NAME", nameWidth)
 	// At wider sizes shrink a very long name slightly to make room for useful
 	// measurements. Do not add a column unless the complete label/value fits.
-	for _, name := range []string{"CPU", "MEM", "AGE", "NODE", "PF", "IP", "%CPU/R", "%MEM/R", "%CPU/L", "%MEM/L", "VS"} {
-		size := available[name]
-		if size == 0 {
-			continue
+	place := func(names ...string) {
+		for _, name := range names {
+			size := available[name]
+			if size == 0 {
+				continue
+			}
+			if name == "NODE" {
+				size = min(size, 24)
+			}
+			if remaining < size+1 && width >= 96 && cols["NAME"] > 24 {
+				give := min(cols["NAME"]-24, size+1-remaining)
+				cols["NAME"] -= give
+				remaining += give
+			}
+			if remaining >= size+1 {
+				reserve(name, size)
+			}
 		}
-		if name == "NODE" {
-			size = min(size, 24)
-		}
-		if remaining < size+1 && width >= 96 && cols["NAME"] > 24 {
-			give := min(cols["NAME"]-24, size+1-remaining)
+	}
+	// The cause column appears only when a row reports one. It first claims
+	// a readable minimum, then age and usage are placed, then it grows toward
+	// its full text before lower-value columns are considered.
+	why := min(available[tableWhyColumn]-2, 60)
+	if why <= len(tableWhyColumn) || width < 96 {
+		why = 0
+	} else {
+		least := min(why, 28)
+		if short := least + 1 - remaining; short > 0 && cols["NAME"] > 24 {
+			give := min(cols["NAME"]-24, short)
 			cols["NAME"] -= give
 			remaining += give
 		}
-		if remaining >= size+1 {
-			reserve(name, size)
+		if remaining < least+1 {
+			why = 0
+		} else {
+			reserve(tableWhyColumn, least)
 		}
 	}
-	// Hand unused width back to the name: a name is never elided while the
-	// row still has blank cells to its right. Budgets above are deliberately
-	// generous (padding and separator are both counted), so a fully reserved
-	// column draws two cells narrower than its budget.
+	delete(available, tableWhyColumn)
+	place("AGE", "CPU", "MEM")
+	// Budgets above are deliberately generous (padding and separator are both
+	// counted), so a fully reserved column draws two cells narrower than its
+	// budget. That slack is real width and is handed back below.
 	spare := remaining - 2
 	for name, size := range cols {
-		if name != "NAME" {
+		if name != "NAME" && name != tableWhyColumn {
 			spare += max(0, size-available[name]+2)
 		}
 	}
-	if spare = min(spare, available["NAME"]-cols["NAME"]); spare > 0 {
-		cols["NAME"] += spare
+	if grow := min(spare, why-cols[tableWhyColumn]); why > 0 && grow > 0 {
+		cols[tableWhyColumn] += grow
+		spare -= grow
+		remaining -= min(remaining, grow)
+	}
+	before := remaining
+	place("NODE", "PF", "IP", "%CPU/R", "%MEM/R", "%CPU/L", "%MEM/L", "VS")
+	spare -= before - remaining
+	// A name is never elided while the row still has blank cells.
+	if grow := min(spare, available["NAME"]-cols["NAME"]); grow > 0 {
+		cols["NAME"] += grow
 	}
 	t.columnWidths = cols
 }
@@ -277,9 +312,14 @@ const (
 	levelFailure
 )
 
-// problemsFirst is a session-wide ordering choice: once chosen it follows the
-// operator into every resource list rather than being re-entered per view.
-var problemsFirst atomic.Bool
+// columnOrderOnly turns off the default problems-first ordering. It is a
+// session-wide choice that follows the operator into every resource list.
+var columnOrderOnly atomic.Bool
+
+func problemsFirstEnabled() bool { return !columnOrderOnly.Load() }
+
+// SetProblemsFirst sets the session ordering without refreshing any table.
+func SetProblemsFirst(enabled bool) { columnOrderOnly.Store(!enabled) }
 
 // tableHealth counts the rows whose status needs attention. It is derived
 // from the same classification that colors the cells, so the summary and the
@@ -338,8 +378,8 @@ func rowLevel(h model1.Header, re *model1.RowEvent, fallback tcell.Color) status
 // ToggleProblemsFirst lists failing, degraded and progressing rows ahead of
 // the rest. The chosen column order is kept inside each group.
 func (t *Table) ToggleProblemsFirst() bool {
-	enabled := !problemsFirst.Load()
-	problemsFirst.Store(enabled)
+	enabled := !problemsFirstEnabled()
+	SetProblemsFirst(enabled)
 	t.Refresh()
 	return enabled
 }
@@ -368,7 +408,7 @@ func (t *Table) healthTitle(used int) string {
 	add(t.health.failing, "failing", p.failure)
 	add(t.health.degraded, "degraded", p.warning)
 	add(t.health.progressing, "in progress", p.progress)
-	if problemsFirst.Load() && out != "" {
+	if problemsFirstEnabled() && out != "" {
 		out += "· problems first "
 	}
 	return out

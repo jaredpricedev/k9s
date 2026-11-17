@@ -255,13 +255,8 @@ func TestTableSummarizesAndOrdersProblemsFromCellClassification(t *testing.T) {
 	for _, want := range []string{"1 failing", "1 degraded", "1 in progress"} {
 		assert.Contains(t, title, want, "restarts and readiness counts alone do not inflate the summary")
 	}
-	assert.NotContains(t, title, "problems first")
-	first, _ := v.GetRowID(1)
-	assert.Equal(t, "ns/a-healthy", first, "column order is the default")
-
-	v.SelectRow(1, 0, true)
-	require.True(t, v.ToggleProblemsFirst())
-	defer v.ToggleProblemsFirst()
+	v.SelectRow(4, 0, true)
+	require.Equal(t, "ns/a-healthy", v.GetSelectedItem())
 	var order []string
 	for row := 1; row < v.GetRowCount(); row++ {
 		id, _ := v.GetRowID(row)
@@ -270,5 +265,11 @@ func TestTableSummarizesAndOrdersProblemsFromCellClassification(t *testing.T) {
 	assert.Equal(t, []string{"c-crashing", "d-pending", "b-starting", "a-healthy", "e-healthy"}, order,
 		"severity first, then the chosen column order")
 	assert.Contains(t, v.GetTitle(), "problems first", "a changed order is stated in text")
+
+	require.False(t, v.ToggleProblemsFirst())
+	defer ui.SetProblemsFirst(true)
+	first, _ := v.GetRowID(1)
+	assert.Equal(t, "ns/a-healthy", first, "Shift-X restores plain column order")
+	assert.NotContains(t, v.GetTitle(), "problems first")
 	assert.Equal(t, "ns/a-healthy", v.GetSelectedItem(), "reordering keeps the selected resource")
 }
