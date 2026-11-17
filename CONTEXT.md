@@ -16,3 +16,7 @@
 | Incomplete observation | Exclusions, limits or unavailable content prevent a complete retained observation. |
 | Stale observation | The requested evidence cannot establish the selected identity as current. |
 | Evidence bundle | Portable observations, user notes and explicitly selected snippets, retaining their individual sources, times, identities and limits. It is neither desired state nor an atomic cluster snapshot. |
+| Hop | One stretch of the path a request takes to a Service: ingress, app (the Service's own Pods), dependency (a Service those Pods call), DNS or network. |
+| Profile | A named mapping from the signals of one hop kind to the metric and label names one exporter uses. It fills fixed query shapes and carries no query text. |
+| Not read | A hop, profile or signal for which no reading exists, with the reason (no mapping, nothing pins it to the object, the source refused, or no series matched). It is never drawn as zero and never described as healthy. |
+| Peer outlier | A reading that differs from the same reading of its peers (the other Pods of the Service) over the same window, by a stated rule and with a minimum number of peers. It is a difference, not a cause. |

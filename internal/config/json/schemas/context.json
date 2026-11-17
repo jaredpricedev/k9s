@@ -3,6 +3,85 @@
   "title": "K9s context config schema",
   "type": "object",
   "additionalProperties": false,
+  "definitions": {
+    "requestPathNames": {
+      "type": "array",
+      "maxItems": 4,
+      "items": { "type": "string" }
+    },
+    "requestPathMatch": {
+      "type": "array",
+      "maxItems": 32,
+      "items": { "type": "string" }
+    },
+    "requestPathService": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ingress": { "$ref": "#/definitions/requestPathNames" },
+        "app": { "$ref": "#/definitions/requestPathNames" },
+        "dns": { "$ref": "#/definitions/requestPathNames" },
+        "network": { "$ref": "#/definitions/requestPathNames" },
+        "dependencies": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["service", "profile"],
+            "properties": {
+              "service": { "type": "string" },
+              "profile": { "type": "string" },
+              "match": { "$ref": "#/definitions/requestPathMatch" }
+            }
+          }
+        }
+      }
+    },
+    "requestPathProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "extends": { "type": "string" },
+        "hop": { "type": "string", "enum": ["ingress", "app", "dependency", "dns", "network"] },
+        "scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "namespace": { "type": "string" },
+            "service": { "type": "string" },
+            "ingress": { "type": "string" },
+            "pod": { "type": "string" },
+            "node": { "type": "string" }
+          }
+        },
+        "match": { "$ref": "#/definitions/requestPathMatch" },
+        "signals": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "kind", "metric"],
+            "properties": {
+              "name": { "type": "string" },
+              "title": { "type": "string" },
+              "kind": { "type": "string", "enum": ["rate", "ratio", "quantile", "gauge"] },
+              "metric": { "type": "string" },
+              "match": { "$ref": "#/definitions/requestPathMatch" },
+              "divisor": { "type": "string" },
+              "divisorMatch": { "$ref": "#/definitions/requestPathMatch" },
+              "quantile": { "type": "number", "minimum": 0, "maximum": 1 },
+              "aggregate": { "type": "string", "enum": ["sum", "max", "min", "avg"] },
+              "by": { "type": "array", "maxItems": 4, "items": { "type": "string" } },
+              "unit": { "type": "string", "enum": ["seconds", "ratio", "perSecond", "count", "bytes", "cores"] },
+              "worse": { "type": "string", "enum": ["high", "low", "none"] }
+            }
+          }
+        }
+      }
+    }
+  },
   "properties": {
     "k9s": {
       "additionalProperties": false,
@@ -72,6 +151,21 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "requestPath": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "defaults": { "$ref": "#/definitions/requestPathService" },
+                "services": {
+                  "type": "object",
+                  "additionalProperties": { "$ref": "#/definitions/requestPathService" }
+                },
+                "profiles": {
+                  "type": "object",
+                  "additionalProperties": { "$ref": "#/definitions/requestPathProfile" }
+                }
+              }
+            },
             "red": {
               "type": "object",
               "additionalProperties": false,

@@ -13,11 +13,13 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import types
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, quote
@@ -46,7 +48,10 @@ daily = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(daily)
 demo = daily.journeys.demo
 sys.path.insert(0, str(HERE))
+import gitlab_hang_fixture as gitlab  # noqa: E402
 import observability_sources_fixture as observed  # noqa: E402
+
+POD_PROXY_PATH = re.compile(r"^/api/v1/namespaces/([a-z0-9-]+)/pods/([a-z0-9.:-]+)/proxy(/.*)?$")
 
 
 class StudyHandler(daily.WorkspaceHandler):
@@ -66,6 +71,24 @@ class StudyHandler(daily.WorkspaceHandler):
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
+            return None
+        pod = POD_PROXY_PATH.match(self.path.split("?", 1)[0])
+        if pod:
+            # The read-only GET a probe sends to one Pod through the API
+            # server. The handler thread waits as long as the Pod would.
+            self.record("GET")
+            code, body, wait = self.server.pod_proxy.handle(pod.group(1), pod.group(2), pod.group(3) or "/")
+            if wait:
+                time.sleep(wait)
+            payload = json.dumps(body).encode()
+            try:
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # the caller gave up waiting, as a probe with a deadline does
             return None
         if self.path.startswith("/apis/metrics.k8s.io/"):
             self.record("GET")
@@ -98,14 +121,32 @@ class StudyHandler(daily.WorkspaceHandler):
                                "metadata": {"resourceVersion": "100"}, "items": items})
         return super().do_GET()
 
+    def do_POST(self):
+        if self.server.pod_proxy.deny and self.path.startswith("/apis/authorization.k8s.io/"):
+            # With --deny-pod-proxy an access review for pods/proxy says no,
+            # like the GET itself. Other reviews stay allowed.
+            self.record("POST")
+            body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            allowed = not (b"pods" in body and b"proxy" in body)
+            return self.reply({"apiVersion": "authorization.k8s.io/v1", "kind": "SelfSubjectAccessReview",
+                               "status": {"allowed": allowed}})
+        return super().do_POST()
 
-def study_objects(api, deny_sources=()):
+
+def study_objects(api, deny_sources=(), deny_pod_proxy=False):
     started = datetime.now(timezone.utc).replace(microsecond=0)
     now = started.isoformat().replace("+00:00", "Z")
     # Prometheus, Alertmanager and Grafana answers share the start time that
     # every "minutes ago" below is measured from.
     api.observability = observed.Sources(started.timestamp(), deny_sources)
     api.objects.extend(observed.service_objects(now))
+    # The "GitLab intermittent hang" scenario: namespace gitlab, cluster DNS
+    # and three healthy nodes. Every Pod is Ready; see gitlab_hang_fixture.py.
+    api.objects.extend(gitlab.objects(started))
+    api.pod_proxy = gitlab.PodProxy(deny_pod_proxy)
+    demo.GROUPS.setdefault("discovery.k8s.io/v1", [])
+    if ("endpointslices", "EndpointSlice", True) not in demo.GROUPS["discovery.k8s.io/v1"]:
+        demo.GROUPS["discovery.k8s.io/v1"].append(("endpointslices", "EndpointSlice", True))
 
     def obj(api_version, kind, name, namespace, labels, spec=None, status=None):
         return {"apiVersion": api_version, "kind": kind, "metadata": {
@@ -446,7 +487,8 @@ def smoke_sources(base):
     notes = named_get(base, grafana + "/api/annotations?from=%d&to=%d&tags=deploy" % ((now - 3600) * 1000, now * 1000))
     assert len(notes) == 1 and "revision 2" in notes[0]["text"], notes
     through = named_get(base, grafana + "/api/datasources/proxy/uid/prom-main/api/v1/query?query=" + quote("up{}"))
-    assert through["status"] == "success" and len(through["data"]["result"]) == 3
+    # Three nodes of the checkout story and three of the GitLab scenario.
+    assert through["status"] == "success" and len(through["data"]["result"]) == 6
     denied = observed.Sources(deny=("grafana",))
     assert denied.handle("grafana", "3000", "/api/health", {})[0] == 403
     assert denied.handle("prometheus", "9090", "/api/v1/status/buildinfo", {})[0] == 200
@@ -454,6 +496,115 @@ def smoke_sources(base):
             "checkout-api 5xx ratio %.3f before the rollout, %.3f now; p95 %.2fs before, %.2fs now" % (before, after, fast, slow),
             "worker-b has no node-exporter sample after it stopped reporting",
             "one silenced and one inhibited alert; --deny-source answers HTTP 403"]
+
+
+def smoke_gitlab(base):
+    """The GitLab hang scenario: every Pod Ready, one webservice Pod the
+    outlier in three stalls, healthy neighbours, a slow Pod proxy answer."""
+    prometheus = "/api/v1/namespaces/monitoring/services/prometheus:9090/proxy"
+    grafana = "/api/v1/namespaces/monitoring/services/grafana:3000/proxy"
+    now = datetime.now(timezone.utc).timestamp()
+
+    def instant(expression, at):
+        value = named_get(base, prometheus + "/api/v1/query?query=" + quote(expression) + "&time=%.3f" % at)
+        assert value["status"] == "success", value
+        return {tuple(sorted(item["metric"].items())): float(item["value"][1]) for item in value["data"]["result"]}
+
+    pods = named_get(base, "/api/v1/namespaces/gitlab/pods")["items"]
+    assert len(pods) == 8, [p["metadata"]["name"] for p in pods]
+    for pod in pods:
+        assert pod["status"]["phase"] == "Running" and all(
+            s["ready"] and s["restartCount"] == 0 for s in pod["status"]["containerStatuses"]), pod["metadata"]["name"]
+    web = [p for p in pods if p["metadata"]["labels"].get("app") == "webservice"]
+    assert len({p["spec"]["nodeName"] for p in web}) == 3, "webservice Pods are on three nodes"
+    slices = named_get(base, "/apis/discovery.k8s.io/v1/namespaces/gitlab/endpointslices")["items"]
+    targets = {e["targetRef"]["uid"] for s in slices if s["metadata"]["labels"]["kubernetes.io/service-name"] == gitlab.SERVICE
+               for e in s["endpoints"]}
+    assert targets == {p["metadata"]["uid"] for p in web}, "EndpointSlice targets are the webservice Pod UIDs"
+    ingress = named_get(base, "/apis/networking.k8s.io/v1/namespaces/gitlab/ingresses/" + gitlab.INGRESS)
+    assert ingress["spec"]["rules"][0]["http"]["paths"][0]["backend"]["service"]["name"] == gitlab.SERVICE
+    assert named_get(base, "/api/v1/namespaces/kube-system/services/kube-dns")["spec"]["clusterIP"] == "10.0.0.10"
+
+    p99 = ('histogram_quantile(0.99, sum by (pod,le) (rate(http_request_duration_seconds_bucket'
+           '{namespace="gitlab"}[120s])))')
+    throttled = ('(sum by (pod) (rate(container_cpu_cfs_throttled_periods_total{namespace="gitlab"}[120s]))'
+                 ' / sum by (pod) (rate(container_cpu_cfs_periods_total{namespace="gitlab"}[120s])))')
+    key = (("pod", gitlab.OUTLIER),)
+    quiet = now - 90 * 60
+    assert max(instant(p99, quiet).values()) < 0.5 and max(instant(throttled, quiet).values()) < 0.1
+    for begin, end in gitlab.STALLS:
+        # The last two minutes of the stall: the 120s rate window lies inside it.
+        middle = now - end - 1
+        slow, share = instant(p99, middle), instant(throttled, middle)
+        assert slow[key] > 10 and share[key] > 0.5, (begin, slow, share)
+        assert all(v < 0.5 for k, v in slow.items() if k != key), slow
+        assert all(v < 0.1 for k, v in share.items() if k != key), share
+        capacity = instant('sum by (pod) (puma_pool_capacity{namespace="gitlab"})', middle)
+        assert capacity[key] == 0 and min(v for k, v in capacity.items() if k != key) > 0, capacity
+        gone = instant('sum(rate(nginx_ingress_controller_requests{namespace="gitlab",status="499"}[120s]))', middle)
+        assert gone[()] > 0.5, gone
+        drops = instant('sum(rate(hubble_drop_total{destination_namespace="gitlab",reason="POLICY_DENIED"}[60s]))', middle)
+        assert drops[()] == 0, "the unrelated drop blip must not overlap a stall"
+    assert instant('sum(rate(nginx_ingress_controller_requests{namespace="gitlab",status="499"}[120s]))', quiet)[()] < 0.05
+    bad = instant('(sum(rate(nginx_ingress_controller_requests{namespace="gitlab",status=~"5.."}[3600s]))'
+                  ' / sum(rate(nginx_ingress_controller_requests{namespace="gitlab"}[3600s])))', now)
+    assert bad[()] < 0.001, bad
+    blip = instant('sum(rate(hubble_drop_total{destination_namespace="gitlab",reason="POLICY_DENIED"}[60s]))',
+                   now - (gitlab.DROP_BLIP[0] + gitlab.DROP_BLIP[1]) / 2 + 30)
+    assert blip[()] > 0.1, blip
+    for expression, limit in (
+            ('histogram_quantile(0.99, sum by (le) (rate(coredns_dns_request_duration_seconds_bucket{}[120s])))', 0.02),
+            ('histogram_quantile(0.99, sum by (le) (rate(grpc_server_handling_seconds_bucket{namespace="gitlab"}[120s])))', 0.2),
+            ('(sum(rate(redis_commands_duration_seconds_total{namespace="gitlab"}[120s]))'
+             ' / sum(rate(redis_commands_total{namespace="gitlab"}[120s])))', 0.001)):
+        for begin, end in gitlab.STALLS:
+            assert instant(expression, now - end - 1)[()] < limit, expression
+    assert instant('min(pg_up{namespace="gitlab"})', now)[()] == 1
+    alerts = named_get(base, "/api/v1/namespaces/monitoring/services/alertmanager:9093/proxy/api/v2/alerts")
+    assert not [a for a in alerts if a["labels"].get("namespace") == "gitlab"], "the hang stays below every alert threshold"
+
+    proxy = "/api/v1/namespaces/gitlab/pods/%s:8080/proxy/-/readiness"
+    began = time.monotonic()
+    assert named_get(base, proxy % gitlab.WEB_PODS[0][0])["status"] == "ok"
+    fast = time.monotonic() - began
+    began = time.monotonic()
+    with urlopen(base + proxy % gitlab.OUTLIER, timeout=10) as response:
+        assert json.loads(response.read())["status"] == "ok"
+    slow = time.monotonic() - began
+    assert fast < 0.5 and slow > 1.4, (fast, slow)
+    for path, code in (("/api/v1/namespaces/gitlab/pods/gitlab-postgresql-0:5432/proxy/", 503),
+                       ("/api/v1/namespaces/gitlab/pods/%s:8080/proxy/nope" % gitlab.WEB_PODS[0][0], 404),
+                       ("/api/v1/namespaces/gitlab/pods/missing:8080/proxy/-/readiness", 404)):
+        try:
+            named_get(base, path)
+            raise AssertionError("pod proxy answered 200 for " + path)
+        except HTTPError as error:
+            assert error.code == code, (path, error.code)
+    assert gitlab.PodProxy(deny=True).handle("gitlab", gitlab.OUTLIER + ":8080", "/-/readiness")[0] == 403
+
+    found = {d["uid"] for d in named_get(base, grafana + "/api/search?type=dash-db")}
+    assert {"gitlab-webservice", "gitlab-ingress"} <= found, found
+    board = named_get(base, grafana + "/api/dashboards/uid/gitlab-webservice")["dashboard"]
+    kinds = [p["type"] for p in board["panels"]]
+    assert {"timeseries", "stat", "gauge", "table", "logs"} <= set(kinds), kinds
+    panel = next(p for p in board["panels"] if p["title"] == "Request duration p99 by pod")
+    text = panel["targets"][0]["expr"].replace("$namespace", "gitlab").replace("$pod", ".*").replace("$__rate_interval", "2m")
+    drawn = named_get(base, prometheus + "/api/v1/query_range?query=" + quote(text) +
+                      "&start=%.3f&end=%.3f&step=30" % (now - 3600, now))["data"]["result"]
+    assert len(drawn) == 3 and panel["targets"][0]["legendFormat"] == "{{pod}}", len(drawn)
+    # The forms a dashboard writes: the grouping after the aggregation, a
+    # range in minutes and a division without the outer parentheses.
+    by_status = instant('sum(rate(nginx_ingress_controller_requests{namespace="gitlab"}[2m])) by (status)', now)
+    assert {dict(k).get("status") for k in by_status} >= {"200", "499", "502"}, by_status
+    plain = instant('sum(rate(nginx_ingress_controller_requests{namespace="gitlab",status="499"}[2m])) / '
+                    'sum(rate(nginx_ingress_controller_requests{namespace="gitlab"}[2m])) * 100', now)
+    assert 0 <= plain[()] < 1, plain
+    return ["gitlab: 8 Pods Ready with no restart, EndpointSlices and Ingress resolve to the webservice Pods",
+            "gitlab: %s is the only outlier in 3 stalls (p99 over 10s, throttled over 50%%, no free Puma thread)" % gitlab.OUTLIER,
+            "gitlab: HTTP 499 rises at the ingress in the stalls, 5xx share %.5f over the last hour" % bad[()],
+            "gitlab: DNS, Redis, Gitaly and PostgreSQL stay normal; the Hubble drop blip overlaps no stall; no alert",
+            "gitlab: pod proxy /-/readiness answered in %.2fs (normal Pod) and %.2fs (outlier); --deny-pod-proxy answers 403" % (fast, slow),
+            "gitlab: Grafana lists and returns the gitlab-webservice and gitlab-ingress dashboards; a panel query evaluates"]
 
 
 def smoke():
@@ -514,6 +665,7 @@ def smoke():
                 assert error.code == 405, (method, error.code)
                 checks.append(method + " rejected with HTTP 405")
         checks.extend(smoke_sources(base))
+        checks.extend(smoke_gitlab(base))
         return checks
     finally:
         api.shutdown()
@@ -529,6 +681,8 @@ def main():
     parser.add_argument("--smoke", action="store_true", help="check named objects, mutation rejection and server cleanup")
     parser.add_argument("--deny-source", action="append", default=[], choices=sorted(observed.SERVICES),
                         help="answer HTTP 403 for this declared observability source (repeatable)")
+    parser.add_argument("--deny-pod-proxy", action="store_true",
+                        help="answer HTTP 403 for every pods/proxy read, as a role without pods/proxy would")
     parser.add_argument("--no-icons", action="store_true", help="start with ui.noIcons, the plain ASCII presentation")
     parser.add_argument("app_args", nargs=argparse.REMAINDER, help="optional application arguments after --")
     args = parser.parse_args()
@@ -545,7 +699,7 @@ def main():
         parser.error("--journal already exists; choose a new path")
 
     api = daily.WorkspaceAPI()
-    study_objects(api, args.deny_source)
+    study_objects(api, args.deny_source, args.deny_pod_proxy)
     thread = threading.Thread(target=api.serve_forever, daemon=True)
     thread.start()
     child = None

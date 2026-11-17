@@ -53,8 +53,9 @@ Cursor 05:19:00Z (window end) · restarts 6, +6 in window
 - The first line names the object, the window, the window end and the step.
   The second says when the read began and how the queries went.
 - Each chart has a legend line. Every drawn series has a glyph that is also
-  in the plot: a line ends in its letter (`a`, `b`, …) and neighbouring Pod
-  lines alternate solid and dotted; a limit, allocatable amount or size is a
+  in the plot: a line is one continuous stroke that ends in its letter (`a`,
+  `b`, …), and when a chart has several lines the letter also repeats along
+  the line; a limit, allocatable amount or size is a
   `─` level; a request is a `┄` level. Colour repeats this and is never the
   only difference.
 - The value after each name is the sample at the cursor. `←`/`→`

@@ -45,6 +45,9 @@ type Sources struct {
 	Grafana      *GrafanaSource `json:"grafana,omitempty" yaml:"grafana,omitempty"`
 	// RED optionally maps HTTP request, error and duration metric names.
 	RED *RED `json:"red,omitempty" yaml:"red,omitempty"`
+	// RequestPath optionally maps the hops of a Service's request path
+	// (ingress, app, dependencies, DNS, network) onto metric names.
+	RequestPath *RequestPath `json:"requestPath,omitempty" yaml:"requestPath,omitempty"`
 }
 
 // Source says how one source is reached. Exactly one of Service and URL is set.

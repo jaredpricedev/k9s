@@ -85,7 +85,6 @@ type graphSeriesSpec struct {
 	By    string
 	Kind  chart.Kind
 	Role  graphRole
-	Dash  int
 	Unit  *chart.Unit
 	Glyph rune
 	ASCII rune
@@ -192,8 +191,8 @@ func buildGraphPlan(t *graphTarget, pods []string, step time.Duration) graphPlan
 		}
 		return []graphSeriesSpec{
 			{ID: "avg", Name: "avg", Expr: observability.Aggregate("avg", e)},
-			{ID: "max", Name: "max", Expr: observability.Aggregate("max", e), Dash: 2},
-			{ID: "min", Name: "min", Expr: observability.Aggregate("min", e), Dash: 3},
+			{ID: "max", Name: "max", Expr: observability.Aggregate("max", e)},
+			{ID: "min", Name: "min", Expr: observability.Aggregate("min", e)},
 		}
 	}
 	// A workload's Pods can differ (a rollout changes the template), so the
@@ -239,7 +238,7 @@ func buildGraphPlan(t *graphTarget, pods []string, step time.Duration) graphPlan
 	netPanel := graphPanelSpec{ID: "network", Title: "NETWORK", Unit: chart.BytesPerSecond, Note: "bytes per second, rate over " + graphSpan(rate) + all,
 		Series: []graphSeriesSpec{
 			{ID: "rx", Name: "rx", Expr: network("container_network_receive_bytes_total")},
-			{ID: "tx", Name: "tx", Expr: network("container_network_transmit_bytes_total"), Dash: 2},
+			{ID: "tx", Name: "tx", Expr: network("container_network_transmit_bytes_total")},
 		}}
 
 	restarts := graphSeriesSpec{ID: "restarts", Name: "restarts", By: "pod",

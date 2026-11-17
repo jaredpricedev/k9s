@@ -54,6 +54,11 @@ An optional `red:` block under `k9s.observability` maps the HTTP request,
 error and duration metric and label names used by `:impact`; it is described
 in [impact.md](impact.md) and contacts nothing.
 
+An optional `requestPath:` block under `k9s.observability` maps the hops of a
+Service's request path (ingress, app, dependencies, DNS, network) onto metric
+and label names, with named profiles; it is described in
+[request-path.md](request-path.md) and contacts nothing.
+
 `service: namespace/name:port` (or `namespace/https:name:port` for a Service
 that serves TLS; the port may be a number or a port name). The source is
 reached through the Kubernetes API server service proxy,
@@ -153,7 +158,10 @@ Every read returns one state, and features show it in words:
   `increase`, `max/min/avg_over_time`, `sum/avg/max/min/count by`, `topk`,
   `histogram_quantile`, `+ - * /`). Names are validated and matcher values are
   always written as escaped string literals, so a Pod or namespace name cannot
-  change the shape of a query. There is no way to send raw query text.
+  change the shape of a query. The one exception is the query of a panel on
+  a declared Grafana dashboard, wrapped with `AuthoredExpr` after its
+  variables are substituted: bounded text the dashboard's owner wrote, never
+  text assembled from cluster names (see [request-path.md](request-path.md)).
 - Alertmanager: `GET /api/v2/alerts`, at most 500 alerts kept.
 - Grafana: `GET /api/annotations` (at most 200, window at most seven days) and
   `GET /api/search` (at most 100 dashboards). Grafana cuts silently at its
@@ -193,7 +201,15 @@ story: healthy request, error and latency series before the revision 2
 rollout twelve minutes before start, failing ones after it; memory climbing to
 the 256Mi limit and restarting; a node whose node-exporter series stop when it
 goes silent. For `:graph` it also serves per-Pod network counters and
-`kube_node_status_allocatable`; no fixture Pod has a CPU limit, so CPU limit
-and throttling read `no data` there. `--no-icons` starts the application with
-`ui.noIcons`. The fixture evaluates only the query forms the typed builder can
-produce. Fixtures show bounds and wording, not production behavior.
+`kube_node_status_allocatable`; no Pod of the checkout story has a CPU limit,
+so CPU limit and throttling read `no data` there. `--no-icons` starts the
+application with `ui.noIcons`. The fixture evaluates the query forms the typed
+builder can produce, and the few more a dashboard panel needs.
+
+A second scenario, namespace `gitlab`, is an intermittent hang in which
+nothing crash-loops: one webservice Pod is CPU throttled at its limit in
+three stalls, with ingress, Puma, dependency, DNS and Hubble series, a Pod
+proxy that answers slowly for that Pod (`--deny-pod-proxy` answers 403) and
+two Grafana dashboards with panel JSON. It is described in
+[request-path.md](request-path.md). Fixtures show bounds and wording, not
+production behavior.

@@ -57,6 +57,36 @@ type Expr struct {
 	plain bool // a bare selector, the only thing Range accepts
 }
 
+// MaxAuthoredQuery bounds the text AuthoredExpr accepts.
+const MaxAuthoredQuery = 4096
+
+// AuthoredExpr wraps PromQL that the owner of a declared source wrote: the
+// query of a Grafana dashboard panel, after its variables were substituted.
+// It is the one exception to building queries from typed parts, and it
+// exists only so that a declared dashboard can be read; never pass text
+// assembled from cluster object names, labels or user input. Values put in
+// place of a dashboard variable must be escaped by the caller (RegexQuote
+// for a regex matcher). Text with a control character, an unsubstituted
+// "$" variable or more than MaxAuthoredQuery bytes is refused. The source
+// only ever receives it in a GET.
+func AuthoredExpr(text string) Expr {
+	text = strings.TrimSpace(text)
+	switch {
+	case text == "":
+		return invalid("empty expression")
+	case len(text) > MaxAuthoredQuery:
+		return invalid("authored query exceeds %d bytes", MaxAuthoredQuery)
+	case strings.Contains(text, "$"):
+		return invalid("authored query still holds a $ variable")
+	}
+	for _, r := range text {
+		if r < 0x20 && r != '\n' && r != '\t' || r == 0x7f {
+			return invalid("authored query holds a control character")
+		}
+	}
+	return Expr{text: text}
+}
+
 // String returns the PromQL text, or "" for an invalid expression.
 func (e Expr) String() string {
 	if e.err != nil {

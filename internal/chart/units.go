@@ -23,7 +23,33 @@ const (
 	BytesPerSecond
 	// Ratio is a share between 0 and 1, written as a percentage.
 	Ratio
+	// Seconds is a duration, written in the largest unit that keeps three
+	// digits: 250µs, 310ms, 41s, 2.5m, 3h.
+	Seconds
+	// PerSecond is a rate of events, such as requests per second.
+	PerSecond
 )
+
+// UnitNamed maps the unit names used by request-path signals (seconds,
+// ratio, perSecond, count, bytes, cores) onto a Unit. An unknown name is
+// Count and false.
+func UnitNamed(name string) (Unit, bool) {
+	switch name {
+	case "seconds":
+		return Seconds, true
+	case "ratio":
+		return Ratio, true
+	case "perSecond":
+		return PerSecond, true
+	case "count":
+		return Count, true
+	case "bytes":
+		return Bytes, true
+	case "cores":
+		return Cores, true
+	}
+	return Count, false
+}
 
 // sig writes v with at most three significant digits and no trailing zeros.
 func sig(v float64) string {
@@ -81,6 +107,20 @@ func (u Unit) Format(v float64) string {
 		return sig(v)
 	case Ratio:
 		return sig(v*100) + "%"
+	case Seconds:
+		switch abs := math.Abs(v); {
+		case abs < 0.0009995:
+			return sig(v*1e6) + "µs"
+		case abs < 0.9995:
+			return sig(v*1000) + "ms"
+		case abs < 99.95:
+			return sig(v) + "s"
+		case abs < 5997:
+			return sig(v/60) + "m"
+		}
+		return sig(v/3600) + "h"
+	case PerSecond:
+		return sig(v) + "/s"
 	}
 	return sig(v)
 }

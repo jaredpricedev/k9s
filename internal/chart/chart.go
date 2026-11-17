@@ -43,8 +43,18 @@ type Series struct {
 	// Key marks where a line ends and names it in the legend, so a line can
 	// be told from another without colour. Zero draws no mark.
 	Key rune
-	// Dash draws only every Dash-th dot of a line (0 and 1 are solid).
+	// Dash draws only every Dash-th dot of a line (0 and 1 are solid). It
+	// is ignored by the Solid and Bold strokes.
 	Dash int
+	// Stroke chooses how a line is drawn; the zero value is Thin.
+	Stroke Stroke
+	// Marker is repeated along a line so that it can be told from another
+	// without colour and without dashes. Zero draws none. The plain
+	// character form draws a marker only when it is a plain character
+	// itself (a letter); there each line also has its own character.
+	Marker rune
+	// MarkerEvery is the distance between markers in cells (0 means 12).
+	MarkerEvery int
 	// Glyph and ASCII are the reference glyphs with and without Unicode.
 	Glyph, ASCII rune
 	// Color is a tview colour such as "#79c7d4"; empty adds no tag.
@@ -52,6 +62,27 @@ type Series struct {
 	// Unit overrides the panel unit for an OffAxis series.
 	Unit *Unit
 }
+
+// Stroke chooses how a Line series is drawn.
+type Stroke int
+
+const (
+	// Thin walks from sample to sample one dot at a time.
+	Thin Stroke = iota
+	// Solid is continuous: every dot column the line crosses is filled
+	// from where the line enters it to where it leaves, so a steep rise or
+	// a sawtooth is one unbroken stroke. Dash is ignored.
+	Solid
+	// Bold is Solid drawn two dots thick, for a single line that must read
+	// at a glance in a small plot.
+	Bold
+)
+
+// Markers are distinct single-cell marks, one per line of a plot.
+var Markers = []rune{'●', '■', '▲', '◆', '▼', '○', '□', '△'}
+
+// MarkerFor returns the marker of the n-th line of a plot.
+func MarkerFor(n int) rune { return Markers[((n%len(Markers))+len(Markers))%len(Markers)] }
 
 // Frame is the time axis shared by stacked panels: a window, the step of
 // the sample grid, and the plot width in terminal cells.
@@ -163,6 +194,13 @@ type Panel struct {
 	Series []Series
 	// Empty is written inside the plot when no series has a sample.
 	Empty string
+	// Ceiling, when positive, is the top of the Y axis instead of the
+	// rounded maximum of the panel's own series, so that panels drawn side
+	// by side share one scale. A value above it is drawn at the top row.
+	Ceiling float64
+	// Bare draws the axis bar without the label gutter, for a panel that
+	// sits to the right of one that already carries the shared labels.
+	Bare bool
 }
 
 // Max is the largest drawn value, and whether there is any.
@@ -183,6 +221,9 @@ func (p *Panel) Max() (float64, bool) {
 
 // Top is the value at the top of the Y axis.
 func (p *Panel) Top() float64 {
+	if p.Ceiling > 0 {
+		return p.Ceiling
+	}
 	top, _ := p.Max()
 	return p.Unit.Ceil(top)
 }
@@ -264,13 +305,15 @@ func (p *Panel) Render(f Frame, height, gutter int, o Options) []string {
 		grid[r] = make([]cell, f.Width)
 	}
 	lines := 0
+	traces := make(map[int][]int)
+	orders := make(map[int]int)
 	for index := range p.Series {
 		s := &p.Series[index]
 		switch s.Kind {
 		case Reference:
 			drawReference(grid, f, s, index, top, yDots, o)
 		case Line:
-			drawLine(grid, f, s, index, lines, top, xDots, yDots)
+			traces[index], orders[index] = drawLine(grid, f, s, index, lines, top, xDots, yDots), lines
 			lines++
 		}
 	}
@@ -290,6 +333,37 @@ func (p *Panel) Render(f Frame, height, gutter int, o Options) []string {
 			col--
 		}
 		grid[row][col].mark, grid[row][col].markBy = s.Key, index
+	}
+	// Markers repeat along a line, each line starting at its own offset so
+	// that two lines running together do not hide each other's marker.
+	{
+		for index := range p.Series {
+			s := &p.Series[index]
+			// The plain character form draws only markers that are plain
+			// characters themselves, such as a line's letter.
+			if s.Kind != Line || s.Marker == 0 || (o.ASCII && s.Marker >= 0x80) {
+				continue
+			}
+			every := s.MarkerEvery
+			if every <= 0 {
+				every = 12
+			}
+			trace := traces[index]
+			// A marker right before the letter that ends the line would
+			// only repeat it.
+			end := len(trace)
+			if s.Key != 0 {
+				for end > 0 && trace[end-1] < 0 {
+					end--
+				}
+				end -= 4
+			}
+			for col := (orders[index]*5 + every/2) % every; col < end; col += every {
+				if row := trace[col]; row >= 0 && grid[row][col].mark == 0 {
+					grid[row][col].mark, grid[row][col].markBy = s.Marker, index
+				}
+			}
+		}
 	}
 	if o.Cursor >= 0 {
 		if col, ok := f.Col(f.TimeAt(o.Cursor)); ok {
@@ -313,15 +387,20 @@ func (p *Panel) Render(f Frame, height, gutter int, o Options) []string {
 	for r := range grid {
 		var b strings.Builder
 		label, labelled := ticks[r]
-		if !drawn {
-			// Without a sample there is no scale to label.
+		if !drawn && p.Ceiling <= 0 {
+			// Without a sample there is no scale to label, unless the
+			// scale is shared with panels that have samples.
 			label, labelled = "", false
 		}
 		axis := bar
-		if labelled {
+		if labelled && !p.Bare {
 			axis = tickBar
 		}
-		b.WriteString(paint(o.AxisColor, strings.Repeat(" ", max(gutter-runewidth.StringWidth(label), 0))+label+" "+axis))
+		if p.Bare {
+			b.WriteString(paint(o.AxisColor, axis))
+		} else {
+			b.WriteString(paint(o.AxisColor, strings.Repeat(" ", max(gutter-runewidth.StringWidth(label), 0))+label+" "+axis))
+		}
 		if !drawn && p.Empty != "" && r == height/2 {
 			text := runewidth.Truncate(p.Empty, max(f.Width-2, 0), "")
 			b.WriteString(" " + text)
@@ -399,16 +478,31 @@ func absDuration(d time.Duration) time.Duration {
 	return d
 }
 
-func drawLine(grid [][]cell, f Frame, s *Series, index, order int, top float64, xDots, yDots int) {
+// drawLine draws one Line series and returns, per plot column, the row the
+// line was last drawn in (-1 where it was not), which is where a marker of
+// the series belongs.
+func drawLine(grid [][]cell, f Frame, s *Series, index, order int, top float64, xDots, yDots int) []int {
 	height, width := len(grid), f.Width*xDots
+	trace := make([]int, f.Width)
+	for i := range trace {
+		trace[i] = -1
+	}
 	dash := max(s.Dash, 1)
+	if s.Stroke != Thin {
+		dash = 1
+	}
 	drawn := 0
 	set := func(x, y int) {
+		if x < 0 || x >= width || y < 0 || y >= height*yDots {
+			return
+		}
 		drawn++
 		if (drawn-1)%dash != 0 {
 			return
 		}
-		cl := &grid[height-1-y/yDots][x/xDots]
+		row := height - 1 - y/yDots
+		trace[x/xDots] = row
+		cl := &grid[row][x/xDots]
 		if cl.dots == 0 && cl.glyph == 0 {
 			cl.dotsBy = index
 		}
@@ -427,6 +521,21 @@ func drawLine(grid [][]cell, f Frame, s *Series, index, order int, top float64, 
 		}
 		return min(int(frac*float64(width)), width-1), levelOf(p.V, top, height*yDots), true
 	}
+	// column fills one dot column between two levels; a Bold stroke adds
+	// the dot below (or, on the bottom line, above).
+	column := func(x, from, to int) {
+		lo, hi := min(from, to), max(from, to)
+		if s.Stroke == Bold && yDots > 1 {
+			if lo > 0 {
+				lo--
+			} else {
+				hi++
+			}
+		}
+		for y := lo; y <= hi; y++ {
+			set(x, y)
+		}
+	}
 	havePrev := false
 	var px, py int
 	var pt time.Time
@@ -436,9 +545,32 @@ func drawLine(grid [][]cell, f Frame, s *Series, index, order int, top float64, 
 			havePrev = false
 			continue
 		}
-		if !havePrev || point.T.Sub(pt) > f.gap() {
+		joined := havePrev && point.T.Sub(pt) <= f.gap()
+		switch {
+		case s.Stroke != Thin && !joined:
+			column(x, y, y)
+		case s.Stroke != Thin:
+			// Each dot column is filled from the level at which the line
+			// enters it to the level at which it leaves: neighbouring
+			// columns always meet, however steep the segment.
+			dx, dy := x-px, y-py
+			level := func(at float64) int {
+				if dx == 0 {
+					return y
+				}
+				return py + int(math.Round(float64(dy)*(at-float64(px))/float64(dx)))
+			}
+			if dx == 0 {
+				column(x, py, y)
+			}
+			for cx := px; cx <= x && dx != 0; cx++ {
+				from := level(math.Max(float64(cx)-0.5, float64(px)))
+				to := level(math.Min(float64(cx)+0.5, float64(x)))
+				column(cx, from, to)
+			}
+		case !joined:
 			set(x, y)
-		} else {
+		default:
 			// Walk from the previous sample, which is already drawn.
 			dx, dy := x-px, y-py
 			steps := max(abs(dx), abs(dy))
@@ -448,6 +580,7 @@ func drawLine(grid [][]cell, f Frame, s *Series, index, order int, top float64, 
 		}
 		px, py, pt, havePrev = x, y, point.T, true
 	}
+	return trace
 }
 
 func abs(v int) int {

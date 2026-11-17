@@ -724,3 +724,62 @@ func TestGraphLongWindowsEndWithinAMinuteOfTheRead(t *testing.T) {
 	_, end, _ := graphFrameTimes(now, 24*time.Hour)
 	require.Equal(t, time.Date(2026, 11, 17, 6, 27, 0, 0, time.UTC), end)
 }
+
+func TestGraphLinesAreSolidAndLetteredInsteadOfDashed(t *testing.T) {
+	dp := &graphTarget{Context: "ct-1-1", Kind: "Deployment", Namespace: "gitlab", Name: "gitlab-webservice-default"}
+	pods := []string{"web-6f9c-2bq7k", "web-6f9c-8wzpd", "web-6f9c-hx4mt"}
+	fake := &graphFake{pods: pods, rules: []graphRule{
+		{contains: "container_cpu_usage_seconds_total", by: pods, value: func(pod string, at time.Time) (float64, bool) {
+			// One Pod saws between idle and its limit; the others are level.
+			if strings.HasSuffix(pod, "hx4mt") && at.Minute()%4 < 2 {
+				return 1.5, true
+			}
+			return 0.4, true
+		}},
+	}}
+	snapshot := loadGraph(t.Context(), fake, dp, time.Hour, graphNow)
+	var cpu *graphPanel
+	panels := snapshot.panels(graphColors{})
+	for i := range panels {
+		if panels[i].Spec.ID == "cpu" {
+			cpu = &panels[i]
+		}
+	}
+	require.NotNil(t, cpu)
+	lines := 0
+	for i := range cpu.Chart.Series {
+		s := &cpu.Chart.Series[i]
+		if s.Kind != chart.Line {
+			continue
+		}
+		lines++
+		require.Equal(t, chart.Solid, s.Stroke, "a line is one continuous stroke")
+		require.Zero(t, s.Dash, "no line is told apart by leaving dots out")
+		require.Equal(t, s.Key, s.Marker, "with several lines, each repeats its letter along the line")
+		require.GreaterOrEqual(t, s.MarkerEvery, 12)
+	}
+	require.Equal(t, 3, lines)
+	// A Pod's CPU chart has one line: solid, and no repeated letter.
+	pod := &graphTarget{Context: "ct-1-1", Kind: "Pod", Namespace: "gitlab", Name: pods[2]}
+	single := loadGraph(t.Context(), &graphFake{rules: []graphRule{
+		{contains: "container_cpu_usage_seconds_total", value: func(string, time.Time) (float64, bool) { return 0.4, true }},
+	}}, pod, time.Hour, graphNow)
+	for _, panel := range single.panels(graphColors{}) {
+		if panel.Spec.ID != "cpu" {
+			continue
+		}
+		for i := range panel.Chart.Series {
+			if s := &panel.Chart.Series[i]; s.Kind == chart.Line {
+				require.Equal(t, chart.Solid, s.Stroke)
+				require.Zero(t, s.Marker, "a single line needs no repeated letter")
+			}
+		}
+	}
+
+	// The sawing line is drawn without a break and carries its letter.
+	text := graphPlainLines(t, renderGraph(snapshot, &graphPage{Width: 100, Height: 40, Cursor: 120}), 100)
+	require.Contains(t, text, "CPU cores  a 2bq7k")
+	require.Contains(t, text, "c hx4mt")
+	plot := text[strings.Index(text, "CPU cores"):]
+	require.GreaterOrEqual(t, strings.Count(plot[:strings.Index(plot, "NETWORK")], "c"), 3)
+}

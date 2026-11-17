@@ -12,12 +12,17 @@ builder in internal/observability/promql.go: selectors with = != =~ !~
 matchers, rate/increase/{max,min,avg}_over_time over a range selector,
 sum/avg/max/min/count with an optional by (...) clause, topk,
 histogram_quantile, number literals and parenthesised + - * / with one-to-one
-matching on identical label sets.
+matching on identical label sets. So that a Grafana dashboard panel can be
+evaluated after its variables are substituted, it also accepts ranges
+written as 5m, the grouping written after an aggregation (sum(x) by (pod))
+and + - * / without the outer parentheses.
 """
 
 import math
 import re
 import time
+
+import gitlab_hang_fixture as gitlab
 
 MI = 1024 * 1024
 GI = 1024 * MI
@@ -55,6 +60,13 @@ class Metrics:
         self.t0 = float(start)
         self.series = []
         self._build()
+        gitlab.add_series(self)
+        self.by_name = {}
+        for series in self.series:
+            self.by_name.setdefault(series.labels["__name__"], []).append(series)
+
+    def add(self, name, labels, fn):
+        self.series.append(Series(name, labels, fn))
 
     # -- constructors -------------------------------------------------
     def gauge(self, name, labels, fn, begin=None, end=None):
@@ -276,6 +288,7 @@ def unquote(literal):
 
 RANGE_FUNCTIONS = ("rate", "increase", "max_over_time", "min_over_time", "avg_over_time")
 AGGREGATIONS = ("sum", "avg", "max", "min", "count")
+DURATION_UNITS = {"s": 1.0, "m": 60.0, "h": 3600.0, "d": 86400.0}
 
 
 class Parser:
@@ -300,6 +313,30 @@ class Parser:
         return node
 
     def expression(self):
+        left = self.term()
+        while self.peek() in (("sym", "+"), ("sym", "-")):
+            operator = self.take("sym")
+            left = ("binary", operator, left, self.term())
+        return left
+
+    def term(self):
+        left = self.unary()
+        while self.peek() in (("sym", "*"), ("sym", "/")):
+            operator = self.take("sym")
+            left = ("binary", operator, left, self.unary())
+        return left
+
+    def labels(self):
+        self.take("sym", "(")
+        names = []
+        while self.peek() != ("sym", ")"):
+            names.append(self.take("word"))
+            if self.peek() == ("sym", ","):
+                self.take()
+        self.take("sym", ")")
+        return names
+
+    def unary(self):
         kind, value = self.peek()
         if kind == "num":
             self.take()
@@ -309,38 +346,34 @@ class Parser:
             return ("scalar", -self.take("num"))
         if kind == "sym" and value == "(":
             self.take()
-            left = self.expression()
-            operator = self.take("sym")
-            if operator not in "+-*/":
-                raise QueryError("unsupported operator %r" % operator)
-            right = self.expression()
+            inner = self.expression()
             self.take("sym", ")")
-            return ("binary", operator, left, right)
+            return inner
         word = self.take("word")
         if word in RANGE_FUNCTIONS and self.peek() == ("sym", "("):
             self.take()
             selector = self.selector(self.take("word"))
             self.take("sym", "[")
             seconds = self.take("num")
-            if self.take("word") != "s":
-                raise QueryError("ranges are written in seconds")
+            # The app writes ranges in seconds; a dashboard may write 5m.
+            unit = self.take("word")
+            if unit not in DURATION_UNITS:
+                raise QueryError("ranges are written as a number and s, m, h or d")
             self.take("sym", "]")
             self.take("sym", ")")
-            return ("range", word, selector, seconds)
+            return ("range", word, selector, seconds * DURATION_UNITS[unit])
         if word in AGGREGATIONS and self.peek() in (("sym", "("), ("word", "by")):
             by = None
             if self.peek() == ("word", "by"):
                 self.take()
-                self.take("sym", "(")
-                by = []
-                while self.peek() != ("sym", ")"):
-                    by.append(self.take("word"))
-                    if self.peek() == ("sym", ","):
-                        self.take()
-                self.take("sym", ")")
+                by = self.labels()
             self.take("sym", "(")
             inner = self.expression()
             self.take("sym", ")")
+            if by is None and self.peek() == ("word", "by"):
+                # Dashboards also write the grouping after the expression.
+                self.take()
+                by = self.labels()
             return ("aggregate", word, by, inner)
         if word in ("topk", "histogram_quantile") and self.peek() == ("sym", "("):
             self.take()
@@ -396,8 +429,8 @@ def evaluate(metrics, node, t):
         return node[1]
     if kind == "select":
         out = []
-        for series in metrics.series:
-            if series.labels["__name__"] == node[1] and matches(series.labels, node[2]):
+        for series in metrics.by_name.get(node[1], ()):
+            if matches(series.labels, node[2]):
                 value = series.fn(t)
                 if value is not None:
                     out.append((dict(series.labels), value))
@@ -405,8 +438,8 @@ def evaluate(metrics, node, t):
     if kind == "range":
         _, function, selector, seconds = node
         out = []
-        for series in metrics.series:
-            if series.labels["__name__"] != selector[1] or not matches(series.labels, selector[2]):
+        for series in metrics.by_name.get(selector[1], ()):
+            if not matches(series.labels, selector[2]):
                 continue
             points = [(t - seconds + seconds * i / 10.0) for i in range(11)]
             samples = [(p, series.fn(p)) for p in points]
@@ -541,6 +574,24 @@ class Sources:
             return 200, {"status": "success", "data": {"version": "2.53.0-synthetic", "revision": "fixture"}}
         if path == "/api/v1/label/__name__/values":
             return 200, {"status": "success", "data": self.metrics.names()}
+        label = re.fullmatch(r"/api/v1/label/([A-Za-z_][A-Za-z0-9_]*)/values", path)
+        if label:
+            # What a Grafana label_values() variable asks for.
+            at = float(self.first(query, "end", time.time()))
+            try:
+                selectors = [Parser(text).parse() for text in query.get("match[]", [])]
+            except (QueryError, IndexError) as error:
+                return 400, {"status": "error", "errorType": "bad_data", "error": str(error)}
+            if any(node[0] != "select" for node in selectors):
+                return 400, {"status": "error", "errorType": "bad_data", "error": "match[] takes a series selector"}
+            values = set()
+            for series in self.metrics.series:
+                if label.group(1) not in series.labels or series.fn(at) is None:
+                    continue
+                if not selectors or any(series.labels["__name__"] == node[1] and matches(series.labels, node[2])
+                                        for node in selectors):
+                    values.add(series.labels[label.group(1)])
+            return 200, {"status": "success", "data": sorted(values)}
         if path not in ("/api/v1/query", "/api/v1/query_range"):
             return 404, {"status": "error", "errorType": "not_found", "error": "unknown path"}
         try:
@@ -692,7 +743,7 @@ class Sources:
         ("k8s-namespace", "Kubernetes / Compute Resources / Namespace (Pods)", "Kubernetes", ["kubernetes-mixin"]),
         ("k8s-node", "Node Exporter / Nodes", "Kubernetes", ["node-exporter-mixin"]),
         ("checkout-slo", "Checkout / Service SLO", "Payments", ["checkout", "slo"]),
-    ]
+    ] + gitlab.DASHBOARDS
 
     def annotations(self):
         ms = lambda seconds_before: int((self.start - seconds_before) * 1000)
@@ -720,7 +771,7 @@ class Sources:
                 return 404, {"message": "Data source not found"}
             return self.prometheus("/" + rest, query)
         if path == "/api/health":
-            return 200, {"database": "ok", "version": "11.2.0-synthetic", "commit": "fixture"}
+            return 200, {"database": "ok", "version": "12.2.0-synthetic", "commit": "fixture"}
         if path == "/api/search":
             text = (self.first(query, "query", "") or "").lower()
             tags = set(query.get("tag", []))
@@ -735,6 +786,12 @@ class Sources:
                             "url": "/d/" + uid + "/" + re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-"),
                             "type": "dash-db", "tags": dashboard_tags, "folderTitle": folder, "isStarred": False})
             return 200, out[:limit]
+        if path.startswith("/api/dashboards/uid/"):
+            wanted = path[len("/api/dashboards/uid/"):]
+            for uid, title, folder, dashboard_tags in self.DASHBOARDS:
+                if uid == wanted:
+                    return 200, gitlab.dashboard(uid, title, folder, dashboard_tags, self.start)
+            return 404, {"message": "Dashboard not found", "traceID": ""}
         if path == "/api/annotations":
             low = float(self.first(query, "from", "0"))
             high = float(self.first(query, "to", str(time.time() * 1000 + 1)))
@@ -804,4 +861,19 @@ CONTEXT_CONFIG = """k9s:
     # of this story do, instead of by pod-name pattern.
     red:
       workloadLabel: service
+    # The hops of the GitLab request path. Ingress, DNS and network keep
+    # their defaults (ingress-nginx, coredns, cilium-hubble); the app hop is
+    # read with the Rails and Puma profile instead of the generic one, and
+    # the three dependencies are named, because a dependency is never guessed.
+    requestPath:
+      services:
+        gitlab/gitlab-webservice-default:
+          app: [gitlab-webservice, container-cpu]
+          dependencies:
+            - service: gitlab/gitlab-postgresql
+              profile: postgres-exporter
+            - service: gitlab/gitlab-redis-master
+              profile: redis-exporter
+            - service: gitlab/gitlab-gitaly
+              profile: grpc-server
 """

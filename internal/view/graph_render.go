@@ -128,17 +128,15 @@ func (s *graphSnapshot) panels(colors graphColors) []graphPanel {
 		panel := graphPanel{Spec: spec, Chart: chart.Panel{Unit: spec.Unit}}
 		lines := 0
 		add := func(sp *graphSeriesSpec, name string, points []chart.Point, state string) {
-			series := chart.Series{Name: name, Kind: sp.Kind, Points: points, Dash: sp.Dash, Glyph: sp.Glyph, ASCII: sp.ASCII, Unit: sp.Unit}
+			series := chart.Series{Name: name, Kind: sp.Kind, Points: points, Glyph: sp.Glyph, ASCII: sp.ASCII, Unit: sp.Unit}
 			switch {
 			case sp.Kind == chart.Line:
+				// Every line is one continuous stroke. Its letter ends it
+				// and, when a chart has several lines, repeats along it.
 				series.Key = rune('a' + lines%26)
+				series.Stroke = chart.Solid
 				if len(colors.Data) > 0 {
 					series.Color = colors.Data[lines%len(colors.Data)]
-				}
-				if sp.By != "" && sp.Dash == 0 {
-					// Neighbouring lines of one query alternate solid and
-					// dotted; the key at each line's end names it.
-					series.Dash = 1 + lines%2
 				}
 				lines++
 			case sp.Role == graphRoleCeiling:
@@ -181,6 +179,16 @@ func (s *graphSnapshot) panels(colors graphColors) []graphPanel {
 			for _, pod := range asked {
 				if !answered[pod] {
 					add(sp, short[pod], nil, graphNoData)
+				}
+			}
+		}
+		if lines > 1 {
+			for k := range panel.Chart.Series {
+				if series := &panel.Chart.Series[k]; series.Kind == chart.Line {
+					series.Marker = series.Key
+					// More lines, wider spacing: the letters stay readable
+					// where several lines run together.
+					series.MarkerEvery = max(12, 8*lines)
 				}
 			}
 		}
