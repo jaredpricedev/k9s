@@ -482,7 +482,9 @@ func graphWrap(text string, width int, indent string) []string {
 				if head == "" {
 					head = string([]rune(word)[:1])
 				}
-				if cut := strings.LastIndex(head, ","); cut > 0 && len(head) < len(word) {
+				// A matcher list breaks after a comma and a list of Pod names
+				// after a bar, so that no name is cut in the middle.
+				if cut := strings.LastIndexAny(head, ",|"); cut > 0 && len(head) < len(word) {
 					head = head[:cut+1]
 				} else if cut := strings.LastIndexAny(head, "{("); cut > 0 && len(head) < len(word) {
 					head = head[:cut+1]

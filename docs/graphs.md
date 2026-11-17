@@ -183,8 +183,10 @@ Cursor 09:41:00Z (window end) · hx4mt 346ms · 8wzpd 346ms · 2bq7k 346ms
 - The third line names every signal. The selected one is in brackets; a star
   marks a signal in which a Pod differs from its peers; a signal that could
   not be compared carries the reason (`5xx (no data)`, `throttled (denied)`).
-  `n` and `Shift-N` step through the signals. A page opens on the first
-  signal in which a Pod differs, else on the first that has samples.
+  `n` and `Shift-N` step through the signals; from the overlaid charts `n`
+  opens this page. A page opens on the first signal in which a Pod differs,
+  else on the first that has samples. Where the names do not all fit, the
+  ones on either side are counted (`+4 earlier`, `+5 more`).
 - The fourth line says which Pod differs and in which signals. It states a
   difference between peers over the same window; it never says why. That
   caveat is kept when the line is shortened.
@@ -211,7 +213,14 @@ Cursor 09:41:00Z (window end) · hx4mt 346ms · 8wzpd 346ms · 2bq7k 346ms
   the ranking number, the value at the cursor and `OUTLIER`. Under it, where
   there is room, every signal is one row with its worst Pod, that Pod's
   number and the median of all Pods; signals without a row are counted.
+  Narrower still, the Node column goes first and then the value at the
+  cursor (the header then no longer names it); a name is shortened last.
+- The page fits from 40x12 up, the smallest size the view draws at: the key
+  line is always the last line, and a status that does not fit two lines
+  keeps the count of what is not shown.
 - `p` returns to the overlaid lines. `s` lists the per-Pod queries too.
+- On a page whose read did not succeed there is nothing to compare; `p`, `n`
+  and `g` say so and point at `r`.
 
 ### When a Pod is called an OUTLIER
 
@@ -256,9 +265,14 @@ not scraped shows as `no data` in the strip and is not drawn as zeros.
 by pod, by container, by revision, by node, by zone. Each group is one small
 chart on the shared scale: the line is the median of the group's Pods, the
 two thin lines are their minimum and maximum, and the title gives the group,
-its size, the Pods in it that are `OUTLIER` and the peak. Groups are sorted
-worst first. So "only the Pods on one Node", "only revision 2" or "only one
-container" is one chart that looks different.
+its size, the Pod in it that is an `OUTLIER` and the number the group is
+ranked by. That number is its worst Pod's (the peak, the lowest value or the
+largest rise); with room the title adds the latest value of the median and
+says that it is the median (`largest +6 in window · median now 3`). The word
+belongs to a Pod, not to the group: a short title of a group of several Pods
+counts them (`1 OUTLIER`). Groups are sorted worst first. So "only the Pods
+on one Node", "only revision 2" or "only one container" is one chart that
+looks different.
 
 | Grouping | A Pod's group comes from |
 | --- | --- |
@@ -273,7 +287,8 @@ reason (`zone not known for 8wzpd (kube_node_labels names no zone for their
 Nodes)`). Those Pods are drawn as a group of their own named "not known";
 no Pod is left out. A Pod name that appears on two Nodes within the window
 (a StatefulSet Pod recreated elsewhere) is placed on neither. The cursor
-readout gives the median of each group at the cursor.
+readout gives the median of each group at the cursor; in the ranked list
+that column is headed `MEDIAN` and the time.
 
 ## Axis marks
 
@@ -325,8 +340,12 @@ window's name.
   observability-sources.md (8 s, 1 MiB, 32 series, 4096 samples), and all
   within 30 s. A Service adds one instant query and the configuration reads
   of the network path collector.
-- The per-Pod comparison is read when `p` or `g` is first pressed for a
-  window, and again on `r` or a window key; never while browsing. It is one
+- The per-Pod comparison is read when `p`, `n` or `g` is first pressed for a
+  window, and again on `r` or a window key; never while browsing. While the
+  charts are being read again these keys wait for that read instead of
+  cancelling it, and the comparison is then read for the charts that arrive.
+  Leaving the page cancels a comparison read that is in flight; coming back
+  asks it once more. It is one
   range query per signal (five, plus at most six from profiles), two for the
   limits and at most two instant label lookups, minus the series the charts
   already hold for the same window. Regrouping by container adds four. The

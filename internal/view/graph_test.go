@@ -692,6 +692,11 @@ func TestGraphWrapKeepsEveryCharacterAndBrackets(t *testing.T) {
 			require.Contains(t, strings.Join(lines, "\n"), "[a-z0-9]", "width %d", width)
 		}
 	}
+	// A list of Pod names breaks between names, never inside one.
+	names := `  sum by (pod) (up{namespace="gitlab",pod=~"gitlab-webservice-default-6f9c7d5b84-2bq7k|gitlab-webservice-default-6f9c7d5b84-8wzpd|gitlab-webservice-default-6f9c7d5b84-hx4mt"})`
+	for _, line := range graphWrap(names, 120, "  ")[1:] {
+		require.True(t, strings.HasPrefix(strings.TrimSpace(line), "pod=~") || strings.HasPrefix(strings.TrimSpace(line), "gitlab-webservice-default-"), "a name was cut: %q", line)
+	}
 	require.Equal(t, []string{"one two three four", "five"}, graphWrap("one two three four five", 20, ""))
 	require.Equal(t, []string{"a", "", "b"}, graphWrap("a\n\nb", 20, ""))
 }

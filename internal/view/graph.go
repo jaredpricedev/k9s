@@ -70,6 +70,10 @@ type graphView struct {
 	compare         *graphCompare
 	compareAsked    *graphSnapshot
 	containersAsked *graphCompare
+	// loading is true while a read of the charts is in flight: the
+	// comparison waits for it instead of cancelling it. comparePending is
+	// true while a read of the comparison is in flight.
+	loading, comparePending bool
 	// loadCompare reads the comparison for a snapshot; given an earlier
 	// comparison it only adds the per-container series to it.
 	loadCompare func(context.Context, *graphSnapshot, *graphCompare) *graphCompare
@@ -305,10 +309,23 @@ func (v *graphView) Init(ctx context.Context) error {
 	return nil
 }
 
+// comparable says whether the comparison keys apply now, and tells the user
+// why when they do not: a key named in the header never does nothing.
+func (v *graphView) comparable() bool {
+	switch {
+	case !v.target.workload():
+		v.app.Flash().Warn(graphNoPeers)
+		return false
+	case v.snapshot != nil && v.snapshot.Window == v.window && v.snapshot.failure() != nil && !v.loading:
+		v.app.Flash().Warn("Nothing to compare: the read above did not succeed; r reads again")
+		return false
+	}
+	return true
+}
+
 // toggleCompare switches between the overlaid lines and one chart per Pod.
 func (v *graphView) toggleCompare() {
-	if !v.target.workload() {
-		v.app.Flash().Warn(graphNoPeers)
+	if !v.comparable() {
 		return
 	}
 	v.comparing = !v.comparing
@@ -319,8 +336,7 @@ func (v *graphView) toggleCompare() {
 // regroup cycles how the series are folded: by pod, container, revision,
 // node and zone. From the overlaid charts it opens the comparison.
 func (v *graphView) regroup(delta int) {
-	if !v.target.workload() {
-		v.app.Flash().Warn(graphNoPeers)
+	if !v.comparable() {
 		return
 	}
 	v.comparing = true
@@ -330,13 +346,19 @@ func (v *graphView) regroup(delta int) {
 	v.render()
 }
 
-// stepSignal cycles the signal of the comparison.
+// stepSignal cycles the signal of the comparison. From the overlaid charts
+// it opens the comparison on the signal it would open on anyway.
 func (v *graphView) stepSignal(delta int) {
-	if !v.target.workload() {
-		v.app.Flash().Warn(graphNoPeers)
+	if !v.comparable() {
 		return
 	}
-	if !v.comparing || v.compare == nil || len(v.compare.Signals) == 0 {
+	if !v.comparing {
+		v.comparing = true
+		v.ensureCompare()
+		v.render()
+		return
+	}
+	if v.compare == nil || v.compare.Base != v.snapshot || len(v.compare.Signals) == 0 {
 		return
 	}
 	_, index := v.compare.signal(v.signal)
@@ -352,6 +374,11 @@ func (v *graphView) stepSignal(delta int) {
 // snapshot; r reads again.
 func (v *graphView) ensureCompare() {
 	if !v.comparing || v.snapshot == nil || v.snapshot.Window != v.window || v.snapshot.failure() != nil || v.loadCompare == nil {
+		return
+	}
+	if v.loading {
+		// The charts are being read again: the comparison is read for the
+		// snapshot that arrives, never in place of it.
 		return
 	}
 	switch {
@@ -382,7 +409,7 @@ func (v *graphView) readCompare(earlier *graphCompare, busy string) {
 	generation, base, load := v.generation, v.snapshot, v.loadCompare
 	ctx, cancel := context.WithTimeout(context.Background(), graphDeadline)
 	v.cancel = cancel
-	v.busy = busy
+	v.busy, v.comparePending = busy, true
 	go func() {
 		defer cancel()
 		compare := load(ctx, base, earlier)
@@ -398,9 +425,9 @@ func (v *graphView) readCompare(earlier *graphCompare, busy string) {
 }
 
 func (v *graphView) acceptCompare(compare *graphCompare) {
-	v.busy = ""
+	v.busy, v.comparePending = "", false
 	if compare == nil {
-		v.app.Flash().Warn("The per-Pod series were not read: the Prometheus source is unavailable; :sources shows why")
+		v.app.Flash().Warn("The per-Pod series were not read: the Prometheus source is unavailable; :sources shows why, r reads again")
 	} else if compare.Base == v.snapshot {
 		v.compare = compare
 	}
@@ -482,11 +509,22 @@ func (v *graphView) Start() {
 	v.StylesChanged(v.app.Styles)
 	if v.snapshot == nil && v.busy == "" {
 		v.refresh()
+		return
+	}
+	// A comparison read that leaving the view cancelled is asked again.
+	if v.busy == "" {
+		v.ensureCompare()
+		v.render()
 	}
 }
 
 func (v *graphView) Stop() {
-	v.active, v.busy = false, ""
+	v.active, v.busy, v.loading = false, "", false
+	if v.comparePending {
+		// The read is cancelled below; it was never answered, so coming
+		// back asks it again instead of showing a page that has no data.
+		v.comparePending, v.compareAsked, v.containersAsked = false, nil, nil
+	}
 	v.generation++
 	if v.cancel != nil {
 		v.cancel()
@@ -522,6 +560,7 @@ func (v *graphView) refresh() {
 	generation, window, load := v.generation, v.window, v.load
 	ctx, cancel := context.WithTimeout(context.Background(), graphDeadline)
 	v.cancel = cancel
+	v.loading, v.comparePending = true, false
 	v.busy = "Reading last " + graphSpan(window) + " once…"
 	v.render()
 	go func() {
@@ -539,7 +578,7 @@ func (v *graphView) refresh() {
 }
 
 func (v *graphView) accept(snapshot *graphSnapshot) {
-	v.busy = ""
+	v.busy, v.loading = "", false
 	if snapshot == nil {
 		return
 	}

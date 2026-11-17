@@ -864,3 +864,184 @@ func TestGraphServiceIsGraphedThroughThePodsBehindIt(t *testing.T) {
 	require.Equal(t, []string{observability.ProfileRED}, profiles)
 	require.Equal(t, []string{"p99", "p50", "errors"}, names)
 }
+
+func TestGraphComparePageFitsFromTheSmallestSupportedSize(t *testing.T) {
+	// Every line fits the width and the page fits the height, so the key
+	// line is never pushed out: at every size from the smallest the view
+	// draws at, for every signal (with and without data) and grouping.
+	denied := hangStory()
+	denied.states = map[string]observability.State{"container_cpu_cfs_throttled": observability.StateDenied}
+	for name, fake := range map[string]*compareFake{"hang": hangStory(), "denied": denied} {
+		base, c := hangCompare(t, fake)
+		c = loadGraphContainers(t.Context(), fake, c)
+		for grouping := graphByPod; grouping < graphGroupings; grouping++ {
+			for i := range c.Signals {
+				for _, size := range [][2]int{{ui.MinTaskWidth, ui.MinTaskHeight}, {41, 16}, {47, 13}, {60, 12}, {72, 14}, {80, 20}, {132, 33}} {
+					page := comparePage(size[0], size[1])
+					page.Grouping, page.Signal, page.ASCII = grouping, c.Signals[i].ID, i%2 == 1
+					lines := renderGraphCompare(base, c, page)
+					where := fmt.Sprintf("%s %s by %s at %dx%d", name, c.Signals[i].Name, grouping, size[0], size[1])
+					graphPlainLines(t, lines, size[0])
+					require.LessOrEqual(t, len(lines), size[1], where)
+					require.Contains(t, lines[len(lines)-1], "regroup · p overlaid", "%s: the key line is the last line", where)
+				}
+			}
+		}
+	}
+
+	// At the smallest width the selected signal keeps its whole name and
+	// the signals beside it are counted in fewer words.
+	base, c := hangCompare(t, hangStory())
+	page := comparePage(ui.MinTaskWidth, 30)
+	page.Signal, page.Grouping = "free-threads", graphByNode
+	text := graphPlainLines(t, renderGraphCompare(base, c, page), ui.MinTaskWidth)
+	require.Contains(t, text, "+7  [free-threads (no data)]  +2")
+
+	// A status that fits no two lines keeps the count of what is not shown.
+	fake := hangStory()
+	for i := range 14 {
+		fake.pods[fmt.Sprintf("%s-p%02d", hangOld, i)] = graphPodMeta{Node: "worker-d", OwnerKind: graphReplicaSet, OwnerName: hangOld}
+	}
+	base, c = hangCompare(t, fake)
+	page = comparePage(ui.MinTaskWidth, ui.MinTaskHeight)
+	text = graphPlainLines(t, renderGraphCompare(base, c, page), ui.MinTaskWidth)
+	require.Regexp(t, `18 pods · 1-\d of 18 pods ↑↓\n`, text)
+}
+
+func TestGraphCompareGroupTitlesSayWhoseNumberIsWhose(t *testing.T) {
+	fake := hangStory()
+	// r5n9j, the one Pod of the new revision, restarts twice in the window.
+	for i := range fake.series {
+		if s := &fake.series[i]; strings.Contains(s.match[0], "restarts_total") && strings.HasSuffix(s.labels["pod"], "r5n9j") {
+			s.value = func(at time.Time) (float64, bool) {
+				if at.Before(graphNow.Add(-20 * time.Minute)) {
+					return 0, true
+				}
+				return 2, true
+			}
+		}
+	}
+	base, c := hangCompare(t, fake)
+
+	// The ranking number of a group is its worst member's and the latest
+	// value is the median of the group: the title names both.
+	page := comparePage(240, 33)
+	page.Signal, page.Grouping = "restarts", graphByNode
+	text := graphPlainLines(t, renderGraphCompare(base, c, page), 240)
+	require.Contains(t, text, "worker-d · 2 pods")
+	require.Contains(t, text, "OUTLIER r5n9j · largest +2 in window · median now 1")
+	require.NotContains(t, text, " +2 in window · now 1", "a rise of one Pod is not shown beside the median as if both were the group's")
+
+	// In a group of several Pods the short word counts the Pods that
+	// differ; it does not call the group an outlier.
+	page = comparePage(80, 20)
+	page.Signal, page.Grouping = "throttled", graphByRevision
+	text = graphPlainLines(t, renderGraphCompare(base, c, page), 80)
+	require.Contains(t, text, "rev 1 6f9c7d5b84    1 OUTLIER · 86%")
+	require.Contains(t, text, "rev 1 6f9c7d5b84 3 pods, rev 2")
+	page.Grouping = graphByNode
+	text = graphPlainLines(t, renderGraphCompare(base, c, page), 80)
+	require.Contains(t, text, "worker-f · 1 pod ")
+	require.Contains(t, text, " OUTLIER · 86%")
+	require.NotContains(t, text, "1 OUTLIER")
+
+	// The list says that a group's value at the cursor is a median.
+	page = comparePage(60, 20)
+	page.Signal, page.Grouping = "throttled", graphByRevision
+	text = graphPlainLines(t, renderGraphCompare(base, c, page), 60)
+	require.Contains(t, text, "PEAK MEDIAN 05:00")
+	require.Regexp(t, `rev 1 6f9c7d5b84 +3 .* 86% +1\.3% 1 OUTLIER\n`, text)
+	page.Grouping = graphByPod
+	text = graphPlainLines(t, renderGraphCompare(base, c, page), 60)
+	require.Contains(t, text, "PEAK AT 05:00")
+
+	// At the smallest width the names stay whole; the value at the cursor
+	// is the column that goes, and the header no longer names it.
+	page = comparePage(ui.MinTaskWidth, 20)
+	page.Signal, page.Grouping = "throttled", graphByNode
+	text = graphPlainLines(t, renderGraphCompare(base, c, page), ui.MinTaskWidth)
+	for _, want := range []string{"worker-f ", "worker-d ", "worker-e ", " PEAK\n", " 86% OUTLIER\n"} {
+		require.Contains(t, text, want)
+	}
+	require.NotContains(t, text, "MEDIAN 05:00")
+}
+
+func TestGraphViewComparisonNeverCancelsAReadOfTheChartsAndResumesItsOwn(t *testing.T) {
+	v, _, reads, deliver := compareViewFixture(t, hangTarget)
+	key := func(k tcell.Key) {
+		action, ok := v.actions.Get(k)
+		require.True(t, ok)
+		action.Action(tcell.NewEventKey(k, 0, tcell.ModNone))
+	}
+	flashed := func() string {
+		select {
+		case message := <-v.app.Flash().Channel():
+			return message.Text
+		case <-time.After(time.Second):
+			return ""
+		}
+	}
+
+	// n is named in the header on the overlaid charts too: it opens the
+	// comparison instead of doing nothing.
+	key(ui.KeyN)
+	require.True(t, v.comparing)
+	require.Equal(t, "Reading every signal once per Pod…", v.busy)
+	deliver()
+	require.Contains(t, drawnText(t, v, 132, 33), "CPU THROTTLED by pod")
+
+	// While the charts are read again, g and p wait for that read: they
+	// neither cancel it nor read the comparison of the page being replaced.
+	generation := v.generation
+	key(ui.KeyR)
+	require.True(t, v.loading)
+	generation++
+	require.Equal(t, generation, v.generation)
+	key(ui.KeyG)
+	key(ui.KeyP)
+	key(ui.KeyP)
+	require.Equal(t, generation, v.generation, "the read of the charts is still the one awaited")
+	require.Equal(t, "Reading last 1h once…", v.busy)
+	require.EqualValues(t, 1, reads.Load())
+	// When the charts arrive the comparison is read for them, once: by Pod,
+	// and then by container, the grouping g chose.
+	v.accept(v.load(t.Context(), v.window))
+	require.False(t, v.loading)
+	require.Equal(t, "Reading every signal once per Pod…", v.busy)
+	deliver()
+	require.Equal(t, "Reading the per-container series once…", v.busy)
+
+	// Leaving the page cancels that read; coming back asks it again
+	// instead of leaving a page that says nothing was read.
+	v.Stop()
+	require.Empty(t, v.busy)
+	v.Start()
+	require.Equal(t, "Reading the per-container series once…", v.busy)
+	require.Eventually(t, func() bool { return reads.Load() == 4 }, 5*time.Second, 2*time.Millisecond)
+	// The cancelled read is never delivered: only the one asked again is.
+	reads.Store(3)
+	deliver()
+	require.True(t, v.compare.Containers)
+	require.Contains(t, drawnText(t, v, 132, 33), "CPU THROTTLED by container")
+	// A page that is complete reads nothing on return.
+	v.Stop()
+	v.Start()
+	require.Empty(t, v.busy)
+	require.EqualValues(t, 3, reads.Load())
+
+	// On a page whose read failed the keys say why they do nothing.
+	failed, fake, failedReads, _ := compareViewFixture(t, hangTarget)
+	fake.states = map[string]observability.State{"kube_pod_info": observability.StateDenied}
+	failed.accept(failed.load(t.Context(), failed.window))
+	require.NotNil(t, failed.snapshot.failure())
+	for len(failed.app.Flash().Channel()) > 0 {
+		<-failed.app.Flash().Channel()
+	}
+	v = failed
+	for _, k := range []tcell.Key{ui.KeyP, ui.KeyG, ui.KeyN} {
+		key(k)
+		require.Equal(t, "Nothing to compare: the read above did not succeed; r reads again", flashed())
+	}
+	require.False(t, failed.comparing)
+	require.Zero(t, failedReads.Load())
+}

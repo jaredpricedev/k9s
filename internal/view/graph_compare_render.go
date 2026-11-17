@@ -38,8 +38,9 @@ type graphItem struct {
 	// Name is the short name; Where is the Node of a Pod or the size of a
 	// group; Count is the size alone, for the list.
 	Name, Where, Count string
-	// Word marks an item that differs; Long and Short describe its value.
-	Word, Long, Short string
+	// Word marks an item that differs and Mark is its short form; Long and
+	// Short describe its value.
+	Word, Mark, Long, Short string
 	// Rank is the single number the list shows; Trend is drawn in the
 	// list, Series in a chart.
 	Rank    string
@@ -120,7 +121,7 @@ func graphPodItems(set *graphSeriesSet, colors graphColors) []graphItem {
 			color = colors.Data[0]
 		}
 		if m.Outlier {
-			item.Word, color = graphOutlierWord, colors.Failure
+			item.Word, item.Mark, color = graphOutlierWord, graphOutlierWord, colors.Failure
 		}
 		if len(m.Limit) > 0 {
 			item.Series = append(item.Series, chart.Series{Kind: chart.Reference, Points: m.Limit, Glyph: '─', ASCII: '=', Color: colors.Ceiling})
@@ -147,19 +148,33 @@ func graphGroupItems(set *graphSeriesSet, groups []graphGroup, by graphGrouping,
 		}
 		item := graphItem{Name: g.Title, Where: size, Count: fmt.Sprintf("%d", len(g.Members)), Trend: g.Mid, Outlier: len(g.Outliers) > 0, Limit: g.Limit}
 		item.Long, item.Short, item.Rank = graphValueWords(set.Signal, set.Shares, g.Value, g.Peak, graphLastOf(g.Mid), g.Value)
-		if set.Signal.Rank == graphRankPeak && !set.Shares && !math.IsNaN(g.Value) {
-			item.Long = "peak " + set.Signal.Unit.Format(g.Peak) + " · median last " + set.Signal.Unit.Format(graphLastOf(g.Mid))
+		// The ranking number is the worst member's; the latest value is the
+		// group's median, and the title says so.
+		if u, last := set.Signal.Unit, graphLastOf(g.Mid); !set.Shares && !math.IsNaN(g.Value) {
+			switch set.Signal.Rank {
+			case graphRankLow:
+				item.Long = "lowest " + u.Format(g.Value) + " · median last " + u.Format(last)
+			case graphRankRise:
+				item.Long = "largest +" + u.Format(g.Value) + " in window · median now " + u.Format(last)
+			default:
+				item.Long = "peak " + u.Format(g.Peak) + " · median last " + u.Format(last)
+			}
 		}
 		color := ""
 		if len(colors.Data) > 0 {
 			color = colors.Data[0]
 		}
-		switch len(g.Outliers) {
-		case 0:
-		case 1:
-			item.Word = graphOutlierWord + " " + g.Outliers[0]
+		// The word belongs to a Pod of the group, not to the group: the
+		// long form names the Pod, the short one counts.
+		switch n := len(g.Outliers); {
+		case n == 0:
+		case n == 1 && len(g.Members) == 1:
+			item.Word, item.Mark = graphOutlierWord+" "+g.Outliers[0], graphOutlierWord
+		case n == 1:
+			item.Word, item.Mark = graphOutlierWord+" "+g.Outliers[0], "1 "+graphOutlierWord
 		default:
-			item.Word = fmt.Sprintf("%d %sS", len(g.Outliers), graphOutlierWord)
+			item.Word = fmt.Sprintf("%d %sS", n, graphOutlierWord)
+			item.Mark = item.Word
 		}
 		if len(g.Limit) > 0 {
 			item.Series = append(item.Series, chart.Series{Kind: chart.Reference, Points: g.Limit, Glyph: '─', ASCII: '=', Color: colors.Ceiling})
@@ -204,10 +219,7 @@ func graphItemTitle(item *graphItem, form int) (title, note string) {
 	if item.Where != "" {
 		where += " · " + item.Where
 	}
-	short := graphOutlierWord
-	if item.Word == "" {
-		short = ""
-	}
+	short := item.Mark
 	switch form {
 	case 0:
 		return where, with(item.Word, item.Long)
@@ -348,9 +360,12 @@ func graphStrip(c *graphCompare, st *graphStanding, selected, width int) (text s
 		tokens[i] = token
 	}
 	const sep = "  "
+	// earlier and more word the two counters; the short wording is for a
+	// width at which the selected name alone nearly fills the line.
+	earlier, more := " earlier", " more"
 	build := func(start int) (line string, end int, a, b int) {
 		if start > 0 {
-			line = fmt.Sprintf("+%d earlier%s", start, sep)
+			line = fmt.Sprintf("+%d%s%s", start, earlier, sep)
 		}
 		end = start
 		for end < len(tokens) {
@@ -362,11 +377,11 @@ func graphStrip(c *graphCompare, st *graphStanding, selected, width int) (text s
 				a = len(next)
 			}
 			next += tokens[end]
-			more := ""
+			rest := ""
 			if end < len(tokens)-1 {
-				more = fmt.Sprintf("%s+%d more", sep, len(tokens)-1-end)
+				rest = fmt.Sprintf("%s+%d%s", sep, len(tokens)-1-end, more)
 			}
-			if runewidth.StringWidth(next+more) > width && end > start {
+			if runewidth.StringWidth(next+rest) > width && end > start {
 				break
 			}
 			line = next
@@ -376,17 +391,30 @@ func graphStrip(c *graphCompare, st *graphStanding, selected, width int) (text s
 			end++
 		}
 		if end < len(tokens) {
-			line += fmt.Sprintf("%s+%d more", sep, len(tokens)-end)
+			line += fmt.Sprintf("%s+%d%s", sep, len(tokens)-end, more)
 		}
 		return line, end, a, b
 	}
-	for start := 0; start < len(tokens); start++ {
-		line, end, a, b := build(start)
-		if selected < end || start >= selected {
-			return line, a, b
+	pick := func() (string, int, int) {
+		for start := 0; start < len(tokens); start++ {
+			line, end, a, b := build(start)
+			if selected < end || start >= selected {
+				return line, a, b
+			}
 		}
+		return "", 0, 0
 	}
-	return "", 0, 0
+	text, from, to = pick()
+	if runewidth.StringWidth(text) > width {
+		// The selected name with both counters is wider than the page: the
+		// counters lose their words before the name loses anything.
+		earlier, more = "", ""
+		text, from, to = pick()
+	}
+	if runewidth.StringWidth(text) > width {
+		return runewidth.Truncate(text, width, "…"), 0, 0
+	}
+	return text, from, to
 }
 
 // graphCompareStatus is the second line: when the per-Pod read began and
@@ -488,7 +516,7 @@ func graphGroupingLine(c *graphCompare, groups []graphGroup, by graphGrouping) s
 		return text + " · all placed"
 	}
 	why := map[graphGrouping]string{
-		graphByContainer: "their series have no container label",
+		graphByContainer: "no series with a container label was returned for them",
 		graphByRevision:  "no ReplicaSet owner in kube_pod_info and no controller-revision-hash in kube_pod_labels",
 		graphByNode:      "kube_pod_info names no single Node for them",
 		graphByZone:      "kube_node_labels names no zone for their Nodes",
@@ -511,7 +539,7 @@ func renderGraphCompare(s *graphSnapshot, c *graphCompare, pg *graphPage) []stri
 	if c == nil || c.Base != s {
 		busy := pg.Busy
 		if busy == "" {
-			busy = "The per-Pod series of this window have not been read."
+			busy = "The per-Pod series of this window have not been read. r reads again."
 		}
 		w.plain(col.Muted, busy)
 		w.out = append(w.out, "")
@@ -627,7 +655,13 @@ func renderGraphCompare(s *graphSnapshot, c *graphCompare, pg *graphPage) []stri
 		}
 		under = lines
 		if by != graphByPod && set.State == "" {
-			under = append(under, graphWrapMax(graphGroupingLine(c, groups, by), width, 2, pg.ASCII)...)
+			// On the shortest pages the grouping keeps to one line, cut
+			// visibly, so that the key line below it is never pushed out.
+			most := 2
+			if pg.Height < 16 {
+				most = 1
+			}
+			under = append(under, graphWrapMax(graphGroupingLine(c, groups, by), width, most, pg.ASCII)...)
 		}
 	}
 	build(list)
@@ -635,9 +669,9 @@ func renderGraphCompare(s *graphSnapshot, c *graphCompare, pg *graphPage) []stri
 	// statusFor words the status line for a page; it takes a second line
 	// rather than lose the count of what is not shown.
 	statusFor := func(shown, first int) []string {
-		var full []string
+		var two, parts []string
 		for level := range 3 {
-			parts := graphCompareStatus(c, shown, first, len(items), what, level)
+			parts = graphCompareStatus(c, shown, first, len(items), what, level)
 			if pg.Busy != "" {
 				parts[0] = pg.Busy + " · shown: " + parts[0]
 			}
@@ -648,16 +682,29 @@ func renderGraphCompare(s *graphSnapshot, c *graphCompare, pg *graphPage) []stri
 			if len(status) == 1 {
 				return status
 			}
-			if level == 0 {
-				full = status
+			// No wording fits one line: two lines of the fullest wording
+			// that fits them say more than two of the shortest.
+			if len(status) == 2 && two == nil {
+				two = status
 			}
 		}
-		// No wording fits one line: two lines of the full wording say more
-		// than two of the shortest.
-		if len(full) > 2 {
-			full = append(full[:1], strings.Join(full[1:], " · "))
+		if two != nil {
+			return two
 		}
-		return full
+		// Not even the shortest wording fits two lines. The middle is cut
+		// visibly; the count of what is not shown is the last part and stays.
+		rest, last := strings.Join(parts[1:], " · "), ""
+		if shown < len(items) && len(parts) > 2 {
+			rest, last = strings.Join(parts[1:len(parts)-1], " · "), parts[len(parts)-1]
+		}
+		if last == "" {
+			return []string{parts[0], rest}
+		}
+		cut := graphWords("…", pg.ASCII)
+		if room := width - runewidth.StringWidth(last) - 3; room >= 8 {
+			return []string{parts[0], runewidth.Truncate(rest, room, cut) + " · " + last}
+		}
+		return []string{parts[0], last}
 	}
 	// Headline, status, signal strip, standing, signal title. The status
 	// is measured for the widest page numbers it can hold.
@@ -782,16 +829,29 @@ func renderGraphCompare(s *graphSnapshot, c *graphCompare, pg *graphPage) []stri
 
 	switch {
 	case set.State != "":
-		w.out = append(w.out, "")
 		reason := set.Reason
 		if pg.Busy != "" && set.State == "not read" {
 			reason = pg.Busy
 		}
-		for _, line := range graphWrap(reason, width, "") {
+		// The reason comes first and the key line stays: on a short page the
+		// blank line and the hint give way, and a reason that still does not
+		// fit is cut visibly.
+		room := max(pg.Height-len(w.out)-1, 1)
+		why := graphWrap(reason, width, "")
+		if len(why) > room {
+			why = append(why[:room-1], w.fit(strings.Join(why[room-1:], " ")))
+		}
+		hint := graphWrap("n shows the next signal, g the next grouping; s lists every query and its answer.", width, "")
+		if len(why)+1+len(hint) <= room {
+			w.out = append(w.out, "")
+		}
+		for _, line := range why {
 			w.plain("", line)
 		}
-		for _, line := range graphWrap("n shows the next signal, g the next grouping; s lists every query and its answer.", width, "") {
-			w.plain(col.Muted, line)
+		if len(why)+len(hint) <= room {
+			for _, line := range hint {
+				w.plain(col.Muted, line)
+			}
 		}
 		w.plain(col.Muted, graphCompareFooter(width, pg.ASCII))
 		return w.out
@@ -965,7 +1025,8 @@ func graphSignalRanks(c *graphCompare, st *graphStanding, selected, width, heigh
 		return text + strings.Repeat(" ", max(cells-runewidth.StringWidth(text), 0))
 	}
 	w := &graphLines{width: width, ascii: pg.ASCII}
-	lines := []string{graphBold(col.Title, pad("EVERY SIGNAL", labelW+1)) + graphPaint(col.Muted, w.fit(pad("WORST POD", podW)+" "+pad("VALUE", valueW)+" MEDIAN OF ALL"))}
+	rest := &graphLines{width: max(width-labelW-1, 1), ascii: pg.ASCII}
+	lines := []string{graphBold(col.Title, pad("EVERY SIGNAL", labelW+1)) + graphPaint(col.Muted, rest.fit(pad("WORST POD", podW)+" "+pad("VALUE", valueW)+" MEDIAN OF ALL"))}
 	// When the rows do not all fit, the ones around the selected signal are
 	// shown and the rest are counted.
 	from, to := 0, len(rows)
@@ -1022,6 +1083,10 @@ func graphCompareList(items []graphItem, sig *graphSignal, set *graphSeriesSet, 
 		nameHead, whereHead = strings.ToUpper(by.String()), "N"
 	}
 	atHead := "AT " + at.UTC().Format("15:04")
+	if by != graphByPod {
+		// The value of a group at the cursor is the median of its members.
+		atHead = "MEDIAN " + at.UTC().Format("15:04")
+	}
 	nameW, whereW, rankW, atW, wordW := runewidth.StringWidth(nameHead), runewidth.StringWidth(whereHead), runewidth.StringWidth(rankHead), runewidth.StringWidth(atHead), 0
 	cursorValues := make([]string, len(items))
 	for i := range items {
@@ -1033,30 +1098,32 @@ func graphCompareList(items []graphItem, sig *graphSignal, set *graphSeriesSet, 
 		whereW = max(whereW, runewidth.StringWidth(items[i].Count))
 		rankW = max(rankW, runewidth.StringWidth(graphWords(items[i].Rank, pg.ASCII)))
 		atW = max(atW, runewidth.StringWidth(cursorValues[i]))
-		if items[i].Outlier {
-			wordW = len(graphOutlierWord)
-		}
+		wordW = max(wordW, runewidth.StringWidth(items[i].Mark))
 	}
 	nameW, whereW = min(nameW, 18), min(whereW, 12)
 	fixed := func() int {
-		total := nameW + 1 + rankW + 1 + atW
-		if whereW > 0 {
-			total += whereW + 1
-		}
-		if wordW > 0 {
-			total += wordW + 1
+		total := nameW + 1 + rankW
+		for _, column := range []int{whereW, atW, wordW} {
+			if column > 0 {
+				total += column + 1
+			}
 		}
 		return total
 	}
-	// The trend keeps at least twelve cells: the Node column goes first,
-	// then the name is shortened.
-	if width-fixed()-1 < 12 {
+	// The trend keeps at least twelve cells. The Node column goes first,
+	// then the value at the cursor (the header no longer names it), and
+	// only then is the name shortened: the name says which row is which.
+	room := func() int { return width - fixed() - 1 }
+	if room() < 12 {
 		whereW = 0
 	}
-	if width-fixed()-1 < 12 {
-		nameW = max(min(nameW, width-fixed()+nameW-13), 6)
+	if room() < 12 {
+		atW = 0
 	}
-	trendW := min(max(width-fixed()-1, 4), 48)
+	if short := 12 - room(); short > 0 {
+		nameW = max(nameW-short, 6)
+	}
+	trendW := min(max(room(), 4), 48)
 	frame := frameOf(trendW)
 	pad := func(text string, cells int) string {
 		text = (&graphLines{width: cells, ascii: pg.ASCII}).fit(text)
@@ -1070,7 +1137,10 @@ func graphCompareList(items []graphItem, sig *graphSignal, set *graphSeriesSet, 
 	if whereW > 0 {
 		header += pad(whereHead, whereW) + " "
 	}
-	header += pad(trendHead, trendW) + " " + right(rankHead, rankW) + " " + right(atHead, atW)
+	header += pad(trendHead, trendW) + " " + right(rankHead, rankW)
+	if atW > 0 {
+		header += " " + right(atHead, atW)
+	}
 	lines = append(lines, graphPaint(col.Muted, strings.TrimRight(header, " ")))
 	for i := range items {
 		item := &items[i]
@@ -1085,9 +1155,12 @@ func graphCompareList(items []graphItem, sig *graphSignal, set *graphSeriesSet, 
 		if whereW > 0 {
 			lead += pad(item.Count, whereW) + " "
 		}
-		tail := " " + right(graphWords(item.Rank, pg.ASCII), rankW) + " " + right(cursorValues[i], atW)
-		if wordW > 0 && item.Outlier {
-			tail += " " + graphOutlierWord
+		tail := " " + right(graphWords(item.Rank, pg.ASCII), rankW)
+		if atW > 0 {
+			tail += " " + right(cursorValues[i], atW)
+		}
+		if item.Mark != "" {
+			tail += " " + item.Mark
 		}
 		trend := graphSpark(item.Trend, frame, ceiling, lineColor, col.Muted, pg.ASCII, sig.Rank == graphRankLow)
 		if len(item.Trend) == 0 {
