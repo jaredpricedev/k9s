@@ -525,6 +525,7 @@ def main():
     parser.add_argument("--smoke", action="store_true", help="check named objects, mutation rejection and server cleanup")
     parser.add_argument("--deny-source", action="append", default=[], choices=sorted(observed.SERVICES),
                         help="answer HTTP 403 for this declared observability source (repeatable)")
+    parser.add_argument("--no-icons", action="store_true", help="start with ui.noIcons, the plain ASCII presentation")
     parser.add_argument("app_args", nargs=argparse.REMAINDER, help="optional application arguments after --")
     args = parser.parse_args()
     if args.smoke:
@@ -551,7 +552,8 @@ def main():
             create_kubeconfig(kubeconfig, api.server_port)
             env = isolated_environment(root, kubeconfig)
             (root / "config" / "k9plus" / "config.yaml").write_text(
-                "k9s:\n  skipLatestRevCheck: true\n  refreshRate: 2\n  ui:\n    splashless: true\n")
+                "k9s:\n  skipLatestRevCheck: true\n  refreshRate: 2\n  ui:\n    splashless: true\n"
+                + ("    noIcons: true\n" if args.no_icons else ""))
             # Declare the three synthetic sources for the study context so the
             # observability features work with no setup. Declaring contacts nothing.
             context_dir = root / "config" / "k9plus" / "clusters" / "study-loopback" / "study-dev"

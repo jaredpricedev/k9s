@@ -117,6 +117,7 @@ func (c *Command) updateSuggestionAliases() {
 		problemsCommandToken,
 		timelineCommandToken,
 		sourcesCommandToken,
+		graphCommandToken,
 	}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
@@ -361,6 +362,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.gitopsCommand(p.GetLine())
 	case timelineCommandToken:
 		c.timelineCommand(p.GetLine())
+	case graphCommandToken:
+		c.graphCommand(p.GetLine())
 	default:
 		return false
 	}
