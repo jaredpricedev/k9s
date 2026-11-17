@@ -129,6 +129,8 @@ Slow requests  Service gitlab-webservice-default · last 1h               read 1
   ↑↓ row · ←→ time · 1-4 window · a show every signal · s queries · Esc back                            7, 8  the rest, dim; a is all detail
 ```
 
+`:slow` is laid out this way; [slow-requests.md](slow-requests.md#the-page) shows the page a read draws, how its rows are sorted into the groups by overlap alone, and what it gives up at each size.
+
 The band is the background of the columns under each `▼`, from the marker row down to the row above the axis: the three blocks of every row above stand inside it. `internal/calm/testdata` holds this page, the Pod graph and the Pod comparison as pinned text in the areas a view is given in terminals of 132×36, 80×24 and 60×24.
 
 ### What a strip draws

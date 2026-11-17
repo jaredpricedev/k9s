@@ -56,9 +56,21 @@ func slowPress(t *testing.T, v *slowView, key tcell.Key) {
 	action.Action(tcell.NewEventKey(key, 0, tcell.ModNone))
 }
 
-func TestSlowFramesStateEveryHopWhenItHappenedAndWhatOverlapsAtEverySize(t *testing.T) {
+// slowAllDetail turns a view to the page a shows: the hop table and the
+// lanes strip the view had before the calm page. The tests below hold that
+// page to what it showed then; slow_calm_test.go holds the calm page.
+func slowAllDetail(t *testing.T, v *slowView) {
+	t.Helper()
+	if !v.all {
+		slowPress(t, v, calmDetailKey)
+	}
+	require.True(t, v.all)
+}
+
+func TestSlowAllDetailStatesEveryHopWhenItHappenedAndWhatOverlapsAtEverySize(t *testing.T) {
 	v := slowViewFixture(t)
 	v.accept(slowStoryRead(&slowtest.Story{}, time.Hour))
+	slowAllDetail(t, v)
 	// 132x32, 80x20 and 60x20 are what the app leaves the view on a 132x36,
 	// 80x24 or 60x24 terminal.
 	for _, size := range [][2]int{{132, 32}, {80, 20}, {60, 20}, {40, 8}} {
@@ -121,7 +133,8 @@ func TestSlowFramesStateEveryHopWhenItHappenedAndWhatOverlapsAtEverySize(t *test
 			// on a whole step.
 			require.Contains(t, frame, "next: Shift-B probe each pod now · m p99 per pod · Enter on …-hx4mt graphs it · h Hubble · Shift-D Grafana · t timeline\n")
 			require.NotContains(t, frame, "p probe", "p is not the probe: Shift-B is, here as on a Service row")
-			require.Contains(t, frame, "↑↓ hop · Enter open · ←→ cursor · n/N episode · 1 15m  2 1h  3 6h  4 24h · s queries and rules · r re-read · b dots · Esc back")
+			require.Contains(t, frame, "↑↓ hop · Enter open · a less detail · ←→ cursor · n/N episode · 1-4 window · s queries · r re-read · b dots · Esc back",
+				"the key back to the calm page is named with the keys of this one")
 		case 80:
 			require.Contains(t, frame, "Slow requests / gitlab-webservice-default · last 1h · read 08:20:12")
 			require.Contains(t, frame, "3 episodes of client give-ups (HTTP 499) at the ingress, 2m-4m each.")
@@ -134,7 +147,9 @@ func TestSlowFramesStateEveryHopWhenItHappenedAndWhatOverlapsAtEverySize(t *test
 			require.Contains(t, frame, "when, UTC")
 			require.Contains(t, frame, "1 column = 2m")
 			require.Contains(t, flat, "Packet drops (POLICY_DENIED) on pod …-2bq7k: 07:39 for 1m, outside every episode.")
+			require.Contains(t, frame, "↑↓ hop · Enter open · a less detail · ←→ cursor · 1-4 window · s queries · Esc")
 		case 60:
+			require.Contains(t, frame, "Enter open · a less detail · 1-4 window · s queries · Esc")
 			require.Contains(t, frame, "  HOP                WORST         STATE    EVIDENCE")
 			require.NotContains(t, frame, "LAST 1h", "the trend gives way before hop, key number or state")
 			for _, label := range []string{"not ready …-hx4mt", "p99 +3 …-hx4mt", "drops …-2bq7k"} {
@@ -183,10 +198,11 @@ func TestSlowLaneCellsAddUpToTheTimeBesideThem(t *testing.T) {
 	require.Equal(t, marks, slowSnap(marks, chart.Frame{}), "without a frame nothing is moved")
 }
 
-func TestSlowNoIconsUsesPlainCharactersOnly(t *testing.T) {
+func TestSlowAllDetailNoIconsUsesPlainCharactersOnly(t *testing.T) {
 	v := slowViewFixture(t)
 	v.app.Config.K9s.UI.NoIcons = true
 	v.accept(slowStoryRead(&slowtest.Story{}, time.Hour))
+	slowAllDetail(t, v)
 	for _, size := range [][2]int{{132, 32}, {80, 20}, {60, 20}} {
 		frame := drawnText(t, v, size[0], size[1])
 		for _, r := range frame {
@@ -207,12 +223,13 @@ func TestSlowNoIconsUsesPlainCharactersOnly(t *testing.T) {
 	require.Contains(t, frame, "WHEN IT HAPPENED · 1 column = 1m · # over its rule · x no data · UTC")
 	require.Contains(t, frame, "pods: queued ...-hx4mt         |........###................####......................##.....  9m of 1h")
 	require.Contains(t, frame, "> service -> pods")
-	require.Contains(t, frame, "Up/Down hop · Enter open · Left/Right cursor")
+	require.Contains(t, frame, "Up/Down hop · Enter open · a less detail · Left/Right cursor")
 	require.Contains(t, frame, "latency 120us")
 }
 
-func TestSlowSaysNotReadWithTheReasonAndNeverDrawsItAsQuiet(t *testing.T) {
+func TestSlowAllDetailSaysNotReadWithTheReasonAndNeverDrawsItAsQuiet(t *testing.T) {
 	v := slowViewFixture(t)
+	slowAllDetail(t, v)
 	frame := drawnText(t, v, 100, 30)
 	require.Contains(t, frame, "Slow requests / Service gitlab/gitlab-webservice-default")
 	require.Contains(t, frame, "Reading the configured path, then one bounded batch from the declared Prometheus.")
@@ -253,6 +270,7 @@ func TestSlowSaysNotReadWithTheReasonAndNeverDrawsItAsQuiet(t *testing.T) {
 
 	// A selection without a request path explains itself and keeps nothing.
 	fresh := slowViewFixture(t)
+	slowAllDetail(t, fresh)
 	fresh.accept(&slowRead{err: errors.New("no Service in namespace gitlab selects the Pods of StatefulSet gitlab/batch, so there is no request path to read")})
 	frame = drawnText(t, fresh, 100, 30)
 	require.Contains(t, strings.Join(strings.Fields(frame), " "),
@@ -267,7 +285,7 @@ func TestSlowSaysNotReadWithTheReasonAndNeverDrawsItAsQuiet(t *testing.T) {
 	require.Contains(t, frame, "OUTLIER")
 }
 
-func TestSlowKeysOpenRowsMoveTheCursorAndShowQueries(t *testing.T) {
+func TestSlowAllDetailKeysOpenRowsMoveTheCursorAndShowQueries(t *testing.T) {
 	v := slowViewFixture(t)
 	var reads, resolved atomic.Int32
 	v.loader = func(_ context.Context, path *slowpath.Path, window time.Duration) slowRead {
@@ -280,8 +298,9 @@ func TestSlowKeysOpenRowsMoveTheCursorAndShowQueries(t *testing.T) {
 	}
 	read := v.loader(t.Context(), nil, v.window)
 	v.accept(&read)
+	slowAllDetail(t, v)
 	frame := drawnText(t, v, 132, 32)
-	require.Equal(t, slowRow{hop: slowpath.HopApp}, v.focus, "the view opens on the strongest finding")
+	require.Equal(t, slowRow{hop: slowpath.HopApp}, v.focus, "the table opens on the hop of the strongest finding")
 	require.Contains(t, frame, "> service → pods")
 	require.Contains(t, frame, "    …-hx4mt", "the Pods are listed when one of them is the outlier and there is room")
 
@@ -469,7 +488,15 @@ func TestSlowCursorKeysAreThoseOfEveryChartView(t *testing.T) {
 	require.Zero(t, v.cursor, "the cursor stops at the start of the window")
 	press(tcell.KeyEnd, tcell.ModNone)
 	require.Equal(t, v.frame.Width-1, v.cursor)
+	require.Contains(t, drawnText(t, v, 132, 32), "cursor 08:19:02–08:20:00 UTC", "the last column of the strips")
+	// The cursor keeps its time when the page changes under it: the lanes
+	// of the all-detail page have columns of a whole minute.
+	slowAllDetail(t, v)
 	require.Contains(t, drawnText(t, v, 132, 32), "cursor 08:19–08:20 UTC")
+	require.Equal(t, v.frame.Width-1, v.cursor)
+	press(tcell.KeyHome, tcell.ModNone)
+	press(tcell.KeyRight, tcell.ModShift)
+	require.Equal(t, 10, v.cursor, "the keys are the same on both pages")
 	for index, window := range graphWindows {
 		action, ok := v.actions.Get(ui.Key1 + tcell.Key(index))
 		require.True(t, ok)
@@ -563,9 +590,10 @@ func TestSlowDiscardsALateReplyAfterTheDestinationChanged(t *testing.T) {
 	require.Contains(t, drawnText(t, other, 100, 30), "Destination changed; this read is retained. Reopen :slow for the current context.")
 }
 
-func TestSlowKeepsWholeSentencesAndTheFindingWhenRowsAreFew(t *testing.T) {
+func TestSlowAllDetailKeepsWholeSentencesAndTheFindingWhenRowsAreFew(t *testing.T) {
 	v := slowViewFixture(t)
 	v.accept(slowStoryRead(&slowtest.Story{}, time.Hour))
+	slowAllDetail(t, v)
 	// 60x24 with the Pods of the app hop listed leaves seven rows under the
 	// table: two lanes, the axis, one line for the rest and the summary.
 	slowPress(t, v, tcell.KeyEnter)

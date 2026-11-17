@@ -167,10 +167,8 @@ func (r *Report) summarize() {
 		r.summarizeEpisodes(&unread)
 	}
 	// What a wide window cannot show.
-	if r.Step >= CoarseStep && r.Plan != nil {
-		r.say(RankCaveat, fmt.Sprintf(
-			"A sample here stands for %s and a rate for %s: a stall of a few minutes merges with the next one or disappears; 1h or 15m shows it.",
-			impact.Dur(r.Step), impact.Dur(r.Plan.RateWindow)))
+	if text := r.coarse(); text != "" {
+		r.say(RankCaveat, text)
 	}
 }
 

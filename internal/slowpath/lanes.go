@@ -460,7 +460,11 @@ func (r *Report) CompactLanes() []Lane {
 // Detail states one hop in full for the detail area: what was read, the
 // worst sample, the rule, the sample counts and the exact queries, and for
 // what was not read the reason.
-func (r *Report) Detail(h *Hop) []string {
+func (r *Report) Detail(h *Hop) []string { return r.DetailOf(h, "") }
+
+// DetailOf is Detail with one signal of the hop stated first: the one a
+// row is about. An empty or unknown name keeps the order of Detail.
+func (r *Report) DetailOf(h *Hop, first string) []string {
 	head := h.Spec.Label() + " · " + h.Spec.What
 	if len(h.Spec.Profiles) > 0 {
 		head += " · profiles " + strings.Join(h.Spec.Profiles, ", ")
@@ -503,6 +507,9 @@ func (r *Report) Detail(h *Hop) []string {
 		return 4
 	}
 	sort.SliceStable(order, func(a, b int) bool { return rank(&h.Signals[order[a]]) < rank(&h.Signals[order[b]]) })
+	if first != "" {
+		sort.SliceStable(order, func(a, b int) bool { return h.Signals[order[a]].Name == first && h.Signals[order[b]].Name != first })
+	}
 	for _, i := range order {
 		sig := &h.Signals[i]
 		head := sig.Name + " [" + sig.Profile + "] " + sig.Title

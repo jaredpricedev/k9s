@@ -1,0 +1,23 @@
+Slow requests  Service gitlab/gitlab-webservice-default · last 1h                                     read 08:20 · 0 of 35 queries
+
+  Prometheus was not read (denied: HTTP 403), so no hop has latency evidence.                             Not read is not healthy.
+
+  IN THE WINDOW
+> endpoints  …-hx4mt Ready=True  once  at 07:51            ×××××××××××××××××××××××××××××××××××××▲·································
+
+  QUIET
+  restarts · rollouts  none in the last 1h                 ·······································································
+
+  NOT READ
+  ingress              prometheus: denied (HTTP 403)       ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+  pods                 prometheus: denied (HTTP 403)       ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+  3 dependencies       prometheus: denied (HTTP 403)       ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+  dns                  prometheus: denied (HTTP 403)       ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+  network              prometheus: denied (HTTP 403)       ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+  endpoints  1 of 1 signals: prometheus: denied (HTTP 40…  ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××
+                                                           ┬──────────┬───────────┬───────────┬───────────┬───────────┬──────────┬
+  UTC                                                    07:20      07:30       07:40       07:50       08:00       08:10      08:20
+
+  next  Shift-B probe the pods now    m compare the pods    Enter its queries    Shift-D open in Grafana
+
+  ↑↓ row · a show every signal · s queries · ←→ time · 1-4 window · t timeline · h Hubble · r re-read · Esc back

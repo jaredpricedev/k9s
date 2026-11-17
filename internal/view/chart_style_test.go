@@ -286,6 +286,9 @@ func TestChartStyleReachesMinisTrendsAndDashboards(t *testing.T) {
 func TestChartStyleKeyRedrawsTheViewAndSaysWhatItDid(t *testing.T) {
 	v := slowViewFixture(t)
 	v.accept(slowStoryRead(&slowtest.Story{}, time.Hour))
+	// The trends are on the page of all detail; the calm page draws when a
+	// rule held, which has one form.
+	slowAllDetail(t, v)
 	action, ok := v.actions.Get(chartStyleKey)
 	require.True(t, ok)
 	frame := drawnText(t, v, 132, 36)

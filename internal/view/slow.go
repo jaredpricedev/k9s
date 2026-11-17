@@ -57,7 +57,9 @@ type slowRow struct {
 
 // slowView is the on-demand request-path view. It reads when opened, when
 // the window changes and on r; it never polls, and a reply that arrives
-// after the view closed or its destination changed is discarded.
+// after the view closed or its destination changed is discarded. It opens
+// on the calm page (slow_calm.go); a shows the hop table and the lanes it
+// had before (slow_render.go). Both draw one read: the key reads nothing.
 type slowView struct {
 	*Details
 	selection  slowpath.Selection
@@ -75,6 +77,17 @@ type slowView struct {
 	table                *tview.Table
 	rows                 []slowRow
 	focus                slowRow
+	// all shows the hop table and the lanes strip the view had before the
+	// calm page; the calm page is what the view opens on.
+	all bool
+	// calm are the rows of the calm page the row cursor can stand on, as
+	// they were last drawn; calmKey is the one it stands on. calmFromTable
+	// says the hop table was just left, so the row is found by its hop.
+	calm          []slowCalmRow
+	calmKey       string
+	calmFromTable bool
+	// arranged says which of the two pages the layout is built for.
+	arranged *bool
 	// expanded says whether the Pods of the app hop are listed; nil picks
 	// by the room there is.
 	expanded *bool
@@ -335,14 +348,40 @@ func (v *slowView) Init(ctx context.Context) error {
 	// state colors of the focused row stay as they are.
 	v.table = tview.NewTable().SetSelectable(false, false).SetFixed(1, 0).SetEvaluateAllRows(false)
 	v.headerHeight, v.tableHeight = 2, 2
-	v.Flex.Clear().SetDirection(tview.FlexRow).
-		AddItem(v.header, v.headerHeight, 0, false).
-		AddItem(v.table, v.tableHeight, 0, true).
-		AddItem(v.body, 0, 1, false).
-		AddItem(v.footer, 1, 0, false)
+	v.arrange(true)
 	v.bindSlowKeys()
 	v.render()
 	return nil
+}
+
+// arrange builds the layout of one of the two pages: the calm page is one
+// text area, the all-detail page a header, the hop table, the lanes and a
+// key line. The text area holds the focus in both, so that a key reaches
+// the view whichever page is up.
+func (v *slowView) arrange(calmPage bool) {
+	if v.arranged != nil && *v.arranged == calmPage {
+		return
+	}
+	v.arranged = &calmPage
+	v.Flex.Clear().SetDirection(tview.FlexRow)
+	if calmPage {
+		v.Flex.AddItem(v.body, 0, 1, true)
+		return
+	}
+	v.Flex.AddItem(v.header, v.headerHeight, 0, false).
+		AddItem(v.table, v.tableHeight, 0, false).
+		AddItem(v.body, 0, 1, true).
+		AddItem(v.footer, 1, 0, false)
+}
+
+// toggleAll switches between the calm page and all the detail the view
+// had before it: every hop in a table and the lanes strip.
+func (v *slowView) toggleAll() {
+	v.all, v.detail, v.detailTop = !v.all, false, 0
+	if !v.all {
+		v.calmKey, v.calmFromTable = "", true
+	}
+	v.render()
 }
 
 func (v *slowView) bindSlowKeys() {
@@ -381,11 +420,12 @@ func (v *slowView) bindSlowKeys() {
 		ui.KeyH:        ui.NewKeyAction("Hubble flows", do(v.openHubble), true),
 		ui.KeyT:        ui.NewKeyAction("Timeline", do(v.openTimeline), true),
 		ui.KeyS:        ui.NewKeyAction("Queries and rules", do(v.toggleDetail), true),
+		calmDetailKey:  ui.NewKeyAction(calmDetailLabel, do(v.toggleAll), true),
 		ui.KeyR:        ui.NewKeyAction("Re-read", do(func() { v.refresh(true) }), true),
-		tcell.KeyUp:    ui.NewKeyAction("Previous hop", do(func() { v.moveFocus(-1) }), false),
-		tcell.KeyDown:  ui.NewKeyAction("Next hop", do(func() { v.moveFocus(1) }), false),
-		ui.KeyK:        ui.NewKeyAction("Previous hop", do(func() { v.moveFocus(-1) }), false),
-		ui.KeyJ:        ui.NewKeyAction("Next hop", do(func() { v.moveFocus(1) }), false),
+		tcell.KeyUp:    ui.NewKeyAction("Previous row", do(func() { v.moveFocus(-1) }), false),
+		tcell.KeyDown:  ui.NewKeyAction("Next row", do(func() { v.moveFocus(1) }), false),
+		ui.KeyK:        ui.NewKeyAction("Previous row", do(func() { v.moveFocus(-1) }), false),
+		ui.KeyJ:        ui.NewKeyAction("Next row", do(func() { v.moveFocus(1) }), false),
 		tcell.KeyLeft:  ui.NewKeyAction("Cursor earlier", cursor(-1), false),
 		tcell.KeyRight: ui.NewKeyAction("Cursor later", cursor(1), false),
 		tcell.KeyHome:  ui.NewKeyAction("Cursor to window start", do(func() { v.cursorEdge(-1) }), false),
@@ -402,13 +442,18 @@ func (v *slowView) bindSlowKeys() {
 		chartStyleKey: chartStyleAction(v.app, v.render),
 	})
 	back := func(event *tcell.EventKey) *tcell.EventKey {
-		if v.cursor >= 0 {
-			// Esc first puts the cursor away; a second Esc leaves.
+		switch {
+		case v.cursor >= 0:
+			// Esc first puts the cursor away, then closes the queries; the
+			// Esc after that leaves.
 			v.cursor = -1
-			v.render()
-			return nil
+		case v.detail:
+			v.detail, v.detailTop = false, 0
+		default:
+			return v.app.PrevCmd(event)
 		}
-		return v.app.PrevCmd(event)
+		v.render()
+		return nil
 	}
 	v.actions.Add(tcell.KeyEscape, ui.NewKeyAction("Back", back, false))
 	v.actions.Add(ui.KeyQ, ui.NewKeyAction("Back", func(event *tcell.EventKey) *tcell.EventKey { return v.app.PrevCmd(event) }, false))
@@ -536,12 +581,19 @@ func (v *slowView) openHubble() {
 	}
 }
 
-// enter opens what the focused row has: the Pods of the app hop, the graph
-// of a Pod, or the queries and rules of any other hop.
+// enter opens what the focused row has. On the calm page that is the graph
+// of a Pod, or the queries and rules of any other row; on the all-detail
+// page the Pods of the app hop, the graph of a Pod, or the queries and
+// rules of any other hop.
 func (v *slowView) enter() {
 	report := v.report()
 	switch {
 	case report == nil:
+	case !v.all && v.detail:
+		// On the page of queries Enter returns, as s does.
+		v.toggleDetail()
+	case !v.all && v.focus.pod == "":
+		v.toggleDetail()
 	case v.focus.pod != "":
 		v.openPodGraph()
 	case v.focus.hop == slowpath.HopApp && len(report.Path.Pods) > 0:
@@ -553,8 +605,25 @@ func (v *slowView) enter() {
 	}
 }
 
-// moveFocus moves the row selection.
+// moveFocus moves the row cursor: over the rows of the calm page that are
+// on the screen, or over the hops of the table.
 func (v *slowView) moveFocus(delta int) {
+	if !v.all {
+		// The calm page: the rows that are on the screen.
+		if len(v.calm) == 0 {
+			return
+		}
+		index := 0
+		for i := range v.calm {
+			if v.calm[i].key == v.calmKey {
+				index = i
+			}
+		}
+		row := &v.calm[min(max(index+delta, 0), len(v.calm)-1)]
+		v.calmKey, v.focus, v.detailTop = row.key, slowRow{hop: row.hop(), pod: row.pod}, 0
+		v.render()
+		return
+	}
 	if len(v.rows) == 0 {
 		return
 	}
@@ -618,9 +687,12 @@ func (v *slowView) moveCursor(delta int) {
 	v.placeCursor()
 }
 
-// placeCursor remembers the time under the cursor and redraws the lanes.
+// placeCursor remembers the time under the cursor and redraws the strips.
+// The time is the middle of the column, so that it is found again in the
+// same column whatever width the strips are redrawn with.
 func (v *slowView) placeCursor() {
-	v.cursorAt, _ = v.frame.ColumnSpan(v.cursor)
+	from, to := v.frame.ColumnSpan(v.cursor)
+	v.cursorAt = from.Add(to.Sub(from) / 2)
 	v.detail = false
 	v.render()
 }
@@ -639,8 +711,15 @@ func (v *slowView) jumpEpisode(direction int) {
 	columns := make([]int, 0, len(report.Episodes))
 	for _, episode := range report.Episodes {
 		// An episode is named by its first raised sample, one step after
-		// its stretch begins; that is the column the cursor lands on.
-		if col, ok := v.frame.Col(episode.Start.Add(report.Step)); ok {
+		// its stretch begins; that is the column the cursor lands on. On
+		// the calm page a sample stands for the step that ends at it, so
+		// the column is the one in which that step ends: it is inside the
+		// episode's band even when the episode is one step long.
+		at := episode.Start.Add(report.Step)
+		if !v.all {
+			at = at.Add(-time.Nanosecond)
+		}
+		if col, ok := v.frame.Col(at); ok {
 			columns = append(columns, col)
 		}
 	}
