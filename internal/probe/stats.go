@@ -30,12 +30,20 @@ const (
 	// Spikes means the median is like the peers' but its slowest answer is
 	// far above theirs: slow some of the time.
 	Spikes
+	// Timeouts means some requests got no answer within the deadline and
+	// nothing else singles the Pod out. It is a fact about this Pod, not a
+	// comparison, so it is stated for one or two Pods as well, and when
+	// every Pod has them.
+	Timeouts
 	// Errors means it answered, but not always with a 2xx or 3xx status.
 	Errors
 	// LikePeers means nothing separates it from its peers in this run.
 	LikePeers
 	// NoPeers means it answered and there are too few Pods to compare.
 	NoPeers
+	// Canceled means requests left for the Pod and the run ended before
+	// any of them had an outcome.
+	Canceled
 )
 
 // Word is the row word of a verdict.
@@ -51,16 +59,22 @@ func (v Verdict) Word() string {
 		return "OUTLIER"
 	case Spikes:
 		return "SPIKES"
+	case Timeouts:
+		return "TIMEOUTS"
 	case Errors:
 		return "ERRORS"
 	case LikePeers:
 		return "like peers"
+	case Canceled:
+		return "canceled"
 	}
 	return "answered"
 }
 
 // Flagged says whether the verdict marks the row.
-func (v Verdict) Flagged() bool { return v == NoAnswer || v == Outlier || v == Spikes || v == Errors }
+func (v Verdict) Flagged() bool {
+	return v == NoAnswer || v == Outlier || v == Spikes || v == Timeouts || v == Errors
+}
 
 // Peer-comparison thresholds. A Pod is an outlier only when it is also this
 // much slower than its peers in absolute terms, so that a few milliseconds
@@ -77,7 +91,11 @@ type CodeCount struct {
 
 // PodStats summarizes the attempts made against one Pod.
 type PodStats struct {
-	Planned, Sent, Answered, TimedOut int
+	// Sent counts requests that left, Finished those of them with an
+	// outcome. The difference is Waiting (in flight) plus Abandoned (the
+	// run was canceled before the answer).
+	Planned, Sent, Finished, Answered, TimedOut int
+	Waiting, Abandoned                          int
 	// Unanswered counts requests that left and got no answer from the Pod
 	// for another reason (denied, unreachable, gone, failed).
 	Unanswered int
@@ -144,7 +162,14 @@ func podStats(attempts []Attempt, deadline time.Duration) PodStats {
 			continue
 		}
 		stats.Sent++
+		if attempt.Finished() {
+			stats.Finished++
+		}
 		switch attempt.Outcome {
+		case InFlight:
+			stats.Waiting++
+		case Abandoned:
+			stats.Abandoned++
 		case Answered:
 			stats.Answered++
 			answered = append(answered, seconds(attempt.Took))
@@ -239,6 +264,11 @@ func (s *Summary) read(plan *Plan, run *Run) (typical, worst, every []float64) {
 		switch {
 		case stats.Sent == 0:
 			stats.Verdict = Unprobed
+		case stats.Finished == 0 && stats.Abandoned > 0:
+			stats.Verdict = Canceled
+		case stats.Finished == 0:
+			// The first request is in flight: nothing can be said yet.
+			stats.Verdict = Unprobed
 		case stats.Answered == 0:
 			stats.Verdict = NoAnswer
 			// A Pod that only timed out still has a lower-bound timing.
@@ -280,7 +310,15 @@ func (s *Summary) compare(typical, worst []float64) {
 	}
 	for i := range s.Pods {
 		stats := &s.Pods[i]
-		if (stats.Verdict == LikePeers || stats.Verdict == NoPeers) && stats.errorsAnswered() {
+		if stats.Verdict != LikePeers && stats.Verdict != NoPeers {
+			continue
+		}
+		// A request without an answer is a fact about this Pod whatever its
+		// peers did: it is never folded into "like peers" or "answered".
+		switch {
+		case stats.TimedOut > 0:
+			stats.Verdict = Timeouts
+		case stats.errorsAnswered():
 			stats.Verdict = Errors
 		}
 	}
@@ -433,7 +471,19 @@ func (r *report) timeouts(stats *PodStats) string {
 	if stats.TimedOut == 0 {
 		return ""
 	}
-	return fmt.Sprintf("; %d of %d had no answer within %s", stats.TimedOut, stats.Sent, Seconds(seconds(r.run.Deadline)))
+	return fmt.Sprintf("; %d of %d had no answer within %s", stats.TimedOut, stats.Finished, Seconds(seconds(r.run.Deadline)))
+}
+
+// abandoned says how many of the sent requests were in flight when the run
+// ended. They left, so they are counted as sent, and the application may
+// still handle them.
+func (r *report) abandoned() string {
+	n := r.run.Abandoned()
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf(", %s still in flight and abandoned without an answer (the application may still handle %s)",
+		plural(n, "of them", "of them"), map[bool]string{true: "it", false: "them"}[n == 1])
 }
 
 // slow states which Pods answered slower than their peers.
@@ -469,7 +519,13 @@ func (r *report) failed(flagged []int) {
 			if stats.TimedOut > 0 {
 				why = "no answer within " + Seconds(seconds(r.run.Deadline))
 			}
-			r.addf("%s gave no answer to %s (%s).", r.name(i), plural(stats.Sent, "request", "requests"), why)
+			r.addf("%s gave no answer to %s (%s).", r.name(i), plural(stats.Finished, "request", "requests"), why)
+		case Timeouts:
+			// Stated on its own terms: a request without an answer needs no
+			// peer to be worth reading.
+			r.addf("%s gave no answer within %s to %d of %s; its %s took %s.", r.name(i), Seconds(seconds(r.run.Deadline)),
+				stats.TimedOut, plural(stats.Finished, "request", "requests"), plural(stats.Answered, "answer", "answers"),
+				span(seconds(stats.Fastest), seconds(stats.Slowest)))
 		case Errors:
 			detail := stats.CodesDetail(r.ascii)
 			if stats.Unanswered > 0 {
@@ -494,13 +550,23 @@ func (r *report) steady(steady []int, others bool) {
 	}
 	switch {
 	case others:
-		r.addf("The other %s answered all %s in %s or less.", plural(len(steady), "Pod", "Pods"), plural(requests, "request", "requests"), Seconds(slowest))
+		who := "The other " + plural(len(steady), "Pod", "Pods")
+		if len(steady) == 1 {
+			who = "The other Pod"
+		}
+		r.addf("%s answered all %s in %s or less.", who, plural(requests, "request", "requests"), Seconds(slowest))
 	case r.summary.Compared == 1:
 		r.addf("%s answered: median %s, slowest %s.", r.name(steady[0]), span(low, high), Seconds(slowest))
 		r.addf("One Pod has no peers here. Probe its Service or workload to see whether it differs from the others.")
 	case !r.summary.Enough:
 		r.addf("%s answered: median %s, slowest %s. Fewer than %d Pods is too few to call one of them different.",
 			plural(len(steady), "Pod", "Pods"), span(low, high), Seconds(slowest), chart.DefaultMinPeers)
+	case high >= 2*low && high-low >= medianFloor:
+		// The peer rule compares each Pod with the median of the group, so
+		// it cannot single one out when about half of them are slow. That
+		// is not the same as answering alike, and it is not said to be.
+		r.addf("The %d Pods did not answer alike: medians %s, slowest answer %s. No single Pod differs from the rest by the peer rule, "+
+			"which cannot name one when several are slow; compare the rows.", len(steady), span(low, high), Seconds(slowest))
 	default:
 		r.addf("All %d Pods answered alike: medians %s, slowest answer %s. No Pod stands out in this run.", len(steady), span(low, high), Seconds(slowest))
 		r.addf("An intermittent stall can fall between %s per Pod: run again, or send more.", plural(r.run.Attempts, "request", "requests"))
@@ -515,10 +581,17 @@ func Result(plan *Plan, run *Run, summary *Summary, ascii bool) []string {
 		return nil
 	}
 	if summary.Denied {
-		return []string{
-			"Not allowed: the API server refused the request. This user is missing " + MissingAccess(plan.Scope.Namespace) + ".",
-			"No request reached a Pod, so nothing is known about how fast any of them answers.",
+		answered := 0
+		for i := range summary.Pods {
+			answered += summary.Pods[i].Answered
 		}
+		lines := []string{"Not allowed: the API server refused the request. This user is missing " + MissingAccess(plan.Scope.Namespace) + "."}
+		if answered == 0 {
+			return append(lines, "No request reached a Pod, so nothing is known about how fast any of them answers.")
+		}
+		// A rule limited to some Pods by name refuses the others.
+		return append(lines, fmt.Sprintf("%s answered before the refusal ended the run. The rows show them; the run is incomplete and compares nothing.",
+			plural(answered, "request was", "requests were")))
 	}
 	var flagged, slow, steady []int
 	for i := range summary.Pods {
@@ -526,7 +599,7 @@ func Result(plan *Plan, run *Run, summary *Summary, ascii bool) []string {
 		case Outlier, Spikes:
 			slow = append(slow, i)
 			flagged = append(flagged, i)
-		case NoAnswer, Errors:
+		case NoAnswer, Timeouts, Errors:
 			flagged = append(flagged, i)
 		case LikePeers, NoPeers:
 			steady = append(steady, i)
@@ -540,10 +613,10 @@ func Result(plan *Plan, run *Run, summary *Summary, ascii bool) []string {
 		r.addf("The difference is between Pods, now. The request did not pass the ingress or the Service, so neither slowed it.")
 	}
 	switch run.Stopped {
-	case "canceled":
-		r.addf("Canceled: %d of %d requests were sent; the rest were not.", run.Sent(), run.Planned())
-	case "run deadline":
-		r.addf("The run reached its %s limit: %d of %d requests were sent.", Seconds(RunDeadline.Seconds()), run.Sent(), run.Planned())
+	case StoppedCanceled:
+		r.addf("Canceled: %d of %d requests were sent%s; the rest were not.", run.Sent(), run.Planned(), r.abandoned())
+	case StoppedDeadline:
+		r.addf("The run reached its %s limit: %d of %d requests were sent%s.", Seconds(RunDeadline.Seconds()), run.Sent(), run.Planned(), r.abandoned())
 	}
 	return r.lines
 }

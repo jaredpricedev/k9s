@@ -87,7 +87,11 @@ func (m *probeConfirm) Draw(screen tcell.Screen) {
 	start := x + max((inner-cancelCells-3-sendCells)/2, 0)
 	tview.Print(screen, cancel, start, y+innerHeight-2, cancelCells, tview.AlignLeft, d.ButtonFgColor.Color())
 	tview.Print(screen, send, start+cancelCells+3, y+innerHeight-2, sendCells, tview.AlignLeft, d.ButtonFgColor.Color())
-	tview.Print(screen, "Tab switches · Enter chooses · Esc cancels", x, y+innerHeight-1, inner, tview.AlignCenter, p.Muted.Color())
+	sep := " · "
+	if m.app.Config.K9s.UI.NoIcons {
+		sep = " | "
+	}
+	tview.Print(screen, strings.Join([]string{"Tab switches", "Enter chooses", "Esc cancels"}, sep), x, y+innerHeight-1, inner, tview.AlignCenter, p.Muted.Color())
 }
 
 func (m *probeConfirm) InputHandler() func(*tcell.EventKey, func(tview.Primitive)) {

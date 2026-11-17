@@ -84,6 +84,19 @@ func TestOnlyADeclaredHTTPProbeBecomesARequest(t *testing.T) {
 	host := map[string]any{"name": "edge", "readinessProbe": map[string]any{"httpGet": map[string]any{"path": "/", "port": int64(80), "host": "example.test"}}}
 	unnamed := map[string]any{"name": "app", "readinessProbe": httpProbe("/ok", "nope")}
 	spaced := map[string]any{"name": "app", "readinessProbe": httpProbe("/a b", int64(80))}
+	// A path that a server or proxy could resolve to another API path is
+	// never sent: it would leave with this user's credentials.
+	for _, path := range []string{"/../../../../api/v1/namespaces/kube-system/secrets", "/a/./b", "/ok/..", "/a/%2e%2e/b", "/a%2f..%2fb",
+		"/%2E%2E", "/a\\..\\b", "//other.example/x", "http://other.example/x", "no-slash", "/a#b"} {
+		require.False(t, usablePath(path), path)
+		climbing := map[string]any{"name": "app", "readinessProbe": httpProbe(path, int64(80))}
+		refused := NewPlan(Scope{Kind: KindPod, Namespace: "gitlab", Name: "p"}, []Pod{PodFromObject(testPod("p", "n", climbing).Object)}, 1)
+		require.Nil(t, refused.Targets[0].Request, path)
+		require.Contains(t, refused.Targets[0].Skip, "path cannot be sent as written", path)
+	}
+	for _, path := range []string{"/", "/-/readiness", "/healthz?full=1&x=..", "/a.b/c..d/.well-known/x", "/api/v1/health%20check"} {
+		require.True(t, usablePath(path), path)
+	}
 	pending := testPod("pending", "", webContainer())
 	pending.Object["status"] = map[string]any{"phase": "Pending"}
 	leaving := testPod("leaving", "worker-a", webContainer())
@@ -197,13 +210,31 @@ func TestExecuteAsksEachPodInTurnAndABoundedNumberAtOnce(t *testing.T) {
 	}
 	plan := NewPlan(Scope{Kind: KindService, Namespace: "gitlab", Name: "web"}, plannedPods(names...), 9)
 	transport := &fakeTransport{wait: 2 * time.Millisecond, answer: func(string, int) Response { return ok(10 * time.Millisecond) }}
-	var reported atomic.Int32
-	run := Execute(t.Context(), transport, plan, Options{Attempts: 3, Pause: time.Millisecond}, func(_, _ int, a Attempt) {
-		require.Equal(t, Answered, a.Outcome)
-		reported.Add(1)
+	// Every request is reported twice: when it leaves, so that a caller knows
+	// what is in flight, and again with its outcome.
+	var left, reported, disorder atomic.Int32
+	var mu sync.Mutex
+	state := map[[2]int]Outcome{}
+	run := Execute(t.Context(), transport, plan, Options{Attempts: 3, Pause: time.Millisecond}, func(pod, n int, a Attempt) {
+		mu.Lock()
+		defer mu.Unlock()
+		before, seen := state[[2]int{pod, n}]
+		switch {
+		case a.Outcome == InFlight && !seen:
+			left.Add(1)
+		case a.Outcome == Answered && seen && before == InFlight:
+			reported.Add(1)
+		default:
+			disorder.Add(1)
+		}
+		state[[2]int{pod, n}] = a.Outcome
 	})
+	require.Zero(t, disorder.Load(), "in flight first, then the outcome, once each")
 	require.Equal(t, 27, run.Planned())
 	require.Equal(t, 27, run.Sent())
+	require.Equal(t, 27, run.Finished())
+	require.Zero(t, run.Abandoned())
+	require.EqualValues(t, 27, left.Load())
 	require.EqualValues(t, 27, reported.Load())
 	require.Empty(t, run.Stopped)
 	require.False(t, transport.overlap.Load(), "one Pod is never asked two requests at once")
@@ -217,15 +248,37 @@ func TestExecuteAsksEachPodInTurnAndABoundedNumberAtOnce(t *testing.T) {
 func TestExecuteStopsOnCancelDeadlineAndRefusal(t *testing.T) {
 	plan := NewPlan(Scope{Kind: KindService, Namespace: "gitlab", Name: "web"}, plannedPods("a", "b", "c"), 3)
 
-	// Cancel: what was not sent stays unsent, and the canceled request in
-	// flight leaves no outcome.
+	// Cancel: what was not sent stays unsent. The three requests in flight
+	// did leave, so they are counted as sent and marked abandoned: the
+	// application may still handle them, and saying "not sent" would be
+	// false.
 	ctx, cancel := context.WithCancel(t.Context())
 	slow := &fakeTransport{wait: time.Hour, answer: func(string, int) Response { return ok(time.Millisecond) }}
 	time.AfterFunc(30*time.Millisecond, cancel)
 	run := Execute(ctx, slow, plan, Options{Attempts: 5, Pause: time.Millisecond}, nil)
 	require.Equal(t, "canceled", run.Stopped)
-	require.Zero(t, run.Sent())
 	require.Equal(t, 15, run.Planned())
+	require.Equal(t, 3, run.Sent(), "one request per Pod had left")
+	require.Equal(t, 3, slow.calls["a"]+slow.calls["b"]+slow.calls["c"], "and the count agrees with what the transport saw")
+	require.Zero(t, run.Finished())
+	require.Equal(t, 3, run.Abandoned())
+	canceled := Summarize(plan, run, nil)
+	for i := range canceled.Pods {
+		require.Equal(t, Canceled, canceled.Pods[i].Verdict)
+		require.False(t, canceled.Pods[i].Verdict.Flagged(), "an abandoned request says nothing about the Pod")
+	}
+	require.Equal(t, []string{"Canceled: 3 of 15 requests were sent, 3 of them still in flight and abandoned without an answer " +
+		"(the application may still handle them); the rest were not."}, Result(plan, run, &canceled, false))
+
+	// A caller that stops waiting marks what it knows to be in flight.
+	waiting := NewRun(plan, Options{Attempts: 2})
+	waiting.Pods[0].Attempts[0] = Attempt{Outcome: Answered, Code: 200, Took: time.Millisecond}
+	waiting.Pods[0].Attempts[1] = Attempt{Outcome: InFlight}
+	require.Equal(t, 2, waiting.Sent())
+	require.Equal(t, 1, waiting.Finished())
+	require.Equal(t, 1, waiting.Abandon())
+	require.Equal(t, Abandoned, waiting.Pods[0].Attempts[1].Outcome)
+	require.Zero(t, waiting.Abandon())
 
 	// A request that outlives its deadline is a timeout that took at least
 	// the deadline; the next request is still sent.
@@ -250,6 +303,18 @@ func TestExecuteStopsOnCancelDeadlineAndRefusal(t *testing.T) {
 	lines := Result(plan, run, &summary, false)
 	require.Contains(t, lines[0], `RBAC verb "get" on resource "pods/proxy" (core API group) in namespace "gitlab"`)
 	require.Contains(t, lines[1], "No request reached a Pod")
+
+	// A rule limited to some Pods by name refuses the others: answers that
+	// did arrive are not denied after the fact.
+	partly := NewRun(plan, Options{Attempts: 2})
+	partly.Pods[0].Attempts[0] = Attempt{Outcome: Answered, Code: 200, Took: 20 * time.Millisecond}
+	partly.Pods[1].Attempts[0] = Attempt{Outcome: Denied, Code: 403, Detail: "forbidden"}
+	partly.Stopped = "denied"
+	summary = Summarize(plan, partly, nil)
+	lines = Result(plan, partly, &summary, false)
+	require.Contains(t, lines[0], "Not allowed")
+	require.NotContains(t, strings.Join(lines, " "), "No request reached a Pod")
+	require.Contains(t, lines[1], "1 request was answered before the refusal ended the run")
 
 	// A Pod that is gone is not asked again; the others are.
 	gone := &fakeTransport{answer: func(pod string, _ int) Response {
@@ -369,6 +434,53 @@ func TestSummaryKeepsJitterSpikesFewPeersAndErrorsApart(t *testing.T) {
 	unsent := Summarize(plan, nil, nil)
 	require.Equal(t, Unprobed, unsent.Pods[0].Verdict)
 	require.Equal(t, "not sent", Unprobed.Word())
+}
+
+// A request without an answer is stated for what it is, and Pods that
+// differ widely are not said to answer alike because no single one differs.
+func TestSummaryFlagsTimeoutsOnTheirOwnAndDoesNotCallAWideSpreadAlike(t *testing.T) {
+	plan := NewPlan(Scope{Kind: KindService, Namespace: "gitlab", Name: "web"}, plannedPods("web-a", "web-b", "web-c"), 3)
+
+	// A request without an answer is a fact about that Pod, not a comparison:
+	// it is flagged when every Pod has one, where nothing "stands out".
+	stalled := runOf(plan, 3, map[string][]time.Duration{"web-a": ms(20, -1, 21), "web-b": ms(-1, 19, 22), "web-c": ms(20, 23, -1)})
+	summary := Summarize(plan, stalled, nil)
+	for i := range summary.Pods {
+		require.Equal(t, Timeouts, summary.Pods[i].Verdict)
+		require.True(t, summary.Pods[i].Verdict.Flagged())
+	}
+	require.Equal(t, "TIMEOUTS", Timeouts.Word())
+	text := strings.Join(Result(plan, stalled, &summary, false), "\n")
+	require.Contains(t, text, "web-a gave no answer within 5s to 1 of 3 requests; its 2 answers took 20ms to 21ms.")
+	require.NotContains(t, text, "alike")
+	require.NotContains(t, text, "stands out")
+
+	// About half of the Pods slow: the peer rule cannot name one, and the
+	// result does not call that "alike".
+	four := NewPlan(Scope{Kind: KindService, Namespace: "gitlab", Name: "web"}, plannedPods("web-a", "web-b", "web-c", "web-d"), 4)
+	split := runOf(four, 3, map[string][]time.Duration{"web-a": ms(20, 22, 21), "web-b": ms(19, 21, 20), "web-c": ms(3000, 2900, 3100), "web-d": ms(2800, 3000, 3200)})
+	summary = Summarize(four, split, nil)
+	for i := range summary.Pods {
+		require.Equal(t, LikePeers, summary.Pods[i].Verdict)
+	}
+	lines := Result(four, split, &summary, false)
+	require.Contains(t, lines[0], "The 4 Pods did not answer alike: medians 20ms to 3s")
+	require.Contains(t, lines[0], "cannot name one when several are slow")
+	require.NotContains(t, strings.Join(lines, " "), "answered alike")
+
+	// Two Pods cannot be compared, but a request that got no answer is said
+	// of two Pods, and of one.
+	pair := NewPlan(Scope{Kind: KindService, Namespace: "gitlab", Name: "web"}, plannedPods("web-a", "web-b"), 2)
+	hung := runOf(pair, 5, map[string][]time.Duration{"web-a": ms(20, 22, 21, 19, 23), "web-b": ms(21, -1, 20, -1, 22)})
+	summary = Summarize(pair, hung, nil)
+	require.Equal(t, []Verdict{NoPeers, Timeouts}, []Verdict{summary.Pods[0].Verdict, summary.Pods[1].Verdict})
+	lines = Result(pair, hung, &summary, false)
+	require.Equal(t, "web-b gave no answer within 5s to 2 of 5 requests; its 3 answers took 20ms to 22ms.", lines[0])
+	require.Equal(t, "The other Pod answered all 5 requests in 23ms or less.", lines[1])
+	single := NewPlan(Scope{Kind: KindPod, Namespace: "gitlab", Name: "web-a"}, plannedPods("web-a"), 1)
+	alone := runOf(single, 3, map[string][]time.Duration{"web-a": ms(20, -1, 21)})
+	summary = Summarize(single, alone, nil)
+	require.Equal(t, Timeouts, summary.Pods[0].Verdict)
 }
 
 func proxyStatus(code int, reason, message string) string {

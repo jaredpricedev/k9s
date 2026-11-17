@@ -253,7 +253,19 @@ func usablePath(path string) bool {
 		}
 	}
 	parsed, err := url.Parse(path)
-	return err == nil && parsed.Host == "" && parsed.Scheme == ""
+	if err != nil || parsed.Host != "" || parsed.Scheme != "" {
+		return false
+	}
+	// A "." or ".." segment, written out or percent-encoded, is refused: a
+	// server or a proxy that resolves it would turn the request into one for
+	// another API path, sent with this user's credentials. The decoded path
+	// is checked, so an encoded slash cannot hide a segment.
+	for _, segment := range strings.Split(parsed.Path, "/") {
+		if segment == "." || segment == ".." {
+			return false
+		}
+	}
+	return !strings.Contains(parsed.Path, "\\")
 }
 
 // httpGet projects one declared probe. It returns false when the container

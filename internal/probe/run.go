@@ -31,6 +31,12 @@ const (
 	Unreachable
 	// Failed means no HTTP response came back from the API server at all.
 	Failed
+	// InFlight means the request left and its answer is still awaited. It
+	// is only seen while a run is in progress.
+	InFlight
+	// Abandoned means the request left and the run ended before its answer
+	// was waited for. The application may still have handled it.
+	Abandoned
 )
 
 // Attempt is one request and its outcome.
@@ -46,8 +52,15 @@ type Attempt struct {
 	Detail string
 }
 
-// Sent reports whether the request left.
+// Sent reports whether the request left. A request that is in flight or
+// was abandoned did leave: the application can see it.
 func (a Attempt) Sent() bool { return a.Outcome != NotSent }
+
+// Finished reports whether the request left and has an outcome: an answer,
+// a timeout or a failure. A request in flight or abandoned has none.
+func (a Attempt) Finished() bool {
+	return a.Outcome != NotSent && a.Outcome != InFlight && a.Outcome != Abandoned
+}
 
 // Response is what a Transport saw for one request.
 type Response struct {
@@ -105,10 +118,18 @@ type Run struct {
 	StartedAt, EndsAt time.Time
 	// Pods is parallel to Plan.Targets.
 	Pods []PodRun
-	// Stopped says why the run ended early: "canceled", "run deadline" or
-	// "denied". Empty when every planned request was sent.
+	// Stopped says why the run ended early: StoppedCanceled,
+	// StoppedDeadline or StoppedDenied. Empty when every planned request
+	// was sent.
 	Stopped string
 }
+
+// Reasons a run ended before every planned request was sent.
+const (
+	StoppedCanceled = "canceled"
+	StoppedDeadline = "run deadline"
+	StoppedDenied   = "denied"
+)
 
 // NewRun is an empty run for the plan, with every request unsent.
 func NewRun(plan *Plan, o Options) *Run {
@@ -144,15 +165,62 @@ func (r *Run) Sent() int {
 	return count
 }
 
-// Progress reports one finished attempt: the target index, the attempt
-// index and the outcome. It is called from the goroutine that sent it.
+// Finished is the number of requests that left and have an outcome.
+func (r *Run) Finished() int {
+	count := 0
+	for i := range r.Pods {
+		for _, attempt := range r.Pods[i].Attempts {
+			if attempt.Finished() {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+// Abandon marks every request still in flight as abandoned and returns how
+// many there were. The caller uses it when it stops waiting for a run: those
+// requests left, so they are not counted as unsent.
+func (r *Run) Abandon() int {
+	count := 0
+	for i := range r.Pods {
+		for n := range r.Pods[i].Attempts {
+			if r.Pods[i].Attempts[n].Outcome == InFlight {
+				r.Pods[i].Attempts[n] = Attempt{Outcome: Abandoned, Detail: abandonedDetail}
+				count++
+			}
+		}
+	}
+	return count
+}
+
+// Abandoned is the number of requests that left and were not waited for.
+func (r *Run) Abandoned() int {
+	count := 0
+	for i := range r.Pods {
+		for _, attempt := range r.Pods[i].Attempts {
+			if attempt.Outcome == Abandoned {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+const abandonedDetail = "canceled before an answer"
+
+// Progress reports one attempt: the target index, the attempt index and its
+// state. It is called twice per request from the goroutine that sends it:
+// with Outcome InFlight just before the request leaves, and with the outcome
+// when there is one. A request abandoned by a cancel is not reported again.
 type Progress func(pod, attempt int, result Attempt)
 
 // Execute sends the plan's requests: up to Concurrency Pods at a time, the
 // requests to one Pod one after another with a pause between them, each
 // under its own deadline. Canceling ctx stops it; what was not sent stays
-// NotSent. After the API server denies pods/proxy, nothing more is sent to
-// any Pod. It returns when every goroutine has stopped.
+// NotSent, and a request that was in flight is Abandoned: it left, so it is
+// not counted as unsent. After the API server denies pods/proxy, nothing more
+// is sent to any Pod. It returns when every goroutine has stopped.
 func Execute(ctx context.Context, transport Transport, plan *Plan, o Options, progress Progress) *Run {
 	o = o.normalized()
 	run := NewRun(plan, o)
@@ -190,8 +258,13 @@ func Execute(ctx context.Context, transport Transport, plan *Plan, o Options, pr
 						return
 					}
 				}
-				result, sent := send(ctx, transport, &request, o.Deadline)
-				if !sent {
+				attempts[n] = Attempt{Outcome: InFlight}
+				if progress != nil {
+					progress(index, n, attempts[n])
+				}
+				result, waited := send(ctx, transport, &request, o.Deadline)
+				if !waited {
+					attempts[n] = Attempt{Outcome: Abandoned, Detail: abandonedDetail}
 					return
 				}
 				attempts[n] = result
@@ -212,18 +285,18 @@ func Execute(ctx context.Context, transport Transport, plan *Plan, o Options, pr
 	run.EndsAt = time.Now().UTC()
 	switch {
 	case denied.Load():
-		run.Stopped = "denied"
+		run.Stopped = StoppedDenied
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		run.Stopped = "run deadline"
+		run.Stopped = StoppedDeadline
 	case ctx.Err() != nil:
-		run.Stopped = "canceled"
+		run.Stopped = StoppedCanceled
 	}
 	return run
 }
 
 // send makes one request under its deadline. It returns false when the run
-// was canceled while the request was in flight: that request has no outcome
-// worth keeping, because nobody waited for it.
+// was canceled while the request was in flight: that request left, but it
+// has no outcome, because nobody waited for it.
 func send(ctx context.Context, transport Transport, request *Request, deadline time.Duration) (Attempt, bool) {
 	requestCtx, cancel := context.WithTimeout(ctx, deadline)
 	defer cancel()
@@ -235,7 +308,7 @@ func send(ctx context.Context, transport Transport, request *Request, deadline t
 	if errors.Is(requestCtx.Err(), context.DeadlineExceeded) && response.Outcome != Answered {
 		attempt = Attempt{Outcome: TimedOut, Took: deadline, Detail: "no answer within the deadline"}
 	}
-	if attempt.Outcome == NotSent {
+	if !attempt.Finished() {
 		attempt.Outcome, attempt.Detail = Failed, "no response"
 	}
 	return attempt, true

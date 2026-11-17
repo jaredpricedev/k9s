@@ -6,6 +6,7 @@ package view
 import (
 	"context"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -181,11 +182,20 @@ func TestProbeRunsOnlyWhatWasConfirmedAndStopsOnEsc(t *testing.T) {
 	v.confirm.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), nil)
 	require.Nil(t, v.confirm)
 
-	// The other declared probe is the only other request there is.
+	// The other declared probe is the only other request there is. The
+	// answers of one path are put aside while the other is shown, never
+	// mixed with it, and come back with their path.
+	readiness := v.run
+	require.NotNil(t, readiness)
 	probePress(t, v, ui.KeyU)
 	require.Equal(t, probe.Liveness, v.plan.Kind)
-	require.Nil(t, v.run, "answers to another path are not kept as if comparable")
+	require.Nil(t, v.run, "answers to another path are not shown as if comparable")
 	require.Contains(t, drawnText(t, v, 132, 32), "GET :8080/-/liveness on each pod, 10 times")
+	probePress(t, v, ui.KeyU)
+	require.Equal(t, probe.Readiness, v.plan.Kind)
+	require.Same(t, readiness, v.run, "one key press does not throw a run away")
+	probePress(t, v, ui.KeyU)
+	require.Nil(t, v.run)
 
 	// Leaving the view cancels and invalidates whatever is in flight.
 	generation := v.generation
@@ -238,7 +248,8 @@ func TestProbeFramesKeepPodMedianAndVerdictAtEverySize(t *testing.T) {
 	narrow := drawnText(t, v, 60, 20)
 	require.NotContains(t, narrow, "ZONE")
 	require.Contains(t, narrow, "SLOWEST")
-	require.Contains(t, narrow, "…lt-6f9c7d5b84-hx4mt", "a shortened name keeps the end that tells the Pods apart")
+	require.Contains(t, narrow, "…-6f9c7d5b84-hx4mt", "a shortened name keeps the end that tells the Pods apart")
+	require.NotContains(t, narrow, "…lt-", "and is cut at a dash, not inside a word")
 
 	// A second run keeps the first as a dimmer row under each Pod.
 	probeFinish(t, v, story)
@@ -270,9 +281,95 @@ func TestProbeNoIconsUsesASCIIOnly(t *testing.T) {
 	}
 	require.Regexp(t, `>! \S*-hx4mt .* 2\.73s .* >=5s .*OUTLIER`, frame)
 	require.Regexp(t, `-hx4mt ([_.:=+*#x-] ){4}[_.:=+*#x-] `, frame)
+	probePress(t, v, ui.Key4)
+	probePress(t, v, ui.KeyR)
+	require.NotNil(t, v.confirm)
+	dialog := drawnText(t, v.confirm, 80, 24)
+	require.Contains(t, dialog, "Tab switches | Enter chooses | Esc cancels")
+	for _, glyph := range []string{"·", "…", "×"} {
+		require.NotContains(t, dialog, glyph)
+	}
+	v.confirm.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), nil)
 	require.Contains(t, frame, "full bar # = ")
 	require.Contains(t, frame, "Only ...-hx4mt answered slowly")
 	require.Contains(t, frame, " | ")
+}
+
+// A request that was in flight when Esc was pressed did reach the API
+// server. It is counted as sent and drawn as abandoned, never as unsent.
+func TestProbeCountsARequestInFlightAtCancelAsSent(t *testing.T) {
+	v, _ := probeViewFixture(t)
+	v.acceptPlan(probeTestPlan(), nil)
+	v.selected = probePodC
+	v.run = probe.NewRun(v.plan, probe.Options{Attempts: 5})
+	v.ranAt = time.Now().UTC().Add(-4 * time.Second)
+	v.run.StartedAt = v.ranAt
+	v.running = true
+	fast := probe.Attempt{Outcome: probe.Answered, Code: 200, Took: 20 * time.Millisecond}
+	for n := range 5 {
+		v.run.Pods[0].Attempts[n], v.run.Pods[1].Attempts[n] = fast, fast
+	}
+	v.run.Pods[2].Attempts[0] = probe.Attempt{Outcome: probe.Answered, Code: 200, Took: 2320 * time.Millisecond}
+	v.run.Pods[2].Attempts[1] = probe.Attempt{Outcome: probe.InFlight}
+	v.render()
+	frame := drawnText(t, v, 132, 32)
+	require.Contains(t, frame, "Sending: 11 of 15 done", "a request in flight is not done")
+	require.Regexp(t, `-hx4mt \S ~ · · · .* 0 of 1 .*probing`, frame, "in flight is drawn as such, and not counted as answered in time")
+	require.Contains(t, frame, "2.32s waiting")
+
+	probePress(t, v, tcell.KeyEscape)
+	require.False(t, v.running)
+	require.Equal(t, 12, v.run.Sent())
+	require.Equal(t, 1, v.run.Abandoned())
+	frame = drawnText(t, v, 132, 32)
+	flat := strings.Join(strings.Fields(frame), " ")
+	require.Contains(t, flat, "12 sent in")
+	require.Contains(t, flat, "Canceled: 12 of 15 requests were sent, 1 of them still in flight and abandoned without an answer "+
+		"(the application may still handle it); the rest were not.")
+	require.Regexp(t, `-hx4mt \S \? · · · .* 0 of 1 `, frame)
+	require.Contains(t, frame, "2.32s abandoned")
+	require.NotContains(t, frame, "...", "nothing is elided from five requests")
+
+	// Leaving the view with a request in flight records it the same way.
+	v.run.Pods[2].Attempts[2] = probe.Attempt{Outcome: probe.InFlight}
+	v.running = true
+	v.Stop()
+	require.Equal(t, 2, v.run.Abandoned())
+	require.Equal(t, "canceled", v.run.Stopped)
+}
+
+// A request without an answer is flagged on its own, with few Pods and when
+// every Pod has one; and more than twelve times are counted, not cut.
+func TestProbeFlagsTimeoutsWithoutPeersAndCountsElidedTimes(t *testing.T) {
+	v, _ := probeViewFixture(t)
+	plan := probe.NewPlan(v.scope, []probe.Pod{
+		probeTestPod(probePodA, "worker-d", "study-zone-a", true), probeTestPod(probePodB, "worker-e", "study-zone-b", true),
+	}, 2)
+	plan.Access = probe.AccessAllowed
+	v.acceptPlan(plan, nil)
+	v.attempts = 20
+	// Counted per Pod, so the answers do not depend on which Pod is asked
+	// first.
+	var mu sync.Mutex
+	calls := map[string]int{}
+	probeFinish(t, v, probeTransportFunc(func(request *probe.Request) probe.Response {
+		mu.Lock()
+		calls[request.Pod]++
+		n := calls[request.Pod]
+		mu.Unlock()
+		if request.Pod == probePodB && n%8 == 0 {
+			return probe.Response{Outcome: probe.TimedOut, Took: 5 * time.Second}
+		}
+		return probe.Response{Outcome: probe.Answered, Code: 200, Took: 20 * time.Millisecond}
+	}))
+	require.Equal(t, probePodB, v.selected, "the cursor starts on the Pod with requests that got no answer")
+	frame := drawnText(t, v, 132, 32)
+	require.Regexp(t, `>! \S*-8wzpd .* 2 of 20 .*TIMEOUTS`, frame)
+	require.Regexp(t, `   \S*-2bq7k .* 0 of 20 .*answered`, frame)
+	flat := strings.Join(strings.Fields(frame), " ")
+	require.Contains(t, flat, "…-8wzpd gave no answer within 5s to 2 of 20 requests; its 18 answers took 20ms.")
+	require.Contains(t, flat, "The other Pod answered all 20 requests in 20ms or less.")
+	require.Contains(t, flat, "... (8 more)")
 }
 
 func TestProbeStatesWhyNothingCanBeSent(t *testing.T) {
@@ -285,6 +382,8 @@ func TestProbeStatesWhyNothingCanBeSent(t *testing.T) {
 	require.Contains(t, frame, "The listed Pod does not declare an httpGet readinessProbe or livenessProbe")
 	require.Contains(t, frame, "The path is never typed.")
 	require.Contains(t, v.runUnavailable(), "nothing this command may send")
+	require.NotContains(t, v.footer.GetText(true), "r run", "a key that would send nothing is not offered")
+	require.Contains(t, v.footer.GetText(true), "Enter open pod")
 	probePress(t, v, ui.KeyR)
 	require.Nil(t, v.confirm)
 	require.Zero(t, story.calls.Load())
@@ -395,5 +494,9 @@ func TestProbeIsRegisteredAndBoundWhereItApplies(t *testing.T) {
 	require.Equal(t, probeColumns{pod: 20, strip: 9, slowest: 7, verdict: 10, spaced: true}, probeLayout(60, 5, 42, 8, 12))
 	require.Equal(t, probeColumns{pod: 18, verdict: 10}, probeLayout(40, 30, 42, 8, 12), "pod, median and the verdict word are never given up")
 	require.Equal(t, "…-6f9c7d5b84-hx4mt", strings.TrimSpace(probeTail(probePodC, 18, false)))
+	require.Equal(t, "…-6f9c7d5b84-hx4mt", strings.TrimSpace(probeTail(probePodC, 20, false)), "cut at a dash, not inside \"default\"")
+	require.Equal(t, "…-webservice-default-6f9c7d5b84-hx4mt", strings.TrimSpace(probeTail(probePodC, 38, false)))
+	require.Equal(t, "…bcdefghijklmnopqrstuvwxyz", probeTail("0abcdefghijklmnopqrstuvwxyz", 26, false),
+		"a name without a dash keeps as much of its end as fits")
 	require.Equal(t, "~-6f9c7d5b84-hx4mt", strings.TrimSpace(probeTail(probePodC, 18, true)))
 }

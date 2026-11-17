@@ -61,14 +61,18 @@ type probeView struct {
 	// by the UI goroutine. A running probe reports each answer into run.
 	run, previous     *probe.Run
 	ranAt, previousAt time.Time
-	elapsed           time.Duration
-	loading, running  bool
-	active            bool
-	cancel            context.CancelFunc
-	generation        uint64
-	header, detail    *tview.TextView
-	footer            *tview.TextView
-	body              *tview.TextView
+	// kept holds the runs of the other declared probe kind, so that looking
+	// at the liveness path does not throw away what the readiness path
+	// answered. Runs of two kinds are never shown side by side.
+	kept             map[probe.Kind]probeRuns
+	elapsed          time.Duration
+	loading, running bool
+	active           bool
+	cancel           context.CancelFunc
+	generation       uint64
+	header, detail   *tview.TextView
+	footer           *tview.TextView
+	body             *tview.TextView
 	// rowOf is the body line of each target; bodyHeight is the number of
 	// body lines on screen, bodyLines how many there are and offset the
 	// first one shown.
@@ -87,6 +91,13 @@ type probeView struct {
 	rendering bool
 	// confirm is the open question, or nil.
 	confirm *probeConfirm
+}
+
+// probeRuns are the runs made with one declared probe kind.
+type probeRuns struct {
+	run, previous     *probe.Run
+	ranAt, previousAt time.Time
+	elapsed           time.Duration
 }
 
 // probeScope says whether a selection can be probed, and as what.
@@ -347,8 +358,8 @@ func (v *probeView) Start() {
 // Stop leaves the view. A probe in flight is canceled: nothing keeps
 // sending requests for a view nobody is looking at.
 func (v *probeView) Stop() {
-	if v.running && v.run != nil {
-		v.run.Stopped = "canceled"
+	if v.running {
+		v.endRun()
 	}
 	if v.confirm != nil {
 		v.confirm = nil
@@ -604,6 +615,18 @@ func (v *probeView) finish(done *probe.Run) {
 	v.render()
 }
 
+// endRun closes the books of a run that is being stopped. A request that
+// was in flight did leave, so it is recorded as abandoned, not as unsent.
+func (v *probeView) endRun() {
+	if v.run == nil {
+		return
+	}
+	v.run.Abandon()
+	v.run.Stopped = probe.StoppedCanceled
+	v.run.EndsAt = time.Now().UTC()
+	v.elapsed = v.run.EndsAt.Sub(v.run.StartedAt)
+}
+
 // cancelRun stops a running probe. Requests in flight are abandoned and
 // what was not sent stays unsent; the answers so far remain on screen.
 func (v *probeView) cancelRun() {
@@ -616,11 +639,7 @@ func (v *probeView) cancelRun() {
 		v.cancel = nil
 	}
 	v.running = false
-	if v.run != nil {
-		v.run.Stopped = "canceled"
-		v.run.EndsAt = time.Now().UTC()
-		v.elapsed = v.run.EndsAt.Sub(v.run.StartedAt)
-	}
+	v.endRun()
 	v.app.Flash().Info("Probe canceled; no further request is sent")
 	v.render()
 }
@@ -637,7 +656,8 @@ func (v *probeView) setAttempts(count int) {
 }
 
 // nextKind switches between the declared readiness and liveness probes.
-// Answers to another path are not comparable, so earlier runs are dropped.
+// Answers to another path are not comparable, so the runs of one kind are
+// put aside while the other is shown, and come back with it.
 func (v *probeView) nextKind() {
 	switch {
 	case v.running:
@@ -645,8 +665,13 @@ func (v *probeView) nextKind() {
 	case v.plan == nil || len(v.plan.Available) < 2:
 		v.app.Flash().Warn("These Pods declare one kind of HTTP probe; the path is never typed")
 	default:
+		if v.kept == nil {
+			v.kept = map[probe.Kind]probeRuns{}
+		}
+		v.kept[v.plan.Kind] = probeRuns{run: v.run, previous: v.previous, ranAt: v.ranAt, previousAt: v.previousAt, elapsed: v.elapsed}
 		v.plan.Select(v.plan.NextKind())
-		v.run, v.previous = nil, nil
+		back := v.kept[v.plan.Kind]
+		v.run, v.previous, v.ranAt, v.previousAt, v.elapsed = back.run, back.previous, back.ranAt, back.previousAt, back.elapsed
 		v.render()
 	}
 }

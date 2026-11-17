@@ -120,29 +120,46 @@ func probeTail(name string, width int, ascii bool) string {
 		mark = "~"
 	}
 	runes := []rune(name)
-	for len(runes) > 0 && runewidth.StringWidth(string(runes))+runewidth.StringWidth(mark) > width {
-		runes = runes[1:]
+	cut := 0
+	for cut < len(runes) && runewidth.StringWidth(string(runes[cut:]))+runewidth.StringWidth(mark) > width {
+		cut++
 	}
-	return runewidth.FillRight(mark+string(runes), width)
+	// A name is cut at a dash when one is near, so that what remains starts
+	// with a whole part ("…-6f9c7d5b84-hx4mt", not "…lt-6f9c7d5b84-hx4mt").
+	if cut > 0 && cut < len(runes) && runes[cut] != '-' {
+		for next := cut; next < len(runes) && next-cut <= 12; next++ {
+			if runes[next] == '-' && len(runes)-next >= min(8, width-1) {
+				cut = next
+				break
+			}
+		}
+	}
+	return runewidth.FillRight(mark+string(runes[cut:]), width)
 }
 
 type probeGlyphs struct {
 	timeout, failed, unsent string
+	// waiting is a request in flight and abandoned one that was in flight
+	// when the run was canceled. Both are plain ASCII in either mode.
+	waiting, abandoned      string
 	times, sep, arrow, full string
 }
 
 func (v *probeView) glyphs() probeGlyphs {
 	if v.noIcons() {
-		return probeGlyphs{timeout: string(chart.GapASCII), failed: "!", unsent: " ", times: "x", sep: " | ", arrow: "->", full: "#"}
+		return probeGlyphs{timeout: string(chart.GapASCII), failed: "!", unsent: " ", waiting: "~", abandoned: "?",
+			times: "x", sep: " | ", arrow: "->", full: "#"}
 	}
-	return probeGlyphs{timeout: string(chart.GapGlyph), failed: "!", unsent: "·", times: "×", sep: " · ", arrow: "→", full: "█"}
+	return probeGlyphs{timeout: string(chart.GapGlyph), failed: "!", unsent: "·", waiting: "~", abandoned: "?",
+		times: "×", sep: " · ", arrow: "→", full: "█"}
 }
 
 // probeStrip draws one cell per request, in the order they were sent, on a
 // scale shared by every row: the height of a bar is the time to the first
 // byte and top is a full bar. A request without an answer is a cross, one
-// the API server could not deliver is "!", and one never sent is a dot:
-// none of them is drawn as a bar, because none of them is a time.
+// the API server could not deliver is "!", one in flight is "~", one that
+// was in flight when the run was canceled is "?", and one never sent is a
+// dot: none of them is drawn as a bar, because none of them is a time.
 //
 // Every cell carries a complete tag: in this terminal library a tag
 // replaces the whole style, so the row's surface is repeated in each.
@@ -159,6 +176,10 @@ func (v *probeView) probeStrip(attempts []probe.Attempt, top, slowLine float64, 
 		switch attempt.Outcome {
 		case probe.NotSent:
 			color, glyph = dim, g.unsent
+		case probe.InFlight:
+			color, glyph = dim, g.waiting
+		case probe.Abandoned:
+			color, glyph = dim, g.abandoned
 		case probe.Answered:
 			seconds := attempt.Took.Seconds()
 			color = normal
@@ -242,7 +263,7 @@ func (v *probeView) headerLines(summary *probe.Summary) []string {
 	case v.plan == nil:
 		state, color = "Not read: "+v.planErr, p.Failure
 	case v.running:
-		done := fmt.Sprintf("Sending: %d of %d done", v.run.Sent(), v.run.Planned())
+		done := fmt.Sprintf("Sending: %d of %d done", v.run.Finished(), v.run.Planned())
 		state, color = impactFit(width,
 			strings.Join([]string{done, probe.Seconds(v.elapsed.Seconds()), "Esc cancels; what was not sent stays unsent"}, g.sep),
 			done+g.sep+"Esc cancels"), p.Progress
@@ -306,9 +327,9 @@ func probeRowColor(p *config.SemanticPalette, verdict probe.Verdict) (config.Col
 	switch verdict {
 	case probe.Outlier, probe.NoAnswer:
 		return p.Failure, true
-	case probe.Spikes, probe.Errors:
+	case probe.Spikes, probe.Timeouts, probe.Errors:
 		return p.Warning, true
-	case probe.NotContacted, probe.Unprobed:
+	case probe.NotContacted, probe.Unprobed, probe.Canceled:
 		return p.Muted, false
 	}
 	return p.Text, false
@@ -385,13 +406,15 @@ func (v *probeView) rowStrip(row *probeRow, columns *probeColumns, attempts []pr
 func (v *probeView) rowNumbers(row *probeRow, columns *probeColumns, stats *probe.PodStats) {
 	ascii := v.noIcons()
 	fastest, median, slowest, over, codes := "", "", "", "", ""
-	if stats.Sent > 0 {
+	// The counts are of requests with an outcome: one in flight or abandoned
+	// was sent but says nothing about whether an answer came in time.
+	if stats.Finished > 0 {
 		fastest = "-"
 		if stats.Answered > 0 {
 			fastest = probe.Seconds(stats.Fastest.Seconds())
 		}
 		median, slowest = stats.TypicalText(ascii), stats.WorstText(ascii)
-		over, codes = fmt.Sprintf("%d of %d", stats.TimedOut, stats.Sent), stats.CodesText()
+		over, codes = fmt.Sprintf("%d of %d", stats.TimedOut, stats.Finished), stats.CodesText()
 	}
 	row.right(fastest, columns.fastest)
 	row.right(median, probeNumberWidth)
@@ -444,7 +467,7 @@ func (v *probeView) podRow(columns *probeColumns, label string, run *probe.Run, 
 	row.left(zone, columns.zone)
 	word := stats.Verdict.Word()
 	switch {
-	case v.running && !dim && stats.Sent < stats.Planned:
+	case v.running && !dim && stats.Finished < stats.Planned:
 		word = "probing"
 	case columns.verdict >= probeVerdictWide && stats.Mark(v.noIcons()) != "":
 		word += " " + stats.Mark(v.noIcons())
@@ -582,20 +605,24 @@ func (v *probeView) selectedLine(summary *probe.Summary) string {
 	}
 	if v.run != nil && index >= 0 && index < len(v.run.Pods) && summary.Pods[index].Sent > 0 {
 		var times []string
-		for n, attempt := range v.run.Pods[index].Attempts {
-			if n == 12 {
-				times = append(times, "...")
-				break
-			}
+		for _, attempt := range v.run.Pods[index].Attempts {
 			switch attempt.Outcome {
 			case probe.NotSent:
 			case probe.Answered:
 				times = append(times, probe.Seconds(attempt.Took.Seconds()))
 			case probe.TimedOut:
 				times = append(times, "timeout")
+			case probe.InFlight:
+				times = append(times, "waiting")
+			case probe.Abandoned:
+				times = append(times, "abandoned")
 			default:
 				times = append(times, attempt.Detail)
 			}
+		}
+		// The first twelve are written out; the strip shows every one.
+		if shown := 12; len(times) > shown {
+			times = append(times[:shown], fmt.Sprintf("... (%d more)", len(times)-shown))
 		}
 		parts = append(parts, strings.Join(times, " "))
 		if codes := summary.Pods[index].CodesDetail(ascii); codes != "" {
@@ -772,6 +799,9 @@ func (v *probeView) detailLines(summary *probe.Summary, level int) []probeLine {
 			if i == 0 && (summary.Denied || strings.HasPrefix(line, "Only ") || strings.Contains(line, "slower than their peers")) {
 				color = p.Failure
 			}
+			if i == 0 && strings.Contains(line, "gave no answer") {
+				color = p.Warning
+			}
 			add(line, color, i == 0)
 		}
 		if v.running {
@@ -801,6 +831,10 @@ func (v *probeView) footerText() string {
 	}
 	keys := []string{"r run", strings.Join(choices, "  ") + " per pod"}
 	brief := []string{"r run", fmt.Sprintf("1-%d requests per pod", len(probe.AttemptChoices))}
+	if v.plan != nil && v.runUnavailable() != "" {
+		// A key that would send nothing is not offered; the pane says why.
+		keys, brief = nil, nil
+	}
 	if v.plan != nil && len(v.plan.Available) > 1 {
 		keys = append(keys, "u "+string(v.plan.NextKind())+" probe")
 		brief = append(brief, "u probe")
