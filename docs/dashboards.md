@@ -147,7 +147,8 @@ one stands for.
    so is one that uses a variable without a saved value, an undefined
    variable or an unsupported variable type.
 4. `$__interval` is the step. `$__rate_interval` is four steps and at least
-   two minutes. Grafana derives it from the datasource's scrape interval,
+   two minutes, the range `:slow`, `:graph` and `:impact` take a rate over
+   for the same step. Grafana derives it from the datasource's scrape interval,
    which is not read here; this value is at least as wide for scrape
    intervals up to 30 seconds. `$__range`, `$__range_s`, `$__range_ms` and
    `$__interval_ms` follow the window and step.
@@ -248,18 +249,33 @@ page also lists the named queries.
 
 ### Named queries
 
-Shipped, for looking into a request that hangs:
+Shipped, for looking into a request that hangs. Each one is a signal of a
+request-path profile ([request-path.md](request-path.md)): the reading
+`:slow` makes of that hop, kept apart by one more label and written with
+`$namespace`, `$pod` and `$__rate_interval` in place of the object and the
+range. No query text is kept for them. The text is written from the profile
+by the builder `:slow` uses, so a shipped query and `:slow` ask the same
+metric with the same matchers, and their numbers agree for the same window.
 
-| Name | Chart | Expression uses |
-| --- | --- | --- |
-| `throttled` | Share of CPU periods in which each Pod was throttled at its limit | `container_cpu_cfs_throttled_periods_total` / `container_cpu_cfs_periods_total` by `pod` (cAdvisor) |
-| `ingress-499` | Share of requests the client gave up on, per Ingress of the namespace | `nginx_ingress_controller_requests{status="499"}` by `ingress` (ingress-nginx, with its `namespace` label) |
-| `puma-queue` | Connections waiting for a free Puma thread, per Pod | `puma_queued_connections` by `pod` (GitLab webservice) |
-| `dns-p99` | 99th percentile of DNS request duration, cluster-wide | `coredns_dns_request_duration_seconds_bucket` |
-| `hubble-drops` | Dropped packets per second by reason, cluster-wide | `hubble_drop_total` by `reason` (Cilium Hubble metrics) |
+| Name | Chart | Profile and signal | Kept apart by |
+| --- | --- | --- | --- |
+| `throttled` | Share of CPU periods in which a container was throttled at its limit | `container-cpu` / `throttled` | Pod |
+| `ingress-499` | Requests per second the client closed while waiting (HTTP 499) | `ingress-nginx` / `499` | Ingress of the namespace |
+| `puma-queue` | Connections waiting for a free Puma thread | `gitlab-webservice` / `queued` | Pod |
+| `dns-p99` | 99th percentile of DNS request duration at CoreDNS, cluster-wide | `coredns` / `p99` | nothing |
+| `hubble-drops` | Packets per second dropped on the way to the selected Pods | `cilium-hubble` / `drops` | Pod and reason |
 
-The metric and label names are the defaults of those exporters. Nothing
-checks that they exist: a query that matches nothing says so.
+The profile is the one the context reads that hop with by default, when it
+has a signal of that name, else the one in the table: with
+`requestPath.defaults.ingress: [ingress-nginx-exported]`, `ingress-499`
+selects by `exported_namespace` as `:slow` does. A profile declared under the
+same name (`extends`) changes the shipped query with it. A scope field that
+`:query` has no variable for (the Service, the Ingress) does not narrow the
+query. `hubble-drops` and the three per-Pod queries need a namespace; without
+a selection they say which variable has no value, and `dns-p99` is still
+drawn. The `About` line of a shipped query names its profile and signal.
+
+Nothing checks that the metrics exist: a query that matches nothing says so.
 
 Your own, per context, in the context configuration file:
 

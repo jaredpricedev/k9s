@@ -52,6 +52,43 @@ import gitlab_hang_fixture as gitlab  # noqa: E402
 import observability_sources_fixture as observed  # noqa: E402
 
 POD_PROXY_PATH = re.compile(r"^/api/v1/namespaces/([a-z0-9-]+)/pods/([a-z0-9.:-]+)/proxy(/.*)?$")
+INGRESS_LIST_PATH = re.compile(r"^/apis/networking\.k8s\.io/v1/(?:namespaces/([a-z0-9-]+)/)?ingresses$")
+
+
+def _age(created):
+    """A creation time as a server-printed age: 6d5h, 12m, 11s."""
+    try:
+        seconds = int((datetime.now(timezone.utc) - datetime.fromisoformat(created.replace("Z", "+00:00"))).total_seconds())
+    except (AttributeError, ValueError):
+        return "<unknown>"
+    seconds = max(seconds, 0)
+    days, hours, minutes = seconds // 86400, seconds % 86400 // 3600, seconds % 3600 // 60
+    if days:
+        return "%dd%dh" % (days, hours) if hours else "%dd" % days
+    if hours:
+        return "%dh%dm" % (hours, minutes) if minutes else "%dh" % hours
+    return "%dm" % minutes if minutes else "%ds" % seconds
+
+
+def ingress_table(objects, namespace):
+    """The server-side table of an Ingress list, the form the resource browser
+    asks for (Accept: as=Table). Columns are those of a real API server."""
+    columns = [("Name", "name"), ("Class", ""), ("Hosts", ""), ("Address", ""), ("Ports", ""), ("Age", "")]
+    rows = []
+    for item in objects:
+        if item["kind"] != "Ingress" or (namespace and item["metadata"].get("namespace") != namespace):
+            continue
+        spec, status = item.get("spec", {}), item.get("status", {})
+        hosts = ",".join(rule.get("host", "*") for rule in spec.get("rules", [])) or "*"
+        address = ",".join(entry.get("ip") or entry.get("hostname", "") for entry in status.get("loadBalancer", {}).get("ingress", []))
+        rows.append({"cells": [item["metadata"]["name"], spec.get("ingressClassName", "<none>"), hosts, address,
+                               "80, 443" if spec.get("tls") else "80", _age(item["metadata"].get("creationTimestamp"))],
+                     "object": {"kind": "PartialObjectMetadata", "apiVersion": "meta.k8s.io/v1",
+                                "metadata": deepcopy(item["metadata"])}})
+    return {"kind": "Table", "apiVersion": "meta.k8s.io/v1", "metadata": {"resourceVersion": "100"},
+            "columnDefinitions": [{"name": name, "type": "string", "format": form, "description": name, "priority": 0}
+                                  for name, form in columns],
+            "rows": rows}
 
 
 class StudyHandler(daily.WorkspaceHandler):
@@ -90,6 +127,12 @@ class StudyHandler(daily.WorkspaceHandler):
             except (BrokenPipeError, ConnectionResetError):
                 pass  # the caller gave up waiting, as a probe with a deadline does
             return None
+        listed = INGRESS_LIST_PATH.match(self.path.split("?", 1)[0])
+        if listed and "as=Table" in self.headers.get("Accept", "") and "watch=" not in self.path:
+            # The resource browser lists Ingresses as a server-side table;
+            # the inherited handler only knows the plain list.
+            self.record("GET")
+            return self.reply(ingress_table(self.server.objects, listed.group(1)))
         if self.path.startswith("/apis/metrics.k8s.io/"):
             self.record("GET")
             return self.failure(403, "Forbidden", "Synthetic fixture denies metrics API reads")
@@ -498,12 +541,16 @@ def smoke_sources(base):
             "one silenced and one inhibited alert; --deny-source answers HTTP 403"]
 
 
-def smoke_gitlab(base):
+def smoke_gitlab(base, started):
     """The GitLab hang scenario: every Pod Ready, one webservice Pod the
-    outlier in three stalls, healthy neighbours, a slow Pod proxy answer."""
+    outlier in three stalls, healthy neighbours, a slow Pod proxy answer.
+
+    started is the fixture's own start time, which the story is measured
+    from. The checks sample one second inside a stall, so reading the clock
+    again here would fail whenever the checks before this one took longer."""
     prometheus = "/api/v1/namespaces/monitoring/services/prometheus:9090/proxy"
     grafana = "/api/v1/namespaces/monitoring/services/grafana:3000/proxy"
-    now = datetime.now(timezone.utc).timestamp()
+    now = started
 
     def instant(expression, at):
         value = named_get(base, prometheus + "/api/v1/query?query=" + quote(expression) + "&time=%.3f" % at)
@@ -523,6 +570,15 @@ def smoke_gitlab(base):
     assert targets == {p["metadata"]["uid"] for p in web}, "EndpointSlice targets are the webservice Pod UIDs"
     ingress = named_get(base, "/apis/networking.k8s.io/v1/namespaces/gitlab/ingresses/" + gitlab.INGRESS)
     assert ingress["spec"]["rules"][0]["http"]["paths"][0]["backend"]["service"]["name"] == gitlab.SERVICE
+    # The resource browser lists Ingresses as a server-side table.
+    listing = Request(base + "/apis/networking.k8s.io/v1/namespaces/gitlab/ingresses?includeObject=Metadata",
+                      headers={"Accept": "application/json;as=Table;v=v1;g=meta.k8s.io,application/json"})
+    with urlopen(listing, timeout=2) as response:
+        table = json.loads(response.read())
+    assert table["kind"] == "Table" and [row["cells"][:5] for row in table["rows"]] == [
+        [gitlab.INGRESS, "gitlab-nginx", gitlab.HOST, "203.0.113.10", "80, 443"]], table
+    assert table["rows"][0]["object"]["metadata"]["uid"] == ingress["metadata"]["uid"], "the table row carries the Ingress identity"
+    assert named_get(base, "/apis/networking.k8s.io/v1/namespaces/gitlab/ingresses")["kind"] == "IngressList"
     assert named_get(base, "/api/v1/namespaces/kube-system/services/kube-dns")["spec"]["clusterIP"] == "10.0.0.10"
 
     p99 = ('histogram_quantile(0.99, sum by (pod,le) (rate(http_request_duration_seconds_bucket'
@@ -665,7 +721,7 @@ def smoke():
                 assert error.code == 405, (method, error.code)
                 checks.append(method + " rejected with HTTP 405")
         checks.extend(smoke_sources(base))
-        checks.extend(smoke_gitlab(base))
+        checks.extend(smoke_gitlab(base, api.observability.start))
         return checks
     finally:
         api.shutdown()

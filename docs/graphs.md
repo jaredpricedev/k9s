@@ -23,7 +23,11 @@ with that reason and reads nothing, and the "next:" line of a list never
 names `:graph`.
 
 `Shift-D` on the graph hands the same object to Grafana with the graph's own
-window ([grafana-handoff.md](grafana-handoff.md)).
+window ([grafana-handoff.md](grafana-handoff.md)). `Shift-W` opens `:slow`
+([slow-requests.md](slow-requests.md)) and `Shift-B` opens `:probe`
+([probe.md](probe.md)) for the graphed object, the keys that open them from a
+row; for a Node, which has neither, the key says so. In `:slow`, `m` opens
+the per-Pod page below.
 
 ## What is never done
 
@@ -219,6 +223,12 @@ Cursor 09:41:00Z (window end) · hx4mt 346ms · 8wzpd 346ms · 2bq7k 346ms
   line is always the last line, and a status that does not fit two lines
   keeps the count of what is not shown.
 - `p` returns to the overlaid lines. `s` lists the per-Pod queries too.
+- `:slow` opens this page with `m`: for the Pods behind its Service, on the
+  signal that set a Pod apart there (for example `p99`) and for the window it
+  read, so the two views show the same Pods, the same reading and the same
+  minutes. The signal is named as `profile/signal`; when this page reads that
+  reading under its own name (`throttled`, `cpu`, `memory`, `restarts`) the
+  name alone finds it, and an unknown one opens on the first signal.
 - On a page whose read did not succeed there is nothing to compare; `p`, `n`
   and `g` say so and point at `r`.
 
@@ -253,7 +263,8 @@ itself. For a workload it is a Service of the namespace whose selector
 matches the workload's Pod template, found with one Get of the workload and
 one list of at most 200 Services; a Service that has a declaration is
 preferred, else the first by name, and the `s` page says which was used and
-why. Of a profile, the signals that name a worse side and can be read per Pod
+why. This is the lookup `:slow` makes for a workload, so both views read the
+same declaration for the same Pods. Of a profile, the signals that name a worse side and can be read per Pod
 are compared (for `gitlab-webservice`: `p99`, `5xx`, `queued`,
 `free-threads`, `busy-threads`), at most six; the two `container-cpu`
 signals are the page's own `throttled` and `cpu`. A signal whose metric is

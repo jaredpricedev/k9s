@@ -199,11 +199,13 @@ func TestQueryBoardDrawsEveryNamedQueryForTheSelection(t *testing.T) {
 		"read 05:00:07Z · 5 of 5 panels drawn · 5 of 5 queries answered",
 		"namespace=gitlab (selection) · pod=~gitlab-webservice-default-.+ (name prefix of the workload)",
 		"> throttled · CPU throttled share by pod  a …2bq7k 1.2%", "b …8wzpd 1.2%  c …hx4mt 4% peak 86%",
-		"ingress-499 · 499 share at ingress", "gitlab-webservice-default 0.02% peak 6.3%",
+		// The shipped queries are the request-path profile signals :slow
+		// reads: 499 is a rate there, so it is a rate here.
+		"ingress-499 · 499 per second at the ingress", "gitlab-webservice-default 0/s peak 0.06/s",
 		"puma-queue · Puma queued connections by pod", "a …2bq7k 0  b …8wzpd 0  c …hx4mt 0 peak 40",
 		"dns-p99 · DNS request duration p99  p99 6ms",
 		// A line that stopped before the window did says when.
-		"hubble-drops · Hubble drops by reason", "a POLICY_DENIED – last 04:20 peak 0.8/s", "b STALE_OR_UNROUTABLE_IP 0.01/s",
+		"hubble-drops · Hubble drops to the pods, by reason", "a POLICY_DENIED – last 04:20 peak 0.8/s", "b STALE_OR_UNROUTABLE_IP 0.01/s",
 	} {
 		require.Contains(t, text, want)
 	}
@@ -212,14 +214,15 @@ func TestQueryBoardDrawsEveryNamedQueryForTheSelection(t *testing.T) {
 	require.Contains(t, text, "> throttled · CPU throttled share by pod  a …2bq7k 1.2%  b …8wzpd 1.2%")
 	require.Contains(t, text, "1-2/5 ↑↓")
 
-	// Nothing with a namespace is selected: the namespaced queries say so,
-	// the cluster-wide ones are drawn.
+	// Nothing with a namespace is selected: the queries about a namespace's
+	// Pods say so, the cluster-wide one is drawn. Drops are read towards the
+	// selected Pods, as :slow reads them, so they need a namespace too.
 	s = loadDash(t.Context(), dashStory(), board, spec, "no selection", dashboard.Selection{}, time.Hour, graphNow)
 	text = dashText(t, s, dashPageOf(132, 32))
 	require.Contains(t, text, "> throttled · CPU throttled share by pod · NOT DRAWN: variable $namespace is not resolved: nothing with a namespace is selected")
-	require.Contains(t, text, "2 of 5 panels drawn, 3 not drawn (s lists why) · 2 of 2 queries answered")
-	require.Contains(t, text, "hubble-drops · Hubble drops by reason")
-	require.Contains(t, text, "a POLICY_DENIED – last 04:20 peak 0.8/s")
+	require.Contains(t, text, "1 of 5 panels drawn, 4 not drawn (s lists why) · 1 of 1 queries answered")
+	require.Contains(t, text, "hubble-drops · Hubble drops to the pods, by reason · NOT DRAWN: variable $namespace is not resolved")
+	require.Contains(t, text, "dns-p99 · DNS request duration p99  p99 6ms")
 }
 
 func TestQueryPageChartsATypedExpressionAndSaysWhatWentWrong(t *testing.T) {

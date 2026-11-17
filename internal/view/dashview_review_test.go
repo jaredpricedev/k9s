@@ -97,7 +97,7 @@ func TestQueryPageOffersExploreWhenEveryReadFailed(t *testing.T) {
 		h := v.app.Content.GetPrimitive(grafanaDialogPage).(*grafanaHandoff)
 		text := handoffText(h, 100)
 		require.NotContains(t, text, "No expression was sent")
-		require.Contains(t, text, "Link    Explore metrics · sum by (pod)")
+		require.Regexp(t, `Link    Explore metrics · \(?sum by \(pod\)`, text)
 		h.close()
 	}
 	require.Len(t, fake.copied, 2)

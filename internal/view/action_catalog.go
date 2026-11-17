@@ -124,6 +124,12 @@ func actionCatalog(owner actionOwner, app *App) []ui.ActionDescriptor {
 	result = foldKeyIntoCommand(result, ui.KeyM, "Graph", "resource.graph")
 	result = foldKeyIntoCommand(result, ui.KeyT, "Timeline", "resource.timeline")
 	result = foldKeyIntoCommand(result, slowKey, slowTitle, "resource.slow")
+	result = foldKeyIntoCommand(result, probeKey, probeTitle, "resource.probe")
+	// In :slow, m opens the per-Pod page of :graph; in :graph, p shows it.
+	// There the key knows more than the typed command (which Service, which
+	// signal, which window), so the entry runs what the key runs.
+	result = foldCommandIntoKey(result, ui.KeyM, graphPodsShort, "resource.graph-pods")
+	result = foldCommandIntoKey(result, ui.KeyP, "Per pod", "resource.graph-pods")
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Category != result[j].Category {
 			return ui.ActionCategoryOrder(result[i].Category) < ui.ActionCategoryOrder(result[j].Category)
@@ -151,6 +157,30 @@ func foldKeyIntoCommand(actions []ui.ActionDescriptor, key tcell.Key, word, id s
 	}
 	actions[command].Label += " (" + tcell.KeyNames[key] + ")"
 	return append(actions[:bound], actions[bound+1:]...)
+}
+
+// foldCommandIntoKey is foldKeyIntoCommand for a view whose key does more
+// than the typed command would: the command's entry keeps its place, its
+// label and its shortcut, names the key, and takes the handler and the
+// availability of the view's own binding.
+func foldCommandIntoKey(actions []ui.ActionDescriptor, key tcell.Key, word, id string) []ui.ActionDescriptor {
+	for i := range actions {
+		if actions[i].Key != key || !strings.HasPrefix(actions[i].Label, word) {
+			continue
+		}
+		handler, reason := actions[i].Handler, actions[i].UnavailableReason
+		folded := foldKeyIntoCommand(actions, key, word, id)
+		if len(folded) == len(actions) {
+			return actions
+		}
+		for j := range folded {
+			if folded[j].ID == id {
+				folded[j].Handler, folded[j].UnavailableReason = handler, reason
+			}
+		}
+		return folded
+	}
+	return actions
 }
 
 func changeReviewActions(owner actionOwner, app *App) []ui.ActionDescriptor {

@@ -337,3 +337,62 @@ func TestAuthoredExprIsBoundedAndRefusesLeftoverVariables(t *testing.T) {
 		assert.Empty(t, AuthoredExpr(text).String(), name)
 	}
 }
+
+// A signal template is the text of a named query in the :query bar. It must
+// be the query ResolveHop builds for :slow, with variables where ResolveHop
+// writes the object's names: the two are one definition, not two.
+func TestSignalTemplateIsTheQueryResolveHopBuilds(t *testing.T) {
+	var s *Sources
+	pods := []string{"web-a", "web-b"}
+	checked := 0
+	for _, hop := range []HopKind{HopIngress, HopApp, HopDNS, HopNetwork} {
+		for _, name := range append([]string{"gitlab-webservice"}, DefaultHopProfiles[hop]...) {
+			profile, err := s.Profile(name)
+			require.NoError(t, err)
+			if profile.Hop != hop {
+				continue
+			}
+			declared := &Sources{RequestPath: &RequestPath{Defaults: &ServicePath{}}}
+			switch hop {
+			case HopIngress:
+				declared.RequestPath.Defaults.Ingress = []string{name}
+			case HopApp:
+				declared.RequestPath.Defaults.App = []string{name}
+			case HopDNS:
+				declared.RequestPath.Defaults.DNS = []string{name}
+			case HopNetwork:
+				declared.RequestPath.Defaults.Network = []string{name}
+			}
+			plan := declared.ResolveHop(hop, "", HopTarget{Namespace: "gitlab", Pods: pods}, 2*time.Minute)
+			require.Empty(t, plan.NotRead, name)
+			for i := range plan.Queries {
+				q := &plan.Queries[i]
+				template, err := s.SignalTemplate(name, q.Signal.Name, ScopePod)
+				require.NoError(t, err, name+"/"+q.Signal.Name)
+				text := strings.NewReplacer(TemplateNamespace, "gitlab", TemplatePod, "web-a|web-b", TemplateRate, "120s").Replace(template.Text)
+				want := q.Expr.String()
+				if q.PodLabel != "" {
+					want = q.ByPod.String()
+				}
+				require.Equal(t, want, text, name+"/"+q.Signal.Name)
+				require.NotContains(t, template.Text, "604799")
+				require.Equal(t, q.ClusterWide, template.ClusterWide)
+				checked++
+			}
+		}
+	}
+	require.GreaterOrEqual(t, checked, 20, "every signal of the default profiles and of gitlab-webservice is compared")
+
+	// A scope field without a variable is left out and listed, as ResolveHop
+	// lists one the object has no name for.
+	ingress, err := s.SignalTemplate("ingress-nginx", "499", ScopeIngress)
+	require.NoError(t, err)
+	require.Equal(t, `sum by (ingress) (rate(nginx_ingress_controller_requests{namespace="$namespace",status="499"}[$__rate_interval]))`, ingress.Text)
+	require.Equal(t, []string{ScopeService, ScopeIngress}, ingress.Unbound)
+	require.Equal(t, []string{"ingress"}, ingress.By)
+
+	_, err = s.SignalTemplate("ingress-nginx", "nope")
+	require.EqualError(t, err, `profile "ingress-nginx" has no signal "nope"`)
+	_, err = s.SignalTemplate("nope", "p99")
+	require.Error(t, err)
+}

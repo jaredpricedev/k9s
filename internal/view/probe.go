@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -24,11 +23,15 @@ const (
 	probeCommandToken = "probe"
 	probeTitle        = "Probe"
 	probeActionID     = "resource.probe"
-	// probeKey opens the probe from a Service, workload or Pod row.
-	probeKey = ui.KeyShiftB
-	// probeSlowKey opens the sibling :slow view when the build has one.
-	probeSlowKey     = ui.KeyW
-	probeSlowCommand = "slow"
+	// probeKey opens the probe from a Service, workload or Pod row, and
+	// from :slow. probeKeyName is how hints write it.
+	probeKey     = ui.KeyShiftB
+	probeKeyName = "Shift-B"
+	// probeMoreKey and probeFewerKey step the number of requests per Pod.
+	// The digits are window keys in every chart view, so they are not used
+	// for a count here.
+	probeMoreKey  = ui.KeyPlus
+	probeFewerKey = ui.KeyUnderscore
 )
 
 var probeKinds = map[string]string{
@@ -82,11 +85,6 @@ type probeView struct {
 	width, height                 int
 	headerHeight                  int
 	detailHeight                  int
-	// slowPresent reports whether this build registers the :slow command.
-	slowPresent func() bool
-	// handoff makes SelectedResource answer with the selection the view was
-	// opened for while a command is handed on to :slow.
-	handoff bool
 	// rendering guards render against re-entry.
 	rendering bool
 	// confirm is the open question, or nil.
@@ -175,20 +173,11 @@ func (a *App) openProbe(target SelectedResourceTarget) {
 }
 
 func newProbeView(app *App, contextName string, scope probe.Scope) *probeView {
-	v := &probeView{
+	return &probeView{
 		Details:     NewDetails(app, probeTitle, scope.Label(), contentTXT, false),
 		contextName: contextName, revision: app.Config.DestinationRevision(), scope: scope,
 		attempts: probe.DefaultAttempts, pause: probe.Pause,
 	}
-	v.slowPresent = func() bool { return probeSiblingPresent(app) }
-	return v
-}
-
-// probeSiblingPresent says whether the :slow command is registered. The
-// probe has no compile-time knowledge of that view: it looks the command up
-// among the typed commands, and when the build has none the key is refused.
-func probeSiblingPresent(app *App) bool {
-	return app != nil && app.command != nil && slices.Contains(app.command.suggestionAliases(), probeSlowCommand)
 }
 
 func probeAvailability(target SelectedResourceTarget) string { //nolint:gocritic // Immutable selection.
@@ -253,10 +242,16 @@ func (v *probeView) moveSelection(step int) {
 // that a graph or a timeline opened from here follows that Pod. Before a
 // plan is read it is the selection the view was opened for.
 func (v *probeView) SelectedResource() SelectedResourceTarget {
-	if target := v.selectedTarget(); target != nil && !v.handoff {
+	if target := v.selectedTarget(); target != nil {
 		return SelectedResourceTarget{Context: v.contextName, GVR: client.PodGVR, Namespace: target.Pod.Namespace,
 			Name: target.Pod.Name, UID: types.UID(target.Pod.UID)}
 	}
+	return v.scopeTarget()
+}
+
+// scopeTarget is the selection the view was opened for: what :slow is
+// handed, whichever Pod the cursor is on.
+func (v *probeView) scopeTarget() SelectedResourceTarget {
 	for gvr, kind := range probeKinds {
 		if kind == v.scope.Kind {
 			return SelectedResourceTarget{Context: v.contextName, GVR: client.NewGVR(gvr), Namespace: v.scope.Namespace,
@@ -302,12 +297,11 @@ func (v *probeView) bindProbeKeys() {
 	runAction := ui.NewKeyAction("Run probe (asks first)", do(v.askRun), true)
 	runAction.Availability = v.runUnavailable
 	v.actions.Add(ui.KeyR, runAction)
-	// The count is chosen with the digits, as windows are in :graph and
-	// :impact; "-" belongs to the application (last view).
-	for index, count := range probe.AttemptChoices {
-		v.actions.Add(ui.Key1+tcell.Key(index), ui.NewKeyAction(probePlural(count, "request", "requests")+" per pod",
-			do(func() { v.setAttempts(count) }), true))
-	}
+	// The count steps up and down through fixed choices. The digits stay
+	// free: they are the window keys of every chart view, and a probe has
+	// no window. "-" belongs to the application (last view).
+	v.actions.Add(probeMoreKey, ui.NewKeyAction("More requests per pod", do(func() { v.stepAttempts(1) }), true))
+	v.actions.Add(probeFewerKey, ui.NewKeyAction("Fewer requests per pod", do(func() { v.stepAttempts(-1) }), true))
 	kindAction := ui.NewKeyAction("Other declared probe", do(v.nextKind), true)
 	kindAction.Availability = func() string {
 		if v.plan == nil || len(v.plan.Available) < 2 {
@@ -323,14 +317,10 @@ func (v *probeView) bindProbeKeys() {
 	v.actions.Add(tcell.KeyEnter, ui.NewKeyAction("Open pod", do(v.openPod), true))
 	v.actions.Add(ui.KeyM, ui.NewKeyAction("Graph pod", do(v.openGraph), true))
 	v.actions.Add(ui.KeyT, ui.NewKeyAction("Timeline of pod", do(v.openTimeline), true))
-	slow := ui.NewKeyAction("Slow requests: which hop", do(v.openSlow), false)
-	slow.Availability = func() string {
-		if !v.slowPresent() {
-			return "This build has no :slow view"
-		}
-		return ""
-	}
-	v.actions.Add(probeSlowKey, slow)
+	v.actions.Add(slowKey, ui.NewKeyActionWithOpts(slowKeyLabel, do(v.openSlow), ui.ActionOpts{Visible: true, Priority: 5}))
+	// Shift-D is the Grafana hand-off for the Pod under the cursor, as in
+	// every incident view.
+	v.actions.Add(grafanaKey, grafanaKeyAction(v.app, func() actionOwner { return v }, nil))
 	back := func(event *tcell.EventKey) *tcell.EventKey {
 		// Esc stops a running probe first; a second Esc leaves.
 		if v.running {
@@ -644,6 +634,34 @@ func (v *probeView) cancelRun() {
 	v.render()
 }
 
+// stepAttempts moves the count to the next larger or smaller choice and
+// stops at either end.
+func (v *probeView) stepAttempts(direction int) {
+	choices := probe.AttemptChoices
+	next := v.attempts
+	if direction > 0 {
+		for _, count := range choices {
+			if count > v.attempts {
+				next = count
+				break
+			}
+		}
+	} else {
+		for i := len(choices) - 1; i >= 0; i-- {
+			if choices[i] < v.attempts {
+				next = choices[i]
+				break
+			}
+		}
+	}
+	if next == v.attempts && !v.running {
+		v.app.Flash().Infof("%s per pod is the %s this view sends", probePlural(next, "request", "requests"),
+			map[bool]string{true: "most", false: "fewest"}[direction > 0])
+		return
+	}
+	v.setAttempts(next)
+}
+
 // setAttempts changes how many requests the next run sends to each Pod. A
 // run in flight keeps the count it was confirmed with.
 func (v *probeView) setAttempts(count int) {
@@ -715,17 +733,17 @@ func (v *probeView) openTimeline() {
 	v.app.openTimeline(v.SelectedResource(), "")
 }
 
-// openSlow hands the selection the probe was opened for to :slow.
+// openSlow hands the selection the probe was opened for to :slow, which
+// reads the whole request path of its Service. A ReplicaSet has no request
+// path of its own, so the Pod under the cursor stands in for it.
 func (v *probeView) openSlow() {
-	if !v.slowPresent() {
-		v.app.Flash().Warn("This build has no :slow view")
-		return
-	}
 	if !v.destinationCurrent() {
 		v.app.Flash().Warn("Context changed; reopen :probe")
 		return
 	}
-	v.handoff = true
-	defer func() { v.handoff = false }()
-	v.app.gotoResource(probeSlowCommand, "", false, true)
+	target := v.scopeTarget()
+	if _, err := slowTarget(target); err != nil {
+		target = v.SelectedResource()
+	}
+	v.app.openSlow(target)
 }

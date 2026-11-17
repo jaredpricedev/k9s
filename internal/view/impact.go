@@ -258,8 +258,16 @@ func (v *impactView) bindImpactKeys() {
 		v.actions.Add(ui.Key1+tcell.Key(index), ui.NewKeyAction("Window "+impact.Dur(width), do(func() { v.setWidth(width) }), true))
 	}
 	v.actions.Add(ui.KeyR, ui.NewKeyAction("Re-read comparison", do(v.refresh), true))
-	v.actions.Add(ui.KeyP, ui.NewKeyAction("Previous (earlier) rollout", do(func() { v.step(1) }), true))
+	// n and Shift-N step forward and back in every view that steps through
+	// something (episodes in :slow, signals in :graph); p is the per-Pod
+	// page of :graph, which Enter opens from here.
+	v.actions.Add(ui.KeyShiftN, ui.NewKeyAction("Previous (earlier) rollout", do(func() { v.step(1) }), true))
 	v.actions.Add(ui.KeyN, ui.NewKeyAction("Next (later) rollout", do(func() { v.step(-1) }), true))
+	// p stepped back here before Shift-N did: it says where that went
+	// instead of doing nothing.
+	v.actions.Add(ui.KeyP, ui.NewKeyAction("Earlier rollout moved to Shift-N", do(func() {
+		v.app.Flash().Info("Shift-N steps to the earlier rollout; n to the later one")
+	}), false))
 	v.actions.Add(ui.KeyT, ui.NewKeyAction("Timeline of this workload", do(v.openTimeline), true))
 	v.actions.Add(tcell.KeyEnter, ui.NewKeyAction("Graph the selected signal", do(v.openGraph), true))
 	v.actions.Add(grafanaKey, grafanaKeyAction(v.app, func() actionOwner { return v }, nil))

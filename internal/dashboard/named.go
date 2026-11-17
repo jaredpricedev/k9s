@@ -18,30 +18,89 @@ type Named struct {
 	Builtin bool
 	// About says in a sentence what the query shows and what it assumes.
 	About string
+	// Profile and Signal name the request-path signal a shipped query is:
+	// the reading :slow makes of the same hop.
+	Profile, Signal string
+}
+
+// builtin is a shipped query: one signal of a request-path profile, kept
+// apart by the label of a scope field. It carries no query text. The text
+// is written from the profile when the queries are listed, so that a
+// shipped query and :slow read the same metric with the same matchers, and
+// a context that declares other label names changes both.
+type builtin struct {
+	Name, Title string
+	Hop         observability.HopKind
+	// Profile is the built-in profile that has the signal. A profile the
+	// context reads the hop with by default is preferred when it has a
+	// signal of that name.
+	Profile, Signal string
+	// Split is the scope field whose label keeps the answer apart.
+	Split string
+	// Each says what one line of the answer is.
+	Each string
 }
 
 // builtins are the queries shipped for looking into a request that hangs.
-// Metric and label names are the defaults of cAdvisor, ingress-nginx, the
-// GitLab Puma exporter, CoreDNS and Hubble; nothing checks that they exist,
-// and a query that matches nothing says so.
-var builtins = []Named{
-	{Name: "throttled", About: "Share of CPU periods in which each Pod's containers were throttled at their limit (cAdvisor).",
-		NamedQuery: observability.NamedQuery{Title: "CPU throttled share by pod", Unit: observability.UnitRatio, Legend: "{{pod}}",
-			Expr: `sum by (pod) (rate(container_cpu_cfs_throttled_periods_total{namespace="$namespace", pod=~"$pod"}[$__rate_interval])) / ` +
-				`sum by (pod) (rate(container_cpu_cfs_periods_total{namespace="$namespace", pod=~"$pod"}[$__rate_interval]))`}},
-	{Name: "ingress-499", About: "Share of requests the client gave up on (HTTP 499) at ingress-nginx, per Ingress of the namespace.",
-		NamedQuery: observability.NamedQuery{Title: "499 share at ingress", Unit: observability.UnitRatio, Legend: "{{ingress}}",
-			Expr: `sum by (ingress) (rate(nginx_ingress_controller_requests{namespace="$namespace", status="499"}[$__rate_interval])) / ` +
-				`sum by (ingress) (rate(nginx_ingress_controller_requests{namespace="$namespace"}[$__rate_interval]))`}},
-	{Name: "puma-queue", About: "Connections waiting for a free Puma thread, per Pod (GitLab webservice exporter).",
-		NamedQuery: observability.NamedQuery{Title: "Puma queued connections by pod", Unit: observability.UnitCount, Legend: "{{pod}}",
-			Expr: `sum by (pod) (puma_queued_connections{namespace="$namespace", pod=~"$pod"})`}},
-	{Name: "dns-p99", About: "99th percentile of CoreDNS request duration, cluster-wide.",
-		NamedQuery: observability.NamedQuery{Title: "DNS request duration p99", Unit: observability.UnitSeconds, Legend: "p99",
-			Expr: `histogram_quantile(0.99, sum by (le) (rate(coredns_dns_request_duration_seconds_bucket[$__rate_interval])))`}},
-	{Name: "hubble-drops", About: "Packets Cilium dropped per second by reason, cluster-wide (Hubble metrics).",
-		NamedQuery: observability.NamedQuery{Title: "Hubble drops by reason", Unit: observability.UnitPerSecond, Legend: "{{reason}}",
-			Expr: `sum by (reason) (rate(hubble_drop_total[$__rate_interval]))`}},
+// Nothing checks that their metrics exist, and a query that matches
+// nothing says so.
+var builtins = []builtin{
+	{Name: "throttled", Title: "CPU throttled share by pod", Hop: observability.HopApp, Profile: "container-cpu", Signal: "throttled",
+		Split: observability.ScopePod, Each: "per Pod"},
+	{Name: "ingress-499", Title: "499 per second at the ingress", Hop: observability.HopIngress, Profile: "ingress-nginx", Signal: "499",
+		Split: observability.ScopeIngress, Each: "per Ingress of the namespace"},
+	{Name: "puma-queue", Title: "Puma queued connections by pod", Hop: observability.HopApp, Profile: "gitlab-webservice", Signal: "queued",
+		Split: observability.ScopePod, Each: "per Pod"},
+	{Name: "dns-p99", Title: "DNS request duration p99", Hop: observability.HopDNS, Profile: "coredns", Signal: "p99",
+		Each: "cluster-wide"},
+	{Name: "hubble-drops", Title: "Hubble drops to the pods, by reason", Hop: observability.HopNetwork, Profile: "cilium-hubble", Signal: "drops",
+		Split: observability.ScopePod, Each: "per Pod and reason"},
+}
+
+// named writes the shipped query from the profile the context reads its
+// hop with: the first default profile of the hop that has the signal, else
+// the profile the query names, else that profile as shipped.
+func (b *builtin) named(s *observability.Sources) Named {
+	var split []string
+	if b.Split != "" {
+		split = []string{b.Split}
+	}
+	out := Named{Name: b.Name, Builtin: true, NamedQuery: observability.NamedQuery{Title: b.Title}}
+	candidates := append(s.HopProfiles(b.Hop, ""), b.Profile)
+	var (
+		template observability.SignalTemplate
+		err      error
+	)
+	for _, name := range candidates {
+		if template, err = s.SignalTemplate(name, b.Signal, split...); err == nil {
+			break
+		}
+	}
+	if err != nil {
+		// The declaration cannot be used; the shipped profile still can.
+		template, err = (*observability.Sources)(nil).SignalTemplate(b.Profile, b.Signal, split...)
+	}
+	if err != nil {
+		out.About = "Not available: " + observability.Clean(err.Error(), 200) + "."
+		return out
+	}
+	out.Profile, out.Signal = template.Profile, template.Signal.Name
+	out.Expr, out.Unit = template.Text, template.Signal.Unit
+	legend := make([]string, 0, len(template.By))
+	for _, label := range template.By {
+		legend = append(legend, "{{"+label+"}}")
+	}
+	out.Legend = strings.Join(legend, " ")
+	if out.Legend == "" {
+		out.Legend = template.Signal.Name
+	}
+	title := template.Signal.Title
+	if title != "" {
+		title = strings.ToUpper(title[:1]) + title[1:]
+	}
+	out.About = title + ", " + b.Each + ". Signal " + template.Signal.Name + " of the " + template.Profile +
+		" request-path profile: the reading :slow makes."
+	return out
 }
 
 // BuiltinQueries lists the shipped queries in their display order.
@@ -57,10 +116,9 @@ func NamedQueries(s *observability.Sources) []Named {
 			saved[name] = true
 		}
 	}
-	for _, q := range builtins {
-		if !saved[q.Name] {
-			q.Builtin = true
-			out = append(out, q)
+	for i := range builtins {
+		if !saved[builtins[i].Name] {
+			out = append(out, builtins[i].named(s))
 		}
 	}
 	names := make([]string, 0, len(saved))

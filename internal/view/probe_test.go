@@ -173,7 +173,7 @@ func TestProbeRunsOnlyWhatWasConfirmedAndStopsOnEsc(t *testing.T) {
 	require.True(t, v.running)
 	require.Eventually(t, func() bool { return story.calls.Load() == sent+15 }, 5*time.Second, 5*time.Millisecond)
 	v.cancelRun()
-	probePress(t, v, ui.Key4)
+	probePress(t, v, probeMoreKey)
 	require.Equal(t, 10, v.attempts)
 	probePress(t, v, ui.KeyR)
 	require.NotNil(t, v.confirm)
@@ -265,9 +265,10 @@ func TestProbeFramesKeepPodMedianAndVerdictAtEverySize(t *testing.T) {
 	target := v.SelectedResource()
 	require.Equal(t, client.PodGVR, target.GVR)
 	require.Equal(t, "gitlab/"+probePodB, target.Path())
-	v.handoff = true
-	require.Equal(t, "gitlab/gitlab-webservice-default", v.SelectedResource().Path(), ":slow is handed the selection the probe was opened for")
-	v.handoff = false
+	require.Equal(t, client.SvcGVR, v.scopeTarget().GVR)
+	require.Equal(t, "gitlab/gitlab-webservice-default", v.scopeTarget().Path(), ":slow is handed the selection the probe was opened for, not the Pod under the cursor")
+	_, err := slowTarget(v.scopeTarget())
+	require.NoError(t, err, "a Service has a request path")
 }
 
 func TestProbeNoIconsUsesASCIIOnly(t *testing.T) {
@@ -281,7 +282,7 @@ func TestProbeNoIconsUsesASCIIOnly(t *testing.T) {
 	}
 	require.Regexp(t, `>! \S*-hx4mt .* 2\.73s .* >=5s .*OUTLIER`, frame)
 	require.Regexp(t, `-hx4mt ([_.:=+*#x-] ){4}[_.:=+*#x-] `, frame)
-	probePress(t, v, ui.Key4)
+	probePress(t, v, probeMoreKey)
 	probePress(t, v, ui.KeyR)
 	require.NotNil(t, v.confirm)
 	dialog := drawnText(t, v.confirm, 80, 24)
@@ -474,23 +475,62 @@ func TestProbeIsRegisteredAndBoundWhereItApplies(t *testing.T) {
 	require.Contains(t, label(ui.KeyT), "imeline")
 	require.Equal(t, "Run probe (asks first)", label(ui.KeyR))
 	require.Equal(t, "Open pod", label(tcell.KeyEnter))
-	require.Equal(t, "10 requests per pod", label(ui.Key4))
 	require.Empty(t, label(ui.KeyDash), "the dash is the application's last-view key")
 
-	// The sibling view is offered only when the build registers it.
-	require.False(t, v.slowPresent())
-	slow, ok := v.actions.Get(probeSlowKey)
-	require.True(t, ok)
-	require.Equal(t, "This build has no :slow view", slow.Availability())
-	require.NotContains(t, v.footer.GetText(true), "w slow")
-	v.slowPresent = func() bool { return true }
-	v.render()
-	require.Empty(t, slow.Availability())
-	require.Contains(t, drawnText(t, v, 132, 30), "w slow")
+	// The digits are window keys in every chart view and a probe has no
+	// window, so the count steps with + and _ through fixed choices.
+	for index := range probe.AttemptChoices {
+		require.Empty(t, label(ui.Key1+tcell.Key(index)), "a digit is not a count here")
+	}
+	require.Equal(t, "More requests per pod", label(probeMoreKey))
+	require.Equal(t, "Fewer requests per pod", label(probeFewerKey))
+	require.Equal(t, probe.DefaultAttempts, v.attempts)
+	// The end of the choices says so; nothing consumes the flash line in a
+	// test, so it is emptied here.
+	said := func() string {
+		text := ""
+		for len(v.app.Flash().Channel()) > 0 {
+			if message := <-v.app.Flash().Channel(); message.Text != "" {
+				text = message.Text
+			}
+		}
+		return text
+	}
+	said()
+	var seen []int
+	for range 4 {
+		probePress(t, v, probeMoreKey)
+		seen = append(seen, v.attempts)
+	}
+	require.Equal(t, []int{10, 20, 30, 30}, seen, "+ stops at the largest choice")
+	require.Equal(t, "30 requests per pod is the most this view sends", said())
+	seen = seen[:0]
+	for range 6 {
+		probePress(t, v, probeFewerKey)
+		seen = append(seen, v.attempts)
+	}
+	require.Equal(t, []int{20, 10, 5, 3, 1, 1}, seen, "_ stops at one")
+	require.Equal(t, "1 request per pod is the fewest this view sends", said())
+	v.setAttempts(probe.DefaultAttempts)
+	frame := drawnText(t, v, 132, 30)
+	require.Contains(t, frame, "r run · + more  _ fewer per pod (×5) · u liveness probe · Enter open pod · m graph · t timeline · Shift-W slow · Esc back")
+	require.Contains(t, drawnText(t, v, 80, 24), "r run · +/_ ×5 per pod · u probe · Enter pod · m graph · Shift-W slow · Esc\n")
+	require.Contains(t, drawnText(t, v, 60, 24), "r run · +/_ ×5 · Enter pod · m graph · Shift-W slow · Esc\n")
 
+	// Shift-W is :slow here as on a Service row, for the selection the
+	// probe was opened for.
+	require.Equal(t, slowKeyLabel, label(slowKey))
+	require.Empty(t, label(ui.KeyW), "w alone is not a second key for it")
+	require.Contains(t, frame, "Shift-W slow")
+
+	// The strip keeps a blank between two requests before a number column
+	// is added: each request stands alone, as far as the width allows.
 	require.Equal(t, probeColumns{pod: 42, strip: 12, fastest: 7, slowest: 7, over: 7, codes: 7, node: 8, zone: 12, verdict: 10, spaced: true},
 		probeLayout(132, 5, 42, 8, 12))
-	require.Equal(t, probeColumns{pod: 20, strip: 5, fastest: 7, slowest: 7, over: 7, codes: 7, verdict: 10}, probeLayout(80, 5, 42, 8, 12))
+	require.Equal(t, probeColumns{pod: 25, strip: 59, slowest: 7, over: 7, node: 8, verdict: 10, spaced: true}, probeLayout(132, 30, 42, 8, 12),
+		"thirty requests keep their blanks at 132 columns; fastest and codes give way")
+	require.Equal(t, probeColumns{pod: 23, strip: 9, slowest: 7, over: 7, node: 8, verdict: 10, spaced: true}, probeLayout(80, 5, 42, 8, 12))
+	require.Equal(t, probeColumns{pod: 19, strip: 30, slowest: 7, verdict: 10}, probeLayout(80, 30, 42, 8, 12), "at 80 columns thirty requests stand side by side")
 	require.Equal(t, probeColumns{pod: 20, strip: 9, slowest: 7, verdict: 10, spaced: true}, probeLayout(60, 5, 42, 8, 12))
 	require.Equal(t, probeColumns{pod: 18, verdict: 10}, probeLayout(40, 30, 42, 8, 12), "pod, median and the verdict word are never given up")
 	require.Equal(t, "…-6f9c7d5b84-hx4mt", strings.TrimSpace(probeTail(probePodC, 18, false)))

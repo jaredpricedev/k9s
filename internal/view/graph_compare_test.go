@@ -759,7 +759,7 @@ func TestGraphPodsCommandAndPaletteEntrySayWhenThereAreNoPeers(t *testing.T) {
 	entry := find(v)
 	require.NotNil(t, entry)
 	require.Equal(t, ":graph pods", entry.Shortcut)
-	require.Equal(t, "Per-Pod graphs: which Pod differs", entry.Label)
+	require.Equal(t, "Per-Pod graphs: which Pod differs (p)", entry.Label, "the key that shows the page here is named on the command")
 	require.Empty(t, entry.UnavailableReason)
 
 	pod, _, _, _ := compareViewFixture(t, graphPod)

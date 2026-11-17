@@ -287,6 +287,16 @@ Gitaly exposes.
   none is declared. `Sources.ResolveDependency` resolves a single one.
 - `HopQuery.Missing(result)` turns an answer that is not a reading (not
   asked, denied, timed out, or answered with no series) into a `NotRead`.
+- `Sources.SignalTemplate(profile, signal, split...)` writes one signal as
+  query text with `$namespace`, `$pod` and `$__rate_interval` in place of the
+  object's names and the rate window. It is built by the code `ResolveHop`
+  uses, and a test holds the two to the same text. The shipped named queries
+  of `:query` are these templates ([dashboards.md](dashboards.md#named-queries)).
+- `PodMatcher(label, pods)` is the one matcher for "exactly these Pods",
+  bounded as above; `:slow` uses it for the readings it adds to the profiles.
+- `slowpath.SelectingServices` and `slowpath.Preferred` find the Service in
+  front of a workload's Pods; `:slow` and the per-Pod page of `:graph` both
+  use them.
 - `Sources.HopProfiles`, `Sources.PathDependencies`, `Sources.Profile`,
   `Sources.ValidateRequestPath`, `BuiltinProfileNames` and `ParseMatcher`.
 
@@ -384,6 +394,10 @@ seconds after the stall (`kube_pod_status_ready`); it is Ready at start. One
 unrelated Hubble drop blip (`POLICY_DENIED`, about 0.8 per second for one
 minute) happens 41 to 40 minutes before start, between two stalls, towards a
 different Pod (`…-2bq7k`): a view must not tie it to the stalls.
+
+The Ingress list of the resource browser asks the API server for a
+server-side table; the fixture answers it for Ingresses, so `:ingresses
+gitlab` lists the Ingress and `Shift-W` on its row opens `:slow`.
 
 Pod proxy, for a probe: `GET
 /api/v1/namespaces/gitlab/pods/<pod>:8080/proxy/-/readiness` (and

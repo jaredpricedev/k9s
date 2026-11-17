@@ -41,23 +41,32 @@ read.
 | Key | Action |
 | --- | --- |
 | `Up` / `Down` (`k` / `j`) | Select a hop, or a Pod of the app hop |
-| `Enter` | On the app hop: list or fold its Pods. On a Pod: open `:graph` for it. On any other hop: its queries, samples and rules |
+| `Enter` | On the app hop: list or fold its Pods. On a Pod: open `:graph` for that Pod, usage against its limits, for the window read here. On any other hop: its queries, samples and rules |
 | `s` | Queries, samples and rules of the selected hop in place of the lanes; `PgDn` / `PgUp` page; `s` again returns |
-| `Left` / `Right` | Show the cursor on the lanes and move it one column; the title states its time and each lane shows its value there |
+| `Left` / `Right` | Show the cursor on the lanes and move it one column, ten with `Shift`; the title states its time and each lane shows its value there |
+| `Home` / `End` | Cursor to the first / last column of the window |
 | `n` / `Shift-N` | Move the cursor to the next / previous episode |
 | `1` `2` `3` `4` | Window: 15m, 1h (default), 6h, 24h. The batch is sent again; the path is not read again |
 | `r` | Read the path and the batch again |
-| `p` | Probe the Pods now, through the `:probe` command when this build has it; otherwise a message says it does not |
+| `Shift-B` | Open `:probe` for the Service ([probe.md](probe.md)). Opening it sends nothing; a request leaves only after `r` and a confirmation there |
+| `m` | `:graph` with one chart per Pod of the Service, on the signal that set a Pod apart here (for example `p99`) and for the window read here ([graphs.md](graphs.md#which-pod-is-different-p)) |
 | `h` | The existing native Hubble view for the backend Pods ([hubble.md](hubble.md)) |
-| `m` | `:graph` for the selected Pod, or the workload behind the Service |
 | `Shift-D` | Grafana hand-off for the selected Pod or the workload, with the window that was read ([grafana-handoff.md](grafana-handoff.md)) |
 | `t` | `:timeline` for the selected Pod or the workload |
 | `Esc` | Put the cursor away; then back |
 
-`p`, `m` and `t` are looked up in the action registry behind `Ctrl-O` when
-the key is pressed, so a command this build does not have, or one that is
-unavailable for the selection, answers with the reason instead of doing
-nothing. The `next:` line lists only the steps that would run.
+These keys are the ones the sibling views use. `Shift-B` is the probe and
+`Shift-W` is this view, on a row of the resource list and inside `:probe`;
+`m`, `t` and `Shift-D` are the graph, the timeline and Grafana as everywhere
+else; the digits are the windows of `:graph`, a drawn dashboard and
+`:query`; the cursor moves as it does there; `n` and `Shift-N` step forward
+and back, as they step through signals in `:graph` and rollouts in
+`:impact`. `p` is not bound here: it is the per-Pod page of `:graph`.
+
+A key answers with the reason when its view is unavailable for the selection
+(no Prometheus source for `m`, for example) instead of doing nothing. The
+`next:` line lists only the steps that would run, as whole steps: when the
+line is too narrow, later steps are shortened and then left out.
 
 ## What is read
 
@@ -347,8 +356,9 @@ list of namespace `gitlab`, select `gitlab-webservice-default` and press
 three as the outlier on p99, queue and CPU throttling, quiet dependencies
 and DNS, and one burst of dropped packets towards another Pod that the
 summary places outside every episode. `--deny-source prometheus` shows the
-not-read state. The fixture does not list Ingresses in its table view, so
-the Ingress row is exercised by tests only.
+not-read state. `:ingresses gitlab` lists the Ingress, and `Shift-W` on its
+row opens the same view for its backend Service. From there `m` opens the
+three Pods side by side on `p99` and `Shift-B` opens the probe.
 
 Code: `internal/slowpath` resolves the path (`Resolve`), plans the batch
 (`BuildPlan`), sends it (`Collect`) and evaluates it (`Evaluate`: rules,

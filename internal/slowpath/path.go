@@ -297,16 +297,32 @@ func ingressBackends(ingress *unstructured.Unstructured) []string {
 // selectingServices lists the Services of the namespace once and returns
 // those whose selector matches the Pod labels, sorted by name.
 func (p *Path) selectingServices(ctx context.Context, objects dynamic.Interface, podLabels map[string]string) ([]string, error) {
-	readCtx, cancel := context.WithTimeout(ctx, ReadTimeout)
-	defer cancel()
-	list, err := objects.Resource(servicesResource).Namespace(p.Namespace).List(readCtx, metav1.ListOptions{Limit: MaxServices})
+	names, read, more, err := SelectingServices(ctx, objects, p.Namespace, podLabels)
 	if err != nil {
 		return nil, readError("Services in namespace "+p.Namespace, err)
 	}
-	if list.GetContinue() != "" {
-		p.notef("only the first %d Services of namespace %s were read to find the one that selects these Pods", len(list.Items), p.Namespace)
+	if more {
+		p.notef("only the first %d Services of namespace %s were read to find the one that selects these Pods", read, p.Namespace)
 	}
-	var names []string
+	return names, nil
+}
+
+// SelectingServices lists the Services of a namespace once, at most
+// MaxServices of them, and returns the names of those whose selector
+// matches the Pod labels, sorted. read is how many Services the list held
+// and more is true when the namespace has others that were not read. It is
+// how every view finds the Service in front of a workload's Pods, so that
+// :slow and :graph read the same request-path declaration for them.
+func SelectingServices(ctx context.Context, objects dynamic.Interface, namespace string, podLabels map[string]string) (names []string, read int, more bool, err error) {
+	if objects == nil {
+		return nil, 0, false, errors.New("no Kubernetes connection")
+	}
+	readCtx, cancel := context.WithTimeout(ctx, ReadTimeout)
+	defer cancel()
+	list, err := objects.Resource(servicesResource).Namespace(namespace).List(readCtx, metav1.ListOptions{Limit: MaxServices})
+	if err != nil {
+		return nil, 0, false, err
+	}
 	for i := range list.Items {
 		selector, _, _ := unstructured.NestedStringMap(list.Items[i].Object, "spec", "selector")
 		if len(selector) > 0 && labels.SelectorFromSet(selector).Matches(labels.Set(podLabels)) {
@@ -314,20 +330,26 @@ func (p *Path) selectingServices(ctx context.Context, objects dynamic.Interface,
 		}
 	}
 	sort.Strings(names)
-	return names, nil
+	return names, len(list.Items), list.GetContinue() != "", nil
 }
 
-// preferred picks the Service to read: the first one with a request-path
-// declaration, else the first in the order given.
-func preferred(names []string, namespace string, sources *observability.Sources) string {
+// Preferred picks the Service whose request path is read when several
+// select the same Pods: the first one with a request-path declaration,
+// else the first in the order given. declared says which it was.
+func Preferred(names []string, namespace string, sources *observability.Sources) (name string, declared bool) {
 	if sources != nil && sources.RequestPath != nil {
 		for _, name := range names {
 			if _, declared := sources.RequestPath.Services[namespace+"/"+name]; declared {
-				return name
+				return name, true
 			}
 		}
 	}
-	return names[0]
+	return names[0], false
+}
+
+func preferred(names []string, namespace string, sources *observability.Sources) string {
+	name, _ := Preferred(names, namespace, sources)
+	return name
 }
 
 func others(names []string, chosen string) string {

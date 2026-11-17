@@ -6,7 +6,6 @@ package view
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/derailed/k9s/internal/chart"
@@ -28,8 +27,10 @@ const (
 	slowCommandAlias = "requests"
 	slowTitle        = "Slow requests"
 	slowKeyLabel     = "Slow requests: which hop"
-	// slowKey opens the view from a Service, Ingress, workload or Pod row.
-	slowKey = ui.KeyShiftW
+	// slowKey opens the view from a Service, Ingress, workload or Pod row,
+	// and from :probe. slowKeyName is how hints write it.
+	slowKey     = ui.KeyShiftW
+	slowKeyName = "Shift-W"
 	// slowDeadline covers the bounded Kubernetes reads and the batch.
 	slowDeadline = slowpath.Deadline + 20*time.Second
 )
@@ -90,9 +91,7 @@ type slowView struct {
 
 	width, height             int
 	headerHeight, tableHeight int
-	// override is the selection handed to a command run from here.
-	override *SelectedResourceTarget
-	observed *HubbleView
+	observed                  *HubbleView
 }
 
 // slowTarget says whether a selection has a request path to read.
@@ -310,14 +309,8 @@ func (v *slowView) workloadTarget() SelectedResourceTarget {
 }
 
 // SelectedResource exposes what the view is about to shared actions: the
-// focused Pod or the workload. A command run from a key here may ask for
-// the Service instead.
-func (v *slowView) SelectedResource() SelectedResourceTarget {
-	if v.override != nil {
-		return *v.override
-	}
-	return v.workloadTarget()
-}
+// focused Pod or the workload.
+func (v *slowView) SelectedResource() SelectedResourceTarget { return v.workloadTarget() }
 
 // GrafanaWindow hands the window that was read to a Grafana link.
 func (v *slowView) GrafanaWindow() (grafanaWindow, bool) {
@@ -360,13 +353,31 @@ func (v *slowView) bindSlowKeys() {
 			return nil
 		}
 	}
-	for index, window := range slowpath.Windows {
+	// The windows and their keys are the ones of :graph, the dashboards
+	// and :query; the cursor keys are theirs too.
+	for index, window := range graphWindows {
 		v.actions.Add(ui.Key1+tcell.Key(index), ui.NewKeyAction("Window "+impact.Dur(window), do(func() { v.setWindow(window) }), true))
 	}
+	// Shift moves the cursor ten columns, as in every chart view. The step
+	// is local to one press.
+	cursor := func(delta int) ui.ActionHandler {
+		return func(event *tcell.EventKey) *tcell.EventKey {
+			step := delta
+			if event != nil && event.Modifiers()&tcell.ModShift != 0 {
+				step *= 10
+			}
+			v.moveCursor(step)
+			return nil
+		}
+	}
 	v.actions.Bulk(ui.KeyMap{
-		tcell.KeyEnter: ui.NewKeyAction("Open row", do(v.enter), true),
-		ui.KeyP:        ui.NewKeyAction("Probe pods now", do(v.openProbe), true),
-		ui.KeyM:        ui.NewKeyAction("Graph", do(v.openGraph), true),
+		// Enter is in the key line under the view at every size; the line
+		// above it names the hand-offs first.
+		tcell.KeyEnter: ui.NewKeyActionWithOpts("Open row", do(v.enter), ui.ActionOpts{Visible: true, Priority: 4}),
+		// The two hand-offs that follow the evidence are named in the key
+		// line above the view, where a short screen has no next: line.
+		probeKey:       ui.NewKeyActionWithOpts("Probe pods", do(v.openProbe), ui.ActionOpts{Visible: true, Priority: 2}),
+		ui.KeyM:        ui.NewKeyActionWithOpts(graphPodsShort, do(v.openGraph), ui.ActionOpts{Visible: true, Priority: 3}),
 		ui.KeyH:        ui.NewKeyAction("Hubble flows", do(v.openHubble), true),
 		ui.KeyT:        ui.NewKeyAction("Timeline", do(v.openTimeline), true),
 		ui.KeyS:        ui.NewKeyAction("Queries and rules", do(v.toggleDetail), true),
@@ -375,8 +386,10 @@ func (v *slowView) bindSlowKeys() {
 		tcell.KeyDown:  ui.NewKeyAction("Next hop", do(func() { v.moveFocus(1) }), false),
 		ui.KeyK:        ui.NewKeyAction("Previous hop", do(func() { v.moveFocus(-1) }), false),
 		ui.KeyJ:        ui.NewKeyAction("Next hop", do(func() { v.moveFocus(1) }), false),
-		tcell.KeyLeft:  ui.NewKeyAction("Cursor earlier", do(func() { v.moveCursor(-1) }), false),
-		tcell.KeyRight: ui.NewKeyAction("Cursor later", do(func() { v.moveCursor(1) }), false),
+		tcell.KeyLeft:  ui.NewKeyAction("Cursor earlier", cursor(-1), false),
+		tcell.KeyRight: ui.NewKeyAction("Cursor later", cursor(1), false),
+		tcell.KeyHome:  ui.NewKeyAction("Cursor to window start", do(func() { v.cursorEdge(-1) }), false),
+		tcell.KeyEnd:   ui.NewKeyAction("Cursor to window end", do(func() { v.cursorEdge(1) }), false),
 		ui.KeyN:        ui.NewKeyAction("Cursor to next episode", do(func() { v.jumpEpisode(1) }), false),
 		ui.KeyShiftN:   ui.NewKeyAction("Cursor to previous episode", do(func() { v.jumpEpisode(-1) }), false),
 		tcell.KeyPgDn:  ui.NewKeyAction("Queries: page down", do(func() { v.scrollDetail(1) }), false),
@@ -396,66 +409,109 @@ func (v *slowView) bindSlowKeys() {
 	}
 	v.actions.Add(tcell.KeyEscape, ui.NewKeyAction("Back", back, false))
 	v.actions.Add(ui.KeyQ, ui.NewKeyAction("Back", func(event *tcell.EventKey) *tcell.EventKey { return v.app.PrevCmd(event) }, false))
+	// The palette and help say why a hand-off would not open, as the key
+	// itself does.
+	for key, reason := range map[tcell.Key]func() string{
+		ui.KeyM:  func() string { return graphAvailability(v.app, v.serviceTarget()) },
+		probeKey: func() string { return probeAvailability(v.serviceTarget()) },
+	} {
+		if action, ok := v.actions.Get(key); ok {
+			action.Availability = reason
+			v.actions.Add(key, action)
+		}
+	}
 }
 
 func (v *slowView) destinationCurrent() bool {
 	return v.selection.Context == v.app.Config.ActiveContextName() && v.revision == v.app.Config.DestinationRevision()
 }
 
-// catalogCommand looks a typed command up in the action registry when a key
-// is pressed, so that a command another part of the build adds (or leaves
-// out) is found at run time.
-func (v *slowView) catalogCommand(token string) *ui.ActionDescriptor {
-	catalog := actionCatalog(v, v.app)
-	for i := range catalog {
-		shortcut := catalog[i].Shortcut
-		if shortcut == ":"+token || strings.HasPrefix(shortcut, ":"+token+" ") {
-			return &catalog[i]
-		}
+// stale warns when the destination changed under the view; nothing is then
+// opened from it.
+func (v *slowView) stale() bool {
+	if v.destinationCurrent() {
+		return false
 	}
-	return nil
+	v.app.Flash().Warn("Destination changed; reopen :" + slowCommandToken)
+	return true
 }
 
-// commandReason says why a typed command cannot run for a selection, or "".
-func (v *slowView) commandReason(token string, target SelectedResourceTarget) string { //nolint:gocritic // Immutable selection.
-	v.override = &target
-	defer func() { v.override = nil }()
-	item := v.catalogCommand(token)
-	switch {
-	case item == nil:
-		return ":" + token + " is not part of this build"
-	case item.UnavailableReason != "":
-		return item.UnavailableReason
-	case item.Handler == nil:
-		return ":" + token + " has no handler"
-	}
-	return ""
-}
-
-// runCommand runs a registered typed command for a selection.
-func (v *slowView) runCommand(token string, target SelectedResourceTarget) { //nolint:gocritic // Immutable selection.
-	if !v.destinationCurrent() {
-		v.app.Flash().Warn("Destination changed; reopen :" + slowCommandToken)
+// openProbe hands the Service to :probe. It opens that view; nothing is
+// sent to a Pod until the probe is run and confirmed there.
+func (v *slowView) openProbe() {
+	if v.stale() {
 		return
 	}
-	v.override = &target
-	defer func() { v.override = nil }()
-	item := v.catalogCommand(token)
-	switch {
-	case item == nil:
-		v.app.Flash().Warnf(":%s is not part of this build", token)
-	case item.UnavailableReason != "":
-		v.app.Flash().Warn(item.UnavailableReason)
-	case item.Handler != nil:
-		item.Handler(nil)
+	target := v.serviceTarget()
+	if reason := probeAvailability(target); reason != "" {
+		v.app.Flash().Warn(reason)
+		return
 	}
+	v.app.openProbe(target)
 }
 
-func (v *slowView) openProbe() { v.runCommand("probe", v.serviceTarget()) }
+// slowGraphSignal names the signal the per-Pod comparison of :graph opens
+// on: the signal of the app hop that set a Pod apart, else the hop's main
+// signal. The second value is its short name. Both are empty when the app
+// hop has no reading.
+func slowGraphSignal(report *slowpath.Report) (id, name string) {
+	if report == nil {
+		return "", ""
+	}
+	app := report.Hop(slowpath.HopApp)
+	if app == nil || app.Main < 0 || app.Main >= len(app.Signals) || !app.Signals[app.Main].Read {
+		return "", ""
+	}
+	sig := &app.Signals[app.Main]
+	switch sig.Profile {
+	case "", graphCPUProfile, slowpath.ProfileCAdvisor, slowpath.ProfileKubeState:
+		// :graph reads these with its own templates and names them plainly.
+		return sig.Name, sig.Name
+	}
+	return sig.Profile + "/" + sig.Name, sig.Name
+}
 
-func (v *slowView) openGraph() { v.runCommand(graphCommandToken, v.workloadTarget()) }
+// openGraph opens :graph on the Pods of the Service, one chart per Pod, on
+// the signal that set a Pod apart here and for the window that was read.
+func (v *slowView) openGraph() {
+	if v.stale() {
+		return
+	}
+	target, focus := v.serviceTarget(), graphPodsWord
+	if reason := graphAvailability(v.app, target); reason != "" {
+		v.app.Flash().Warn(reason)
+		return
+	}
+	if t, err := graphTargetFor(target); err != nil || !t.workload() {
+		// The path is not resolved yet and one Pod was selected: its own
+		// charts are what there is.
+		focus = ""
+	} else if id, _ := slowGraphSignal(v.report()); id != "" {
+		focus += ":" + id
+	}
+	v.app.openGraphAt(target, v.window, focus)
+}
 
-func (v *slowView) openTimeline() { v.runCommand(timelineCommandToken, v.workloadTarget()) }
+// openPodGraph opens the focused Pod's own charts, usage against its
+// limits, for the window that was read.
+func (v *slowView) openPodGraph() {
+	if v.stale() {
+		return
+	}
+	target := v.workloadTarget()
+	if reason := graphAvailability(v.app, target); reason != "" {
+		v.app.Flash().Warn(reason)
+		return
+	}
+	v.app.openGraphAt(target, v.window, "")
+}
+
+func (v *slowView) openTimeline() {
+	if v.stale() {
+		return
+	}
+	v.app.openTimeline(v.workloadTarget(), "")
+}
 
 // openHubble opens the existing native Hubble view for the backend Pods,
 // as :network-review does. It starts no probe and changes nothing.
@@ -484,7 +540,7 @@ func (v *slowView) enter() {
 	switch {
 	case report == nil:
 	case v.focus.pod != "":
-		v.openGraph()
+		v.openPodGraph()
 	case v.focus.hop == slowpath.HopApp && len(report.Path.Pods) > 0:
 		open := !v.podsListed()
 		v.expanded = &open
@@ -531,7 +587,19 @@ func (v *slowView) setWindow(window time.Duration) {
 	v.refresh(false)
 }
 
-// moveCursor shows the cursor on the lanes and moves it one column.
+// cursorEdge puts the cursor on the first or the last column of the lanes.
+func (v *slowView) cursorEdge(direction int) {
+	if v.report() == nil || v.frame.Width <= 0 {
+		return
+	}
+	v.cursor = 0
+	if direction > 0 {
+		v.cursor = v.frame.Width - 1
+	}
+	v.placeCursor()
+}
+
+// moveCursor shows the cursor on the lanes and moves it by delta columns.
 func (v *slowView) moveCursor(delta int) {
 	if v.report() == nil || v.frame.Width <= 0 {
 		return

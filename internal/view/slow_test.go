@@ -115,8 +115,12 @@ func TestSlowFramesStateEveryHopWhenItHappenedAndWhatOverlapsAtEverySize(t *test
 			require.Contains(t, flat, "2 of 3 (07:28, 07:47) overlap not Ready on pod …-hx4mt.")
 			require.Contains(t, flat, "Packet drops (POLICY_DENIED) on pod …-2bq7k: 07:39 for 1m, outside every episode.")
 			require.Contains(t, flat, "5xx stayed at 0%: clients gave up waiting, they were not refused.")
-			require.Contains(t, frame, "next: Enter on …-hx4mt graphs it against its limits · h Hubble flows to the pods · Shift-D Grafana, this window · t timeline")
-			require.NotContains(t, frame, "p probe", "a command this build does not have is not offered")
+			// The next steps name the sibling views by the keys that open
+			// them here: the probe, the Pods side by side on the signal that
+			// set one apart, and that Pod against its limits. The line ends
+			// on a whole step.
+			require.Contains(t, frame, "next: Shift-B probe each pod now · m p99 per pod · Enter on …-hx4mt graphs it · h Hubble · Shift-D Grafana · t timeline\n")
+			require.NotContains(t, frame, "p probe", "p is not the probe: Shift-B is, here as on a Service row")
 			require.Contains(t, frame, "↑↓ hop · Enter open · ←→ cursor · n/N episode · 1 15m  2 1h  3 6h  4 24h · s queries and rules · r re-read · Esc back")
 		case 80:
 			require.Contains(t, frame, "Slow requests / gitlab-webservice-default · last 1h · read 08:20:12")
@@ -291,7 +295,7 @@ func TestSlowKeysOpenRowsMoveTheCursorAndShowQueries(t *testing.T) {
 	require.Equal(t, client.PodGVR, target.GVR)
 	require.Equal(t, slowtest.Outlier, target.Name)
 	require.Equal(t, types.UID("uid-"+slowtest.Outlier), target.UID)
-	require.Contains(t, drawnText(t, v, 132, 32), "next: Enter graphs …-hx4mt")
+	require.Contains(t, drawnText(t, v, 132, 32), "· m p99 of each pod side by side · Enter graphs …-hx4mt ·")
 	slowPress(t, v, tcell.KeyUp)
 	slowPress(t, v, tcell.KeyUp)
 	slowPress(t, v, tcell.KeyUp)
@@ -359,32 +363,119 @@ func TestSlowKeysOpenRowsMoveTheCursorAndShowQueries(t *testing.T) {
 	require.Eventually(t, func() bool { return resolved.Load() == 2 }, 2*time.Second, 5*time.Millisecond)
 }
 
-func TestSlowLooksCommandsUpWhenAKeyIsPressed(t *testing.T) {
+// The view hands on to its siblings by the keys that mean the same in every
+// incident view: Shift-B the probe, m the graph, t the timeline, Shift-D
+// Grafana. m arrives in :graph on one chart per Pod, on the signal that set
+// a Pod apart here and for the window that was read.
+func TestSlowHandsOnToProbeGraphAndTimelineByTheSharedKeys(t *testing.T) {
 	v := slowViewFixture(t)
 	v.accept(slowStoryRead(&slowtest.Story{}, time.Hour))
-	require.Nil(t, v.catalogCommand("probe"))
-	require.Equal(t, ":probe is not part of this build", v.commandReason("probe", v.serviceTarget()))
-	require.Empty(t, v.commandReason(graphCommandToken, v.workloadTarget()), "a workload can be graphed when Prometheus is declared")
-	require.Empty(t, v.commandReason(timelineCommandToken, v.workloadTarget()))
-	require.Contains(t, v.commandReason(graphCommandToken, v.serviceTarget()), "Select a Pod, Deployment")
-	require.Nil(t, v.override, "the selection handed to a command does not outlive the lookup")
-	item := v.catalogCommand(graphCommandToken)
-	require.NotNil(t, item)
-	require.Equal(t, "Graph: usage vs limits over time (m)", item.Label, "the palette names the key on the command, once")
-
-	// p answers even when the command is missing; it never does nothing.
-	slowPress(t, v, ui.KeyP)
-	require.Same(t, v, v.app.Content.Top())
-	for _, key := range []tcell.Key{ui.KeyP, ui.KeyH, ui.KeyM, ui.KeyT, ui.KeyS, ui.KeyR, tcell.KeyEnter, grafanaKey, ui.Key1, ui.Key4} {
+	for _, key := range []tcell.Key{probeKey, ui.KeyH, ui.KeyM, ui.KeyT, ui.KeyS, ui.KeyR, tcell.KeyEnter, grafanaKey, ui.Key1, ui.Key4,
+		tcell.KeyHome, tcell.KeyEnd} {
 		_, ok := v.actions.Get(key)
 		require.True(t, ok, tcell.KeyNames[key])
 	}
+	_, ok := v.actions.Get(ui.KeyP)
+	require.False(t, ok, "p is the per-Pod page of :graph; it is not a second key for the probe here")
 	action, _ := v.actions.Get(grafanaKey)
 	require.Equal(t, grafanaKeyLabel, action.Description, "Shift-D is the Grafana hand-off here as in the other incident views")
 	action, _ = v.actions.Get(ui.KeyM)
-	require.Contains(t, action.Description, "Graph")
+	require.Equal(t, graphPodsShort, action.Description, "m is the graph key; here it opens the Pods side by side")
+	require.True(t, action.Opts.Visible && action.Opts.Priority > 0, "named in the key line above the view, where a short screen has no next: line")
 	action, _ = v.actions.Get(ui.KeyT)
 	require.Contains(t, action.Description, "imeline")
+	action, _ = v.actions.Get(probeKey)
+	require.Equal(t, "Probe pods", action.Description, "the words of the same key on a Service row")
+	require.True(t, action.Opts.Visible && action.Opts.Priority > 0)
+	require.Equal(t, tcell.KeyNames[probeKey], probeKeyName)
+	require.Equal(t, tcell.KeyNames[slowKey], slowKeyName)
+
+	// The probe is asked for the Service, which it accepts.
+	require.Equal(t, client.SvcGVR, v.serviceTarget().GVR)
+	require.Empty(t, probeAvailability(v.serviceTarget()))
+
+	// The signal that set a Pod apart is the one the comparison opens on.
+	id, name := slowGraphSignal(v.report())
+	require.Equal(t, [2]string{"gitlab-webservice/p99", "p99"}, [2]string{id, name})
+	none, _ := slowGraphSignal(nil)
+	require.Empty(t, none)
+	slowPress(t, v, ui.Key3)
+	v.loading = false
+	slowPress(t, v, ui.KeyM)
+	graph, ok := v.app.Content.Top().(*graphView)
+	require.True(t, ok, "m opens :graph")
+	t.Cleanup(graph.Stop)
+	require.True(t, graph.comparing, "one chart per Pod")
+	require.Equal(t, "gitlab-webservice/p99", graph.signal)
+	require.Equal(t, 6*time.Hour, graph.window, "the window that was read here")
+	require.Equal(t, graphKindService, graph.target.Kind, "the Pods compared are the Pods behind the Service")
+	require.Equal(t, "gitlab-webservice-default", graph.target.Name)
+	v.app.Content.Pop()
+
+	// Enter on a Pod row opens that Pod's own charts, in the same window.
+	drawnText(t, v, 132, 32)
+	slowPress(t, v, tcell.KeyDown)
+	slowPress(t, v, tcell.KeyDown)
+	slowPress(t, v, tcell.KeyDown)
+	require.Equal(t, slowtest.Outlier, v.focus.pod)
+	slowPress(t, v, tcell.KeyEnter)
+	graph, ok = v.app.Content.Top().(*graphView)
+	require.True(t, ok)
+	t.Cleanup(graph.Stop)
+	require.False(t, graph.comparing)
+	require.Equal(t, "Pod", graph.target.Kind)
+	require.Equal(t, slowtest.Outlier, graph.target.Name)
+	require.Equal(t, 6*time.Hour, graph.window)
+	v.app.Content.Pop()
+
+	// A view whose destination changed opens nothing.
+	v.revision++
+	slowPress(t, v, ui.KeyM)
+	slowPress(t, v, probeKey)
+	require.Same(t, v, v.app.Content.Top())
+	v.revision--
+
+	// A line that has no room for every step drops whole steps from its
+	// end; it never ends inside one.
+	steps := []slowStep{{"Shift-B probe each pod now", "Shift-B probe pods"}, {"m p99 of each pod side by side", "m p99 per pod"}, {"t timeline", "t timeline"}}
+	require.Equal(t, "next: Shift-B probe each pod now · m p99 of each pod side by side · t timeline", v.fitSteps(steps, 90))
+	require.Equal(t, "next: Shift-B probe each pod now · m p99 per pod · t timeline", v.fitSteps(steps, 70))
+	require.Equal(t, "next: Shift-B probe pods · m p99 per pod · t timeline", v.fitSteps(steps, 58))
+	require.Equal(t, "next: Shift-B probe pods · m p99 per pod", v.fitSteps(steps, 50))
+	require.Equal(t, "next: Shift-B probe pods", v.fitSteps(steps, 30))
+	require.Empty(t, v.fitSteps(nil, 80))
+}
+
+// The cursor moves as it does in :graph and in a zoomed dashboard panel:
+// one column, ten with Shift, and Home and End to the ends of the window.
+func TestSlowCursorKeysAreThoseOfEveryChartView(t *testing.T) {
+	v := slowViewFixture(t)
+	v.accept(slowStoryRead(&slowtest.Story{}, time.Hour))
+	drawnText(t, v, 132, 32)
+	press := func(key tcell.Key, mod tcell.ModMask) {
+		action, ok := v.actions.Get(key)
+		require.True(t, ok)
+		action.Action(tcell.NewEventKey(key, 0, mod))
+	}
+	press(tcell.KeyHome, tcell.ModNone)
+	require.Zero(t, v.cursor)
+	press(tcell.KeyRight, tcell.ModShift)
+	require.Equal(t, 10, v.cursor)
+	press(tcell.KeyRight, tcell.ModNone)
+	require.Equal(t, 11, v.cursor, "a Shift press does not make the next press larger")
+	press(tcell.KeyLeft, tcell.ModShift)
+	require.Equal(t, 1, v.cursor)
+	press(tcell.KeyLeft, tcell.ModShift)
+	require.Zero(t, v.cursor, "the cursor stops at the start of the window")
+	press(tcell.KeyEnd, tcell.ModNone)
+	require.Equal(t, v.frame.Width-1, v.cursor)
+	require.Contains(t, drawnText(t, v, 132, 32), "cursor 08:19–08:20 UTC")
+	for index, window := range graphWindows {
+		action, ok := v.actions.Get(ui.Key1 + tcell.Key(index))
+		require.True(t, ok)
+		require.Equal(t, "Window "+graphSpan(window), action.Description, "the window keys are those of :graph and the dashboards")
+	}
+	require.Equal(t, graphDefaultWindow, slowpath.DefaultWindow)
 }
 
 func TestSlowIsRegisteredAsACommandAPaletteEntryAndARowKey(t *testing.T) {

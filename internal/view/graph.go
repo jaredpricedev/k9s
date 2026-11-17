@@ -18,6 +18,7 @@ import (
 	"github.com/derailed/k9s/internal/inspect"
 	"github.com/derailed/k9s/internal/networkpath"
 	"github.com/derailed/k9s/internal/observability"
+	"github.com/derailed/k9s/internal/slowpath"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
@@ -33,10 +34,11 @@ const (
 	// graphPodsWord opens the per-Pod comparison: ":graph pods", and the
 	// focus "pods" or "pods:<signal>" of openGraphAt.
 	graphPodsWord = "pods"
-	// graphServiceListLimit bounds the one list of Services that finds the
-	// Service in front of a workload.
-	graphServiceListLimit = 200
-	graphNoPeers          = "Nothing to compare: :graph on a workload or a Service compares its Pods"
+	graphNoPeers  = "Nothing to compare: :graph on a workload or a Service compares its Pods"
+	// graphPodsLabel names the per-Pod comparison in the palette and help,
+	// and on the key that opens it from :slow.
+	graphPodsLabel = graphPodsShort + ": which Pod differs"
+	graphPodsShort = "Per-Pod graphs"
 )
 
 // graphView draws charts for one object from the declared Prometheus
@@ -298,8 +300,35 @@ func (v *graphView) Init(ctx context.Context) error {
 			return nil
 		}
 	}
+	// The sibling views of a hang open from here with the keys that open
+	// them from a row: Shift-W the request path, Shift-B the probe. Each
+	// says why when the object has none.
+	handOff := func(label string, reason func(SelectedResourceTarget) string, open func(SelectedResourceTarget)) ui.KeyAction {
+		action := ui.NewKeyAction(label, do(func() {
+			target := v.SelectedResource()
+			switch why := reason(target); {
+			case !v.current():
+				v.app.Flash().Warn("Destination changed; reopen :graph")
+			case why != "":
+				v.app.Flash().Warn(why)
+			default:
+				open(target)
+			}
+		}), true)
+		action.Availability = func() string { return reason(v.SelectedResource()) }
+		return action
+	}
+	v.actions.Add(slowKey, handOff(slowKeyLabel, func(t SelectedResourceTarget) string { return slowAvailability(v.app, t) }, v.app.openSlow))
+	v.actions.Add(probeKey, handOff("Probe pods", probeAvailability, v.app.openProbe))
+	perPod := ui.NewKeyActionWithOpts("Per pod", charts(v.toggleCompare), opts(1))
+	perPod.Availability = func() string {
+		if !v.target.workload() {
+			return graphNoPeers
+		}
+		return ""
+	}
 	v.actions.Bulk(ui.KeyMap{
-		ui.KeyP:      ui.NewKeyActionWithOpts("Per pod", charts(v.toggleCompare), opts(1)),
+		ui.KeyP:      perPod,
 		ui.KeyN:      ui.NewKeyActionWithOpts("Next signal", charts(func() { v.stepSignal(1) }), opts(2)),
 		ui.KeyG:      ui.NewKeyActionWithOpts("Regroup", charts(func() { v.regroup(1) }), opts(3)),
 		ui.KeyShiftN: ui.NewKeyActionWithOpts("Previous signal", charts(func() { v.stepSignal(-1) }), ui.ActionOpts{Visible: pods}),
@@ -821,46 +850,25 @@ func graphServiceFor(ctx context.Context, dial dynamic.Interface, t *graphTarget
 	if len(labels) == 0 {
 		return graphServicePath{Note: "the " + t.Kind + " has no Pod template labels to match a Service by" + fallback}
 	}
-	list, err := dial.Resource(client.SvcGVR.GVR()).Namespace(t.Namespace).List(ctx, metav1.ListOptions{Limit: graphServiceListLimit})
+	// The one list and the one choice :slow makes for the same Pods.
+	names, read, more, err := slowpath.SelectingServices(ctx, dial, t.Namespace, labels)
 	if err != nil {
 		return graphServicePath{Note: "the Services of the namespace were not read" + fallback}
 	}
-	var names []string
-	for i := range list.Items {
-		selector, _, _ := unstructured.NestedStringMap(list.Items[i].Object, "spec", "selector")
-		if len(selector) == 0 {
-			continue
-		}
-		matches := true
-		for key, value := range selector {
-			if labels[key] != value {
-				matches = false
-				break
-			}
-		}
-		if matches {
-			names = append(names, list.Items[i].GetName())
-		}
-	}
-	sort.Strings(names)
 	cut := ""
-	if list.GetContinue() != "" {
-		cut = fmt.Sprintf(" (only the first %d Services of the namespace were read)", len(list.Items))
+	if more {
+		cut = fmt.Sprintf(" (only the first %d Services of the namespace were read)", read)
 	}
 	if len(names) == 0 {
 		return graphServicePath{Note: "no Service selects this " + t.Kind + "'s Pod template" + cut + fallback}
 	}
-	chosen, how := names[0], "its selector matches the Pod template"
+	how := "its selector matches the Pod template"
 	if len(names) > 1 {
 		how = fmt.Sprintf("the first by name of %d Services whose selector matches the Pod template", len(names))
 	}
-	if sources != nil && sources.RequestPath != nil {
-		for _, name := range names {
-			if _, declared := sources.RequestPath.Services[t.Namespace+"/"+name]; declared {
-				chosen, how = name, "its selector matches the Pod template and it has a requestPath declaration"
-				break
-			}
-		}
+	chosen, declared := slowpath.Preferred(names, t.Namespace, sources)
+	if declared {
+		how = "its selector matches the Pod template and it has a requestPath declaration"
 	}
 	return graphServicePath{Path: t.Namespace + "/" + chosen, Note: how + cut}
 }

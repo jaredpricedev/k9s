@@ -24,7 +24,7 @@ Nothing is read until the view is opened. The view never refreshes on a timer.
 | --- | --- |
 | `r` | Read again |
 | `1` `2` `3` `4` `5` | Window on each side: 5m, 15m, 30m (default), 1h, 3h |
-| `p` / `n` | Previous (earlier) / next (later) retained rollout |
+| `n` / `Shift-N` | Next (later) / previous (earlier) retained rollout, the same pair that steps through episodes in `:slow` and signals in `:graph` |
 | `t` | Open `:timeline` for the same workload |
 | `Enter` | Open `:graph` for the workload over the narrowest graph window that reaches back to the start of the before window, scrolled to the chart of the selected signal (memory signals and restarts: MEMORY; CPU signals: CPU). For a signal `:graph` does not draw (request rate, errors, latency, readiness) a message says so and the graph opens at the top |
 | `Shift-D` | Grafana hand-off for the workload, with the range from the start of the before window to the end of the after window ([grafana-handoff.md](grafana-handoff.md)) |
@@ -64,7 +64,7 @@ retained, and the exact time.
 - Less than one minute on a side is not compared.
 - A revision created *before* the revision it replaced is a rollback onto an
   older ReplicaSet. Kubernetes does not record when a rollback happened, so no
-  windows are placed around it; the view says so and `p` steps to an earlier
+  windows are placed around it; the view says so and `Shift-N` steps to an earlier
   rollout.
 - Revisions pruned by the workload's history limit cannot be shown.
 
@@ -207,7 +207,7 @@ adds that error ratio and latency are not like-for-like.
   ratio. CPU throttling series exist only for containers with a CPU limit.
 - More than 32 histogram buckets exceed the shared series limit; latency is
   then reported `not read` rather than computed from a partial histogram.
-- Prometheus retention bounds how far back `p` is useful.
+- Prometheus retention bounds how far back `Shift-N` is useful.
 - A 403 from the API server's service proxy and a 403 from Prometheus itself
   both read `denied`.
 - `:graph` draws memory, CPU, network and restarts only, so `Enter` on an

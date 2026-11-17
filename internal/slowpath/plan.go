@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -38,13 +37,7 @@ const (
 	Deadline = 45 * time.Second
 	// DefaultWindow is the window the view opens on.
 	DefaultWindow = time.Hour
-	// maxPodMatcher keeps the Pod name matcher of the added readings within
-	// the query builder's value limit.
-	maxPodMatcher = 1000
 )
-
-// Windows are the selectable windows, on keys 1 to 4.
-var Windows = []time.Duration{15 * time.Minute, time.Hour, 6 * time.Hour, 24 * time.Hour}
 
 // Profiles named for the readings :slow adds to the declared ones.
 const (
@@ -147,24 +140,6 @@ func (p *Plan) take(index int, resolved *observability.HopPlan, perPod bool) {
 	}
 }
 
-// podMatcher matches exactly the named Pods; names that would make the
-// matcher too long are left out and counted.
-func podMatcher(pods []string) (m observability.Matcher, omitted int) {
-	names := append([]string(nil), pods...)
-	sort.Strings(names)
-	var parts []string
-	size := 0
-	for _, pod := range names {
-		quoted := observability.RegexQuote(pod)
-		if size+len(quoted)+1 > maxPodMatcher {
-			break
-		}
-		parts = append(parts, quoted)
-		size += len(quoted) + 1
-	}
-	return observability.Re("pod", strings.Join(parts, "|")), len(names) - len(parts)
-}
-
 // fixed adds one reading with fixed kube-state-metrics or cAdvisor names.
 func (p *Plan) fixed(index int, profile string, sig *observability.Signal, expr observability.Expr, scope string, omitted int) {
 	p.add(&Query{HopIndex: index, Sent: expr, PerPod: true, HopQuery: observability.HopQuery{
@@ -244,8 +219,9 @@ func BuildPlan(sources *observability.Sources, path *Path, window time.Duration,
 	}
 	index = add(&HopSpec{ID: HopService, From: from, To: "service", Short: "endpoints", What: fmt.Sprintf("%d endpoints", path.Endpoints)})
 	namespace := observability.Eq("namespace", path.Namespace)
-	matcher, omitted := podMatcher(pods)
-	scope := fmt.Sprintf("namespace=%q,pod=~%q", path.Namespace, matcher.Value)
+	// The same matcher the profiles of the hop are pinned with.
+	matcher, omitted := observability.PodMatcher("pod", pods)
+	scope := fmt.Sprintf("namespace=%q,pod%s%q", path.Namespace, string(matcher.Op), matcher.Value)
 	if len(pods) > 0 {
 		plan.fixed(index, ProfileKubeState,
 			&observability.Signal{Name: SignalReady, Title: "Pod Ready condition (1 is Ready)", Kind: observability.SignalGauge,

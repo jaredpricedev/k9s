@@ -17,6 +17,8 @@ func initKeys() {
 	tcell.KeyNames[KeyDash] = "-"
 	tcell.KeyNames[KeyLeftBracket] = "["
 	tcell.KeyNames[KeyRightBracket] = "]"
+	tcell.KeyNames[KeyPlus] = "+"
+	tcell.KeyNames[KeyUnderscore] = "_"
 
 	initNumbKeys()
 	initStdKeys()
@@ -87,6 +89,10 @@ const (
 	KeyDash         = 45
 	KeyLeftBracket  = 91
 	KeyRightBracket = 93
+	// KeyPlus and KeyUnderscore step a count up and down in a view whose
+	// digits are window keys; "-" belongs to the application.
+	KeyPlus       = 43
+	KeyUnderscore = 95
 )
 
 // Define Shift Keys.

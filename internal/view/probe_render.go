@@ -37,8 +37,11 @@ type probeColumns struct {
 }
 
 // probeLayout spends the width in a fixed order: the strip, the slowest
-// answer, the unanswered count, the fastest answer, the status codes and
-// the node come before any column grows.
+// answer, the unanswered count and the node, then a blank between two bars
+// of the strip so that each request stands alone, then the fastest answer
+// and the status codes, and only then does a column grow. The selected
+// Pod's line under the table states every time and every code whatever the
+// columns leave out.
 func probeLayout(width, attempts, podNatural, nodeNatural, zoneNatural int) probeColumns {
 	podNatural = min(max(podNatural, len("previous 00:00:00Z")), probePodMax)
 	columns := probeColumns{pod: min(podNatural, probePodMin), verdict: probeVerdictWidth}
@@ -59,17 +62,17 @@ func probeLayout(width, attempts, podNatural, nodeNatural, zoneNatural int) prob
 	if take(probeNumberWidth + 1) {
 		columns.over = probeNumberWidth
 	}
+	if node := min(max(nodeNatural, 4), probeNodeMax); nodeNatural > 0 && columns.over > 0 && take(node+1) {
+		columns.node = node
+	}
+	if spaced := 2*attempts - 1; columns.strip > 0 && attempts > 1 && take(spaced-columns.strip) {
+		columns.strip, columns.spaced = spaced, true
+	}
 	if take(probeNumberWidth + 1) {
 		columns.fastest = probeNumberWidth
 	}
 	if take(probeNumberWidth + 1) {
 		columns.codes = probeNumberWidth
-	}
-	if node := min(max(nodeNatural, 4), probeNodeMax); nodeNatural > 0 && take(node+1) {
-		columns.node = node
-	}
-	if spaced := 2*attempts - 1; columns.strip > 0 && attempts > 1 && take(spaced-columns.strip) {
-		columns.strip, columns.spaced = spaced, true
 	}
 	grow := func(limit int) {
 		if more := min(limit-columns.pod, rest); more > 0 {
@@ -484,7 +487,7 @@ func (v *probeView) tableHeading(columns *probeColumns) string {
 	heading := "   " + impactCell("POD", columns.pod) + " "
 	if columns.strip > 0 {
 		label := "REQ"
-		for _, candidate := range []string{"REQUESTS", "EACH REQUEST", "EACH REQUEST, IN ORDER"} {
+		for _, candidate := range []string{"REQUESTS", "EACH REQUEST", "EACH REQUEST, IN ORDER", "EACH REQUEST, IN ORDER (height = time to first byte)"} {
 			if len(candidate) <= columns.strip {
 				label = candidate
 			}
@@ -699,9 +702,9 @@ func (v *probeView) nextLine(summary *probe.Summary) string {
 	case ran:
 		if v.runUnavailable() == "" {
 			parts = append(parts, "r runs again (this run stays as a dimmer strip)")
-			for index, count := range probe.AttemptChoices {
+			for _, count := range probe.AttemptChoices {
 				if count > v.attempts {
-					parts = append(parts, fmt.Sprintf("%d sends %d per pod", index+1, count))
+					parts = append(parts, fmt.Sprintf("+ sends %d per pod", count))
 					break
 				}
 			}
@@ -709,8 +712,8 @@ func (v *probeView) nextLine(summary *probe.Summary) string {
 	case v.runUnavailable() == "":
 		parts = append(parts, "r sends the requests after you confirm")
 	}
-	if v.slowPresent() && ran {
-		parts = append(parts, "w slow requests by hop")
+	if _, err := slowTarget(v.scopeTarget()); err == nil && ran {
+		parts = append(parts, slowKeyName+" slow requests by hop")
 	}
 	if len(parts) == 0 {
 		return ""
@@ -825,26 +828,40 @@ func (v *probeView) footerText() string {
 		return impactFit(width, "Esc cancels the probe; answers so far stay on screen", "Esc cancels the probe")
 	}
 	g := v.glyphs()
-	choices := make([]string, 0, len(probe.AttemptChoices))
-	for index, count := range probe.AttemptChoices {
-		choices = append(choices, fmt.Sprintf("%d %s%d", index+1, g.times, count))
+	count := fmt.Sprintf("%s%d", g.times, v.attempts)
+	// Four forms, longest first; each names the run, the count, the other
+	// probe and the sibling views as far as the width allows.
+	forms := [][]string{
+		{"r run", "+ more  _ fewer per pod (" + count + ")", "u " + v.otherKind() + " probe", "Enter open pod", "m graph", "t timeline", slowKeyName + " slow", "Esc back"},
+		{"r run", "+/_ " + count + " per pod", "u probe", "Enter pod", "m graph", "t timeline", slowKeyName + " slow", "Esc back"},
+		{"r run", "+/_ " + count + " per pod", "u probe", "Enter pod", "m graph", slowKeyName + " slow", "Esc"},
+		{"r run", "+/_ " + count, "Enter pod", "m graph", slowKeyName + " slow", "Esc"},
 	}
-	keys := []string{"r run", strings.Join(choices, "  ") + " per pod"}
-	brief := []string{"r run", fmt.Sprintf("1-%d requests per pod", len(probe.AttemptChoices))}
-	if v.plan != nil && v.runUnavailable() != "" {
-		// A key that would send nothing is not offered; the pane says why.
-		keys, brief = nil, nil
+	runnable := v.plan == nil || v.runUnavailable() == ""
+	several := v.plan != nil && len(v.plan.Available) > 1
+	texts := make([]string, 0, len(forms))
+	for _, form := range forms {
+		var keys []string
+		for _, key := range form {
+			switch {
+			// A key that would send nothing is not offered; the pane says why.
+			case !runnable && (strings.HasPrefix(key, "r run") || strings.HasPrefix(key, "+")):
+			case !several && strings.HasPrefix(key, "u "):
+			default:
+				keys = append(keys, key)
+			}
+		}
+		texts = append(texts, strings.Join(keys, g.sep))
 	}
-	if v.plan != nil && len(v.plan.Available) > 1 {
-		keys = append(keys, "u "+string(v.plan.NextKind())+" probe")
-		brief = append(brief, "u probe")
+	return impactFit(width, texts...)
+}
+
+// otherKind names the declared probe that u switches to.
+func (v *probeView) otherKind() string {
+	if v.plan == nil {
+		return ""
 	}
-	keys = append(keys, "Enter open pod", "m graph", "t timeline")
-	brief = append(brief, "Enter pod", "m graph")
-	if v.slowPresent() {
-		keys = append(keys, "w slow")
-	}
-	return impactFit(width, strings.Join(append(keys, "Esc back"), g.sep), strings.Join(append(brief, "Esc back"), g.sep), strings.Join(brief, g.sep))
+	return string(v.plan.NextKind())
 }
 
 // render lays the view out: the header, the table, the result pane and the

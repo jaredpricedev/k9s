@@ -58,6 +58,29 @@ When the line does not fit it drops the explanatory detail from the last check b
 
 Limits: the guidance is only as current as the list row. It parses the `WHY` phrase, so a custom view that removes `STATUS` or `WHY` from pods loses the corresponding detail. It reports the first failing container, as `WHY` does. A deployment line is based on the ready count alone and does not read conditions such as `ProgressDeadlineExceeded`; `:rollout` shows those. There is no setting to turn the line off.
 
+A Service, an Ingress or a workload that reports no problem keeps a plain border. The views that look into a hang (`:slow`, `:probe`) are opened on request from such a row, with `Shift-W` and `Shift-B` or from `Ctrl-O`; nothing on the list, in `:problems` or on this line points at them, because a quiet status is not evidence of a hang and the list does not read the metrics that would be.
+
+## One keyboard for the incident and chart views
+
+`:problems`, `:alerts`, `:timeline`, `:impact`, `:graph`, `:slow`, `:probe`, a drawn dashboard and `:query` are opened from one another. A key means one thing in all of them:
+
+| Key | Meaning | Where |
+| --- | --- | --- |
+| `m` | `:graph`. From `:slow` it opens one chart per Pod on the signal that set a Pod apart | rows, `:problems`, `:alerts`, `:timeline`, `:slow`, `:probe` |
+| `t` | `:timeline` | rows, `:problems`, `:alerts`, `:impact`, `:slow`, `:probe` |
+| `Shift-D` | Grafana hand-off for the selection and the window on screen | every one of them |
+| `Shift-W` | `:slow` | rows, `:probe`, `:graph` |
+| `Shift-B` | `:probe`; opening it sends nothing | rows, `:slow`, `:graph` |
+| `1` to `4` | Window 15m, 1h, 6h, 24h (`:impact`: `1` to `5`, the width compared on each side of a rollout) | `:graph`, `:slow`, dashboards, `:query`, `:timeline` |
+| `Left` / `Right`, with `Shift` ten steps, `Home` / `End` | The time cursor | `:graph`, `:slow`, a zoomed panel |
+| `n` / `Shift-N` | Next / previous of what the view steps through: episodes, signals, rollouts | `:slow`, `:graph`, `:impact` |
+| `r` | Read again. In `:probe` it is the one read there is: it sends the requests, after a confirmation | every one of them |
+| `s` | The queries or sources behind the page | `:graph`, `:slow`, dashboards, `:query`, `:timeline` |
+| `p` | One chart per Pod | `:graph` only |
+| `+` / `_` | More / fewer requests per Pod | `:probe` only; the digits stay windows |
+
+`TestHangViewsShareOneKeyboard` holds the views to this table. The palette and `?` list each command once under Inspect and name the key that opens it on the same entry (`Slow requests: which hop (Shift-W)`).
+
 ## Semantic skin tokens
 
 Existing skins remain supported. An optional `k9s.semantic` object can override `canvas`, `panel`, `text`, `muted`, `focus`, `healthy`, `warning`, `failure`, `progress`, `unknown`, `category`, and `selected`. These tokens also feed inherited prompts, dialogs, help, tables and charts. Runtime updates keep selection and stream state.

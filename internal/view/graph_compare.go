@@ -279,6 +279,12 @@ func (c *graphCompare) signal(id string) (*graphSignal, int) {
 			return &c.Signals[i], i
 		}
 	}
+	// A caller from another view names a profile signal as profile/name
+	// (:slow does); the name alone finds it when this page reads the same
+	// reading with its own template, or under another profile.
+	if _, name, qualified := strings.Cut(id, "/"); qualified {
+		id = name
+	}
 	for i := range c.Signals {
 		if c.Signals[i].Name == id {
 			return &c.Signals[i], i

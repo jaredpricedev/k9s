@@ -474,16 +474,46 @@ func TestNamedQueriesShipBuiltinsAndTakeSavedOnes(t *testing.T) {
 	board := QueryBoard(NamedQueries(nil))
 	plan := BuildPlan(board, b)
 	require.Equal(t, Counts{Panels: 5, Planned: 5}, plan.Count(board))
-	require.Equal(t, `sum by (pod) (rate(container_cpu_cfs_throttled_periods_total{namespace="gitlab", pod=~"gitlab-webservice-default-.+"}[2m])) / `+
-		`sum by (pod) (rate(container_cpu_cfs_periods_total{namespace="gitlab", pod=~"gitlab-webservice-default-.+"}[2m]))`, plan.Panels[0].Queries[0].Expr.String())
+	// A shipped query is a signal of a request-path profile, written by the
+	// builder that :slow uses: the cAdvisor matchers of container-cpu are
+	// in it, and no text of its own is kept here.
+	require.Equal(t, `(sum by (pod) (rate(container_cpu_cfs_throttled_periods_total{namespace="gitlab",pod=~"gitlab-webservice-default-.+",container!="",container!="POD"}[2m])) / `+
+		`sum by (pod) (rate(container_cpu_cfs_periods_total{namespace="gitlab",pod=~"gitlab-webservice-default-.+",container!="",container!="POD"}[2m])))`,
+		plan.Panels[0].Queries[0].Expr.String())
 	require.Equal(t, "throttled · CPU throttled share by pod", board.Panels[0].Title)
 	require.Equal(t, chart.Ratio, board.Panels[0].Unit.Chart)
-	require.Equal(t, `sum by (reason) (rate(hubble_drop_total[2m]))`, plan.Panels[4].Queries[0].Expr.String())
+	require.Equal(t, `sum by (ingress) (rate(nginx_ingress_controller_requests{namespace="gitlab",status="499"}[2m]))`, plan.Panels[1].Queries[0].Expr.String())
+	require.Equal(t, `sum by (pod) (puma_queued_connections{namespace="gitlab",pod=~"gitlab-webservice-default-.+"})`, plan.Panels[2].Queries[0].Expr.String())
+	require.Equal(t, `histogram_quantile(0.99, sum by (le) (rate(coredns_dns_request_duration_seconds_bucket{}[2m])))`, plan.Panels[3].Queries[0].Expr.String())
+	require.Equal(t, `sum by (destination_pod,reason) (rate(hubble_drop_total{destination_namespace="gitlab",destination_pod=~"gitlab-webservice-default-.+"}[2m]))`,
+		plan.Panels[4].Queries[0].Expr.String())
+	for i, want := range [][2]string{{"container-cpu", "throttled"}, {"ingress-nginx", "499"}, {"gitlab-webservice", "queued"}, {"coredns", "p99"}, {"cilium-hubble", "drops"}} {
+		q := NamedQueries(nil)[i]
+		require.Equal(t, want, [2]string{q.Profile, q.Signal})
+		require.Contains(t, q.About, "Signal "+want[1]+" of the "+want[0]+" request-path profile: the reading :slow makes.")
+		require.NotContains(t, q.Expr, "604799", "the range of a rate is the variable")
+	}
+	require.Equal(t, "{{destination_pod}} {{reason}}", NamedQueries(nil)[4].Legend)
+	require.Equal(t, "p99", NamedQueries(nil)[3].Legend)
+
+	// A context that reads the hop with other label names changes the
+	// shipped query with it, as it changes :slow.
+	exported := &observability.Sources{RequestPath: &observability.RequestPath{
+		Defaults: &observability.ServicePath{Ingress: []string{"ingress-nginx-exported"}},
+		Profiles: map[string]observability.Profile{"container-cpu": {Extends: "container-cpu", Scope: map[string]string{"pod": "pod_name"}}},
+	}}
+	require.NoError(t, exported.ValidateRequestPath())
+	own := NamedQueries(exported)
+	require.Equal(t, "ingress-nginx-exported", own[1].Profile)
+	require.Equal(t, `sum by (ingress) (rate(nginx_ingress_controller_requests{exported_namespace="$namespace",status="499"}[$__rate_interval]))`, own[1].Expr)
+	require.Contains(t, own[0].Expr, `sum by (pod_name) (rate(container_cpu_cfs_throttled_periods_total{namespace="$namespace",pod_name=~"$pod",`)
+	require.Equal(t, "{{pod_name}}", own[0].Legend)
 
 	// Without a namespace the namespaced ones say why they are not drawn;
-	// the cluster-wide ones still are.
+	// the cluster-wide one still is.
 	plan = BuildPlan(board, SelectionBindings(Selection{}, time.Hour, 30*time.Second))
 	require.Equal(t, "variable $namespace is not resolved: nothing with a namespace is selected", plan.Panels[0].NotDrawn)
+	require.Equal(t, "variable $namespace is not resolved: nothing with a namespace is selected", plan.Panels[4].NotDrawn)
 	require.Empty(t, plan.Panels[3].NotDrawn)
 
 	saved := &observability.Sources{Queries: map[string]observability.NamedQuery{

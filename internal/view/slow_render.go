@@ -658,12 +658,17 @@ func (v *slowView) sentences(report *slowpath.Report, width, limit int) []string
 	return best
 }
 
+// slowStep is one follow-up read: the key and what it opens, and a shorter
+// form for a line that has no room for the whole of it.
+type slowStep struct{ long, short string }
+
 // nextSteps offers the follow-up reads as keys, and only those that would
-// run: a command that this build does not have is left out.
-func (v *slowView) nextSteps(report *slowpath.Report) string {
-	var steps []string
-	if v.commandReason("probe", v.serviceTarget()) == "" {
-		steps = append(steps, "p probe each pod now")
+// run. The line holds whole steps: later steps are shortened first, then
+// left out, so that it never ends in the middle of one.
+func (v *slowView) nextSteps(report *slowpath.Report, width int) string {
+	var steps []slowStep
+	if probeAvailability(v.serviceTarget()) == "" && len(report.Path.Pods) > 0 {
+		steps = append(steps, slowStep{probeKeyName + " probe each pod now", probeKeyName + " probe pods"})
 	}
 	if app := report.Hop(slowpath.HopApp); app != nil && len(app.Pods) > 0 {
 		outlier := ""
@@ -672,30 +677,52 @@ func (v *slowView) nextSteps(report *slowpath.Report) string {
 				outlier = report.ShortPod(app.Pods[i].Pod.Name)
 			}
 		}
-		if v.commandReason(graphCommandToken, v.workloadTarget()) == "" {
+		if graphAvailability(v.app, v.serviceTarget()) == "" {
+			// m opens the comparison on the signal that set a Pod apart.
+			if _, name := slowGraphSignal(report); name != "" && len(app.Pods) > 1 {
+				steps = append(steps, slowStep{"m " + name + " of each pod side by side", "m " + name + " per pod"})
+			} else if len(app.Pods) > 1 {
+				steps = append(steps, slowStep{"m graphs of each pod side by side", "m per-pod graphs"})
+			}
 			switch {
 			case v.focus.pod != "":
-				steps = append(steps, "Enter graphs "+report.ShortPod(v.focus.pod))
+				short := report.ShortPod(v.focus.pod)
+				steps = append(steps, slowStep{"Enter graphs " + short + " against its limits", "Enter graphs " + short})
 			case outlier != "" && v.podsListed():
-				steps = append(steps, "Enter on "+outlier+" graphs it against its limits")
+				steps = append(steps, slowStep{"Enter on " + outlier + " graphs it against its limits", "Enter on " + outlier + " graphs it"})
 			case outlier != "":
-				steps = append(steps, "Enter lists the pods, m graphs the workload")
-			default:
-				steps = append(steps, "m graph")
+				steps = append(steps, slowStep{"Enter lists the pods", "Enter lists pods"})
 			}
 		}
-		steps = append(steps, "h Hubble flows to the pods")
+		steps = append(steps, slowStep{"h Hubble flows to the pods", "h Hubble"})
 	}
 	if grafanaUnavailableShort(v.app, v) == "" {
-		steps = append(steps, "Shift-D Grafana, this window")
+		steps = append(steps, slowStep{"Shift-D Grafana, this window", "Shift-D Grafana"})
 	}
-	if v.commandReason(timelineCommandToken, v.workloadTarget()) == "" {
-		steps = append(steps, "t timeline")
+	if _, _, err := timelineScope(v.workloadTarget(), v.app.Config.ActiveNamespace(), ""); err == nil {
+		steps = append(steps, slowStep{"t timeline", "t timeline"})
 	}
-	if len(steps) == 0 {
+	return v.fitSteps(steps, width)
+}
+
+// fitSteps joins the steps into one line of at most width cells.
+func (v *slowView) fitSteps(steps []slowStep, width int) string {
+	const lead = "next: "
+	texts := make([]string, len(steps))
+	for i := range steps {
+		texts[i] = steps[i].long
+	}
+	line := func() string { return v.plain(lead + strings.Join(texts, " · ")) }
+	for i := len(texts) - 1; i >= 0 && runewidth.StringWidth(line()) > width; i-- {
+		texts[i] = steps[i].short
+	}
+	for len(texts) > 1 && runewidth.StringWidth(line()) > width {
+		texts = texts[:len(texts)-1]
+	}
+	if len(texts) == 0 {
 		return ""
 	}
-	return "next: " + strings.Join(steps, " · ")
+	return lead + strings.Join(texts, " · ")
 }
 
 func (v *slowView) bodyLines(width, rows int) []string {
@@ -781,7 +808,7 @@ func (v *slowView) shareRows(report *slowpath.Report, width, rows int) slowBudge
 		summaryCap = 2
 	}
 	if rows >= 13 {
-		b.next = v.nextSteps(report)
+		b.next = v.nextSteps(report, width)
 	}
 	count := func(flags ...bool) int {
 		n := 0

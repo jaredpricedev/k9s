@@ -100,6 +100,7 @@ and [Hubble measurements](docs/hubble-performance-2026-10-04.md).
 | Is one backend slow right now (asks before it sends anything) | `Shift-B` on a Service, workload or Pod, or `:probe`: a timed read-only GET to each Pod's own declared readiness path ([docs/probe.md](docs/probe.md)) |
 | A Grafana dashboard's panels, or any PromQL, drawn in the terminal | `v` on a row of `:dashboards`; `:query`, `:query <name>` or `:query <expression>` ([docs/dashboards.md](docs/dashboards.md)) |
 | Walk one incident | `:problems` → `:alerts` → `t` timeline → `:impact` → `Enter` graph → `Shift-D` Grafana; `m`, `t` and `Shift-D` mean the same in each of these views |
+| Walk one hang that no status shows | Select the Service → `Shift-W` slow requests (which hop, which Pod, when) → `m` the Pods side by side on the signal that set one apart → `Shift-B` probe each Pod now (asks first) → `:dashboards`, `v` a dashboard drawn here → `:query throttled`. `Shift-W` and `Shift-B` mean the same on a row and in these views; digits are windows, arrows the cursor, `n`/`Shift-N` next and previous in each |
 | Access, capacity, storage, node maintenance | `:access`, `:capacity`, `:storage`; select a Node then `:maintenance` or `o` |
 | Network path / task handoff | Select a Service then `:network-review`; `:taskbook save` / `:taskbook open` |
 | Connection checks and session reconnect | `:connection`, then `r` to retry checks or `R` to reconnect the same context while retaining workspace/navigation |

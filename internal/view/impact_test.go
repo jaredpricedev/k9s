@@ -181,7 +181,7 @@ func TestImpactFramesStateBeforeAfterAndVerdictAtEverySize(t *testing.T) {
 		case 60:
 			require.Contains(t, frame, "before 04:08-04:20Z │ after 04:20-04:32Z · 12m (asked 30m)")
 			require.NotContains(t, frame, "before│after", "the trend gives way before signal, before, after or verdict")
-			require.Contains(t, frame, "p/n rollout")
+			require.Contains(t, frame, "n/N rollout")
 		}
 	}
 }
@@ -222,7 +222,7 @@ func TestImpactStatesWhatCouldNotBeReadInsteadOfShowingZeros(t *testing.T) {
 	frame = drawnText(t, v, 80, 24)
 	require.Contains(t, frame, "rev 3 (latest; 3 retained)")
 	require.Contains(t, frame, "No comparison: rev 3 reuses checkout-api-6c8d7f9b5: a rollback.")
-	require.Contains(t, frame, "p and n step to another retained rollout.")
+	require.Contains(t, frame, "n and N step to another retained rollout.")
 	require.Contains(t, frame, "Nothing was compared.")
 
 	v.accept(&impactRead{err: errors.New("Pod apps/checkout-api-0 has no controller, so it has no rollout to compare around")})
@@ -327,10 +327,13 @@ func TestImpactKeysReadOnlyOnRequestAndDiscardLateReplies(t *testing.T) {
 	quiet()
 	press(ui.Key1)
 	require.Equal(t, call{0, 5 * time.Minute}, next())
-	press(ui.KeyP)
+	press(ui.KeyShiftN)
 	require.Equal(t, call{1, 5 * time.Minute}, next())
-	press(ui.KeyP)
+	press(ui.KeyShiftN)
 	quiet() // only two revisions are retained
+	// p was this step before Shift-N: it reads nothing and says so.
+	press(ui.KeyP)
+	quiet()
 	press(ui.KeyN)
 	require.Equal(t, call{0, 5 * time.Minute}, next())
 	press(ui.KeyN)

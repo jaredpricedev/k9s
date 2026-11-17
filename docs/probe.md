@@ -23,13 +23,14 @@ sent. The header says "Nothing has been sent" until you send something.
 | Key | What it does |
 | --- | --- |
 | `r` | Run. The first time, and whenever the request changed, a dialog states what will be sent and waits for your answer. The same request runs again without a second question. |
-| `1` to `6` | Requests per Pod for the next run: 1, 3, 5 (default), 10, 20 or 30. |
+| `+` / `_` | More / fewer requests per Pod for the next run, through 1, 3, 5 (default), 10, 20 and 30. The digits are not used: they are the window keys of `:slow`, `:graph` and the dashboards, and a probe has no window. `-` is the application's last-view key. |
 | `u` | Switch between the Pods' declared readiness and liveness probe, when they declare both. Times for another path are not comparable, so the runs of one probe are put aside while the other is shown and come back when you switch back; the two are never shown together. |
 | Up / Down, `j` / `k` | Move between Pods. The line under the table states every time, the status codes, the node and zone and the declared probe of the Pod under the cursor. |
 | `Enter` | Open the Pod under the cursor in the Pod list. |
 | `m` | Graph that Pod ([graphs.md](graphs.md)). |
 | `t` | Timeline of that Pod. |
-| `w` | Open `:slow` for the selection the probe was opened for, when the build has that view. Otherwise the key says so. |
+| `Shift-D` | Grafana hand-off for that Pod ([grafana-handoff.md](grafana-handoff.md)). |
+| `Shift-W` | Open `:slow` ([slow-requests.md](slow-requests.md)) for the selection the probe was opened for, whichever Pod the cursor is on: the same key as on a Service row. From `:slow`, `Shift-B` opens this view. |
 | `Esc` | Cancel a running probe. When nothing is running, go back. A request that was in flight at that moment has left: it is counted as sent, drawn as `?` and reported as abandoned, because the application may still handle it. Only requests that never left are "not sent". |
 
 After a run, `r` runs again and keeps the run before it as a dimmer row under
@@ -115,6 +116,16 @@ Service. So:
 Each Pod has one row: a strip with one cell per request in the order they
 were sent, the fastest, median and slowest answer, how many got no answer
 within the deadline, the status codes, the node and zone, and one word.
+
+The width is spent in a fixed order: the Pod, its median and the word always
+remain; then the strip, the slowest answer, the unanswered count and the
+node; then a blank between two bars of the strip, so that each request
+stands alone; then the fastest answer and the status codes; then the zone
+and the full Pod name. At 132 columns thirty requests keep their blanks and
+the strip is headed "EACH REQUEST, IN ORDER (height = time to first byte)";
+at 80 columns thirty stand side by side. Whatever a column leaves out is in
+the line under the table for the Pod under the cursor: every time, every
+status code, the node and the zone.
 
 The strip uses one scale for every row, stated in the header as
 "full bar █ = 4s". The height of a bar is the time to the first byte. A

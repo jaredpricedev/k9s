@@ -888,9 +888,11 @@ func targetValue(t *HopTarget, field string) string {
 	return ""
 }
 
-// podMatcher matches exactly the named Pods and reports how many names
-// were left out to keep the matcher within the builder's value limit.
-func podMatcher(label string, pods []string) (m Matcher, omitted int) {
+// PodMatcher matches exactly the named Pods and reports how many names
+// were left out to keep the matcher within the builder's value limit. It
+// is the one matcher every reading of a hop's Pods uses, whether a profile
+// supplies the metric or a view names it.
+func PodMatcher(label string, pods []string) (m Matcher, omitted int) {
 	names := append([]string(nil), pods...)
 	sort.Strings(names)
 	var parts []string
@@ -939,7 +941,7 @@ func (s *Sources) resolveProfile(plan *HopPlan, name string, extra []Matcher) {
 				continue
 			}
 			var m Matcher
-			m, omitted = podMatcher(label, plan.Target.Pods)
+			m, omitted = PodMatcher(label, plan.Target.Pods)
 			scope = append(scope, m)
 			continue
 		}
@@ -1046,6 +1048,97 @@ func signalExpr(sig *Signal, base []Matcher, rate time.Duration, by []string) (E
 		return Expr{}, err
 	}
 	return e, nil
+}
+
+// Variables a signal template names instead of an object.
+const (
+	// TemplateNamespace stands for the namespace, as an exact value.
+	TemplateNamespace = "$namespace"
+	// TemplatePod stands for the Pod names, as a regular expression.
+	TemplatePod = "$pod"
+	// TemplateRate stands for the range a rate is taken over.
+	TemplateRate = "$__rate_interval"
+	// templateRateWindow is written by the builder where TemplateRate goes.
+	// No view takes a rate over this range, and a matcher of a declared
+	// profile is not a range.
+	templateRateWindow = 604799 * time.Second
+)
+
+// SignalTemplate is one signal of a profile written out as PromQL text
+// with variables in place of an object's names.
+type SignalTemplate struct {
+	Profile string
+	// Signal is the declaration with its defaults filled in.
+	Signal Signal
+	// Text is the query: the fixed shape ResolveHop fills for the same
+	// signal, with TemplateNamespace, TemplatePod and TemplateRate where
+	// ResolveHop writes a namespace, Pod names and a rate window.
+	Text string
+	// By are the labels the answer is kept apart by, in order.
+	By []string
+	// Unbound lists scope fields of the profile that have no variable
+	// (service, ingress, node); they do not narrow the query.
+	Unbound []string
+	// ClusterWide is true when the profile pins the query to nothing.
+	ClusterWide bool
+}
+
+// SignalTemplate writes one signal of a profile as a query template: the
+// text a person would save for the :query bar, built by the same code and
+// from the same metric names, label names and matchers that ResolveHop
+// uses, so that a named query and :slow cannot drift apart. split names
+// scope fields (ScopePod, ScopeIngress) whose label keeps the answer apart,
+// before the signal's own by labels. Nothing is contacted.
+func (s *Sources) SignalTemplate(profileName, signalName string, split ...string) (SignalTemplate, error) {
+	out := SignalTemplate{Profile: profileName}
+	profile, err := s.Profile(profileName)
+	if err != nil {
+		return out, err
+	}
+	found := false
+	for i := range profile.Signals {
+		if profile.Signals[i].Name == signalName {
+			out.Signal, found = profile.Signals[i], true
+			break
+		}
+	}
+	if !found {
+		return out, fmt.Errorf("profile %q has no signal %q", Clean(profileName, 64), Clean(signalName, 64))
+	}
+	fillSignal(&out.Signal)
+	var scope []Matcher
+	for _, field := range scopeFields {
+		label, declared := profile.Scope[field]
+		if !declared {
+			continue
+		}
+		switch field {
+		case ScopeNamespace:
+			scope = append(scope, Eq(label, TemplateNamespace))
+		case ScopePod:
+			scope = append(scope, Re(label, TemplatePod))
+		default:
+			out.Unbound = append(out.Unbound, field)
+		}
+	}
+	out.ClusterWide = len(scope) == 0
+	static, err := parseMatchers(profile.Match)
+	if err != nil {
+		return out, err
+	}
+	for _, field := range split {
+		if label, declared := profile.Scope[field]; declared {
+			out.By = append(out.By, label)
+		}
+	}
+	out.By = append(out.By, out.Signal.By...)
+	expr, err := signalExpr(&out.Signal, append(scope, static...), templateRateWindow, out.By)
+	if err != nil {
+		return out, err
+	}
+	written, _ := duration(templateRateWindow)
+	out.Text = strings.ReplaceAll(expr.String(), "["+written+"]", "["+TemplateRate+"]")
+	return out, nil
 }
 
 // Missing reports why an answer to this query is not a reading: the source

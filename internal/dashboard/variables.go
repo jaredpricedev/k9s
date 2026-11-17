@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/derailed/k9s/internal/impact"
 	"github.com/derailed/k9s/internal/observability"
 )
 
@@ -83,12 +84,14 @@ type Bindings struct {
 	Missing []string
 }
 
-// RateInterval is what $__rate_interval stands for: four steps and at
-// least two minutes. Grafana derives it from the scrape interval of the
+// RateInterval is what $__rate_interval stands for: the range :slow,
+// :graph and :impact take a rate over for the same step (four steps and at
+// least two minutes), so that a query here and the same reading there show
+// the same numbers. Grafana derives it from the scrape interval of the
 // datasource, which is not read here; this value is at least as wide for
 // scrape intervals up to 30 seconds, so a rate always has samples.
 func RateInterval(step time.Duration) time.Duration {
-	return max(4*step, 2*time.Minute)
+	return impact.RateWindowFor(step)
 }
 
 // Find returns the binding of a variable, or nil.
