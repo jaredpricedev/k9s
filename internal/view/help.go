@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
@@ -17,6 +18,7 @@ import (
 	"github.com/derailed/k9s/internal/view/cmd"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
+	"github.com/mattn/go-runewidth"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
@@ -34,6 +36,7 @@ type Help struct {
 
 	styles          *config.Styles
 	hints           HelpFunc
+	catalog         func() []ui.ActionDescriptor
 	maxKey, maxDesc int
 	width           int
 	extras          map[string]string
@@ -48,6 +51,7 @@ func NewHelp(app *App) *Help {
 	}
 	if owner, ok := app.Content.Top().(actionOwner); ok {
 		h.hints = func() model.MenuHints { return actionCatalogHints(owner, app) }
+		h.catalog = func() []ui.ActionDescriptor { return actionCatalog(owner, app) }
 	}
 	return h
 }
@@ -62,6 +66,10 @@ func (h *Help) Init(ctx context.Context) error {
 		return err
 	}
 	h.SetSelectable(false, false)
+	// Section headings scroll with their rows, and columns keep one width
+	// while scrolling instead of following whichever rows are visible.
+	h.SetFixed(0, 0)
+	h.SetEvaluateAllRows(true)
 	h.resetTitle()
 	h.SetBorder(true)
 	h.SetBorderPadding(0, 0, 1, 1)
@@ -127,7 +135,17 @@ func (h *Help) build() {
 	}
 	h.maxKey = min(h.maxKey, max(8, width/3))
 	h.maxDesc = max(1, width-h.maxKey-2)
-	row := h.addHelpSection(0, "RESOURCE", hints)
+	row := 0
+	if h.catalog == nil {
+		row = h.addHelpSection(0, "RESOURCE", hints)
+	} else {
+		for _, section := range helpSections(h.catalog()) {
+			if row > 0 {
+				row++
+			}
+			row = h.addHelpSection(row, section.title, section.hints)
+		}
+	}
 	if len(h.extras) > 0 {
 		var extra model.MenuHints
 		for label, value := range h.extras {
@@ -149,6 +167,50 @@ func (h *Help) build() {
 	}
 }
 
+type helpSection struct {
+	title string
+	hints model.MenuHints
+}
+
+// helpSections separates what can be done now from what cannot, and direct
+// keys from typed commands, so a reader scans one short group at a time.
+// Every discoverable binding keeps its label, key and unavailable reason.
+func helpSections(catalog []ui.ActionDescriptor) []helpSection {
+	sections := []helpSection{{title: "RESOURCE"}, {title: "NAVIGATION"}, {title: "COMMANDS"}, {title: "UNAVAILABLE HERE"}}
+	named := make(map[string]bool, len(catalog))
+	for _, item := range catalog {
+		if item.Discoverable && item.Shortcut != "" {
+			named[item.ID+"\x00"+item.Label] = true
+		}
+	}
+	for _, item := range catalog {
+		if !item.Discoverable || (item.Shortcut == "" && named[item.ID+"\x00"+item.Label]) {
+			continue
+		}
+		hint := model.MenuHint{Mnemonic: item.Shortcut, Description: item.Label}
+		index := 0
+		switch {
+		case item.UnavailableReason != "":
+			hint.Description += " · " + item.UnavailableReason
+			index = 3
+		case len(item.Shortcut) > 1 && item.Shortcut[0] == ':':
+			index = 2
+		case item.Category == ui.ActionNavigate || item.Category == ui.ActionFilter:
+			index = 1
+		}
+		sections[index].hints = append(sections[index].hints, hint)
+	}
+	result := sections[:1]
+	sort.Sort(result[0].hints)
+	for _, section := range sections[1:] {
+		if len(section.hints) > 0 {
+			sort.Sort(section.hints)
+			result = append(result, section)
+		}
+	}
+	return result
+}
+
 func (h *Help) addHelpSection(row int, title string, hints model.MenuHints) int {
 	h.SetCell(row, 0, h.titleCell(title).SetReference("heading"))
 	h.SetCell(row, 1, tview.NewTableCell(""))
@@ -156,10 +218,7 @@ func (h *Help) addHelpSection(row int, title string, hints model.MenuHints) int 
 	for _, hint := range hints {
 		key := ui.ToMnemonic(hint.Mnemonic)
 		h.SetCell(row, 0, tview.NewTableCell(key).SetReference(hint.Mnemonic).SetMaxWidth(h.maxKey))
-		lines := tview.WordWrap(tview.Escape(hint.Description), h.maxDesc)
-		if len(lines) == 0 {
-			lines = []string{""}
-		}
+		lines := helpWrap(hint.Description, h.maxDesc)
 		for index, line := range lines {
 			if index > 0 {
 				h.SetCell(row, 0, tview.NewTableCell(""))
@@ -169,6 +228,43 @@ func (h *Help) addHelpSection(row int, title string, hints model.MenuHints) int 
 		}
 	}
 	return row
+}
+
+// helpWrap breaks between words by terminal cell width and escapes each line
+// afterwards, so literal brackets never shift a break into the middle of a
+// word. Only a single word wider than the column is split.
+func helpWrap(text string, width int) []string {
+	var lines []string
+	line, used := "", 0
+	flush := func() {
+		lines = append(lines, tview.Escape(line))
+		line, used = "", 0
+	}
+	for _, word := range strings.Fields(text) {
+		size := runewidth.StringWidth(word)
+		if used > 0 && used+1+size > width {
+			flush()
+		}
+		for size > width {
+			head := runewidth.Truncate(word, width, "")
+			if head == "" {
+				break
+			}
+			lines = append(lines, tview.Escape(head))
+			word = word[len(head):]
+			size = runewidth.StringWidth(word)
+		}
+		if used > 0 {
+			line += " "
+			used++
+		}
+		line += word
+		used += size
+	}
+	if used > 0 || len(lines) == 0 {
+		flush()
+	}
+	return lines
 }
 
 // Draw recalculates wrapping after resize without losing the reader's place.

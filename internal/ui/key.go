@@ -13,6 +13,10 @@ func initKeys() {
 	tcell.KeyNames[KeyHelp] = "?"
 	tcell.KeyNames[KeySlash] = "/"
 	tcell.KeyNames[KeySpace] = "space"
+	tcell.KeyNames[KeyColon] = ":"
+	tcell.KeyNames[KeyDash] = "-"
+	tcell.KeyNames[KeyLeftBracket] = "["
+	tcell.KeyNames[KeyRightBracket] = "]"
 
 	initNumbKeys()
 	initStdKeys()

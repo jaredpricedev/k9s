@@ -287,8 +287,10 @@ func investigationOverview(i *inspect.Investigation, width int) string {
 		b.WriteString("Past exit historical; cause unknown.\n")
 		return b.String()
 	}
+	// Sections are separated so findings, gaps and proposals scan as three
+	// distinct answers rather than one block of equal-weight lines.
 	if len(gaps) > 0 {
-		b.WriteString("VISIBILITY GAPS · 5 full evidence\n")
+		b.WriteString("\nVISIBILITY GAPS · 5 full evidence\n")
 		for _, gap := range gaps[:min(2, len(gaps))] {
 			fmt.Fprintln(&b, fitInvestigation("[?] "+gap, width))
 		}
@@ -296,16 +298,22 @@ func investigationOverview(i *inspect.Investigation, width int) string {
 			fmt.Fprintf(&b, "%d more gaps in 5 Evidence\n", len(gaps)-2)
 		}
 	} else {
-		b.WriteString("Sources collected; events remain retained history.\n")
+		b.WriteString("\nSources collected; events remain retained history.\n")
 	}
-	b.WriteString("NEXT CHECKS · proposed, cause unconfirmed\n")
+	b.WriteString("\nNEXT CHECKS · proposed, cause unconfirmed\n")
 	if i.Identity.GVR == client.PodGVR.String() {
 		b.WriteString("l Pod logs · 2 containers · 3 events\n")
 	} else {
 		b.WriteString("g related Pod · 2 containers · 3 events\n")
 	}
 	b.WriteString("5 evidence · :pressure budgets · 6 compare\n")
-	b.WriteString("Previous exit is historical; current cause unknown.\n")
+	// The caveat belongs only beside a previous exit that is actually shown.
+	for index := range i.Containers {
+		if i.Containers[index].LastTermination != nil {
+			b.WriteString("Previous exit is historical; current cause unknown.\n")
+			break
+		}
+	}
 	return b.String()
 }
 

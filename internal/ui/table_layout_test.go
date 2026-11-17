@@ -209,3 +209,21 @@ func TestNativeProviderLayoutPreservesCompleteStatusAndRetainedDetail(t *testing
 		})
 	}
 }
+
+func TestPodLayoutReturnsSpareWidthToNames(t *testing.T) {
+	for _, all := range []bool{false, true} {
+		v, _ := podLayoutFixture(t, all, config.NewStyles())
+		screen := tcell.NewSimulationScreen("")
+		require.NoError(t, screen.Init())
+		screen.SetSize(180, 40)
+		v.SetRect(0, 0, 180, 40)
+		v.Draw(screen)
+		text := layoutScreenText(screen, 180, 40)
+		screen.Fini()
+		assert.Contains(t, text, "payments-reconciliation-worker-production-release-2026-4",
+			"all=%v: a name is not elided while the row has blank cells", all)
+		for _, kept := range []string{"ContainerStatusUnknown", "worker-east-production", "2h"} {
+			assert.Contains(t, text, kept, "all=%v: wider names do not displace other columns", all)
+		}
+	}
+}

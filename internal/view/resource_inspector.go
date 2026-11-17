@@ -609,7 +609,7 @@ func inspectionMarkup(a *App, text string) string {
 			lines[i] = detailStyled(a.Styles.Semantic().Warning.String(), "", line)
 		case strings.HasPrefix(line, "[?] "):
 			lines[i] = detailStyled(a.Styles.Semantic().Unknown.String(), "", line)
-		case line == "CURRENT FINDINGS" || strings.HasPrefix(line, "CONTAINER STATUS") || line == "VISIBILITY" || line == "NEXT CHECKS" ||
+		case line == "CURRENT FINDINGS" || strings.HasPrefix(line, "CONTAINER STATUS") || strings.HasPrefix(line, "VISIBILITY") || strings.HasPrefix(line, "NEXT CHECKS") ||
 			line == "RETAINED EVENTS" || strings.HasPrefix(line, "RESOURCE BUDGETS") || strings.HasPrefix(line, "CURRENT CONTAINERS") ||
 			strings.HasPrefix(line, "RESOURCE COMPARISON") || strings.HasPrefix(line, "OBSERVATIONS ·") || line == "LIMITATIONS":
 			lines[i] = detailStyled(a.Styles.Semantic().Focus.String(), "b", line)

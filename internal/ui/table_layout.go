@@ -120,6 +120,19 @@ func (t *Table) fitColumns(data *model1.TableData, pads MaxyPad) {
 			reserve(name, size)
 		}
 	}
+	// Hand unused width back to the name: a name is never elided while the
+	// row still has blank cells to its right. Budgets above are deliberately
+	// generous (padding and separator are both counted), so a fully reserved
+	// column draws two cells narrower than its budget.
+	spare := remaining - 2
+	for name, size := range cols {
+		if name != "NAME" {
+			spare += max(0, size-available[name]+2)
+		}
+	}
+	if spare = min(spare, available["NAME"]-cols["NAME"]); spare > 0 {
+		cols["NAME"] += spare
+	}
 	t.columnWidths = cols
 }
 
