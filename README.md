@@ -90,6 +90,7 @@ and [Hubble measurements](docs/hubble-performance-2026-10-04.md).
 | Saved scopes / daily queue / scoped search | `:workspace` / `:daily` / `:inventory` |
 | Application activity / reviewed changes | `:activity` / `:review /path/to/manifest.yaml`, then `b` or `:changeset` |
 | Scheduled job review | `:job-review` |
+| What changed before it broke | Select a Pod or workload, then `:timeline` (or `:timeline <namespace>`) |
 | Access, capacity, storage, node maintenance | `:access`, `:capacity`, `:storage`; select a Node then `:maintenance` or `o` |
 | Network path / task handoff | Select a Service then `:network-review`; `:taskbook save` / `:taskbook open` |
 | Connection checks and session reconnect | `:connection`, then `r` to retry checks or `R` to reconnect the same context while retaining workspace/navigation |

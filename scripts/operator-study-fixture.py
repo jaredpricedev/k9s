@@ -71,6 +71,14 @@ class StudyHandler(daily.WorkspaceHandler):
                      and o["metadata"].get("namespace") == "apps" and o.get("type") == "Warning"]
             return self.reply({"apiVersion": "v1", "kind": "EventList",
                                "metadata": {"resourceVersion": "100"}, "items": items})
+        if self.path.split("?", 1)[0] == "/api/v1/namespaces/apps/events" and "fieldSelector" not in self.path:
+            # The inherited handler serves only UID-scoped events. A plain
+            # namespace LIST (the :timeline read) returns every apps event.
+            self.record("GET")
+            items = [deepcopy(o) for o in self.server.objects if o["kind"] == "Event"
+                     and o["metadata"].get("namespace") == "apps"]
+            return self.reply({"apiVersion": "v1", "kind": "EventList",
+                               "metadata": {"resourceVersion": "100"}, "items": items})
         return super().do_GET()
 
 
@@ -82,6 +90,43 @@ def study_objects(api):
             "name": name, "namespace": namespace, "uid": "study-" + kind.lower() + "-" + name,
             "resourceVersion": "100", "generation": 2, "creationTimestamp": now, "labels": labels},
             "spec": spec or {}, "status": status or {}}
+
+    def ago(minutes):
+        return (datetime.now(timezone.utc).replace(microsecond=0) - timedelta(minutes=minutes)
+                ).isoformat().replace("+00:00", "Z")
+
+    def checkout_template(revision):
+        """Two pod templates for :timeline: revision 2 changes the image, an
+        environment key, a Secret key reference and the memory limit."""
+        env = [{"name": "LOG_LEVEL", "value": "info"},
+               {"name": "PAYMENT_TOKEN", "valueFrom": {"secretKeyRef": {
+                   "name": "checkout-secrets", "key": "token-v%d" % revision}}}]
+        if revision == 2:
+            env.append({"name": "FEATURE_FLAGS", "value": "synthetic-flag-value-must-not-be-shown"})
+        return {"metadata": {"labels": {"app": "checkout"}}, "spec": {"containers": [{
+            "name": "api", "image": "example.test/checkout:v%d" % revision, "env": env,
+            "envFrom": [{"configMapRef": {"name": "checkout-config"}}],
+            "resources": {"requests": {"cpu": "100m", "memory": "128Mi"},
+                          "limits": {"memory": "512Mi" if revision == 1 else "256Mi"}}}]}}
+
+    def timed(value, created, **metadata):
+        value["metadata"]["creationTimestamp"] = created
+        value["metadata"].update(metadata)
+        return value
+
+    def event(name, minutes_first, minutes_last, kind, involved, reason, kind_type, count, message, component):
+        return {"apiVersion": "v1", "kind": "Event", "metadata": {
+            "name": name, "namespace": "apps", "uid": "study-event-" + name, "resourceVersion": "100",
+            "creationTimestamp": ago(minutes_first)},
+            "involvedObject": {"apiVersion": "v1", "kind": kind, "name": involved, "namespace": "apps",
+                               "uid": "study-" + kind.lower() + "-" + involved},
+            "reason": reason, "type": kind_type, "count": count,
+            "firstTimestamp": ago(minutes_first), "lastTimestamp": ago(minutes_last),
+            "source": {"component": component}, "message": message}
+
+    deployment_owner = [{"apiVersion": "apps/v1", "kind": "Deployment", "name": "checkout-api",
+                         "uid": "study-deployment-checkout-api", "controller": True}]
+    new_set, new_pod = "checkout-api-7d9f8c6b5d", "checkout-api-7d9f8c6b5d-x2x9q"
 
     # The base fixture already contains investigation-api with current
     # CrashLoopBackOff plus a previous OOMKilled termination and retained event.
@@ -95,11 +140,11 @@ def study_objects(api):
                 {"type": "Ready", "status": "False", "reason": "PodScheduled"}]}),
         obj("apps/v1", "Deployment", "checkout-api", "apps", {"app": "daily", "component": "checkout"},
             {"replicas": 2, "selector": {"matchLabels": {"app": "checkout"}},
-             "template": {"metadata": {"labels": {"app": "checkout"}},
-                          "spec": {"containers": [{"name": "api", "image": "example.test/checkout:v2"}]}}},
+             "template": checkout_template(2)},
             {"observedGeneration": 1, "replicas": 2, "updatedReplicas": 1,
              "readyReplicas": 1, "availableReplicas": 1, "unavailableReplicas": 1,
              "conditions": [{"type": "Progressing", "status": "False", "reason": "ProgressDeadlineExceeded",
+                             "lastTransitionTime": ago(2),
                              "message": "Synthetic rollout has not completed"}]}),
         obj("v1", "Service", "checkout-api", "apps", {"app": "daily", "component": "checkout"},
             {"type": "ClusterIP", "clusterIP": "10.0.0.20", "selector": {"app": "checkout"},
@@ -176,7 +221,7 @@ def study_objects(api):
             "controller": True}]
         return item
 
-    def event(name, namespace, kind, target, reason, message, count):
+    def warning_event(name, namespace, kind, target, reason, message, count):
         return {"apiVersion": "v1", "kind": "Event", "metadata": {
             "name": name, "namespace": namespace, "uid": "study-event-" + name,
             "resourceVersion": "100", "creationTimestamp": earlier},
@@ -210,11 +255,11 @@ def study_objects(api):
                                           "lastTransitionTime": earlier}]}),
         obj("v1", "PersistentVolumeClaim", "ledger-data-2", "apps", {"app": "ledger"},
             {"storageClassName": "fast"}, {"phase": "Pending"}),
-        event("ledger-data-2-provisioning", "apps", "PersistentVolumeClaim", "ledger-data-2", "ProvisioningFailed",
+        warning_event("ledger-data-2-provisioning", "apps", "PersistentVolumeClaim", "ledger-data-2", "ProvisioningFailed",
               'storageclass.storage.k8s.io "fast" not found', 9),
-        event("checkout-api-x2kq-backoff", "apps", "Pod", "checkout-api-6c9f7d-x2kq", "BackOff",
+        warning_event("checkout-api-x2kq-backoff", "apps", "Pod", "checkout-api-6c9f7d-x2kq", "BackOff",
               "Back-off restarting failed container api", 41),
-        event("ingress-sync", "apps", "Service", "checkout-api", "FailedToUpdateEndpointSlices",
+        warning_event("ingress-sync", "apps", "Service", "checkout-api", "FailedToUpdateEndpointSlices",
               "Error updating Endpoint Slices for Service apps/checkout-api", 2),
     ])
     for resource in (("replicasets", "ReplicaSet", True), ("statefulsets", "StatefulSet", True),
@@ -223,6 +268,70 @@ def study_objects(api):
             demo.GROUPS["apps/v1"].append(resource)
     if not any(name == "persistentvolumeclaims" for name, _, _ in demo.GROUPS["v1"]):
         demo.GROUPS["v1"].append(("persistentvolumeclaims", "PersistentVolumeClaim", True))
+    # :timeline evidence. Fourteen minutes ago the ConfigMap was edited, twelve
+    # minutes ago revision 2 rolled out, and ten minutes ago its pod began to
+    # crash. The order is observable; the fixture asserts no cause.
+    api.objects.extend([
+        timed(obj("apps/v1", "ReplicaSet", "checkout-api-6c8d7f9b5", "apps", {"app": "checkout"},
+                  {"replicas": 1, "selector": {"matchLabels": {"app": "checkout"}}, "template": checkout_template(1)},
+                  {"replicas": 1, "readyReplicas": 1}), ago(3 * 24 * 60), ownerReferences=deployment_owner,
+              annotations={"deployment.kubernetes.io/revision": "1", "deployment.kubernetes.io/desired-replicas": "2"}),
+        timed(obj("apps/v1", "ReplicaSet", new_set, "apps", {"app": "checkout"},
+                  {"replicas": 1, "selector": {"matchLabels": {"app": "checkout"}}, "template": checkout_template(2)},
+                  {"replicas": 1, "readyReplicas": 0}), ago(12), ownerReferences=deployment_owner,
+              annotations={"deployment.kubernetes.io/revision": "2", "deployment.kubernetes.io/desired-replicas": "2"}),
+        timed(obj("v1", "Pod", new_pod, "apps", {"app": "checkout", "component": "checkout"},
+                  dict(checkout_template(2)["spec"], nodeName="fixture-node"),
+                  {"phase": "Running", "conditions": [{"type": "Ready", "status": "False"}],
+                   "containerStatuses": [{"name": "api", "ready": False, "restartCount": 6,
+                                          "state": {"waiting": {"reason": "CrashLoopBackOff",
+                                                                "message": "back-off restarting failed container"}},
+                                          "lastState": {"terminated": {"reason": "Error", "exitCode": 1,
+                                                                       "startedAt": ago(3), "finishedAt": ago(2)}}}]}),
+              ago(12), ownerReferences=[{"apiVersion": "apps/v1", "kind": "ReplicaSet", "name": new_set,
+                                         "uid": "study-replicaset-" + new_set, "controller": True}]),
+        timed({"apiVersion": "v1", "kind": "ConfigMap", "metadata": {
+            "name": "checkout-config", "namespace": "apps", "uid": "study-configmap-checkout-config",
+            "resourceVersion": "100"}, "data": {"PAYMENT_URL": "synthetic-value-must-not-be-shown"}},
+            ago(3 * 24 * 60), managedFields=[
+                {"manager": "kubectl-create", "operation": "Update", "apiVersion": "v1", "time": ago(3 * 24 * 60)},
+                {"manager": "kubectl-edit", "operation": "Update", "apiVersion": "v1", "time": ago(14)}]),
+        timed({"apiVersion": "v1", "kind": "Secret", "metadata": {
+            "name": "checkout-secrets", "namespace": "apps", "uid": "study-secret-checkout-secrets",
+            "resourceVersion": "100"}, "type": "Opaque",
+            "data": {"token-v2": "c3ludGhldGljLXNlY3JldC1tdXN0LW5vdC1iZS1zaG93bg=="}},
+            ago(30 * 24 * 60), managedFields=[
+                {"manager": "external-secrets", "operation": "Apply", "apiVersion": "v1", "time": ago(125)}]),
+        timed({"apiVersion": "autoscaling/v2", "kind": "HorizontalPodAutoscaler", "metadata": {
+            "name": "checkout-api", "namespace": "apps", "uid": "study-hpa-checkout-api", "resourceVersion": "100"},
+            "spec": {"scaleTargetRef": {"apiVersion": "apps/v1", "kind": "Deployment", "name": "checkout-api"},
+                     "minReplicas": 2, "maxReplicas": 6},
+            "status": {"currentReplicas": 2, "desiredReplicas": 2, "lastScaleTime": ago(26 * 60), "conditions": [
+                {"type": "AbleToScale", "status": "True", "reason": "ReadyForNewScale",
+                 "lastTransitionTime": ago(3 * 24 * 60), "message": "recommended size matches current size"},
+                {"type": "ScalingActive", "status": "False", "reason": "FailedGetResourceMetric",
+                 "lastTransitionTime": ago(8),
+                 "message": "the HPA was unable to compute the replica count: metrics API denied"}]}},
+            ago(3 * 24 * 60)),
+        event("checkout-scaled", 12, 12, "Deployment", "checkout-api", "ScalingReplicaSet", "Normal", 1,
+              "Scaled up replica set " + new_set + " to 1", "deployment-controller"),
+        event("checkout-started", 11, 3, "Pod", new_pod, "Started", "Normal", 7,
+              "Started container api", "kubelet"),
+        event("checkout-backoff", 10, 1, "Pod", new_pod, "BackOff", "Warning", 14,
+              "Back-off restarting failed container api in pod " + new_pod, "kubelet"),
+    ])
+    for node in api.objects:
+        if node["kind"] == "Node" and node["metadata"]["name"] == "fixture-node":
+            conditions = node.setdefault("status", {}).setdefault("conditions", [])
+            if not any(c.get("type") == "Ready" for c in conditions):
+                conditions.append({"type": "Ready", "status": "True", "reason": "KubeletReady",
+                                   "message": "kubelet is posting ready status"})
+            for condition in conditions:
+                condition.setdefault("lastTransitionTime", ago(6 * 24 * 60))
+    for group, entry in (("v1", ("configmaps", "ConfigMap", True)), ("apps/v1", ("replicasets", "ReplicaSet", True)),
+                         ("autoscaling/v2", ("horizontalpodautoscalers", "HorizontalPodAutoscaler", True))):
+        if entry not in demo.GROUPS.setdefault(group, []):
+            demo.GROUPS[group].append(entry)
     # Services are part of the existing core-v1 discovery in the test helpers.
     if not any(name == "services" for name, _, _ in demo.GROUPS["v1"]):
         demo.GROUPS["v1"].append(("services", "Service", True))

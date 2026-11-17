@@ -192,6 +192,91 @@ only by an event and unknown to the view cannot be opened with `Enter`.
 (a stalled Deployment with two failing pods behind a ReplicaSet, a partly ready
 StatefulSet, a failed Job, a Pending claim and Warning events) and denies the
 cluster-wide DaemonSet list and `ops` events so the `NOT READ` line can be seen.
+## Timeline: what changed, and in what order
+
+`:timeline` (also **Timeline: what changed, in order** in `Ctrl-O`) answers the
+first question of an incident. With a Pod, Deployment, ReplicaSet, StatefulSet,
+DaemonSet or Job selected it follows that workload and what it depends on. With
+nothing suitable selected it covers the active namespace, and `:timeline <ns>`
+names a namespace directly. It needs one namespace: in all-namespaces mode with
+no selection the action is listed as unavailable and says why, and
+`:timeline all` is refused. For a namespace scope the namespace object is read
+too: lists in a namespace that does not exist succeed with no items, so a
+missing namespace is reported as not found instead of as a quiet timeline. When
+the namespace object cannot be read (for example, access denied) the timeline
+is still shown and the **s** page says its existence was not verified.
+
+The pane under the list cannot scroll. Its first line (exact time, age, source,
+resource) shortens its wording and then elides the middle of the name instead
+of wrapping, and below about 72 columns the order sentence shortens to
+"Preceded the first failing signal by 2m; order, not cause." so the full text
+of the change stays visible. A very long event message or change list can
+still be cut at the bottom of the pane.
+
+It merges into one list, newest first:
+
+- Events, Warning and Normal, merged by type, reason and kind, with a count and
+  the first and last time. A merged event is placed at its first retained
+  occurrence, because that is when the condition began.
+- Rollout history from the ReplicaSets a Deployment owns: creation time,
+  revision, and what the pod template changed against the previous revision:
+  image, environment keys added (`+`), removed (`-`) or changed (`~`), resource
+  requests and limits, desired replicas, containers added or removed. Environment
+  values and command lines are never printed.
+- The retained exit of each container (reason, exit code, `finishedAt`).
+- ConfigMaps and Secrets the pods or templates reference, from
+  `metadata.managedFields`: the time and the field manager. They are read with a
+  metadata-only request, so their values are not requested or shown.
+- HorizontalPodAutoscaler condition transitions and the last scale time.
+- Condition transitions of the nodes running the pods.
+- Abnormal Deployment conditions and unschedulable pods, when they carry a time.
+
+Every entry has its exact UTC time, its age at capture, its source and the
+resource it concerns; the pane under the list shows these in full for the
+selected entry, with the API field the time came from.
+
+The first failing signal that could be read is marked (`▶`, or `>` with
+`noIcons`) and labelled `FAULT BEGAN`. Failing signals are a Warning event, a
+container exit that is not a clean completion, an abnormal condition. A rule is
+drawn under it and every other entry is labelled as so long before or after.
+Changes are marked `◆` (`*`), other failing signals `!`. A change listed under
+the rule **preceded** the fault. That is an ordering. The view never says one
+entry caused another, and the earliest warning in a namespace may belong to an
+older, unrelated problem: **m** makes the selected entry the reference moment
+instead, and **m** on it again returns to the first failing signal.
+
+Keys: **Enter** opens the entry's resource in its list; **/** filters by text;
+**1**, **2**, **3**, **4** narrow the window to the last 15m, 1h, 6h or 24h
+before capture and **0** shows everything read; **s** shows sources and limits;
+**r** reads again; **Esc** clears the filter, then goes back. Narrowing,
+filtering and marking work on the retained observation and read nothing.
+
+Limits, which the view also states under **s**:
+
+- Reads happen when the view opens and on **r**, never on a refresh tick. There
+  are five list reads (pods, events, ReplicaSets, Deployments, autoscalers; at
+  most 500 events and 200 of each other kind, not paginated) and then at most 20
+  ConfigMaps, 20 Secrets and 10 nodes. Each read has a 3s timeout inside a 12s
+  total. A truncated list is reported as incomplete.
+- A source that was denied, timed out or failed is named in the header as not
+  read. Its history is unknown, not empty. With no failing signal the header
+  says so and adds that this is not evidence of health.
+- Kubernetes expires events, commonly after an hour. The view reports the oldest
+  event it read and says older event history is unavailable.
+- Rollout times are ReplicaSet creation times. A rollback reuses an older
+  ReplicaSet, so its time is not shown. Revisions pruned by
+  `revisionHistoryLimit` are gone. StatefulSet and DaemonSet revisions are not
+  read.
+- Pod status keeps only the most recent exit per container, and `managedFields`
+  keeps only the last write per manager. Earlier restarts and edits are not timed.
+- Failing status that carries no time is listed under **s** and is not placed
+  in the order. Entries in the same second have no known order.
+- Below 72 columns the before/after column becomes a signed span (`-4m`, `+8m`,
+  `FAULT`) and the resource name moves to the detail pane; the time, kind and
+  text stay.
+
+`python3 scripts/operator-study-fixture.py` serves a synthetic incident for
+this view: a ConfigMap edit, then a second Deployment revision, then a crash.
 
 ## Verification and operation
 

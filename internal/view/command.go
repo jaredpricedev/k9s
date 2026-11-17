@@ -115,6 +115,7 @@ func (c *Command) updateSuggestionAliases() {
 		jobReviewCommandToken, maintenanceCommandToken, accessCommandName, taskbookCommandName,
 		activityCommand, networkReviewCommandToken, changeSetCommandToken, "security-review", dependencyReviewCommandToken,
 		problemsCommandToken,
+		timelineCommandToken,
 	}
 	if c.alias == nil {
 		c.suggestionCatalog.Store(&aliases)
@@ -355,6 +356,8 @@ func (c *Command) toolkitCmd(p *cmd.Interpreter) bool {
 		c.networkReviewCommand(p.GetLine())
 	case gitopsCommandToken:
 		c.gitopsCommand(p.GetLine())
+	case timelineCommandToken:
+		c.timelineCommand(p.GetLine())
 	default:
 		return false
 	}
