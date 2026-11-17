@@ -210,10 +210,13 @@ def study_objects(api):
                          ("apps/v1", ("daemonsets", "DaemonSet", True))):
         if entry not in demo.GROUPS[group]:
             demo.GROUPS[group].append(entry)
-    # Cross-kind objects for :problems: a ReplicaSet that ties two failing Pods
-    # to the stalled Deployment by controller UID, a partly ready StatefulSet,
-    # a failed Job, a Pending claim, and Warning events about some of them.
-    earlier = (datetime.now(timezone.utc).replace(microsecond=0) - timedelta(minutes=14)).isoformat().replace("+00:00", "Z")
+    # Cross-kind objects for :problems: a second failing Pod under the
+    # revision-2 ReplicaSet that :timeline describes (the ReplicaSet ties both
+    # Pods to the stalled Deployment by controller UID), a partly ready
+    # StatefulSet, a failed Job, a Pending claim, and Warning events about some
+    # of them. Nine minutes ago is after that rollout and its first back-off,
+    # so these objects do not move the fault :timeline reports.
+    earlier = ago(9)
 
     def owned(item, kind, name):
         item["metadata"]["ownerReferences"] = [{
@@ -238,14 +241,10 @@ def study_objects(api):
                               "lastTransitionTime": earlier}],
                           "containerStatuses": [{"name": "api", "ready": False, "restartCount": 6,
                                                 "state": {"waiting": {"reason": reason, "message": message}}}]}),
-                     "ReplicaSet", "checkout-api-6c9f7d")
+                     "ReplicaSet", new_set)
 
     api.objects.extend([
-        owned(obj("apps/v1", "ReplicaSet", "checkout-api-6c9f7d", "apps", {"app": "checkout"},
-                  {"replicas": 2}, {"replicas": 2, "readyReplicas": 0}), "Deployment", "checkout-api"),
-        crashing("checkout-api-6c9f7d-x2kq", "CrashLoopBackOff",
-                 "back-off 2m40s restarting failed container=api"),
-        crashing("checkout-api-6c9f7d-p8wm", "ImagePullBackOff",
+        crashing(new_set + "-p8wm", "ImagePullBackOff",
                  'Back-off pulling image "example.test/checkout:v2"'),
         obj("apps/v1", "StatefulSet", "ledger", "ops", {"app": "ledger"},
             {"replicas": 3}, {"observedGeneration": 2, "replicas": 3, "readyReplicas": 2, "updatedReplicas": 3}),
@@ -257,8 +256,6 @@ def study_objects(api):
             {"storageClassName": "fast"}, {"phase": "Pending"}),
         warning_event("ledger-data-2-provisioning", "apps", "PersistentVolumeClaim", "ledger-data-2", "ProvisioningFailed",
               'storageclass.storage.k8s.io "fast" not found', 9),
-        warning_event("checkout-api-x2kq-backoff", "apps", "Pod", "checkout-api-6c9f7d-x2kq", "BackOff",
-              "Back-off restarting failed container api", 41),
         warning_event("ingress-sync", "apps", "Service", "checkout-api", "FailedToUpdateEndpointSlices",
               "Error updating Endpoint Slices for Service apps/checkout-api", 2),
     ])
@@ -277,8 +274,8 @@ def study_objects(api):
                   {"replicas": 1, "readyReplicas": 1}), ago(3 * 24 * 60), ownerReferences=deployment_owner,
               annotations={"deployment.kubernetes.io/revision": "1", "deployment.kubernetes.io/desired-replicas": "2"}),
         timed(obj("apps/v1", "ReplicaSet", new_set, "apps", {"app": "checkout"},
-                  {"replicas": 1, "selector": {"matchLabels": {"app": "checkout"}}, "template": checkout_template(2)},
-                  {"replicas": 1, "readyReplicas": 0}), ago(12), ownerReferences=deployment_owner,
+                  {"replicas": 2, "selector": {"matchLabels": {"app": "checkout"}}, "template": checkout_template(2)},
+                  {"replicas": 2, "readyReplicas": 0}), ago(12), ownerReferences=deployment_owner,
               annotations={"deployment.kubernetes.io/revision": "2", "deployment.kubernetes.io/desired-replicas": "2"}),
         timed(obj("v1", "Pod", new_pod, "apps", {"app": "checkout", "component": "checkout"},
                   dict(checkout_template(2)["spec"], nodeName="fixture-node"),
