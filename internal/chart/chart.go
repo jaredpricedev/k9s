@@ -472,8 +472,16 @@ func paint(color, text string) string {
 	if color == "" || text == "" {
 		return text
 	}
+	if strings.HasSuffix(color, reverseSuffix) {
+		return "[" + color + "]" + text + "[-::-]"
+	}
 	return "[" + color + "::]" + text + "[-::]"
 }
+
+// reverseSuffix on a colour asks for reverse video: the colour becomes the
+// background and the glyph is cut out of it. A level that crosses the body
+// of an area is drawn this way, so the fill carries on behind the line.
+const reverseSuffix = "::r"
 
 // Render draws the panel as height lines: a Y label gutter of the given
 // width, the axis, and f.Width plot cells.
@@ -699,6 +707,9 @@ func (p *Panel) glyph(cl *cell, o Options, cursor rune) (glyph rune, color strin
 	case cl.dots != 0:
 		return 0x2800 + cl.dots, p.Series[cl.dotsBy].Color
 	case cl.ref != 0:
+		if fill := p.fillColor(cl, o); cl.fill == len(blockGlyphs)-1 && !o.ASCII && fill != "" {
+			return cl.ref, fill + reverseSuffix
+		}
 		return cl.ref, p.Series[cl.refBy].Color
 	case cl.fill > 0:
 		return blockGlyphs[cl.fill], p.fillColor(cl, o)
