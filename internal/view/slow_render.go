@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/derailed/k9s/internal/calm"
 	"github.com/derailed/k9s/internal/chart"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/impact"
@@ -255,6 +256,14 @@ func (v *slowView) render() {
 	if height <= 0 {
 		height = 20
 	}
+	if !v.all {
+		// The calm page is the default; a shows what follows instead.
+		v.arrange(true)
+		v.body.SetText(strings.Join(v.calmLines(width, height), "\n"))
+		v.body.ScrollToBeginning()
+		return
+	}
+	v.arrange(false)
 	header := v.headerLines(width)
 	v.buildRows()
 	tableHeight := 1 + len(v.rows)
@@ -277,14 +286,17 @@ func (v *slowView) render() {
 	v.body.ScrollToBeginning()
 	// The plain form of an arrow is a word, so a hint is measured as drawn.
 	arrows, sides := v.plain("↑↓"), v.plain("←→")
+	// a returns to the calm page. It is named at every width, because it
+	// is the way back to the page the view opens on.
+	less := calm.DetailKey + " less detail"
 	// The key that switches the trends between blocks and dots is named
 	// wherever a form leaves room for it.
 	forms := chartStyleForms([]string{
-		arrows + " hop · Enter open · " + sides + " cursor · n/N episode · 1 15m  2 1h  3 6h  4 24h · s queries and rules · r re-read · Esc back",
-		arrows + " hop · Enter open · " + sides + " cursor · n/N episode · 1-4 window · s queries · r re-read · Esc back",
-		arrows + " hop · Enter open · " + sides + " cursor · 1-4 window · s queries · r read · Esc",
-		"Enter open · " + sides + " cursor · 1-4 window · s queries · Esc",
-		"Enter open · 1-4 window · s queries · Esc",
+		arrows + " hop · Enter open · " + less + " · " + sides + " cursor · n/N episode · 1 15m  2 1h  3 6h  4 24h · s queries and rules · r re-read · Esc back",
+		arrows + " hop · Enter open · " + less + " · " + sides + " cursor · n/N episode · 1-4 window · s queries · r re-read · Esc back",
+		arrows + " hop · Enter open · " + less + " · " + sides + " cursor · 1-4 window · s queries · Esc",
+		"Enter open · " + less + " · " + sides + " cursor · 1-4 window · s queries · Esc",
+		"Enter open · " + less + " · 1-4 window · s queries · Esc",
 	}, v.app.chartStyle())
 	v.footer.SetText(timelineTag(v.app.Styles.Semantic().Muted, false) + tview.Escape(impactFit(width, forms...)) + "[-:-:-]")
 }
@@ -972,6 +984,27 @@ func (v *slowView) focusLines(report *slowpath.Report, limit int) []string {
 	return lines
 }
 
+// detailText is everything behind the row the cursor stands on, as plain
+// lines. On the calm page that is the hops of the row with the row's own
+// signal first, or the dated facts of its lane; on the all-detail page the
+// focused hop.
+func (v *slowView) detailText(report *slowpath.Report) []string {
+	var out []string
+	if row := v.calmRow(); !v.all && row != nil {
+		for _, hop := range row.hops {
+			out = append(out, report.DetailOf(hop, row.signal)...)
+		}
+		for _, lane := range row.facts {
+			out = append(out, report.LaneDetail(lane)...)
+		}
+		return out
+	}
+	for _, hop := range v.focusedHops() {
+		out = append(out, report.Detail(hop)...)
+	}
+	return out
+}
+
 // detailLines replace the lanes with everything behind the focused row:
 // every signal with its numbers, rule and exact query. PgDn and PgUp page.
 func (v *slowView) detailLines(report *slowpath.Report, width, rows int) []string {
@@ -997,19 +1030,17 @@ func (v *slowView) detailLines(report *slowpath.Report, width, rows int) []strin
 			add(color, bold, indent+part)
 		}
 	}
-	for _, hop := range v.focusedHops() {
-		for _, text := range report.Detail(hop) {
-			text = v.plain(text)
-			switch {
-			case !strings.HasPrefix(text, " "):
-				wrapped(p.Text, true, text, impactWrap)
-			case strings.HasPrefix(text, "  query:"):
-				wrapped(p.Muted, false, text, slowHardWrap)
-			case strings.HasPrefix(text, "  not read"):
-				wrapped(p.Warning, false, text, slowHardWrap)
-			default:
-				wrapped(p.Muted, false, text, impactWrap)
-			}
+	for _, text := range v.detailText(report) {
+		text = v.plain(text)
+		switch {
+		case !strings.HasPrefix(text, " "):
+			wrapped(p.Text, true, text, impactWrap)
+		case strings.HasPrefix(text, "  query:"):
+			wrapped(p.Muted, false, text, slowHardWrap)
+		case strings.HasPrefix(text, "  not read"):
+			wrapped(p.Warning, false, text, slowHardWrap)
+		default:
+			wrapped(p.Muted, false, text, impactWrap)
 		}
 	}
 	if path := report.Path; len(path.Notes) > 0 {
@@ -1021,12 +1052,17 @@ func (v *slowView) detailLines(report *slowpath.Report, width, rows int) []strin
 	v.detailPage = page
 	v.detailTop = min(v.detailTop, max(len(out)-page, 0))
 	// The paging keys stay in the heading at every width: they are the only
-	// way to the lines below.
-	head := impactFit(width, "QUERIES, SAMPLES AND RULES · s or Enter returns to the lanes", "QUERIES AND RULES · s returns to the lanes", "QUERIES AND RULES · s returns")
+	// way to the lines below. On the all-detail page the queries stand
+	// where the lanes were, and the heading says so.
+	back := ""
+	if v.all {
+		back = " to the lanes"
+	}
+	head := impactFit(width, "QUERIES, SAMPLES AND RULES · s or Enter returns"+back, "QUERIES AND RULES · s returns"+back, "QUERIES AND RULES · s returns")
 	if len(out) > page {
 		from, to := v.detailTop+1, min(v.detailTop+page, len(out))
 		head = impactFit(width,
-			fmt.Sprintf("QUERIES, SAMPLES AND RULES · s or Enter returns to the lanes · lines %d-%d of %d · PgDn PgUp", from, to, len(out)),
+			fmt.Sprintf("QUERIES, SAMPLES AND RULES · s or Enter returns%s · lines %d-%d of %d · PgDn PgUp", back, from, to, len(out)),
 			fmt.Sprintf("QUERIES AND RULES · s returns · lines %d-%d of %d · PgDn PgUp", from, to, len(out)),
 			fmt.Sprintf("QUERIES · s returns · %d-%d of %d · PgDn PgUp", from, to, len(out)))
 	}

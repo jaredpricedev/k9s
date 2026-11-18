@@ -12,9 +12,9 @@ request-path declaration and profiles in [request-path.md](request-path.md).
 It reads only when you open it, change the window or press `r`. It changes
 nothing in the cluster and sends no probe.
 
-It reports what overlaps in time. It says "overlaps", "before" and "outside",
-never "because". Two things that are raised in the same minutes overlap;
-that is order in time, not a cause.
+It reports what overlaps in time. It says "lines up with", "overlaps",
+"before" and "outside", never "because". Two things that are raised in the
+same minutes overlap; that is order in time, not a cause.
 
 ## Opening it
 
@@ -36,14 +36,185 @@ the reason, for other kinds and when the context declares no Prometheus
 source. The typed command still opens the view and shows every hop as not
 read.
 
+## The page
+
+The view opens on one page, laid out the calm way
+([presentation.md](presentation.md#calm-layout-the-standard-for-incident-views)):
+the answer first, then every lane of the read as one row with its time strip
+on one shared axis. This is the hang of the test story in the area a 132x36
+terminal gives the view (`internal/view/testdata/slow/hang-132x32.txt`):
+
+```text
+Slow requests  Service gitlab/gitlab-webservice-default · last 1h                                    read 08:20 · 35 of 35 queries
+
+  3 stalls: clients gave up waiting at 07:28, 07:47 and 08:13 UTC, for 2 to 4 minutes each.
+  All 3 line up with slow p99, queueing, no free threads and CPU throttling on pod …-hx4mt.
+  2 of 3 also line up with not Ready on pod …-hx4mt.                                          Overlap in time, not proof of cause.
+
+                                                            stalls        ▼▼▼▼▼               ▼▼▼▼▼▼                      ▼▼▼
+
+  LINES UP WITH THE STALLS
+  ingress      client give-ups (HTTP 499) +2  6.29%   of requests  ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁
+
+> pod …-hx4mt  slow p99                       48s     peers 350ms  ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁
+               queueing                       30      peers 0      ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁
+               no free threads                0       peers 5      ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁
+               CPU throttling                 86%     peers 1.2%   ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁
+               not Ready                      twice   up to 3m     ▁▁▁▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+
+  DIFFERS, BUT NOT DURING A STALL
+  network      packet drops (POLICY_DENIED)   0.37/s  to …-2bq7k   ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+
+  QUIET
+  pods …-2bq7k, …-8wzpd  p99 350ms                                 ·······························································
+  3 dependencies         no rule crossed                           ·······························································
+  dns                    p99 6ms                                   ·······························································
+  restarts · rollouts    none in the last 1h                       ·······························································
+                                                                   ┬──────━━━┯━─────────┬─────━━━━┯━─────────┬─────────┬──━━━────┬
+  UTC                                                            07:20     07:30      07:40     07:50      08:00     08:10     08:20
+
+  next  Shift-B probe the pods now    m compare the pods    Enter open …-hx4mt    Shift-D open in Grafana
+
+  ↑↓ row · a show every signal · s queries · ←→ time · 1-4 window · n next stall · t timeline · h Hubble · r re-read · Esc back
+```
+
+Behind the columns under each `▼` runs a band, from the marker row down to
+the row above the axis: what is over its rule inside a band lines up with a
+stall, and what is over its rule between two bands does not.
+
+### The answer
+
+The answer is computed from the episodes and from interval overlap
+(`slowpath.Report.Answer`); no sentence says "because".
+
+- The first sentence, in bold, states the episodes: how many, when each
+  began (UTC) and how long they lasted. They are called **stalls** when the
+  signal they are counted from is the ingress's HTTP 499, which is a client
+  that closed the request while it waited, and **episodes** for any other
+  signal (`2 episodes of not Ready on pod …-hx4mt at 07:29 and 07:48 UTC`).
+- When the window cuts an episode, the next sentence says so, because its
+  length is then only what the window holds: `It was already raised when the
+  window began.` (the first sentence then says `for at least 1m45s`), or
+  `It was still raised at the last sample: it may not be over.` Of several
+  episodes it names the one that is cut (`The last was still raised …`). A
+  window that holds every episode whole adds nothing.
+- The next states what lines up with every one of them, grouped by where
+  (`All 3 line up with slow p99, queueing, no free threads and CPU throttling
+  on pod …-hx4mt.`).
+- Then what lines up with some (`2 of 3 also line up with not Ready on pod
+  …-hx4mt.`); lanes that overlap different episodes are never joined in one
+  count. When nothing else does: `Nothing else lines up.`, with `that was
+  read` when a hop was not read.
+- A Pod whose usual level differs from its peers' is stated whether or not
+  there is an episode (`Pod …-hx4mt usually differs from its peers: p99 2s
+  (peers 305ms).`).
+- At 6h and 24h the answer ends with what such a window cannot show.
+- The caveat (`Overlap in time, not proof of cause.`) is dim, at the right
+  of the last line when it fits there.
+- Without an episode: `No signal that was read crossed its rule in the last
+  1h.`, then how many of the queries were answered, and `Nothing found is
+  not proof of health.`
+- When Prometheus answered nothing: `Prometheus was not read (denied: HTTP
+  403), so no hop has latency evidence.` in the warning colour, and `Not
+  read is not healthy.`
+
+When the first sentence does not fit on one line, the times are left to the
+marker row and the axis. When the second does not, it counts the signals the
+rows under it name (`All 3 line up with 4 signals on pod …-hx4mt.`). A screen
+without room for strips keeps the times in the sentence.
+
+A read that failed after an earlier one succeeded, and a destination that
+changed under the view, are one line in the warning colour under the title;
+the earlier read stays on the page. While a read runs the title says
+`reading…`, and the page stays as it is.
+
+### The rows
+
+One row per lane. The lanes are those of [When it happened](#when-it-happened):
+one per hop, one per raised signal for the Pods of the Service, and the dated
+facts. A row is the subject, what its marks mean, the one number that matters,
+what that number is held against, and the strip. The subject is the hop, or
+`pod …-hx4mt` when every mark of the lane belongs to one Pod of the Service;
+it is written once and its rows stand beneath it.
+
+| Row | Number | Held against |
+| --- | --- | --- |
+| a raised signal of a hop | its worst sample; for a rate that is part of a total, its share of that total at worst (`6.29%`) | `of requests`; the Pod its worst series is about (`to …-2bq7k`); else its own usual level (`usual 4%`) |
+| a raised signal of one Pod | that Pod's worst sample | `peers 350ms` when the Pod differs from its peers on it, else its own usual level |
+| a raised signal of several Pods | the worst sample | how many of the Pods crossed it (`2 of 3 pods`) |
+| not Ready | how often (`twice`) | the longest stretch (`up to 3m`) |
+| dated facts: restarts, rollouts and new Pods, firing alerts, a Ready change | how often, or for how long an alert fired | when first (`at 08:00`, `from 07:46`) |
+| a Pod whose usual level differs from its peers' | that level | `peers 305ms` |
+
+`+2` after what a row measures says the hop has two more raised signals on
+the same lane; `s` lists them.
+
+Which group a row is in is the overlap of its lane's marks with the episodes
+(`slowpath.Report.Findings`, which counts with `OverlapCount` as the summary
+sentences do). The view chooses nothing.
+
+| Group | Rows |
+| --- | --- |
+| `LINES UP WITH THE STALLS` (`… THE EPISODES`) | the lane the episodes are counted from, then every lane whose marks overlap at least one episode, the ones that overlap most first |
+| `DIFFERS, BUT NOT DURING A STALL` (`… AN EPISODE`) | a lane that is marked in the window and overlaps no episode; a Pod whose usual level differs from its peers' |
+| `QUIET` | what was read and has no mark, one dim line each. The Pods that crossed no rule while another did share a line (`pods …-2bq7k, …-8wzpd  p99 350ms`), dependencies without a mark share one, and the dated facts of which there were none share one. A stretch without samples is `×` on these lines too: on the line of the Pods where none of them has a sample, and the restarts then have a line of their own that says how long nothing is known (`restarts  none where read, no data for 10m`) |
+| `NOT READ` | every lane without data, with the reason; `dependencies  none declared`; and a hop that was read in part (`dns  1 of 5 signals: no series matched …`), which is quiet only for what was read. The group is left out when it is empty |
+
+Without an episode nothing lines up. The first two groups are then
+`DIFFERS FROM ITS PEERS` (a Pod whose usual level differs), `OVER ITS RULE`
+(a signal that is marked although no episode was counted from it) and
+`IN THE WINDOW` (dated facts).
+
+### Strips, bands and the axis
+
+| Glyph | `noIcons` | Meaning |
+| --- | --- | --- |
+| `█` | `#` | the lane's rule held in this column: the stretches the overlap is computed from, a rate without its window (see [The rule of a signal](#the-rule-of-a-signal)) |
+| `▁` | `_` | sampled, and the rule did not hold |
+| `▲` | `^` | a dated fact |
+| `·` | `.` | read, and nothing happened |
+| `×` | `x` | no data. It is never drawn as quiet |
+| `▼` | `v` | an episode, on the marker row; the axis is heavy under it (`━`, `=`) |
+
+The row the episodes are counted from draws the stretches of the one signal
+it names, so its marks are the bands. One strip column is the window divided
+by the width of the strips (about 57s for 1h at 132 columns, 2m13s at 80),
+and a mark fills every column it touches.
+
+One colour per subject on the whole page, from the semantic palette: the Pod
+that differs from its peers in the failure colour, any other subject that
+lines up in the warning colour, a subject that is raised without lining up
+in the progress colour. Quiet rows are muted and dim. The band is the skin's
+`band` token; without colour the marker row and the axis carry the episodes.
+
+### The two cursors
+
+The row cursor (`>`) moves over the rows that are on the screen. It opens on
+a row of the Pod the view was opened for, else on the first row of a Pod that
+differs from its peers, else on the first row. `s`, `Enter`, `t` and
+`Shift-D` act on its row.
+
+`Left` and `Right` show the time cursor and move it one strip column; `n`
+and `Shift-N` put it on the column in which the first raised sample of the
+next or previous episode ends. The title states the time of the column and
+the value of the selected row there (`cursor 07:27:37–07:28:34 UTC · slow p99
+48s`), and each row states its own in the column of what its number is held
+against (`┆ 48s`). The value is the worst of the samples that stand for the
+column; a sample stands for the step that ends at it. `Esc` puts the cursor
+away.
+
+Neither cursor moves a row or a column: the page is planned first, and the
+cursors are drawn on the plan.
+
 ## Keys
 
 | Key | Action |
 | --- | --- |
-| `Up` / `Down` (`k` / `j`) | Select a hop, or a Pod of the app hop |
-| `Enter` | On the app hop: list or fold its Pods. On a Pod: open `:graph` for that Pod, usage against its limits, for the window read here. On any other hop: its queries, samples and rules |
-| `s` | Queries, samples and rules of the selected hop in place of the lanes; `PgDn` / `PgUp` page; `s` again returns |
-| `Left` / `Right` | Show the cursor on the lanes and move it one column, ten with `Shift`; the title states its time and each lane shows its value there |
+| `Up` / `Down` (`k` / `j`) | Move the row cursor |
+| `Enter` | On a row of a Pod: open `:graph` for that Pod, usage against its limits, for the window read here. On any other row: its queries, samples and rules. On the page of queries: return |
+| `s` | Queries, samples and rules behind the selected row, the signal of the row first; for a row of dated facts, the facts with their times. `PgDn` / `PgUp` page; `s`, `Enter` or `Esc` returns |
+| `a` | All detail: the hop table, the lanes strip and the summary sentences the view had before the calm page ([below](#all-detail-a)). `a` again returns. It reads nothing |
+| `Left` / `Right` | Show the time cursor and move it one column, ten with `Shift` |
 | `Home` / `End` | Cursor to the first / last column of the window |
 | `n` / `Shift-N` | Move the cursor to the next / previous episode |
 | `1` `2` `3` `4` | Window: 15m, 1h (default), 6h, 24h. The batch is sent again; the path is not read again |
@@ -53,8 +224,8 @@ read.
 | `h` | The existing native Hubble view for the backend Pods ([hubble.md](hubble.md)) |
 | `Shift-D` | Grafana hand-off for the selected Pod or the workload, with the window that was read ([grafana-handoff.md](grafana-handoff.md)) |
 | `t` | `:timeline` for the selected Pod or the workload |
-| `b` | Chart style: the trends as eighth blocks (the default) or as a thin braille line, as in `:graph`, the dashboards and `:query`; the choice holds for the session |
-| `Esc` | Put the cursor away; then back |
+| `b` | Chart style of the trends on the all-detail page: eighth blocks (the default) or a thin braille line, as in `:graph`, the dashboards and `:query`; the choice holds for the session. The strips of the calm page have one form |
+| `Esc` | Put the time cursor away; then close the queries; then back |
 
 These keys are the ones the sibling views use. `Shift-B` is the probe and
 `Shift-W` is this view, on a row of the resource list and inside `:probe`;
@@ -62,12 +233,17 @@ These keys are the ones the sibling views use. `Shift-B` is the probe and
 else; the digits are the windows of `:graph`, a drawn dashboard and
 `:query`; the cursor moves as it does there; `n` and `Shift-N` step forward
 and back, as they step through signals in `:graph` and rollouts in
-`:impact`. `p` is not bound here: it is the per-Pod page of `:graph`.
+`:impact`; `a` is all detail in every view laid out the calm way. `p` is not
+bound here: it is the per-Pod page of `:graph`.
 
 A key answers with the reason when its view is unavailable for the selection
 (no Prometheus source for `m`, for example) instead of doing nothing. The
-`next:` line lists only the steps that would run, as whole steps: when the
-line is too narrow, later steps are shortened and then left out.
+page has two lines of keys. The `next` line names the likely steps in words,
+and only those that would run: `Shift-B probe the pods now`, `m compare the
+pods`, what `Enter` does on the selected row (`open …-hx4mt`, `its queries`)
+and `Shift-D open in Grafana`; a narrow line drops steps from its end. The
+dim line under it names the rest, `a` and `s` first and the way out last,
+and drops from before the way out.
 
 ## What is read
 
@@ -105,7 +281,7 @@ Alertmanager, one read, only when the context declares one: the alerts whose
 
 ## The hops
 
-One row per hop, in the order a request meets them.
+One hop per stretch of the path, in the order a request meets them.
 
 | Row | Read from | Signals |
 | --- | --- | --- |
@@ -115,6 +291,19 @@ One row per hop, in the order a request meets them.
 | pods → *dependency* | the profile of each dependency declared under `requestPath.services.<namespace/name>.dependencies` | that profile's signals (`postgres-exporter`, `redis-exporter`, `grpc-server`, or your own) |
 | dns | the DNS profiles (default `coredns`, cluster-wide) and the `dns-errors` signal of the network profile | p99 lookup time, SERVFAIL and NXDOMAIN share, share of DNS errors answered to these Pods |
 | network | the network profiles (default `cilium-hubble`), per destination Pod | drops by reason, TCP resets per new connection, flows |
+
+## All detail (`a`)
+
+`a` shows what the view showed before the calm page, and `a` again returns:
+every hop as a row of a table, the lanes as a strip of their own under it,
+and what lines up as sentences. Nothing is read for it. This section,
+[When it happened](#when-it-happened) and [What lines up](#what-lines-up)
+describe that page; the calm page draws the same lanes and states the same
+overlap.
+
+`Up` and `Down` select a hop, or a Pod of the app hop. `Enter` on the app
+hop lists or folds its Pods, on a Pod opens `:graph` for it, and on any other
+hop shows its queries in place of the lanes, as `s` does.
 
 Columns: `HOP`, `WHAT` (the host, the Service or the profile), `LAST 1h` (a
 trend of the hop's main signal in eighth blocks, one cell high, with `×` for
@@ -236,7 +425,8 @@ The row then reads `1 of 3 pods: …-hx4mt p99 48s vs peers 350ms`, and
 
 ## When it happened
 
-The bottom half is a strip of lanes on one time axis. A filled cell means
+On the all-detail page the bottom half is a strip of lanes on one time axis;
+on the calm page each lane is a row. A filled cell means
 that the lane's rule was crossed in that column; a dot that it was not; `×`
 (`x` without icons) that there is no data, which is never drawn as quiet.
 
@@ -253,8 +443,8 @@ that the lane's rule was crossed in that column; a dot that it was not; `×`
 - Without kube-state-metrics the endpoints lane marks only the last Ready
   change the API still knows, and the time before it is unknown.
 
-One column is a round stretch of time (1m for 1h at 132 columns, 2m at 80
-and 60), stated in the title or in the axis gutter. The edges of a stretch
+On the all-detail page one column is a round stretch of time (1m for 1h at
+132 columns, 2m at 80 and 60), stated in the title or in the axis gutter. The edges of a stretch
 are moved to the nearest column edge, so that the cells a lane fills add up
 to the time written beside it; a stretch shorter than half a column keeps
 one cell. To the right of a lane is the time it was over its rule, or, with
@@ -275,7 +465,8 @@ stretch in which any of them was raised, but the episodes are those of the
 one signal the headline names: a stretch in which the ingress was slow and
 no client gave up is on the lane and is not counted as a give-up.
 
-The summary is computed from interval overlap only:
+The answer and the groups of the calm page, and the summary of the
+all-detail page, are computed from interval overlap only. The summary states:
 
 - which lanes overlap every episode, grouped by where ("slow p99, queueing
   and CPU throttling on pod …-hx4mt");
@@ -298,19 +489,60 @@ from the least important; what overlaps every episode and the caveat stay.
 
 ## Sizes and presentation
 
-- 132x36: every hop and the Pods of an outlying app hop, the title, one lane
-  per raised signal, the summary and the next steps.
-- 80x24: the hop table without the `WHAT` column and with quiet dependencies
-  on one row, the lanes with marks, and the summary.
-- 60 columns: hop, key number and state word; the trend column is left out
+The application keeps two rows at the top of the terminal and two at the
+bottom, so the view is given 132x32, 80x20 and 60x20 in terminals of 132x36,
+80x24 and 60x24. The calm page gives room up in the order of
+[presentation.md](presentation.md#what-a-smaller-screen-gives-up), and only
+as far as the size needs (`TestSlowCalmPageSaysWhatEachSizeGivesUp`):
+
+| Terminal | Strips | What the page gives up, in this order |
+| --- | --- | --- |
+| 132x36 | about 63 columns | nothing. With a `NOT READ` group, the blank rows around the answer and the keys |
+| 80x24 | 27 columns | the times in the first sentence and the names of the signals in the second (the marker row and the rows have them); the blank rows; `QUIET` and `NOT READ` to one line each; `DIFFERS, BUT NOT DURING A STALL` to one line; the column of what a number is held against; the hints at the end of the second key line |
+| 60x24 | 20 columns | the same, and what a row measures is shortened and marked (`client give-ups…`) |
+| fewer rows than the rows that line up | | the last of those rows, counted in a line that names the key that shows them (`not shown at this size (a shows all): 7 of 8 rows of LINES UP WITH THE STALLS`) |
+| under about 41 columns | none | the strips: the rows are written as text and the times return to the answer |
+
+At 80x24 and 60x24 every row that lines up keeps its number and its strip,
+and both key lines stay: the page keeps the line that names `a` and `s` in
+place of its last blank rows.
+
+```text
+Slow requests  Service gitlab/gitlab-webservice-default · last 1h  08:20 · 35/35
+  3 stalls: clients gave up waiting, for 2 to 4 minutes each.
+  All 3 line up with 4 signals on pod …-hx4mt.
+  2 of 3 also line up with not Ready on pod …-hx4mt.
+  Overlap in time, not proof of cause.
+                                              stalls    ▼▼      ▼▼▼         ▼▼
+  LINES UP WITH THE STALLS
+  ingress      client give-ups (HTTP 499) +2  6.29%  ▁▁▁██▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁
+> pod …-hx4mt  slow p99                       48s    ▁▁▁██▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁
+               queueing                       30     ▁▁▁██▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁
+               no free threads                0      ▁▁▁██▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁
+               CPU throttling                 86%    ▁▁▁██▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁
+               not Ready                      twice  ▁▁▁▁█▁▁▁▁▁▁▁██▁▁▁▁▁▁▁▁▁▁▁▁▁
+                                                     ───━┯──────━━━────┬────━━──
+  UTC                                                  07:30         08:00
+  DIFFERS, BUT NOT DURING A STALL  network packet drops (POLICY_DENIED) 0.37/s …
+  QUIET  pods …-2bq7k, …-8wzpd · 3 dependencies · dns · restarts · rollouts
+  next  Shift-B probe the pods now  m compare the pods  Enter open …-hx4mt
+  ↑↓ row · a show every signal · s queries · ←→ time · 1-4 window · Esc back
+```
+
+- The all-detail page: at 132x36 every hop and the Pods of an outlying app
+  hop, the title, one lane per raised signal, the summary and the next
+  steps; at 80x24 the hop table without the `WHAT` column and with quiet
+  dependencies on one row, the lanes with marks, and the summary; at 60
+  columns hop, key number and state word, with the trend column left out
   first. A lane label that does not fit keeps what its marks mean and the
   Pod (`not ready …-hx4mt`, `p99 +3 …-hx4mt`) before the name of the hop.
 - The page of queries and rules (`s`) wraps at every width: no number, rule
   or query is cut.
-- With `noIcons` every character is ASCII except the `·` separator: `->`
-  for the arrow, `#` for a mark, `x` for no data, `...` for an elision.
-- State is always a word. Color repeats it and is taken from the semantic
-  palette.
+- With `noIcons` the calm page is ASCII only (`|` for the separator, `#`
+  for a mark, `v` for an episode, `x` for no data, `...` for an elision);
+  the all-detail page keeps the `·` separator.
+- State is always a word or a glyph. Color repeats it and is taken from the
+  semantic palette.
 
 ## Limits
 
@@ -347,6 +579,20 @@ from the least important; what overlaps every episode and the caveat stay.
   ingress is not read, that is the next hop that was raised.
 - The Kubernetes API keeps only the last Ready change and the last restart
   of a container; history comes from kube-state-metrics.
+- The calm page names one raised signal per hop on its row and counts the
+  others (`+2`); `s` and `a` list them. The Pods of the Service have a row
+  per raised signal, four at most.
+- A strip column is rarely a whole minute, and a mark fills every column it
+  touches: a dated fact half a minute before a stall can stand in the first
+  column of its band. The answer and the groups are computed from the times,
+  never from the columns.
+- The value at the time cursor is what the source answered. For a rate it
+  is still raised in the columns after a band while the burst leaves the
+  rate window.
+- The row cursor moves over the rows that are on the screen. A group that
+  is folded to one line is reached on a taller screen or with `a`.
+- A reason for not reading is cut at the strips on the calm page; `s` on
+  the row states it in full.
 - Nothing here proves a cause, and a quiet window is not proof of health.
 
 ## Trying it
@@ -354,16 +600,19 @@ from the least important; what overlaps every episode and the caveat stay.
 `scripts/operator-study-fixture.py` serves the "GitLab intermittent hang"
 scenario described in [request-path.md](request-path.md). Open the Service
 list of namespace `gitlab`, select `gitlab-webservice-default` and press
-`Shift-W`: three episodes of client give-ups at the ingress, one Pod of
-three as the outlier on p99, queue and CPU throttling, quiet dependencies
-and DNS, and one burst of dropped packets towards another Pod that the
-summary places outside every episode. `--deny-source prometheus` shows the
+`Shift-W`: three stalls, the rows of one Pod of three over their rules
+inside every band (p99, queue, free threads and CPU throttling), quiet
+peers, dependencies and DNS, and one burst of dropped packets towards
+another Pod between two bands, under `DIFFERS, BUT NOT DURING A STALL`. `a`
+shows the hop table and the lanes. `--deny-source prometheus` shows the
 not-read state. `:ingresses gitlab` lists the Ingress, and `Shift-W` on its
 row opens the same view for its backend Service. From there `m` opens the
 three Pods side by side on `p99` and `Shift-B` opens the probe.
 
 Code: `internal/slowpath` resolves the path (`Resolve`), plans the batch
 (`BuildPlan`), sends it (`Collect`) and evaluates it (`Evaluate`: rules,
-peers, lanes, episodes, summary); `internal/view/slow.go` and
-`slow_render.go` are the view. `internal/slowpath/slowtest` is the synthetic
+peers, lanes, episodes, summary) and states the read for the calm page
+(`Findings`, `Answer`); `internal/view/slow.go` is the view, `slow_calm.go`
+its calm page, built with `internal/calm`, and `slow_render.go` the
+all-detail page. `internal/slowpath/slowtest` is the synthetic
 story the tests use.

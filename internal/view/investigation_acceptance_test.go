@@ -478,7 +478,12 @@ func TestInvestigationAcceptanceTypedRelatedEscRetainsTabSearchAndViewport(t *te
 		jumpError = d.app.inject(NewDetails(d.app, "Pod", "ops/child", contentInspection, true).Update("Retained related Pod"), false)
 	})
 	require.NoError(t, jumpError)
-	require.Contains(t, investigationAcceptanceFrame(screen), "ns:ops")
+	// The update returns before its draw has reached the screen: the frame
+	// is read until the draw is on it, not once in the middle of it.
+	shows := func(text string) func() bool {
+		return func() bool { return strings.Contains(investigationAcceptanceFrame(screen), text) }
+	}
+	require.Eventually(t, shows("ns:ops"), 2*time.Second, 5*time.Millisecond, "the frame after the jump names the namespace")
 	var styleError error
 	investigationAcceptanceUpdate(t, d.app, func() {
 		styleError = d.app.Styles.Load("../../skins/monochrome.yaml", false)
@@ -489,7 +494,7 @@ func TestInvestigationAcceptanceTypedRelatedEscRetainsTabSearchAndViewport(t *te
 	investigationAcceptanceAwait(t, d.app, func() bool { return d.app.Content.Top() == d })
 	investigationAcceptanceUpdate(t, d.app, func() {})
 	require.Equal(t, uiAcceptanceNamespace, d.app.Config.ActiveNamespace())
-	require.Contains(t, investigationAcceptanceFrame(screen), "ns:apps")
+	require.Eventually(t, shows("ns:apps"), 2*time.Second, 5*time.Millisecond, "the frame after Esc names the namespace returned to")
 	require.Equal(t, investigationEvidenceTab, d.activeTab)
 	require.Equal(t, investigationAcceptanceQuery, d.inspectionQuery)
 	require.Equal(t, investigationAcceptanceQuery, d.cmdBuff.GetText())
