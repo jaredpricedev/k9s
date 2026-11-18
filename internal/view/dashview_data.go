@@ -176,6 +176,10 @@ type dashLine struct {
 	Name, Full, RefID string
 	Points            []chart.Point
 	Raw               []observability.Sample
+	// Slot is the line's place among the lines of its panel: its letter,
+	// the same on every page. Tint is its colour among the data colours:
+	// its slot, unless a page draws only some of the lines.
+	Slot, Tint int
 }
 
 // dashData is what a panel's answers amount to.
@@ -253,6 +257,7 @@ func (s *dashSnapshot) data(index int, ascii bool) dashData {
 	for i, name := range dashboard.ShortNames(full) {
 		// A long name that shares no start with another keeps both ends.
 		out.Lines[i].Name = graphWords(graphMiddle(name, dashNameWidth), ascii)
+		out.Lines[i].Slot, out.Lines[i].Tint = i, i
 	}
 	if len(out.Lines) == 0 && len(out.States) > 0 {
 		word := func(state string) string { return state[strings.Index(state, ": ")+2:] }

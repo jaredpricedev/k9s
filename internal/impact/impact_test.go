@@ -413,6 +413,10 @@ func TestCollectStatesWhatWasMeasuredAfterTheRolloutAndNoCause(t *testing.T) {
 	require.Equal(t, "no series matched (the source answered)", throttled.Reason)
 	require.False(t, throttled.Before.Valid, "a missing metric has no value; it is not zero")
 
+	// Collect stamps the read with the wall clock, and the summary adds the
+	// date to a rollout of another day. The fixture's rollout is on a fixed
+	// day: read on that day, the summary gives the time alone.
+	report.ReadAt = report.Windows.Rollout.Add(12 * time.Minute)
 	require.Equal(t, "After rev 2 (04:20): error ratio 0.2% -> 14.1%, p99 248ms -> 2.5s, restarts 0 -> 6, "+
 		"memory at limit (limit 512Mi -> 256Mi), ready replicas 2 -> 1.", report.Summary())
 	require.Equal(t, "not available: CPU throttled", report.Uncompared())
@@ -430,7 +434,11 @@ func TestCollectReportsDeniedTooFewSamplesAndTrafficShiftsHonestly(t *testing.T)
 	denied := &fakeSource{status: observability.Status{State: observability.StateDenied, HTTPStatus: 403}}
 	report := Collect(t.Context(), denied, checkoutRequest(t))
 	require.Equal(t, "denied (HTTP 403)", report.Failure)
+	report.ReadAt = report.Windows.Rollout.Add(12 * time.Minute)
 	require.Equal(t, "After rev 2 (04:20): nothing was read from the source: denied (HTTP 403). No comparison was made.", report.Summary())
+	// Read on another day, the rollout is dated.
+	report.ReadAt = report.Windows.Rollout.Add(24 * time.Hour)
+	require.Equal(t, "After rev 2 (Nov17 04:20): nothing was read from the source: denied (HTTP 403). No comparison was made.", report.Summary())
 	for index := range report.Outcomes {
 		require.Equal(t, NotRead, report.Outcomes[index].State)
 		require.False(t, report.Outcomes[index].After.Valid)

@@ -254,11 +254,26 @@ func TestChartStyleReachesMinisTrendsAndDashboards(t *testing.T) {
 	require.False(t, hasBraille(list))
 	require.True(t, hasBraille(compare(chart.Dots, 60, 20, graphByPod)))
 
-	// A drawn dashboard: stat trends are blocks, a chart of several
-	// lines is stepped lines; zoomed, a panel of one series is an area.
+	// A drawn dashboard in the calm layout: the main chart follows the
+	// style, and the key line names what b switches to. The strips of the
+	// rows are the kit's eighth blocks in either style.
 	s := dashStorySnapshot(t)
-	dash := func(style chart.Style, zoom bool, selected int) string {
+	calmPage := func(style chart.Style) string {
 		page := dashPageOf(132, 33)
+		page.Style = style
+		return dashText(t, s, page)
+	}
+	require.True(t, hasSteps(calmPage(chart.Auto)), "several series: stepped lines")
+	require.False(t, hasBraille(calmPage(chart.Auto)))
+	require.Contains(t, calmPage(chart.Auto), "r re-read · b dots · Esc back")
+	require.True(t, hasBraille(calmPage(chart.Dots)), "the main chart follows the style")
+	require.False(t, hasSteps(calmPage(chart.Dots)))
+	require.Contains(t, calmPage(chart.Dots), "r re-read · b solid · Esc back")
+
+	// Under the all-detail key: stat trends are blocks, a chart of several
+	// lines is stepped lines; zoomed, a panel of one series is an area.
+	dash := func(style chart.Style, zoom bool, selected int) string {
+		page := dashDetailOf(132, 33)
 		page.Style, page.Zoom = style, zoom
 		if zoom {
 			page.Selected, page.Cursor = selected, int(s.Window/s.Step)
@@ -269,7 +284,7 @@ func TestChartStyleReachesMinisTrendsAndDashboards(t *testing.T) {
 	require.True(t, hasBlocks(grid))
 	require.True(t, hasSteps(grid))
 	require.False(t, hasBraille(grid))
-	require.Contains(t, grid, "Shift-D Grafana · b dots · Esc back")
+	require.Contains(t, grid, "Shift-D Grafana · a calm layout · b dots · Esc back")
 	require.True(t, hasBraille(dash(chart.Dots, false, 0)))
 	require.False(t, hasBlocks(dash(chart.Dots, false, 0)))
 	stat := dash(chart.Auto, true, 2)

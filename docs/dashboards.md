@@ -38,6 +38,95 @@ Select a Pod, workload, Node or namespace, open `:dashboards`, choose a
 `declared` or `search` row and press `v`. An `explore` row is a link, not a
 dashboard, and says so.
 
+The page opens in the calm layout the incident views share
+([presentation.md](presentation.md#calm-layout-the-standard-for-incident-views)):
+what was read first, one panel at full size, and every other panel as one row
+on the same time axis.
+
+```
+Dashboard  GitLab / Webservice overview · last 1h                    read 02:18 · 11 of 11 queries
+  9 of 11 panels read. 2 cannot be drawn here.                           A reading, not a finding.
+
+  REQUEST DURATION P99 BY POD  c …hx4mt 346ms peak 47.9s  b …8wzpd 346ms  a …2bq7k 346ms
+                       50s ┤      ╭╮           ╭─╮               │
+                           │      ││           │ │               │
+                       25s ┤     ╭╯│           │ │               │
+                           │     │ │          ╭╯ │              ╭┴╮
+                           │     │ ╰╮         │  ╰╮             │ ╰╮
+                         0 ┤─────╯──╰──────a──╯─b─╰──c──────────╯──cba
+  REQUESTS
+  Requests per second       █████▇▆▇███████████▆▆▇███████████████▇████  35.8/s
+  Slowest pod p99           ▁▁▁▁▃██▅▃▁▁▁▁▁▁▁▁▁▅██▅▃▁▁▁▁▁▁▁▁▁▁▁▁▁▄█▅▁▁▁  346ms green      max red
+  Puma threads in use       ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  37.5% green
+  CPU throttled, worst pod  ▁▁▁▁▃██▆▃▁▁▁▁▁▁▁▁▁▆██▆▃▁▁▁▁▁▁▁▁▁▁▁▁▁▄▇▆▁▁▁  4.19% green      max red
+  Requests by pod           ███▇▇▇▇███▇▇▇▇███▇▇▇▇████▇▇▇████▇▇▇████▇▇▇  …8wzpd 11.7/s
+  PUMA AND CPU
+  Puma queued connections   ▁▁▁▁▅██▁▁▁▁▁▁▁▁▁▁▃███▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▆█▁▁▁▁  …hx4mt queued 0  peak 40
+  CPU usage against limit   ▃▃▃▃▄██▇▄▃▃▃▃▃▃▃▃▃▇██▇▄▃▃▃▃▃▃▃▃▃▃▃▃▃▅▇▆▃▃▃  …hx4mt 502m      peak 1.54
+  CPU throttled periods     ▁▁▁▁▃██▆▃▁▁▁▁▁▁▁▁▁▆██▆▃▁▁▁▁▁▁▁▁▁▁▁▁▁▄▇▆▁▁▁  …hx4mt 4.19%     peak 90%
+                            ────────┬─────────┬──────────┬─────────┬──
+  UTC                             01:30     01:45      02:00     02:15
+  NOT DRAWN  Pods and nodes (table) · Webservice log lines with timeout (logs)
+
+  next  n next chart (Requests by pod)    Enter zoom    a all panels    D open in Grafana
+  ←→ time · ↑↓ chart · s queries · 1-4 window · r re-read · b dots · Esc back
+```
+
+- **Title line.** The dashboard, the window, when it was read and how many
+  of its queries were answered. The count is in the warning colour when not
+  every query answered.
+- **What was read.** One sentence counts the panels that are on the page as
+  a chart or a row, and a second one everything that is not: `6 of 11 panels
+  read, 1 only in part. 2 cannot be drawn here, 2 were not answered, 1
+  matched no series (not a zero).` A dashboard shows; it finds nothing, and
+  the sentence does not either: its caveat is `A reading, not a finding.`
+- **One main chart.** The first line chart of the dashboard, at full size,
+  with its legend on one line, the line with the highest peak first; what
+  the line has no room for is counted (`+2 more`). A chart of more than four
+  series draws the four with the highest peak and says so (`4 highest of 6
+  series`); a line keeps the letter it has in the grid and in the zoomed
+  panel. `n` (or `Tab`, `↓`) makes the next panel the main chart and the one
+  that was a row; `Shift-N`, `Shift-Tab` and `↑` go back. Any drawn panel
+  can be the main chart: a stat or gauge is drawn as the series behind it.
+- **Every other panel is one row** on the time axis of the chart: its title,
+  its strip and its number.
+  - A `stat` or `gauge` of one series is its value with the author's
+    threshold word. When the panel has a threshold that reads as a warning
+    or a failure, the strip is drawn against it: the baseline (`▁`) where
+    the value was under it, and a level in the row's colour where it was
+    over. When the window held another step than the value does, the row
+    says so beside the number: `max 47.9s red`, or `max red` where the
+    screen has no room for the number.
+  - Any other panel is its series with the highest peak (a level that never
+    moves, such as a limit, stands for the panel only when nothing else was
+    read): the name, the last sample, and the peak when it is more than
+    twice the last sample. At 120 columns and more the row also says how
+    many series it is not (`+5 more`). The strip is drawn from zero to that
+    series' own highest sample, so the peak is its scale.
+  - `×` in a strip is a cell without a sample. `partial` after a row marks
+    a panel that was drawn from some of its queries; as the main chart, and
+    zoomed, it names the query that is missing.
+- **A dashboard row is a group**: its title in capitals over its panels.
+  Panels under no row stand under `ALSO`.
+- **What is not on the page** is one line per kind under the axis, with each
+  panel's reason in a word or two: `NOT DRAWN` (the definition or the
+  selection rules it out), `NOT READ` (its queries were not answered) and
+  `NO SERIES MATCHED`. These lines are never left out, and `s` has every
+  reason in full.
+- **Two key lines**: the likely next steps in words, and the rest. `←` `→`
+  move a time cursor through the chart and every row; the legend and the
+  numbers then read the sample taken at that time, and the line over the
+  chart says which (`at 04:29:00Z`). `Enter` zooms the main chart.
+- Nothing on this page is read for it: it is laid out from the one read the
+  page already made.
+
+### All detail: the grid of every panel (`a`)
+
+`a` shows the dashboard as a grid of every panel, with each tile's minimum
+and maximum, every legend entry, the variables and the expression of the
+selected panel. `a` again, or `Esc`, returns to the calm page with the
+selected panel as its main chart.
+
 ```
 Dashboard · GitLab / Webservice overview · last 1h to 10:38:30Z · step 30s
 read 10:38:38Z · 9/11 panels drawn · 11/11 answered · 1-6/11 ↑↓
@@ -64,7 +153,7 @@ for Deployment gitlab/gitlab-webservice-default · namespace=gitlab (selection) 
          09:45      10:00     10:15      10:30              09:45      10:00     10:15      10:30
 ── Puma and CPU ────────────────────────────────────────────────────────────────────────────────────
 Panel 1 of 11 · stat · A sum(rate(http_requests_total{namespace="gitlab", pod=~".*"}[2m]))
-←/→ ↑/↓ panel · Enter zoom · 1-4 window · r re-read · s queries · Shift-D Grafana · Esc
+←/→ ↑/↓ panel · Enter zoom · 1-4 window · r re-read · s queries · Shift-D Grafana · a calm layout · Esc
 ```
 
 - The first line names the dashboard, the window, the window end and the
@@ -84,6 +173,9 @@ Panel 1 of 11 · stat · A sum(rate(http_requests_total{namespace="gitlab", pod=
   other start in the same column.
 
 ### Supported panel types
+
+How each type is drawn in the grid of every panel (on the calm page each is
+the main chart or one row, as above):
 
 | Grafana type | Drawn as |
 | --- | --- |
@@ -163,9 +255,11 @@ substitution (a regex anchor, a `$1` in `label_replace`) is not sent.
 
 ### What is not drawn
 
-A panel that draws nothing takes one line in its place, selectable like any
-panel: `Pods and nodes · NOT DRAWN: panel type "table" is not drawn here`.
-The reasons are:
+On the calm page a panel that draws nothing is named in one of the lines
+under the axis, with its reason in a word or two (`NOT DRAWN  Pods and nodes
+(table)`); a line counts what it has no room to name. In the grid it takes
+one line in its place, selectable like any panel: `Pods and nodes · NOT
+DRAWN: panel type "table" is not drawn here`. The reasons are:
 
 - the panel type is not one of the drawn types, or it is a text panel or a
   library panel whose definition is not part of the dashboard JSON;
@@ -177,8 +271,9 @@ The reasons are:
 - the read was denied, timed out or failed;
 - a limit of one read: at most 24 panels and 40 queries are sent per read, a
   panel keeps at most 6 queries and draws at most 12 lines, and a definition
-  keeps at most 80 panels and 40 variables. The status line counts what a
-  limit cut and `s` lists it.
+  keeps at most 80 panels and 40 variables. The calm page says how many
+  panels are over the limit of one read, the status line of the grid counts
+  what a limit cut, and `s` lists it.
 
 `s` lists every panel with the expression that was sent and what came back,
 every variable, and everything that was not drawn with its reason.
@@ -196,16 +291,17 @@ still offers the dashboard, or for a query page the expression in Explore.
 
 | Key | Action |
 | --- | --- |
-| `←` `→`, `Tab` `Shift-Tab` | Previous or next panel |
-| `↑` `↓` | The panel above or below |
-| `Home` `End` | First or last panel |
-| `Enter` | Zoom the selected panel; `Esc` returns to the grid |
+| `n` `Shift-N`, `Tab` `Shift-Tab`, `↓` `↑` | Calm page: the next or previous drawn panel becomes the main chart, round the dashboard. Grid: `Tab` `Shift-Tab` select the next or previous panel, `↑` `↓` the panel above or below |
+| `←` `→` | Calm page: the time cursor, through the chart and every row (`Shift` moves ten points). Grid: the previous or next panel |
+| `Home` `End` | Calm page: the window's start or end. Grid: the first or last panel |
+| `Enter` | Zoom the main chart or the selected panel; `Esc` returns to where it was zoomed from |
+| `a` | All detail: the grid of every panel. `a` again or `Esc` returns to the calm page |
 | `1` `2` `3` `4` | Window: 15m, 1h, 6h, 24h (reads the panels once) |
 | `r` | Read the panels again |
 | `s` | Queries, variables and what was not drawn |
 | `Shift-D` | Open the same dashboard in Grafana with the window drawn here and the variables the selection filled |
 | `b` | Chart style: filled areas and solid lines (the default) or braille dots; the choice holds for the session and is the same in `:graph` and `:slow` |
-| `Esc` | Back |
+| `Esc` | Back: out of the `s` page, the zoomed panel or the grid first, then out of the page |
 
 In a zoomed panel `←` `→` move the cursor along the sample grid (`Shift`
 moves ten points, `Home` and `End` go to the window's ends) and `↑` `↓` change
@@ -218,9 +314,61 @@ description. A stat or gauge is zoomed as the series behind it.
 
 | Typed | Result |
 | --- | --- |
-| `:query` | Every named query as one chart each, for the selection |
-| `:query <name>` | That named query alone, with the cursor |
+| `:query` | Every named query for the selection, laid out like a dashboard: the first at full size, the others as one row each under the name they are run by; `a` shows one chart each |
+| `:query <name>` | That named query alone |
 | `:query <expression>` | The expression alone; anything that is not a known name is taken as PromQL |
+
+The page of one query:
+
+```
+Query  throttled · last 1h                                             read 02:17 · 1 of 1 queries
+
+  3 series; highest …hx4mt, peak 90% at 01:27.                           A reading, not a finding.
+
+  CPU THROTTLED SHARE BY POD  percent
+       100% ┤
+            │          ╭╮                   ╭─╮                         ╭╮
+            │          ││                   │ │                         ││
+            │         ╭╯╰╮                 ╭╯ ╰╮                        ││
+        50% ┤         │  │                 │   │                        ││
+            │         │  │                ╭╯   │                       ╭╯╰╮
+            │         │  │                │    │                       │  │
+            │        ╭╯  ╰╮               │    ╰╮                      │  │
+            │        │    │               │     │                      │  │
+          0 ┤────────╯────╰─a────b────c───╯─────╰─────────a────b────c──╯──╰─cba
+
+  SERIES BY PEAK                                                                 last
+  c  …hx4mt  ▁▁▁▁▁▁▁▁▅███▆▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▅████▆▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▆▇▆▄▁▁▁▁  4.17%  peak 90%
+  b  …8wzpd  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  1.17%  peak 1.26%
+  a  …2bq7k  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  1.16%  peak 1.26%
+             ──┬──────────┬──────────┬──────────┬──────────┬──────────┬────────
+  UTC        01:20      01:30      01:40      01:50      02:00      02:10
+
+  next  e edit the expression    s queries, and how to save this one    D open in Grafana
+
+  ←→ time · 1-4 window · a all detail · r re-read · b dots · Esc back
+```
+
+- The title line names the query, or the expression as it was typed. The
+  sentence under it reads and does not judge: how many series came back,
+  which stands highest and when (`1 series: p99, 6ms throughout.` for one
+  that never moves). It adds how many series a limit left undrawn and
+  whether the answer was cut.
+- The chart is at full size. With several series, each is one row under it,
+  the highest peak first, on the chart's time axis and on its scale: the
+  letter that ends its line in the chart, its name, the last sample (the
+  sample at the cursor once `←` `→` moved it), its peak and its strip. A
+  chart of more than four series draws the four with the highest peak; the
+  rows list every series, and one that is not drawn has no letter.
+- An answer without series is the sentence itself (`No series matched:
+  missing data, not a zero.`), with the caveat `Nothing found is not proof
+  of health.` and no axis; a rejected expression or a failed read is the
+  sentence in the warning colour, with `Not read is not healthy.`
+- The expression as it was sent, its state and sample counts, the variables
+  and what the query is about are under `s`, with the YAML that would save
+  the query. `a` shows the page as it was before the calm layout, with the
+  cursor line, the expression, the description and the variables under the
+  chart.
 
 Names complete in the prompt (`:query thr` then `Tab`). In a query page `e`
 puts the expression back into the prompt to change it; a `:query` typed while
@@ -298,12 +446,46 @@ nothing writes it.
 
 ## Sizes and plain characters
 
-At 80x24 a dashboard page holds one or two charts, or four value tiles and a
-chart; at 60 columns one chart, or two value tiles side by side, with the
-readout. A zoomed panel keeps the cursor line, the expression and the keys at
-60 columns. With `ui.noIcons` the page uses plain characters: `-- title --`
-for a section, `=` and `-` for a bar, the chart package's plain line glyphs,
-`...` for a shortened name and `Left/Right`, `Up/Down` in the key line.
+The calm page gives up room in the order every calm page does
+([presentation.md](presentation.md#what-a-smaller-screen-gives-up)), and a
+dashboard adds three things of its own:
+
+1. Under 120 columns a row no longer says how many series it is not, and of
+   a maximum only the word: `max red` for a value whose window held another
+   step, `peak 40` for a line that ends low. These are never left out of a
+   row: `346ms green` alone would hide the stall.
+2. The strips and the chart shorten together, because they share the axis.
+   When they would fall under 20 columns, or a row would lose `max red` or
+   its peak, the rows are not drawn narrower: every group folds to one line
+   and the chart takes the width with its own axis. This is the page at 60
+   columns. A folded line names first the panel whose window held the worst
+   step of its author's rule, and of a panel first what its number would
+   hide (`REQUESTS  Slowest pod p99 max red, 346ms green +4 more`), and
+   counts the rest.
+3. On a short page the first group keeps its rows and the groups under it
+   fold; then rows are left out and counted, and the page ends as the chart
+   alone with the lines of what was not drawn or read, which stay. A page
+   with no room for the chart (ten rows or fewer for the dashboard above)
+   shows the title, the sentence of what was read and the key for all
+   detail.
+
+At 80x24 the GitLab dashboard of the fixture shows its chart four rows high,
+the five rows of its first group with strips of 30 columns, and its second
+group and the undrawn panels as one line each; the second key line is given
+up. The page of one query keeps its chart and every series row at 80x24 and
+at 60 columns.
+
+In the grid of every panel (`a`), at 80x24 a page holds one or two charts,
+or four value tiles and a chart; at 60 columns one chart, or two value tiles
+side by side, with the readout. A zoomed panel keeps the cursor line, the
+expression and the keys at 60 columns.
+
+With `ui.noIcons` the pages use plain characters. The calm page: `_` for the
+baseline of a strip and `.:-=+*#` for its levels, `x` for a cell without a
+sample, `:` and `^` for the cursor, `|` between the parts of a line, `...`
+for a shortened name. The grid: `-- title --` for a section, `=` and `-`
+for a bar, the chart package's plain line glyphs, and `Left/Right`,
+`Up/Down` in the key line.
 
 ## Limits
 
