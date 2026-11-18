@@ -413,8 +413,18 @@ func TestCollectStatesWhatWasMeasuredAfterTheRolloutAndNoCause(t *testing.T) {
 	require.Equal(t, "no series matched (the source answered)", throttled.Reason)
 	require.False(t, throttled.Before.Valid, "a missing metric has no value; it is not zero")
 
+	// Collect stamps the read with the wall clock, and the sentence names
+	// the date of a rollout that was not on the day of the read. The stamp
+	// is pinned so that the sentence does not depend on the day the test
+	// runs.
+	require.WithinDuration(t, time.Now(), report.ReadAt, time.Minute)
+	report.ReadAt = rolloutAt.Add(time.Hour)
 	require.Equal(t, "After rev 2 (04:20): error ratio 0.2% -> 14.1%, p99 248ms -> 2.5s, restarts 0 -> 6, "+
 		"memory at limit (limit 512Mi -> 256Mi), ready replicas 2 -> 1.", report.Summary())
+	// Read on another day, the sentence names the date of the rollout.
+	report.ReadAt = rolloutAt.Add(24 * time.Hour)
+	require.Contains(t, report.Summary(), "After rev 2 (Nov17 04:20): error ratio 0.2% -> 14.1%")
+	report.ReadAt = rolloutAt.Add(time.Hour)
 	require.Equal(t, "not available: CPU throttled", report.Uncompared())
 	require.Equal(t, []string{"image v1 -> v2", "limits.memory 512Mi -> 256Mi", "env ~PAYMENT_TOKEN +FEATURE_FLAGS"}, report.Changes)
 	require.Empty(t, report.Traffic)
@@ -430,7 +440,11 @@ func TestCollectReportsDeniedTooFewSamplesAndTrafficShiftsHonestly(t *testing.T)
 	denied := &fakeSource{status: observability.Status{State: observability.StateDenied, HTTPStatus: 403}}
 	report := Collect(t.Context(), denied, checkoutRequest(t))
 	require.Equal(t, "denied (HTTP 403)", report.Failure)
+	// Pinned as above: the wall clock does not decide the sentence.
+	report.ReadAt = rolloutAt.Add(time.Hour)
 	require.Equal(t, "After rev 2 (04:20): nothing was read from the source: denied (HTTP 403). No comparison was made.", report.Summary())
+	report.ReadAt = rolloutAt.Add(24 * time.Hour)
+	require.Equal(t, "After rev 2 (Nov17 04:20): nothing was read from the source: denied (HTTP 403). No comparison was made.", report.Summary())
 	for index := range report.Outcomes {
 		require.Equal(t, NotRead, report.Outcomes[index].State)
 		require.False(t, report.Outcomes[index].After.Valid)

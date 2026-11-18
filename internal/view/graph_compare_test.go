@@ -711,10 +711,10 @@ func TestGraphViewComparisonKeysReadOnRequestOnly(t *testing.T) {
 	}
 	require.Contains(t, drawnText(t, v, 132, 33), "Cursor 04:30:00Z, 30m before window end · hx4mt 86%")
 	// The calm page reads the same sample: the number of each row is its
-	// value under the cursor, and the word over the numbers says when.
+	// value under the cursor, and over the numbers is the time it reads.
 	key(calmDetailKey)
 	frame = drawnText(t, v, 132, 33)
-	require.Regexp(t, `P99 · Rails request duration, 99th percentile .* at 04:30:00\n`, frame)
+	require.Regexp(t, `P99 · Rails request duration, 99th percentile .* 04:30:00\n`, frame)
 	require.Regexp(t, `  CPU THROTTLED[ ┆]*\n> hx4mt`, frame, "the signal the other page was on is the one marked")
 	require.Regexp(t, `> hx4mt  worker-f  [▁-█]+  86% +differs\n`, frame)
 	key(calmDetailKey)

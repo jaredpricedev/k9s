@@ -178,7 +178,7 @@ A view is given 80×21 in an 80×24 terminal: the application keeps two rows at 
 | mark | `category` | a labelled moment: the guide, its key, its legend |
 | band | `band` | the background of the columns of an episode |
 
-For a view: build a `calm.Page`, plan it with `calm.Lay(&page, width, height, calmOptions(app))` and draw `calm.Render(&page, &plan, opts).Lines()`. `internal/calm/calmtest` has the three reference pages to model one on. Text handed to the kit is plain; the kit escapes it and writes the tags, each naming foreground, background and attributes, because tview reads a tag as a whole. A layout change adds no request: the kit only draws what a view has already read.
+For a view: build a `calm.Page`, plan it with `calm.Lay(&page, width, height, calmOptions(app))` and draw `calm.Render(&page, &plan, opts).Lines()`. `internal/calm/calmtest` has the three reference pages to model one on. Text handed to the kit is plain; the kit escapes it and writes the tags, each naming foreground, background and attributes, because tview reads a tag as a whole. A layout change adds no request: the kit only draws what a view has already read. A time cursor moves and nothing else does: a view whose numbers are read under the cursor gives its group the widest number and note any sample of the window writes (`Group.NumberWidth`, `Group.CompareWidth`), so the columns after the strips, and with them every strip, band and mark, are the same wherever the cursor is. The cursor is drawn at every sample of the window, the first included.
 
 ## Semantic skin tokens
 

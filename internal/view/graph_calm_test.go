@@ -228,13 +228,111 @@ func TestGraphCalmPagePromotesTheNextChartAndReadsTheCursor(t *testing.T) {
 	pg.Moved, pg.Cursor = true, int(snapshot.Window/snapshot.Step)-2
 	page = graphPlainLines(t, renderGraphCalm(snapshot, pg), 132)
 	require.Contains(t, page, "  MEMORY  254Mi at 04:59:00  at limit  ─ limit 256Mi  ┄ request 128Mi")
-	require.Regexp(t, `ALSO .* at 04:59:00$`, calmLine(t, page, "  ALSO"))
+	require.Equal(t, 1, strings.Count(page, "04:59:00"), "the time the cursor reads is said once, over the chart")
 	require.Contains(t, calmLine(t, page, "┬"), "^")
 	require.Contains(t, page, "┆")
 	// At the window end there is no cursor to draw.
 	page = graphPlainLines(t, renderGraphCalm(snapshot, calmGraphPage(132, 33)), 132)
 	require.NotContains(t, page, "┆")
 	require.NotContains(t, calmLine(t, page, "┬"), "^")
+}
+
+// calmAxisSpan is where the time axis of a plain page starts and how wide
+// it is, in cells: every strip of the page stands on it.
+func calmAxisSpan(t *testing.T, page string) (start, width int) {
+	t.Helper()
+	for _, line := range calmLines(page) {
+		rule := strings.TrimLeft(line, " ")
+		if strings.ContainsAny(rule, "┬┯+") && strings.Trim(rule, "─┬━┯-+=#^RXF") == "" {
+			return len([]rune(line)) - len([]rune(rule)), len([]rune(rule))
+		}
+	}
+	require.Failf(t, "no axis", "no time axis on:\n%s", page)
+	return 0, 0
+}
+
+// The numbers of the rows are read under the cursor, and their widths
+// differ from sample to sample (9kB/s, 2.6kB/s; a name, a name and "at
+// limit"). The columns are held as wide as the widest of them, so that
+// moving the cursor moves the cursor and nothing else: not a strip, not a
+// mark, not the axis.
+func TestGraphCalmCursorMovesNothingButItself(t *testing.T) {
+	pod := loadGraph(t.Context(), graphLimitStory(), graphPod, time.Hour, graphNow)
+	pod.Marks = []graphMark{{Key: 'R', T: pod.End.Add(-12 * time.Minute), Label: "rollout rev 2"}}
+	// Two Pods, one of which is at its limit every fourth minute: the row
+	// of memory then names another Pod and adds "at min limit".
+	pods := []string{"checkout-api-6c8d7f9b5-k4m2t", "checkout-api-7d9f8c6b5d-x2x9q"}
+	workload := loadGraph(t.Context(), &graphFake{pods: pods, rules: []graphRule{
+		{contains: "container_memory_working_set_bytes", by: pods, value: func(pod string, at time.Time) (float64, bool) {
+			if strings.HasSuffix(pod, "x2x9q") {
+				return map[bool]float64{true: 250, false: 9.5}[at.Minute()%4 == 0] * graphMi, true
+			}
+			return 100 * graphMi, true
+		}},
+		{contains: "kube_pod_container_resource_limits", value: graphConst(256 * graphMi)},
+		{contains: "container_cpu_usage_seconds_total", by: pods, value: func(string, time.Time) (float64, bool) { return 0.34, true }},
+		{contains: "kube_pod_container_status_restarts_total", by: pods, value: func(string, time.Time) (float64, bool) { return 0, true }},
+	}}, &graphTarget{Context: "ct-1-1", Kind: "Deployment", Namespace: "apps", Name: "checkout-api"}, time.Hour, graphNow)
+	require.Nil(t, workload.failure())
+	for name, snapshot := range map[string]*graphSnapshot{"pod": pod, "workload": workload} {
+		steps := int(snapshot.Window / snapshot.Step)
+		for _, size := range [][2]int{{132, 33}, {80, 20}} {
+			for _, main := range []string{"", "cpu", "network"} {
+				still := calmGraphPage(size[0], size[1])
+				still.Main, still.ASCII = main, name == "workload"
+				page := graphPlainLines(t, renderGraphCalm(snapshot, still), size[0])
+				require.Empty(t, still.Missing, "%s %dx%d main %q", name, size[0], size[1], main)
+				start, width := calmAxisSpan(t, page)
+				var marks, rule []int
+				if name == "pod" {
+					marks = calmColumns(calmLine(t, page, "  restarts  "), "▲")
+					rule = calmColumns(calmLine(t, page, "┬"), "R")
+					require.Len(t, marks, 6)
+					require.Len(t, rule, 1)
+				}
+				for _, cursor := range []int{0, 1, steps / 3, steps / 2, steps - 30, steps - 3, steps - 1, steps} {
+					moved := calmGraphPage(size[0], size[1])
+					moved.Main, moved.ASCII, moved.Moved, moved.Cursor = main, still.ASCII, true, cursor
+					page := graphPlainLines(t, renderGraphCalm(snapshot, moved), size[0])
+					gotStart, gotWidth := calmAxisSpan(t, page)
+					require.Equal(t, [2]int{start, width}, [2]int{gotStart, gotWidth}, "%s %dx%d main %q cursor %d: the axis\n%s", name, size[0], size[1], main, cursor, page)
+					if name == "pod" {
+						require.Equal(t, marks, calmColumns(calmLine(t, page, "  restarts  "), "▲"), "%s cursor %d: the restart marks", name, cursor)
+						require.Equal(t, rule, calmColumns(calmLine(t, page, "┬"), "R"), "%s cursor %d: the rollout", name, cursor)
+					}
+				}
+			}
+		}
+	}
+}
+
+// The legend over the chart is not part of the plot: a guide starts under
+// it, and never floats in the blank end of that line. The letter of a
+// line that is not filled is in the plot, so the legend names it.
+func TestGraphCalmLegendRowCarriesNoGuideAndNamesTheLetterOfALine(t *testing.T) {
+	snapshot := loadGraph(t.Context(), graphLimitStory(), graphPod, time.Hour, graphNow)
+	snapshot.Marks = []graphMark{
+		{Key: 'R', T: snapshot.End.Add(-12 * time.Minute), Label: "rollout rev 2"},
+		{Key: 'X', T: snapshot.End.Add(-2 * time.Minute), Label: "last exit OOMKilled (137)"},
+	}
+	pg := calmGraphPage(132, 33)
+	pg.Moved, pg.Cursor = true, int(snapshot.Window/snapshot.Step)-20
+	page := graphPlainLines(t, renderGraphCalm(snapshot, pg), 132)
+	require.Equal(t, "  MEMORY  150Mi at 04:50:00  ─ limit 256Mi  ┄ request 128Mi", calmLine(t, page, "  MEMORY"))
+	require.Contains(t, calmLine(t, page, "  ALSO"), "┊", "the guides run through the rows under the plot")
+	require.Contains(t, calmLine(t, page, "  ALSO"), "┆", "and so does the cursor")
+
+	// Dots and noIcons draw the line with its letter at its end.
+	for axis, pg := range map[string]*graphPage{
+		"256Mi ┤": func() *graphPage { pg := calmGraphPage(132, 33); pg.Style = chart.Dots; return pg }(),
+		"256Mi +": func() *graphPage { pg := calmGraphPage(132, 33); pg.ASCII = true; return pg }(),
+	} {
+		page := graphPlainLines(t, renderGraphCalm(snapshot, pg), 132)
+		require.Regexp(t, `^  MEMORY  a 150Mi now  `, calmLine(t, page, "  MEMORY"))
+		require.Equal(t, 1, strings.Count(page[strings.Index(page, axis):strings.Index(page, "ALSO")], "a"), "the letter the legend names is in the plot:\n%s", page)
+	}
+	// A filled area needs no letter.
+	require.Regexp(t, `^  MEMORY  150Mi now  `, calmLine(t, graphPlainLines(t, renderGraphCalm(snapshot, calmGraphPage(132, 33)), 132), "  MEMORY"))
 }
 
 func TestGraphCalmNoIconsPageIsASCII(t *testing.T) {

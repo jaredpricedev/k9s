@@ -66,6 +66,11 @@ type Group struct {
 	// Summary is what the group says when folded to one line; empty names
 	// its rows.
 	Summary []string
+	// NumberWidth and CompareWidth are the least widths of the number and
+	// the comparison column, in cells. A view whose numbers are read under
+	// a cursor gives the widest it can write there, so that the columns are
+	// the same wherever the cursor is and no strip moves when it does.
+	NumberWidth, CompareWidth int
 }
 
 // items is what a folded group names: its summary, or its rows. A quiet
@@ -179,6 +184,9 @@ func natural(groups []Group, width int, numberAfter bool) Layout {
 		}
 		if g.Head != "" {
 			l.Number = max(l.Number, cells(g.Head))
+		}
+		if len(g.Rows) > 0 {
+			l.Number, l.Compare = max(l.Number, g.NumberWidth), max(l.Compare, g.CompareWidth)
 		}
 	}
 	l.Subject, l.What = min(l.Subject, maxSubject), min(l.What, maxWhat)

@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/derailed/k9s/internal/calm"
 	"github.com/derailed/k9s/internal/chart"
@@ -78,12 +80,18 @@ func graphCalmAt(s *graphSnapshot, pg *graphPage) graphCalmWhen {
 	}
 	frame := chart.Frame{Start: s.Start, End: s.End, Step: s.Step, Width: 1}
 	when.at, when.moved = frame.TimeAt(min(max(pg.Cursor, 0), frame.Steps())), true
-	clock := when.at.UTC().Format("15:04")
-	if s.Step < time.Minute {
-		clock = when.at.UTC().Format("15:04:05")
-	}
-	when.word = "at " + clock
+	when.word = "at " + graphCalmClock(s, when.at)
 	return when
+}
+
+// graphCalmClock is a sample time as a calm page writes it: to the minute,
+// and to the second where the samples are less than a minute apart. It is
+// as wide for every time of a window.
+func graphCalmClock(s *graphSnapshot, at time.Time) string {
+	if s.Step < time.Minute {
+		return at.UTC().Format("15:04:05")
+	}
+	return at.UTC().Format("15:04")
 }
 
 // graphPanelWords are how a chart is named in a sentence and on a strip.
@@ -100,7 +108,8 @@ func graphPanelWord(spec *graphPanelSpec) (subject, strip string) {
 	if lower == "" {
 		return "The reading", "reading"
 	}
-	return strings.ToUpper(lower[:1]) + lower[1:], lower
+	first, size := utf8.DecodeRuneInString(lower)
+	return string(unicode.ToUpper(first)) + lower[size:], lower
 }
 
 // graphSay writes a value for a sentence: as the charts write it, with the
@@ -552,7 +561,13 @@ func graphCalmHead(p *graphPanel, f chart.Frame, when graphCalmWhen, pg *graphPa
 			if _, sampled := f.ValueAt(series, when.at); sampled {
 				value += " " + when.word
 			}
-			parts = add(parts, span(pal.Text, false, value))
+			if entry.Glyph != string(chart.FillGlyph) {
+				// A line that is not filled (dots, noIcons) carries its
+				// letter in the plot, so the legend names it.
+				parts = add(parts, span(series.Color, true, entry.Glyph), span(pal.Text, false, " "+value))
+			} else {
+				parts = add(parts, span(pal.Text, false, value))
+			}
 			if flag != "" {
 				parts = add(parts, span(pal.Warn, true, flag))
 			}
@@ -583,6 +598,13 @@ func graphCalmHead(p *graphPanel, f chart.Frame, when graphCalmWhen, pg *graphPa
 		}
 		head += gap + piece.tagged
 		used += len(gap) + runewidth.StringWidth(piece.plain)
+	}
+	// The legend is over the plot, not part of it: a guide of the page
+	// starts under it. The kit runs a guide through blank cells in the
+	// default style only, so the rest of the row is blank cells that carry
+	// an attribute; an episode still shades them.
+	if rest := width - tview.TaggedStringWidth(head); rest > 0 {
+		head += "[-:-:d]" + strings.Repeat(" ", rest) + "[-:-:-]"
 	}
 	return head
 }
@@ -648,6 +670,40 @@ func graphCalmStrip(p *graphPanel, f chart.Frame, when graphCalmWhen, pg *graphP
 	}
 	row.Compare = strings.Join(notes, " ")
 	return row
+}
+
+// graphCalmReserve is the widest number and the widest note a strip of the
+// panel writes at any sample of the window, in cells. The row reads the
+// sample under the cursor: the highest of the lines there, the name of
+// that line and whether it is at a limit. Columns held this wide are the
+// same wherever the cursor is, so no strip moves when it does.
+func graphCalmReserve(p *graphPanel, f chart.Frame, pg *graphPage) (number, compare int) {
+	lines, limited, name := 0, false, 0
+	for i := range p.Chart.Series {
+		s := &p.Chart.Series[i]
+		if s.Kind == chart.Line {
+			lines++
+		}
+		limited = limited || s.Limit && len(s.Points) > 0
+	}
+	for i := range p.Chart.Series {
+		if s := &p.Chart.Series[i]; s.Kind == chart.Line && lines > 1 && len(s.Points) > 0 {
+			name = max(name, runewidth.StringWidth(s.Name))
+		}
+	}
+	number = runewidth.StringWidth(graphWords(graphNoSample, pg.ASCII))
+	flag := 0
+	for _, pt := range graphHighest(p) {
+		number = max(number, runewidth.StringWidth(p.Chart.Unit.Format(pt.V)))
+		if limited {
+			flag = max(flag, runewidth.StringWidth(strings.TrimSpace(p.atLimit(f, pt.T, pt.V))))
+		}
+	}
+	compare = name + flag
+	if name > 0 && flag > 0 {
+		compare++
+	}
+	return number, compare
 }
 
 // graphCalmTitle is the title line of a calm page of :graph.
@@ -838,10 +894,8 @@ func graphCalmPage(s *graphSnapshot, pg *graphPage) calm.Page {
 		},
 	}
 
+	// The time a moved cursor reads is on the line over the chart, once.
 	also := calm.Group{Label: graphAlsoLabel, Role: calm.Secondary}
-	if when.moved {
-		also.Head = when.word
-	}
 	if restarts.shown {
 		row := calm.Row{What: graphRestartLabel, Color: pal.Warn}
 		switch {
@@ -869,6 +923,8 @@ func graphCalmPage(s *graphSnapshot, pg *graphPage) calm.Page {
 	for i := range panels {
 		if i != main {
 			also.Rows = append(also.Rows, graphCalmStrip(&panels[i], frame, when, pg))
+			number, compare := graphCalmReserve(&panels[i], frame, pg)
+			also.NumberWidth, also.CompareWidth = max(also.NumberWidth, number), max(also.CompareWidth, compare)
 		}
 	}
 	if len(also.Rows) > 0 {
@@ -966,6 +1022,8 @@ func graphCalmReport(s *graphSnapshot) string {
 		"It states order in time; it does not say that one caused the other.\n", chart.Ratio.Format(1-chart.NearLimit), graphFollow)
 	b.WriteString("  A row under ALSO is another chart on one row: the highest of its lines at each time, on the scale that chart has at full size. " +
 		"The restarts row marks every rise of the counter; its first mark is the first restart.\n")
+	b.WriteString("  Under a moved cursor every number is the sample at the cursor, and the line over the chart says its time. " +
+		"The columns after the strips are as wide as the widest of those samples, so the strips stay where they are when the cursor moves.\n")
 	b.WriteString("  × is a time without a sample. NO DATA names a query that was answered and matched nothing; NOT READ one that was not answered.\n")
 	return b.String()
 }

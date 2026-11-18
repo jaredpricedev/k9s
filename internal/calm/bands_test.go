@@ -187,6 +187,15 @@ func TestGuidesRunThroughBlankCellsOnly(t *testing.T) {
 	assert.Equal(t, "                |    :", plain(ascii))
 	row := draw(t, []string{Shade("", bands, twenty, twentyLayout, colorOpts)}, 40)[0]
 	assert.Equal(t, shown{r: '┊', fg: testPalette.Mark}, row[16])
+
+	// A cursor is drawn at every sample of the window, its first and its
+	// last included; outside the window there is none.
+	for at, want := range map[int]string{0: "            ┆", 1: "            ┆", 2: "             ┆", 20: "                               ┆", 21: "", -1: ""} {
+		edge := Bands{Cursor: minute(at)}
+		assert.Equal(t, want, text(draw(t, []string{Shade("", edge, twenty, twentyLayout, plainOpts)}, 40)[0]), "cursor at minute %d", at)
+		axis := AxisLines(edge, twenty, twentyLayout, plainOpts)[0]
+		assert.Equal(t, want != "", strings.Contains(axis, "^"), "cursor at minute %d: on the axis", at)
+	}
 }
 
 func TestShadeSurvivesTagsThatResetTheBackground(t *testing.T) {

@@ -55,7 +55,7 @@ Graph  Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 15m                       
 
   Memory reached its 256Mi limit 6 times. A container restarted after 5 of them.                Order in time, not proof of cause.
 
-  MEMORY  254Mi now  at limit  ─ limit 256Mi  ┄ request 128Mi                                           ┊
+  MEMORY  254Mi now  at limit  ─ limit 256Mi  ┄ request 128Mi
      256Mi ┤                  ─────────────▂▇▇▇▇▇▇▇▇▇────▂▅▇▇▇▇▇▇▇▇────▂▅▇▇▇▇▇▇▇▇─────▂▇▇▇▇▇▇▇▇─────▂▅▇▇▇▇▇▇▇▇────▂▅▇▇▇
            │                    ┊        ▁▆██████████  ▁▆██████████▄ ▁▆██████████▄  ▁▆█████████▄  ▁▆██████████  ▁▆█████
            │                    ┊      ▁▅████████████▁▅█████████████▁█████████████▁▅████████████▁▅████████████▁▅███████
@@ -113,7 +113,9 @@ Graph  Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 15m                       
   line over the chart is its legend: the value now, the words `at limit`
   where that is so, and the levels drawn (`─ limit 256Mi`, `┄ request
   128Mi`). A chart of several Pods names each line by its letter and keeps
-  them solid lines; entries without room are counted (`+1 more`). The chart
+  them solid lines; entries without room are counted (`+1 more`). A single
+  line that is not a filled area (dots, noIcons) is drawn with its letter,
+  and the legend then names it (`a 254Mi now`). The chart
   is drawn as described under [Every chart](#every-chart-a): a filled area
   for one series, the warning colour where it is at its limit.
 - **`ALSO`** holds every other chart as one row: its name, a strip on the
@@ -129,7 +131,8 @@ Graph  Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 15m                       
   it at full size.
 - **Moments** read from the object ([Axis marks](#axis-marks)) are thin
   guides (`┊`) through the whole block, with their letter on the axis and
-  one line each under it. The rollout line adds what the limit of the chart
+  one line each under it. A guide starts under the legend line, which is
+  not part of the plot. The rollout line adds what the limit of the chart
   was before it when the samples on both sides show that it changed
   (`memory min limit 512Mi before it, 256Mi now`). The first restart has no
   guide here: it is the first `▲` of the restarts row.
@@ -143,8 +146,11 @@ Graph  Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 15m                       
   steps; Home and End jump to the window edges. At the window end no cursor
   is drawn and every number is the latest sample. Once it is moved, the
   cursor is a `┆` through the block and a `^` on the axis, the legend reads
-  `206Mi at 04:55:30`, and the word over the numbers of the rows says the
-  same time. Nothing is interpolated.
+  `206Mi at 04:55:30`, and the number of every row is its sample at that
+  time. Nothing is interpolated. The cursor moves and nothing else does:
+  the columns after the strips are held as wide as the widest number and
+  note any sample of the window writes there (`9kB/s`, `x2x9q at min
+  limit`), so no strip, mark or axis shifts.
 - **Two lines of keys**: `next` names the likely steps in words (`p compare
   the pods` for a workload, the next chart, `a all charts`, `t what
   changed` for `:timeline`, `D open in Grafana` when Grafana is declared);
@@ -364,30 +370,30 @@ shared time axis. `a` shows one small chart per Pod and the table of every
 signal, as the page was before ([A chart per Pod](#a-chart-per-pod-a)).
 
 ```
-Compare pods  Service gitlab/gitlab-webservice-default · 3 pods · last 1h                            read 22:15 · 13 of 13 queries
+Compare pods  Service gitlab/gitlab-webservice-default · 3 pods · last 1h                            read 03:00 · 13 of 13 queries
 
   Pod hx4mt differs from the other two in 6 of 10 signals. No other Pod differs.                 A difference, not proof of cause.
 
-     hx4mt differs            ▼▼▼▼▼                         ▼▼▼▼▼▼▼                                  ▼▼▼▼
+     hx4mt differs             ▼▼▼▼▼                        ▼▼▼▼▼▼▼                                 ▼▼▼▼
 
-  QUEUED · connections waiting for a free Puma thread                                                               peak
-> hx4mt  worker-f  ▁▁▁▁▁▁▁▁▁▁▁▆▇███▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▆▇█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▄▇██▁▁▁▁▁▁▁▁▁  40     differs
-  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0
-  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0
+  QUEUED · connections waiting for a free Puma thread                                                            peak
+> hx4mt  worker-f  ▁▁▁▁▁▁▁▁▁▁▁▁▅████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▅██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▅███▁▁▁▁▁▁▁  40        differs
+  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0
+  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0
 
-  FREE-THREADS · Puma threads free to take a request                                                                low
-  hx4mt  worker-f  ▁▁▁▁▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁  0      differs
-  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  4
-  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  4
+  FREE-THREADS · Puma threads free to take a request                                                             low
+  hx4mt  worker-f  ▁▁▁▁▁▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁  0         differs
+  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  4
+  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  4
 
-  P99 · Rails request duration, 99th percentile                                                                     peak
-  hx4mt  worker-f  ▁▁▁▁▁▁▁▁▁▁▁▄▄▇██▅▄▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▄▄▇████▅▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▄▇▇▅▄▁▁▁▁▁▁▁  47.9s  differs
-  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  346ms
-  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  346ms
-                   ───────┬───━━━━━──────┬───────────────┬──━━━━━━━──────┬───────────────┬───────────━━━━┬────────
-  UTC                   21:20          21:30           21:40           21:50           22:00           22:10
+  P99 · Rails request duration, 99th percentile                                                                  peak
+  hx4mt  worker-f  ▁▁▁▁▁▁▁▁▁▁▁▁▂▄▇██▅▄▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▄▇████▅▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▄▇▇▅▃▁▁▁▁▁  47.9s     differs
+  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  346ms
+  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  346ms
+                   ┬───────────━━━┯━─────────────┬──────────━━━━━┯━─────────────┬──────────────┬────━━━━──────┬
+  UTC            02:00          02:10          02:20           02:30          02:40          02:50          03:00
 
-  ALSO DIFFERS  throttled (hx4mt 90%, peers 1.26%) · cpu (hx4mt 1.57, peers 423m) · busy-threads (hx4mt 8, peers 4)
+  ALSO DIFFERS  throttled (hx4mt 89.1%, peers 1.26%) · cpu (hx4mt 1.55, peers 423m) · busy-threads (hx4mt 8, peers 4)
   ALIKE ON ALL 3  memory · restarts · 5xx · network
 
   next  Enter open hx4mt    g group by container / revision / node / zone    B probe the pods now
@@ -398,7 +404,10 @@ Compare pods  Service gitlab/gitlab-webservice-default · 3 pods · last 1h     
 - **The answer** counts: `Pod hx4mt differs from the other two in 6 of 10
   signals. No other Pod differs.`, with `A difference, not proof of cause.`
   Signals that had no reading are counted in the same sentence (`3 of 10
-  signals had no reading`). Several Pods are listed with their counts.
+  signals had no reading`). "The other two" is said only when each of them
+  has samples in every signal the Pod differs in; where one has none the
+  sentence says `differs from its peers`, and the rows show which Pod was
+  not sampled. Several Pods are listed with their counts.
   When no Pod differs the page says how much it read (`No Pod differs from
   its peers in the 7 signals read. All 13 queries answered.`) and that
   nothing found is not proof of health; with fewer than three Pods it says
@@ -441,7 +450,9 @@ Compare pods  Service gitlab/gitlab-webservice-default · 3 pods · last 1h     
 - **The other signals are one line each**: `ALSO DIFFERS` for those that
   have no room as a group, each with the Pod, its number and the median of
   its peers; `ALIKE ON ALL 3` for those in which no Pod is an `OUTLIER`
-  (which is not "identical": see the rule); `NOT COMPARED` for those with
+  (which is not "identical": see the rule). A Pod without a sample in a
+  signal was not compared in it, so the line then reads `ALIKE` and counts
+  the Pods that were (`cpu (3 of 4 pods sampled)`). `NOT COMPARED` for those with
   too few Pods that have samples; `NOT READ` with the state of each that
   gave no reading. The last two are never given up for room.
 - **More Pods than five** show the Pods that differ (three at most), the
@@ -450,7 +461,11 @@ Compare pods  Service gitlab/gitlab-webservice-default · 3 pods · last 1h     
   the key line says which page it is.
 - **`←`/`→`** move the cursor as on the charts. Once it is moved, the number
   of every row is its sample under the cursor and the word over the numbers
-  is the time (`at 04:30:00`).
+  is the time (`04:30:00`). The number column is always as wide as that
+  time and the widest sample of the signal, so the strips, the bands and
+  the axis stay where they are when the cursor moves. On a narrow page the
+  label of a group gives way to the word over its numbers (`QUEUED` without
+  what it measures) rather than the other way round.
 - **How many groups**: as many as the size holds without giving anything
   up, blank rows included; at 132x36 that is three signals of three Pods.
   A second group is worth the blank rows around the answer and the keys;
@@ -458,21 +473,21 @@ Compare pods  Service gitlab/gitlab-webservice-default · 3 pods · last 1h     
   shown and the rest are in `ALSO DIFFERS`:
 
 ```
-Compare pods  Service gitlab/g…service-default · 3 pods · last 1h  22:15 · 13/13
+Compare pods  Service gitlab/g…service-default · 3 pods · last 1h  03:00 · 13/13
   Pod hx4mt differs from the other two in 6 of 10 signals. No other Pod differs.
   A difference, not proof of cause.
 
-     hx4mt differs      ▼▼▼           ▼▼▼▼                ▼▼▼
-  QUEUED · connections waiting for a free Puma thread              peak
-> hx4mt  worker-f  ▁▁▁▁▁▆██▁▁▁▁▁▁▁▁▁▁▁▄▇██▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▄▇█▁▁▁▁  40    differs
-  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0
-  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0
-  FREE-THREADS · Puma threads free to take a request               low
-  hx4mt  worker-f  ▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁  0     differs
-  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  4
-  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  4
-                   ─────━━━───┬───────━━━┯───────────┬────━━━───┬
-  UTC                       21:30      21:45       22:00      22:15
+     hx4mt differs      ▼▼▼          ▼▼▼▼               ▼▼
+  QUEUED · connections waiting for a free Puma thread          peak
+> hx4mt  worker-f  ▁▁▁▁▁▆██▁▁▁▁▁▁▁▁▁▁▅███▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██▁▁▁  40        differs
+  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0
+  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0
+  FREE-THREADS · Puma threads free to take a request           low
+  hx4mt  worker-f  ▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██▁▁▁  0         differs
+  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  4
+  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  4
+                   ┬────━━━──┬───────━━━┯─────────┬─────━━──┬
+  UTC            02:00     02:15      02:30     02:45     03:00
   ALSO DIFFERS  p99 (hx4mt 47.9s, peers 346ms) +3 more
   ALIKE ON ALL 3  memory · restarts · 5xx · network
 
@@ -640,33 +655,33 @@ marked group. So "only the Pods on one Node" or "only revision 2" is one row
 that looks different:
 
 ```
-Compare pods  Deployment apps/checkout-api · 4 pods · by revision · last 1h                          read 22:15 · 15 of 15 queries
+Compare pods  Deployment apps/checkout-api · 4 pods · by revision · last 1h                          read 03:00 · 15 of 15 queries
 
-  Pod x2x9q differs from the other 3 in 5 of 7 signals. No other Pod differs. 1 of 8 signals had no reading.
+  Pod x2x9q differs from its peers in 5 of 7 signals. No other Pod differs. 1 of 8 signals had no reading.
   A difference, not proof of cause.
 
-              x2x9q differs                                                               ▼▼▼▼▼▼ ▼▼▼▼▼
+              x2x9q differs                                                              ▼▼▼▼▼ ▼ ▼▼▼
 
-  RESTARTS                                                                                                rise
-> rev 2 7d9f8c6b5d  2 pods  ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××··▲·▲·▲·▲·▲·▲··  +6        x2x9q  differs
-  rev 1 6c8d7f9b5   2 pods  ············································································  +0
+  RESTARTS                                                                                              rise
+> rev 2 7d9f8c6b5d  2 pods  ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××··▲·▲·▲·▲·▲·▲··  +6          x2x9q  differs
+  rev 1 6c8d7f9b5   2 pods  ··········································································  +0
 
-  ERRORS · share of requests answered with an error status                                                peak
-  rev 2 7d9f8c6b5d  2 pods  ××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××████████████████  75%       x2x9q  differs
-  rev 1 6c8d7f9b5   2 pods  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  2.03%
+  ERRORS · share of requests answered with an error status                                              peak
+  rev 2 7d9f8c6b5d  2 pods  ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××███████████████  75%         x2x9q  differs
+  rev 1 6c8d7f9b5   2 pods  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  2.03%
 
   P50 · request duration, median
-  rev 2 7d9f8c6b5d  2 pods  ××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××████████████████  556ms     x2x9q  differs
-  rev 1 6c8d7f9b5   2 pods  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  80ms
+  rev 2 7d9f8c6b5d  2 pods  ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××××███████████████  556ms       x2x9q  differs
+  rev 1 6c8d7f9b5   2 pods  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  80ms
 
-  MEMORY                                                                                                  of limit
-  rev 2 7d9f8c6b5d  2 pods  ××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××▁▇██████████████  99.2%     x2x9q  differs
-  rev 1 6c8d7f9b5   2 pods  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  38.1%
-                            ──────┬────────────┬───────────┬────────────┬────────────┬────━━━━━━─┯━━━━──
-  UTC                           21:20        21:30       21:40        21:50        22:00       22:10
+  MEMORY                                                                                                of limit
+  rev 2 7d9f8c6b5d  2 pods  ××××××××××××××××××××××××××××××××××××××××××××××××××××××××××▁▇██████████████  99.2%       x2x9q  differs
+  rev 1 6c8d7f9b5   2 pods  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  38.1%
+                            ───────────┬────────────┬───────────┬───────────┬────────────┯━━━━─━─━━━─┬
+  UTC                                02:10        02:20       02:30       02:40        02:50       03:00
 
   ALSO DIFFERS  network (x2x9q 11.6kB/s, peers 25.2kB/s)
-  ALIKE ON ALL 4  cpu · p99
+  ALIKE  cpu (3 of 4 pods sampled) · p99 (3 of 4 pods sampled)
   NOT READ  throttled (no data)
 
   next  Enter open x2x9q    g group by node / zone / pod / container    B probe the pods now

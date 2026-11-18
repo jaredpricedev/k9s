@@ -12,6 +12,7 @@ import (
 
 	"github.com/derailed/k9s/internal/calm"
 	"github.com/derailed/k9s/internal/chart"
+	"github.com/mattn/go-runewidth"
 )
 
 // The calm layout of the per-Pod comparison (docs/graphs.md). The page
@@ -27,6 +28,7 @@ const (
 	graphCompareCaveat = "A difference, not proof of cause."
 	graphDiffersWord   = "differs"
 	graphAlsoDiffers   = "ALSO DIFFERS"
+	graphAlikeLabel    = "ALIKE"
 	graphNotCompared   = "NOT COMPARED"
 	graphPerPodOnly    = "PER POD ONLY"
 	graphEpisodesWord  = "episodes"
@@ -84,6 +86,18 @@ type graphCalmSignal struct {
 	far     float64
 	// compared is false when the signal had too few peers with samples.
 	compared bool
+}
+
+// sampled counts the Pods that have a sample in the signal. A Pod without
+// one was compared with nothing: it is neither alike nor different.
+func (set *graphSeriesSet) sampled() int {
+	pods := make(map[string]bool, len(set.Members))
+	for i := range set.Members {
+		if m := &set.Members[i]; m.sampled() {
+			pods[m.Pod] = true
+		}
+	}
+	return len(pods)
 }
 
 // graphCalmSignals orders the signals of a comparison for a calm page:
@@ -342,8 +356,11 @@ type graphCalmRow struct {
 // graphCalmRowsOf builds the rows of one signal: one per Pod (or, by
 // container, per container), or one per group when the series are
 // regrouped. The number is what ranks the row, or under a moved cursor
-// its value there.
-func graphCalmRowsOf(c *graphCompare, entry *graphCalmSignal, by graphGrouping, when graphCalmWhen, pg *graphPage) []graphCalmRow {
+// its value there. wide is the widest number a row of the signal can
+// write, in cells: what ranks it or any of its samples. The page holds
+// the number column that wide, so that the strips are where they are
+// wherever the cursor is and whichever of the rows are shown.
+func graphCalmRowsOf(c *graphCompare, entry *graphCalmSignal, by graphGrouping, when graphCalmWhen, pg *graphPage) (rows []graphCalmRow, wide int) {
 	s, sig, set := c.Base, entry.sig, &entry.set
 	pal := pg.Palette
 	apart := graphApart(set)
@@ -354,16 +371,27 @@ func graphCalmRowsOf(c *graphCompare, entry *graphCalmSignal, by graphGrouping, 
 		}
 	}
 	grid := chart.Frame{Start: s.Start, End: s.End, Step: s.Step, Width: 1}
+	wide = runewidth.StringWidth(graphWords(graphNoSample, pg.ASCII))
+	for i := range set.Members {
+		m := &set.Members[i]
+		if !m.sampled() {
+			wide = max(wide, runewidth.StringWidth(graphNoSamples))
+		}
+		for _, p := range m.Points {
+			wide = max(wide, runewidth.StringWidth(sig.Unit.Format(p.V)))
+		}
+	}
 	number := func(rank string, points []chart.Point) string {
+		rank = graphWords(rank, pg.ASCII)
+		wide = max(wide, runewidth.StringWidth(rank))
 		if !when.moved {
-			return graphWords(rank, pg.ASCII)
+			return rank
 		}
 		if v, ok := grid.ValueAt(&chart.Series{Points: points}, when.at); ok {
 			return sig.Unit.Format(v)
 		}
 		return graphWords(graphNoSample, pg.ASCII)
 	}
-	var rows []graphCalmRow
 	if by == graphByPod || by == graphByContainer {
 		for i := range set.Members {
 			m := &set.Members[i]
@@ -440,7 +468,7 @@ func graphCalmRowsOf(c *graphCompare, entry *graphCalmSignal, by graphGrouping, 
 		}
 		return !rows[a].differs && rows[a].row.Subject < rows[b].row.Subject
 	})
-	return rows
+	return rows, wide
 }
 
 // graphCalmPaged cuts the rows of a signal to what a calm page shows of
@@ -505,6 +533,24 @@ func graphOthers(n int) string {
 	return fmt.Sprintf("the other %d", n)
 }
 
+// fewestPeers is the fewest other Pods with samples that a Pod was held
+// against, over the signals in which it differs from them.
+func (c *graphCompare) fewestPeers(name string) int {
+	fewest := len(c.pods()) - 1
+	for i := range c.Signals {
+		set := c.series(&c.Signals[i], false)
+		if set.State != "" || !set.Peers.Enough {
+			continue
+		}
+		for j := range set.Members {
+			if m := &set.Members[j]; m.Outlier && m.Name == name {
+				fewest = min(fewest, set.sampled()-1)
+			}
+		}
+	}
+	return max(fewest, 0)
+}
+
 // graphCompareVerdict is the answer of the comparison: which Pod differs
 // from its peers and in how many of the signals that were read. It says
 // nothing about why, and it says when there were too few Pods or too few
@@ -532,8 +578,14 @@ func graphCompareVerdict(c *graphCompare, st *graphStanding) calm.Verdict {
 		return v
 	case len(st.Pods) == 1:
 		pod := st.Pods[0]
+		others := graphOthers(pods - 1)
+		if c.fewestPeers(pod) < pods-1 {
+			// A Pod without a sample in one of those signals was not
+			// compared in it: "the other 3" would count it.
+			others = "its peers"
+		}
 		v := calm.Verdict{Caveat: graphCompareCaveat, Sentences: []string{
-			fmt.Sprintf("Pod %s differs from %s in %d of %s.", pod, graphOthers(pods-1), len(st.Signals[pod]), graphPlural(st.Read, "signal")),
+			fmt.Sprintf("Pod %s differs from %s in %d of %s.", pod, others, len(st.Signals[pod]), graphPlural(st.Read, "signal")),
 			"No other Pod differs.",
 		}}
 		if unread != "" {
@@ -685,15 +737,20 @@ func graphCompareCalmPage(s *graphSnapshot, c *graphCompare, pg *graphPage, coun
 	for _, i := range shownAt {
 		onPage[i] = true
 		entry := &order[i]
-		all := graphCalmRowsOf(c, entry, by, when, pg)
+		all, wide := graphCalmRowsOf(c, entry, by, when, pg)
 		_, pages := graphCalmPaged(all, 0, rest)
 		pg.PeerPages = max(pg.PeerPages, pages)
 		shown, _ := graphCalmPaged(all, min(pg.Peers, pg.PeerPages-1), rest)
-		group := calm.Group{Label: graphCalmLabel(entry.sig), Color: pal.Accent}
 		column, _ := graphRankWords(entry.sig, entry.set.Shares)
 		word := strings.ToLower(column)
+		// The number column is as wide as the widest thing written in it
+		// with or without a cursor, the word over it included.
+		wide = max(wide, runewidth.StringWidth(word), runewidth.StringWidth(graphCalmClock(s, s.End)))
+		group := calm.Group{Label: graphCalmLabel(entry.sig), Color: pal.Accent, NumberWidth: wide}
 		if when.moved {
-			word = when.word
+			// Under a moved cursor the numbers are the samples at its
+			// time, and the word over them is that time.
+			word = graphCalmClock(s, when.at)
 		}
 		if word != head {
 			// The word over the numbers is written where it changes.
@@ -724,6 +781,7 @@ func graphCompareCalmPage(s *graphSnapshot, c *graphCompare, pg *graphPage, coun
 	}
 
 	var also, alike, uncompared []string
+	partial := false
 	for i := range order {
 		if onPage[i] {
 			continue
@@ -732,7 +790,14 @@ func graphCompareCalmPage(s *graphSnapshot, c *graphCompare, pg *graphPage, coun
 		case entry.differs:
 			also = append(also, graphCalmAlso(entry))
 		case entry.compared:
-			alike = append(alike, entry.sig.Name)
+			name := entry.sig.Name
+			if sampled := entry.set.sampled(); sampled < pods {
+				// A Pod without a sample is not like the others: it was
+				// not compared.
+				name += fmt.Sprintf(" (%d of %d pods sampled)", sampled, pods)
+				partial = true
+			}
+			alike = append(alike, name)
 		default:
 			uncompared = append(uncompared, entry.sig.Name)
 		}
@@ -741,7 +806,11 @@ func graphCompareCalmPage(s *graphSnapshot, c *graphCompare, pg *graphPage, coun
 		page.Groups = append(page.Groups, calm.Group{Label: graphAlsoDiffers, Role: calm.Secondary, Summary: also})
 	}
 	if len(alike) > 0 {
-		page.Groups = append(page.Groups, calm.Group{Label: fmt.Sprintf("ALIKE ON ALL %d", pods), Role: calm.QuietRole, Summary: alike})
+		label := fmt.Sprintf("%s ON ALL %d", graphAlikeLabel, pods)
+		if partial {
+			label = graphAlikeLabel
+		}
+		page.Groups = append(page.Groups, calm.Group{Label: label, Role: calm.QuietRole, Summary: alike})
 	}
 	if len(perPod) > 0 {
 		page.Groups = append(page.Groups, calm.Group{Label: graphPerPodOnly, Role: calm.QuietRole, Summary: perPod})
@@ -825,6 +894,31 @@ func renderGraphCompareCalm(s *graphSnapshot, c *graphCompare, pg *graphPage) []
 		// One signal fewer as a group; it is named in one line instead.
 		count = groups - 1
 	}
+	graphCalmHeadRoom(&page, &plan, o)
 	pg.Dropped, pg.Missing = plan.Dropped, plan.Missing
 	return calm.Render(&page, &plan, o).Lines()
+}
+
+// graphCalmHeadRoom keeps the word over the numbers on a narrow page. The
+// word says what the numbers are: a peak, a rise, or the time of a moved
+// cursor, which is written nowhere else. The kit writes it only where the
+// label of the group leaves its column free, so a label that reaches the
+// column gives way: first what the signal measures, then the end of its
+// title. The columns are not measured from the labels: nothing moves.
+func graphCalmHeadRoom(page *calm.Page, plan *calm.Plan, o calm.Options) {
+	l := plan.Layout
+	if l.Strip == 0 || l.Number == 0 || plan.TextRows {
+		return
+	}
+	room := l.StripCol + l.Strip - calm.Indent
+	for i := range page.Groups {
+		g := &page.Groups[i]
+		if g.Head == "" || runewidth.StringWidth(g.Label) <= room {
+			continue
+		}
+		g.Label, _, _ = strings.Cut(g.Label, " · ")
+		if runewidth.StringWidth(g.Label) > room {
+			g.Label = runewidth.Truncate(g.Label, room, graphWords("…", o.ASCII))
+		}
+	}
 }

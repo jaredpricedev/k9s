@@ -80,7 +80,7 @@ func TestGraphCompareCalmPageNamesThePodThatDiffersAndShowsWhatLinesUp(t *testin
 	// the same columns: that is what "lines up" looks like.
 	marker := calmLine(t, page, calmMarker)
 	band := calmColumns(marker, "▼")
-	require.Len(t, band, 8, "eight samples of thirty seconds on a strip of 95 columns for an hour")
+	require.Len(t, band, 7, "eight samples of thirty seconds on a strip of 92 columns for an hour")
 	require.Equal(t, band, calmColumns(group[1], calmLevels))
 	require.Equal(t, band, calmColumns(lines[indexOf(lines, "  P99")+1], calmLevels))
 	axis := calmLine(t, page, "┬")
@@ -110,7 +110,7 @@ func TestGraphCompareCalmPageNamesThePodThatDiffersAndShowsWhatLinesUp(t *testin
 	for _, r := range ascii {
 		require.Less(t, r, rune(128), "%q is not ASCII", r)
 	}
-	require.Equal(t, 8, strings.Count(calmLine(t, ascii, calmMarker), "v"))
+	require.Equal(t, 7, strings.Count(calmLine(t, ascii, calmMarker), "v"))
 	require.Regexp(t, `^> hx4mt  worker-f  _+#+_+  14 +differs$`, calmLine(t, ascii, "> hx4mt"))
 	require.Contains(t, calmLine(t, ascii, "+-"), "=")
 }
@@ -230,7 +230,7 @@ func TestGraphCompareCalmStepsThroughSignalsInTheOrderItShowsThem(t *testing.T) 
 	moved := calmGraphPage(132, 33)
 	moved.Moved, moved.Cursor = true, int(base.Window/base.Step)-56
 	page = graphPlainLines(t, renderGraphCompareCalm(base, c, moved), 132)
-	require.Regexp(t, `QUEUED · connections waiting for a free Puma thread .* at 04:32:00$`, calmLine(t, page, "  QUEUED"))
+	require.Regexp(t, `QUEUED · connections waiting for a free Puma thread .* 04:32:00$`, calmLine(t, page, "  QUEUED"))
 	require.Regexp(t, `^> hx4mt  worker-f  [▁-█]+  14 +differs$`, calmLine(t, page, "> hx4mt"))
 	require.Contains(t, calmLine(t, page, "┬"), "^")
 	moved.Cursor = 10
@@ -273,10 +273,12 @@ func TestGraphCompareCalmPageSaysWhatASmallerScreenGivesUp(t *testing.T) {
 	require.Contains(t, page, "ALSO DIFFERS  p99 (hx4mt 48s, peers 350ms) +2 more")
 	require.Contains(t, page, "  ↑↓ signal · ←→ time · 1-4 window · a show every signal · Esc back")
 
-	// 60 columns: the strips shorten; nothing else changes.
+	// 60 columns: the strips shorten; nothing else changes. The number
+	// column keeps the room of a cursor time, so the strips are as wide
+	// with a cursor as without one.
 	page, pg = render(60, 20, graphByPod)
 	require.Empty(t, pg.Missing)
-	require.Regexp(t, `^> hx4mt  worker-f  [▁-█]{26}  14 +differs$`, calmLine(t, page, "> hx4mt"))
+	require.Regexp(t, `^> hx4mt  worker-f  [▁-█]{22}  14 +differs$`, calmLine(t, page, "> hx4mt"))
 	require.Contains(t, page, "NOT READ  5xx (no data) · free-threads (no data) +1 more")
 	require.Contains(t, page, "  ↑↓ signal · ←→ time · 1-4 window · Esc back")
 
@@ -535,6 +537,93 @@ func TestGraphApartSaysWhenAPodThatDiffersIsOutsideTheOthers(t *testing.T) {
 	// that ends at it, and neighbouring samples are one stretch.
 	require.Equal(t, []chart.Interval{{Start: at(0), End: at(1)}, {Start: at(2), End: at(3)}, {Start: at(4), End: at(5)}}, graphApartBands(apart[0], time.Minute))
 	require.Equal(t, []chart.Interval{{Start: at(0), End: at(2)}}, graphApartBands(map[int64]bool{at(1).UnixNano(): true, at(2).UnixNano(): true}, time.Minute))
+}
+
+// The numbers of the rows are read under the cursor and differ in width
+// from sample to sample and from what ranks a row (48s, 350ms, 14, 0), and
+// the word over them becomes a time. The number column is held as wide as
+// the widest of them: moving the cursor moves nothing but the cursor.
+func TestGraphCompareCalmCursorMovesNothingButItself(t *testing.T) {
+	base, c := hangCompare(t, hangStory())
+	steps := int(base.Window / base.Step)
+	for _, by := range []graphGrouping{graphByPod, graphByNode} {
+		for _, size := range [][2]int{{132, 33}, {80, 20}, {60, 20}} {
+			still := calmGraphPage(size[0], size[1])
+			still.Grouping = by
+			page := graphPlainLines(t, renderGraphCompareCalm(base, c, still), size[0])
+			start, width := calmAxisSpan(t, page)
+			band := calmColumns(calmLine(t, page, "▼"), "▼")
+			differs := strings.Index(calmLine(t, page, "> "), " differs")
+			require.NotEmpty(t, band)
+			require.Positive(t, differs)
+			for _, cursor := range []int{0, 1, steps / 3, steps - 56, steps - 30, steps - 1, steps} {
+				moved := calmGraphPage(size[0], size[1])
+				moved.Grouping, moved.Moved, moved.Cursor = by, true, cursor
+				page := graphPlainLines(t, renderGraphCompareCalm(base, c, moved), size[0])
+				gotStart, gotWidth := calmAxisSpan(t, page)
+				require.Equal(t, [2]int{start, width}, [2]int{gotStart, gotWidth}, "%s %dx%d cursor %d: the axis\n%s", by, size[0], size[1], cursor, page)
+				require.Equal(t, band, calmColumns(calmLine(t, page, "▼"), "▼"), "%s %dx%d cursor %d: the bands", by, size[0], size[1], cursor)
+				require.Equal(t, differs, strings.Index(calmLine(t, page, "> "), " differs"), "%s %dx%d cursor %d: the word after the strip", by, size[0], size[1], cursor)
+			}
+		}
+	}
+}
+
+// The word over the numbers says what they are, and under a moved cursor
+// it is the only place that says which time they are read at. On a narrow
+// page the label of the group gives way to it.
+func TestGraphCompareCalmKeepsTheWordOverTheNumbersOnANarrowPage(t *testing.T) {
+	base, c := hangCompare(t, hangStory())
+	still := calmGraphPage(60, 20)
+	page := graphPlainLines(t, renderGraphCompareCalm(base, c, still), 60)
+	require.Regexp(t, `^  QUEUED +peak$`, calmLine(t, page, "  QUEUED"), "60 columns have no room for what the signal measures and the word")
+	moved := calmGraphPage(60, 20)
+	moved.Moved, moved.Cursor = true, int(base.Window/base.Step)-56
+	page = graphPlainLines(t, renderGraphCompareCalm(base, c, moved), 60)
+	require.Regexp(t, `^  QUEUED +┆? +04:32:00$`, calmLine(t, page, "  QUEUED"))
+	require.Regexp(t, `^> hx4mt  worker-f  [▁-█┆]+  14 +differs$`, calmLine(t, page, "> hx4mt"))
+	// Where both fit, both are written.
+	for _, size := range [][2]int{{132, 33}, {80, 20}} {
+		page = graphPlainLines(t, renderGraphCompareCalm(base, c, calmGraphPage(size[0], size[1])), size[0])
+		require.Regexp(t, `^  QUEUED · connections waiting for a free Puma thread +peak$`, calmLine(t, page, "  QUEUED"))
+	}
+	// A group whose word is the one already written over the group above
+	// has none to make room for, and keeps its label.
+	page = graphPlainLines(t, renderGraphCompareCalm(base, c, calmGraphPage(60, 33)), 60)
+	require.Contains(t, page, "\n  P99 · Rails request duration, 99th percentile\n")
+}
+
+// A Pod without a sample in a signal was compared with nothing in it. The
+// page does not call it alike, and does not count it among the Pods the
+// one that differs was held against.
+func TestGraphCompareCalmCountsOnlyThePodsThatWereSampled(t *testing.T) {
+	story := hangStory()
+	kept := story.series[:0]
+	for _, series := range story.series {
+		// The fourth Pod has no memory, no network and no queue metric.
+		unsampled := series.labels["pod"] == hangPods[3] &&
+			(strings.Contains(strings.Join(series.match, " "), "container_memory_working_set_bytes") ||
+				strings.Contains(strings.Join(series.match, " "), "container_network_receive_bytes_total") ||
+				strings.Contains(strings.Join(series.match, " "), "puma_queued_connections"))
+		if !unsampled {
+			kept = append(kept, series)
+		}
+	}
+	story.series = kept
+	base, c := hangCompare(t, story)
+	page := graphPlainLines(t, renderGraphCompareCalm(base, c, calmGraphPage(132, 33)), 132)
+	lines := calmLines(page)
+	require.Equal(t, "  Pod hx4mt differs from its peers in 4 of 7 signals. No other Pod differs. 3 of 10 signals had no reading.", lines[2],
+		"in the queue it was held against two Pods, not \"the other 3\"")
+	require.Contains(t, page, "\n  ALIKE  memory (3 of 4 pods sampled) · restarts · network (3 of 4 pods sampled)\n")
+	require.NotContains(t, page, "ALIKE ON ALL")
+	require.Regexp(t, `^  r5n9j  worker-d  ×+  no samples$`, calmLine(t, page, "  r5n9j"), "its row says so, with the gap glyph all along")
+
+	// Every Pod sampled in every signal: the count is of all of them.
+	base, c = hangCompare(t, hangStory())
+	page = graphPlainLines(t, renderGraphCompareCalm(base, c, calmGraphPage(132, 33)), 132)
+	require.Contains(t, page, "Pod hx4mt differs from the other 3 in 4 of 7 signals.")
+	require.Contains(t, page, "\n  ALIKE ON ALL 4  memory · restarts · network\n")
 }
 
 func TestGraphCompareVerdictCountsPodsAndSignals(t *testing.T) {
