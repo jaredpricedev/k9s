@@ -21,16 +21,31 @@ import (
 
 func TestDashboardNoIconsPageIsASCII(t *testing.T) {
 	s := dashStorySnapshot(t)
-	for _, zoom := range []bool{false, true} {
+	// The calm page, the grid of every panel and a zoomed panel.
+	for _, mode := range [][2]bool{{false, false}, {true, false}, {false, true}} {
 		page := dashPageOf(80, 20)
-		page.ASCII, page.Zoom, page.Selected, page.Cursor = true, zoom, 5, 60
+		page.ASCII, page.Detail, page.Zoom, page.Selected, page.Cursor = true, mode[0], mode[1], 5, 60
 		text := dashText(t, s, page)
 		for _, r := range text {
 			require.True(t, r < 128 || r == '·', "%q is neither ASCII nor the shared separator", r)
 		}
 		require.Contains(t, text, "...hx4mt")
 	}
-	page := dashPageOf(132, 32)
+	// The calm page in plain characters: a strip is the baseline and what
+	// stands over the rule, the axis and the separators are plain too.
+	plain := dashPageOf(80, 20)
+	plain.ASCII = true
+	dashHasLines(t, dashText(t, s, plain),
+		"Dashboard  GitLab / Webservice overview | last 1h  read 05:00 | 11 of 11 queries",
+		"  REQUEST DURATION P99 BY POD  c ...hx4mt 350ms peak 47.9s  +2 more",
+		"  Requests per second       ############+#############  36.6/s",
+		"  Slowest pod p99           ___##______###________##__  346ms green      max red",
+		"  Puma threads in use       __________________________  37.5% green",
+		"                            +------------+-----------+",
+		"  NOT DRAWN  Pods and nodes (table) | Webservice log lines with timeout (logs)",
+		"  next  n next chart (Requests by pod)  Enter zoom  a all panels",
+	)
+	page := dashDetailOf(132, 32)
 	page.ASCII = true
 	text := dashText(t, s, page)
 	for _, want := range []string{"-- Requests -----", "========------------- of 100%", "a ...2bq7k 310ms", "c ...hx4mt 350ms peak 47.9s", "(Up/Down)",
@@ -49,7 +64,36 @@ func TestDashboardEmptyRejectedAndDeniedAnswersAreWordsNeverALine(t *testing.T) 
 		{contains: "puma_pool_capacity", value: func(map[string]string, time.Time) (float64, bool) { return 0, false }},
 	}, fake.rules...)
 	s := loadDash(t.Context(), fake, dashDefinition(t, "grafana12-gitlab-webservice.json"), dashWebservice, dashLabel, dashDeployment, time.Hour, graphNow)
-	text := dashText(t, s, dashPageOf(132, 32))
+	// The calm page: the title counts the answers and the first sentences
+	// what they came to; each panel that drew nothing is named in a line
+	// under the axis that says why, and those lines are never left out.
+	calmPage := dashText(t, s, dashPageOf(132, 32))
+	dashHasLines(t, calmPage,
+		"Dashboard  GitLab / Webservice overview · last 1h                                                     read 05:00 · 9 of 11 queries",
+		"  6 of 11 panels read, 1 only in part. 2 cannot be drawn here, 2 were not answered, 1 matched no series (not a zero).",
+		"  A reading, not a finding.",
+		// The first line chart that was drawn is the main chart, and says
+		// which of its queries is missing before its lines.
+		"  PUMA QUEUED CONNECTIONS  query B no series matched  c …hx4mt queued 0 peak 40  a …2bq7k queued 0  b …8wzpd queued 0",
+		"  NOT DRAWN  Pods and nodes (table) · Webservice log lines with timeout (logs)",
+		"  NOT READ  Request duration p99 by pod (expression failed) · Requests by pod (denied)",
+		"  NO SERIES MATCHED  Slowest pod p99",
+	)
+	for _, row := range []string{"  Slowest pod p99  ", "  Request duration p99 by pod  ", "  Requests by pod  "} {
+		require.NotContains(t, calmPage, row, "a panel that drew nothing is not a row with a quiet strip")
+	}
+	require.NotContains(t, calmPage, "\x07")
+	narrow := dashText(t, s, dashPageOf(60, 20))
+	dashHasLines(t, narrow,
+		"Dashboard  GitLab / Webservice over… · last 1h  05:00 · 9/11",
+		"  NOT DRAWN  Pods and nodes (table) +1 more",
+		"  NOT READ  Request duration p99 by pod (expression… +1 more",
+		"  NO SERIES MATCHED  Slowest pod p99",
+	)
+	// The read status of a partial read is in the warning colour.
+	require.Contains(t, strings.Join(renderDash(s, dashPageOf(132, 32)), "\n"), "[#e7bd73:-:-]read 05:00 · 9 of 11 queries[-:-:-]")
+
+	text := dashText(t, s, dashDetailOf(132, 32))
 	for _, want := range []string{
 		"6/11 panels drawn · 9/11 answered, 1 rejected, 1 denied · 2 matched no series",
 		// A panel whose query drew nothing takes one line with the reason;
@@ -111,9 +155,14 @@ func TestDashboardFailuresSayWhichSourceAndPointToSources(t *testing.T) {
 		s    *dashSnapshot
 		want []string
 	}{
-		{grafana(observability.StateDenied, "HTTP 403"), []string{"Dashboard · GitLab / Webservice overview · last 1h",
-			"Grafana DENIED the read of the dashboard definition (HTTP 403) at 05:00:09Z.", "a read that failed is not a reading of zero",
-			"Open :sources to see the declaration and probe it once (p).", "Source: grafana via service monitoring/grafana:3000"}},
+		// A page that read nothing is a calm page of words: the title says
+		// "not read", the first sentence which read failed and how, and the
+		// caveat that this is not health.
+		{grafana(observability.StateDenied, "HTTP 403"), []string{
+			"Dashboard  GitLab / Webservice overview · last 1h                                                                         not read",
+			"  Grafana DENIED the read of the dashboard definition (HTTP 403) at 05:00:09Z.", "a read that failed is not a reading of zero",
+			"Open :sources to see the declaration and probe it once (p).", "Source: grafana via service monitoring/grafana:3000",
+			"  Not read is not healthy.", "  next  r read again    D open in Grafana", "  1-4 window · Esc back"}},
 		{grafana(observability.StateAbsent, "HTTP 404"), []string{"Grafana ABSENT: it has no dashboard with this UID, or it is not visible to these credentials (HTTP 404)",
 			":dashboards lists what Grafana returns."}},
 		{grafana(observability.StateTimeout, "no answer within the deadline"), []string{"Grafana TIMEOUT: the read of the dashboard definition was not answered in time", "Press r to ask again"}},
@@ -161,7 +210,39 @@ func TestDashboardFailuresSayWhichSourceAndPointToSources(t *testing.T) {
 func TestDashboardVariablesThatCannotBeFilledNameThePanelAndTheReason(t *testing.T) {
 	s := loadDash(t.Context(), dashStory(), dashDefinition(t, "grafana12-odd.json"), &dashSpec{UID: "odd-cases", Mapping: dashboard.ConventionalMapping},
 		"namespace shop", dashboard.Selection{Namespace: "shop"}, time.Hour, graphNow)
-	text := dashText(t, s, dashPageOf(132, 32))
+	// The calm page counts what cannot be drawn and names each panel with
+	// the reason in a word or two; the line counts what it has no room for.
+	calmPage := dashText(t, s, dashPageOf(132, 32))
+	dashHasLines(t, calmPage,
+		"  1 of 10 panels read, 1 only in part. 7 cannot be drawn here, 2 matched no series (not a zero).         A reading, not a finding.",
+		// No line chart was drawn: the one stat that was is the main chart.
+		"  BY STATUS  query A no series matched  B 36.6%",
+		"  NOT DRAWN  All pods without allValue ($pod not resolved) · Uses an empty variable ($empty not resolved) +5 more",
+		"  NO SERIES MATCHED  Mixed sources · Inside a collapsed row",
+	)
+	require.Contains(t, dashText(t, s, dashPageOf(200, 32)),
+		"All pods without allValue ($pod not resolved) · Uses an empty variable ($empty not resolved) · Shared SLO panel (library panel) · Share by team (piechart) +3 more")
+	// Every reason has its few words; the s page keeps all of them.
+	for reason, want := range map[string]string{
+		`panel type "table" is not drawn here`:                                  "table",
+		"variable $pod is not resolved: it is set to All without an allValue":   "$pod not resolved",
+		"variable $cluster is not defined":                                      "$cluster not defined",
+		"library panel: its definition is not part of the dashboard JSON":       "library panel",
+		"its datasource is postgres, not Prometheus":                            "its datasource is postgres",
+		"it holds a literal $, which is not sent":                               "it holds a literal $",
+		"not read: one read draws at most 24 panels":                            "over the limit of one read",
+		"denied (HTTP 403): nothing was read":                                   "denied",
+		`expression failed: bad_data: 1:28: parse error: unexpected "by"`:       "expression failed",
+		"not read: the page's 45s deadline ended first; r reads again":          "not read",
+		"timeout (no answer within the deadline): nothing was read":             "timeout",
+		"no series matched in this window (not a zero)":                         "no series matched in this window",
+		"incomplete (response exceeds the 32 series limit): nothing was read":   "incomplete",
+		"unavailable (HTTP 502 from the source, bad gateway): nothing was read": "unavailable",
+	} {
+		require.Equal(t, want, dashBrief(reason), reason)
+	}
+
+	text := dashText(t, s, dashDetailOf(132, 32))
 	for _, want := range []string{
 		"All pods without allValue · unit wibble (plain numbers) · NOT DRAWN: variable $pod is not resolved: it is set to All without an a…",
 		"Mixed sources · NOT DRAWN: no series matched in this window (not a zero)",
@@ -193,7 +274,39 @@ func TestQueryBoardDrawsEveryNamedQueryForTheSelection(t *testing.T) {
 	fake := dashStory()
 	s := loadDash(t.Context(), fake, board, spec, dashLabel, dashDeployment, time.Hour, graphNow)
 	require.Len(t, fake.asked, 5)
-	text := dashText(t, s, dashPageOf(132, 32))
+	// The calm page: the first named query at full size, the others as one
+	// row each on its time axis, under the name they are run by.
+	dashHasLines(t, dashText(t, s, dashPageOf(132, 32)),
+		"Queries  Named queries · last 1h                                                                       read 05:00 · 5 of 5 queries",
+		"  All 5 named queries read.                                                                              A reading, not a finding.",
+		"  THROTTLED · CPU THROTTLED SHARE BY POD  c …hx4mt 4% peak 86%  a …2bq7k 1.2%  b …8wzpd 1.2%",
+		"  ALSO",
+		// 499 is a rate in the request-path profile, so it is a rate here.
+		// The name of a query's only series is written whole or not at all:
+		// here it gives way to the peak, and the legend of the chart (n)
+		// and the zoomed panel have it. The numbers are as wide as the
+		// widest of the window: under the cursor a line that starts late
+		// says "– first" and the time.
+		"  ingress-499   ▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁  0/s            peak 0.06/s",
+		"  puma-queue    ▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁  …hx4mt 0       peak 40 · +2 more",
+		"  dns-p99       █████████████████████████████████████████████████████████████████████████████  p99 6ms",
+		// A line that stopped before the window did says when, and where it
+		// has no sample the strip says so: missing is never drawn as quiet.
+		"  hubble-drops  ××××××××××××××××××××××××██×××××××××××××××××××××××××××××××××××××××××××××××××××  – last 04:20   peak 0.8/s · +1 more",
+		"  next  n next chart (ingress-499)    Enter zoom    a all charts    D open in Grafana",
+	)
+	dashHasLines(t, dashText(t, s, dashPageOf(80, 20)),
+		"  THROTTLED · CPU THROTTLED SHARE BY POD  c …hx4mt 4% peak 86%  +2 more",
+		// 80 columns keep the peak: a strip is drawn to its own highest
+		// sample, and "0/s" alone would hide the burst.
+		"  ingress-499   ▁▁▁▁███▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁██▁▁▁  0/s            peak 0.06/s",
+		"  puma-queue    ▁▁▁▁███▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁██▁▁▁  …hx4mt 0       peak 40",
+		"  hubble-drops  ×××××××××××█××××××××××××××××××××××××  – last 04:20   peak 0.8/s",
+		"  next  n next chart (ingress-499)  Enter zoom  a all charts  D open in Grafana",
+		"  ←→ time · ↑↓ chart · s queries · 1-4 window · r re-read · b dots · Esc back",
+	)
+
+	text := dashText(t, s, dashDetailOf(132, 32))
 	for _, want := range []string{
 		"Queries · Named queries · last 1h to 05:00Z · step 30s",
 		"read 05:00:07Z · 5 of 5 panels drawn · 5 of 5 queries answered",
@@ -210,7 +323,7 @@ func TestQueryBoardDrawsEveryNamedQueryForTheSelection(t *testing.T) {
 		require.Contains(t, text, want)
 	}
 	// 80 columns: one chart per line.
-	text = dashText(t, s, dashPageOf(80, 20))
+	text = dashText(t, s, dashDetailOf(80, 20))
 	require.Contains(t, text, "> throttled · CPU throttled share by pod  a …2bq7k 1.2%  b …8wzpd 1.2%")
 	require.Contains(t, text, "1-2/5 ↑↓")
 
@@ -218,7 +331,13 @@ func TestQueryBoardDrawsEveryNamedQueryForTheSelection(t *testing.T) {
 	// Pods say so, the cluster-wide one is drawn. Drops are read towards the
 	// selected Pods, as :slow reads them, so they need a namespace too.
 	s = loadDash(t.Context(), dashStory(), board, spec, "no selection", dashboard.Selection{}, time.Hour, graphNow)
-	text = dashText(t, s, dashPageOf(132, 32))
+	dashHasLines(t, dashText(t, s, dashPageOf(132, 32)),
+		"Queries  Named queries · last 1h                                                                       read 05:00 · 1 of 1 queries",
+		"  1 of 5 named queries read. 4 cannot be drawn here.                                                     A reading, not a finding.",
+		"  DNS-P99 · DNS REQUEST DURATION P99  p99 6ms",
+		"  NOT DRAWN  throttled ($namespace not resolved) · ingress-499 ($namespace not resolved) +2 more",
+	)
+	text = dashText(t, s, dashDetailOf(132, 32))
 	require.Contains(t, text, "> throttled · CPU throttled share by pod · NOT DRAWN: variable $namespace is not resolved: nothing with a namespace is selected")
 	require.Contains(t, text, "1 of 5 panels drawn, 4 not drawn (s lists why) · 1 of 1 queries answered")
 	require.Contains(t, text, "hubble-drops · Hubble drops to the pods, by reason · NOT DRAWN: variable $namespace is not resolved")
@@ -230,11 +349,67 @@ func TestQueryPageChartsATypedExpressionAndSaysWhatWentWrong(t *testing.T) {
 		spec := querySpec(nil, text)
 		return &spec, dashboard.QueryPage(spec.Query)
 	}
-	page := dashPageOf(100, 20)
-	page.Zoom, page.Cursor = true, 120
+	// The all-detail page of one query is the page as it was before the
+	// calm layout: the chart with the cursor, the expression as it was
+	// sent, what it is about and the variables.
+	page := dashDetailOf(100, 20)
+	page.Cursor = 120
 
 	spec, d := typed(`sum by (pod) (puma_queued_connections{namespace="$namespace", pod=~"$pod"})`)
 	s := loadDash(t.Context(), dashStory(), d, spec, dashLabel, dashDeployment, time.Hour, graphNow)
+	// The calm page: a sentence that reads and does not judge, the chart,
+	// and one row per series under it on the chart's axis and scale, the
+	// highest peak first, each under the letter that ends its line.
+	calmPage := dashText(t, s, dashPageOf(132, 32))
+	dashHasLines(t, calmPage,
+		// A typed expression has no name: it is what the page draws.
+		`Query  sum by (pod) (puma_queued_connections{namespace="$namespace", pod=~"$pod"}) · last 1h           read 05:00 · 1 of 1 queries`,
+		"",
+		"  3 series; highest …hx4mt, peak 40 at 04:08.                                                            A reading, not a finding.",
+		"",
+		"  TYPED EXPRESSION",
+		"         40 ┤             ╭─────╮                         ╭───────╮                                   ╭───╮",
+		"  SERIES BY PEAK                                                                                                     last",
+		"  c  …hx4mt  ▁▁▁▁▁▁▁▁▁▁▁▁███████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁  0     peak 40",
+		"  a  …2bq7k  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0     peak 0",
+		"  b  …8wzpd  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0     peak 0",
+		"",
+		// The expression as it was sent, the variables and how to save the
+		// query are under s; the next line says so.
+		"  next  e edit the expression    s queries, and how to save this one    D open in Grafana",
+		"",
+		"  ←→ time · 1 15m  2 1h  3 6h  4 24h · a all detail · r re-read · b dots · Esc back",
+	)
+	for _, gone := range []string{"Variables:", "About:", `namespace="gitlab"`, "Cursor ", "Panel 1 of 1"} {
+		require.NotContains(t, calmPage, gone, "the calm page leaves it to s and a")
+	}
+	// With the cursor moved, the rows read the samples taken then.
+	at := dashPageOf(132, 32)
+	at.Cursor = 58
+	dashHasLines(t, dashText(t, s, at),
+		// The cursor runs down the page from the line over the chart.
+		"  TYPED EXPRESSION  at 04:29:00Z                             ┆",
+		// The time is in the line over the chart; the word over the numbers
+		// points at the caret on the axis and is as wide as "last".
+		"  SERIES BY PEAK                                             ┆                                                       at ^",
+		"  c  …hx4mt  ▁▁▁▁▁▁▁▁▁▁▁▁███████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁  40    peak 40",
+		"             ┬───────┬────────┬───────┬────────┬───────┬─────^──┬───────┬────────┬───────┬────────┬───────┬───────┬",
+	)
+	// 80x24 and 60 columns keep the chart, every row and the key for all
+	// detail.
+	dashHasLines(t, dashText(t, s, dashPageOf(80, 20)),
+		`Query  sum by (pod) (puma_queued_connections{namespace="… · last 1h  05:00 · 1/1`,
+		"  3 series; highest …hx4mt, peak 40 at 04:08.          A reading, not a finding.",
+		"  c  …hx4mt  ▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁  0     peak 40",
+		"  next  e edit the expression  s queries, and how to save this one",
+		"  ←→ time · 1-4 window · a all detail · r re-read · b dots · Esc back",
+	)
+	dashHasLines(t, dashText(t, s, dashPageOf(60, 20)),
+		"  c  …hx4mt  ▁▁▁▁██▁▁▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁▁██▁▁  0     peak 40",
+		"  next  e edit the expression",
+		"  ←→ time · 1-4 window · a all detail · r re-read · Esc back",
+	)
+
 	text := dashText(t, s, page)
 	for _, want := range []string{
 		"Query · typed expression · last 1h to 05:00Z · step 30s",
@@ -242,7 +417,7 @@ func TestQueryPageChartsATypedExpressionAndSaysWhatWentWrong(t *testing.T) {
 		"a …2bq7k 0  b …8wzpd 0  c …hx4mt 0",
 		`A sum by (pod) (puma_queued_connections{namespace="gitlab", pod=~"gitlab-webservice-default-.+"})`,
 		"Variables: namespace=gitlab (selection) · pod=~gitlab-webservice-default-.+ (name prefix of the",
-		"e edit · b dots · Esc back",
+		"e edit · a calm layout · Esc back",
 	} {
 		require.Contains(t, text, want)
 	}
@@ -252,6 +427,14 @@ func TestQueryPageChartsATypedExpressionAndSaysWhatWentWrong(t *testing.T) {
 	named := querySpec(nil, "dns-p99")
 	require.Equal(t, "dns-p99", named.Query.Name)
 	s = loadDash(t.Context(), dashStory(), dashboard.QueryPage(named.Query), &named, dashLabel, dashDeployment, time.Hour, graphNow)
+	// One series has no rows: the line over the chart names it.
+	dashHasLines(t, dashText(t, s, dashPageOf(80, 20)),
+		"Query  dns-p99 · last 1h                             read 05:00 · 1 of 1 queries",
+		"",
+		"  1 series: p99, 6ms throughout.                       A reading, not a finding.",
+		"",
+		"  DNS REQUEST DURATION P99  seconds  p99 6ms",
+	)
 	text = dashText(t, s, page)
 	require.Contains(t, text, "Query · dns-p99 · last 1h to 05:00Z · step 30s")
 	require.Contains(t, text, "DNS request duration p99 · seconds")
@@ -264,17 +447,31 @@ func TestQueryPageChartsATypedExpressionAndSaysWhatWentWrong(t *testing.T) {
 	fake := &dashFake{rules: []dashRule{{contains: "> 3", rejected: "bad_data: 1:8: parse error: unexpected character: '>'\x1b[31m"}}}
 	spec, d = typed("up > 3")
 	s = loadDash(t.Context(), fake, d, spec, dashLabel, dashDeployment, time.Hour, graphNow)
-	text = strings.Join(strings.Fields(dashText(t, s, page)), " ")
-	for _, want := range []string{
-		"NOT DRAWN: expression failed: bad_data: 1:8: parse error: unexpected character: '>' [31m.",
-		"Prometheus rejected the expression as it was sent, in its own words above. Nothing was read. Press e to edit the expression.",
-		"1 15m 2 1h 3 6h 4 24h · r re-read · s detail · e edit · b dots · Esc back",
-	} {
-		require.Contains(t, strings.ReplaceAll(text, "[]", "]"), want)
+	// Both pages say it: the calm one as its verdict, in the warning colour
+	// and with the caveat that a failed read is not health.
+	for _, name := range []string{"calm", "all detail"} {
+		pg := map[string]*dashPage{"calm": dashPageOf(100, 20), "all detail": page}[name]
+		text = strings.Join(strings.Fields(dashText(t, s, pg)), " ")
+		for _, want := range []string{
+			"NOT DRAWN: expression failed: bad_data: 1:8: parse error: unexpected character: '>' [31m.",
+			"Prometheus rejected the expression as it was sent, in its own words above. Nothing was read. Press e to edit the expression.",
+		} {
+			require.Contains(t, strings.ReplaceAll(text, "[]", "]"), want, name)
+		}
+		require.NotContains(t, text, "\x1b", name)
+		require.NotContains(t, text, "┤", "%s: a failed query draws no axis and no flat line", name)
+		require.NotContains(t, text, "cursor", "%s: and offers no cursor", name)
+		require.NotContains(t, text, "←→ time", name)
 	}
-	require.NotContains(t, text, "\x1b")
-	require.NotContains(t, text, "┤", "a failed query draws no axis and no flat line")
-	require.NotContains(t, text, "cursor", "and offers no cursor")
+	require.Contains(t, text, "1 15m 2 1h 3 6h 4 24h · r re-read · s detail · e edit · a calm layout · Esc back")
+	rejected := dashText(t, s, dashPageOf(100, 20))
+	dashHasLines(t, rejected,
+		"Query  up > 3 · last 1h                                                read 05:00 · 0 of 1 queries",
+		"  next  e edit the expression    s the query as it was sent    D open in Grafana",
+		"  1-4 window · r re-read · a all detail · Esc back",
+	)
+	require.Contains(t, rejected, "Not read is not healthy.")
+	require.Contains(t, strings.Join(renderDash(s, dashPageOf(100, 20)), "\n"), "[#e7bd73:-:b]NOT DRAWN: expression failed")
 
 	// An empty answer is "no series matched"; a bare word that is not a
 	// name is offered the names.
@@ -286,15 +483,29 @@ func TestQueryPageChartsATypedExpressionAndSaysWhatWentWrong(t *testing.T) {
 		require.Contains(t, text, want)
 	}
 	require.NotContains(t, text, "┤")
+	// The calm page: an answer that matched nothing is the verdict, in so
+	// many words, and it is not a clean bill either.
+	empty := dashText(t, s, dashPageOf(100, 20))
+	dashHasLines(t, empty,
+		"Query  throtled · last 1h                                              read 05:00 · 1 of 1 queries",
+		"",
+		"  No series matched: missing data, not a zero.",
+		"  The metric may not be scraped here, or a label may have another name. If a named query was",
+		"  meant: throttled, ingress-499, puma-queue, dns-p99, hubble-drops. Press e to edit the",
+		"  expression.                                                Nothing found is not proof of health.",
+	)
+	require.NotContains(t, empty, "┤")
 
 	// A variable without a value is refused before anything is sent.
 	fake = &dashFake{}
 	spec, d = typed(`up{node="$node"}`)
 	s = loadDash(t.Context(), fake, d, spec, dashLabel, dashDeployment, time.Hour, graphNow)
 	require.Empty(t, fake.asked)
-	text = strings.Join(strings.Fields(dashText(t, s, page)), " ")
-	require.Contains(t, text, "NOT DRAWN: variable $node is not resolved: no node is selected or known for the selection.")
-	require.Contains(t, text, "Nothing was sent for this panel. Press e to edit the expression.")
+	for name, pg := range map[string]*dashPage{"calm": dashPageOf(100, 20), "all detail": page} {
+		text = strings.Join(strings.Fields(dashText(t, s, pg)), " ")
+		require.Contains(t, text, "NOT DRAWN: variable $node is not resolved: no node is selected or known for the selection.", name)
+		require.Contains(t, text, "Nothing was sent for this panel. Press e to edit the expression.", name)
+	}
 
 	// A selection's name is data in a typed expression too.
 	spec, d = typed(`up{pod="$pod"}`)
@@ -338,35 +549,88 @@ func TestDashboardViewReadsTheDefinitionOnceAndMovesOnRequest(t *testing.T) {
 	// The app is not running in a test, so apply what a read returns directly.
 	v.active = true
 	v.accept(v.load(t.Context(), &v.spec, v.window, nil))
+	// The calm page is what a dashboard opens on: what was read, one chart
+	// at full size, the other panels as rows.
 	frame := drawnText(t, v, 80, 20)
-	require.Contains(t, frame, "Dashboard · GitLab / Webservice overview · last 1h to 05:00Z · step 30s")
-	require.Contains(t, frame, "> Requests per second")
-	require.Contains(t, frame, "Panel 1 of 11 · stat")
+	dashHasLines(t, frame,
+		"Dashboard  GitLab / Webservice overview · last 1h  read 05:00 · 11 of 11 queries",
+		"  9 of 11 panels read. 2 cannot be drawn here.         A reading, not a finding.",
+		"  REQUEST DURATION P99 BY POD  c …hx4mt 350ms peak 47.9s  +2 more",
+		"  next  n next chart (Requests by pod)  Enter zoom  a all panels",
+	)
+	require.False(t, v.zoom || v.detail)
+	require.Equal(t, 5, v.selected, "the main chart is the panel the keys act on")
 
-	key := func(k tcell.Key) {
+	press := func(k tcell.Key, mod tcell.ModMask) {
 		action, ok := v.actions.Get(k)
 		require.True(t, ok)
-		require.Nil(t, action.Action(tcell.NewEventKey(k, 0, tcell.ModNone)))
+		require.Nil(t, action.Action(tcell.NewEventKey(k, 0, mod)))
 	}
-	key(tcell.KeyRight)
-	require.Contains(t, drawnText(t, v, 80, 20), "> Slowest pod p99")
+	key := func(k tcell.Key) { press(k, tcell.ModNone) }
+
+	// The next-chart key makes the next panel that was drawn the main
+	// chart, and the one that was becomes a row. It is n, and Tab as in
+	// every incident view; Down does the same, Up, Shift-N and Shift-Tab
+	// go back, and the keys go round.
+	key(calmNextChartKey)
+	require.Equal(t, 6, v.selected)
+	frame = drawnText(t, v, 80, 20)
+	dashHasLines(t, frame,
+		"  REQUESTS BY POD  a …2bq7k 12.2/s  b …8wzpd 12.2/s  c …hx4mt 12.2/s",
+		"  Request duration p99 by pod  ▁▁███▁▁▁▁▁██▁▁▁▁▁▁▁▁██▁  …hx4mt 350ms  peak 47.9s",
+		"  next  n next chart (Puma queued connections)  Enter zoom  a all panels",
+	)
+	key(calmNextChartAltKey)
+	require.Equal(t, 8, v.selected, "a dashboard row is a heading, not a chart")
+	require.Contains(t, drawnText(t, v, 80, 20), "  PUMA QUEUED CONNEC…  4 highest of 6 series  c …hx4mt queued 0 peak 40  +3 more")
 	key(tcell.KeyDown)
-	require.Contains(t, drawnText(t, v, 80, 20), "> CPU throttled, worst pod")
-	key(tcell.KeyDown)
-	require.Contains(t, drawnText(t, v, 80, 20), "> Request duration p99 by pod")
+	require.Equal(t, 9, v.selected)
 	key(tcell.KeyUp)
-	key(tcell.KeyHome)
-	require.Contains(t, drawnText(t, v, 80, 20), "> Requests per second")
-	key(tcell.KeyTab)
-	key(tcell.KeyTab)
-	key(tcell.KeyTab)
-	key(tcell.KeyTab)
+	key(ui.KeyShiftN)
+	key(tcell.KeyBacktab)
+	require.Equal(t, 5, v.selected)
+	for range 4 {
+		key(tcell.KeyUp)
+	}
+	require.Equal(t, 1, v.selected, "the first panel that was drawn")
+	key(tcell.KeyUp)
+	require.Equal(t, 10, v.selected, "and round to the last")
+	key(calmNextChartKey)
+	for range 4 {
+		key(calmNextChartKey)
+	}
 	require.Equal(t, 5, v.selected)
 
-	// Enter zooms the selected panel; there the arrows move the cursor.
+	// Left and right move the time cursor through the chart and every row:
+	// the numbers then read the samples taken at that time.
+	for range 62 {
+		key(tcell.KeyLeft)
+	}
+	frame = drawnText(t, v, 80, 20)
+	dashHasLines(t, frame,
+		"  REQUEST DURATION P99 BY POD  at 04:29:00Z  c …hx4mt 47.9s  +2 more",
+		"  Slowest pod p99           ▁▁▁███▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁  47.9s red      max red",
+	)
+	press(tcell.KeyLeft, tcell.ModShift)
+	require.Contains(t, drawnText(t, v, 80, 20), "  REQUEST DURATION P99 BY POD  at 04:24:00Z  ")
+	// Home is the first sample the page has a column for, one step into
+	// the window, so the caret stands on the axis for every time the page
+	// names. Left does not go further.
+	key(tcell.KeyHome)
+	key(tcell.KeyLeft)
+	frame = drawnText(t, v, 80, 20)
+	require.Contains(t, frame, "  REQUEST DURATION P99 BY POD  at 04:00:30Z  ")
+	require.Contains(t, frame, "                            ^─────────────┬────────────┬")
+	key(tcell.KeyEnd)
+	require.True(t, v.atEnd)
+	require.NotContains(t, drawnText(t, v, 80, 20), "  at 0", "at the window's end the page reads each line where it ends")
+
+	// Enter zooms the main chart; there the arrows move the cursor and
+	// change the panel, and Esc goes back to the calm page.
 	key(tcell.KeyEnter)
 	require.True(t, v.zoom)
 	frame = drawnText(t, v, 80, 20)
+	require.Contains(t, frame, "Dashboard · GitLab / Webservice overview · last 1h to 05:00Z · step 30s")
 	require.Contains(t, frame, "Panel 5 of 11 · timeseries · Request duration p99 by pod · seconds")
 	require.Contains(t, frame, "Cursor 05:00:00Z (window end)")
 	for range 62 {
@@ -375,16 +639,57 @@ func TestDashboardViewReadsTheDefinitionOnceAndMovesOnRequest(t *testing.T) {
 	frame = drawnText(t, v, 80, 20)
 	require.Contains(t, frame, "c …hx4mt 47.9s")
 	require.Contains(t, frame, "Cursor 04:29:00Z, 31m before window end")
-	left, _ := v.actions.Get(tcell.KeyLeft)
-	require.Nil(t, left.Action(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModShift)))
+	press(tcell.KeyLeft, tcell.ModShift)
 	require.Contains(t, drawnText(t, v, 80, 20), "Cursor 04:24:00Z")
 	key(tcell.KeyEnd)
 	require.True(t, v.atEnd)
 	key(tcell.KeyDown)
-	require.Contains(t, drawnText(t, v, 80, 20), "Panel 6 of 11 · timeseries · Requests by pod")
+	frame = drawnText(t, v, 80, 20)
+	require.Contains(t, frame, "Panel 6 of 11 · timeseries · Requests by pod")
+	require.Contains(t, frame, "Esc back")
 	key(tcell.KeyEscape)
 	require.False(t, v.zoom, "Esc leaves the zoom, not the view")
-	require.Contains(t, drawnText(t, v, 80, 20), "> Requests by pod")
+	require.Contains(t, drawnText(t, v, 80, 20), "  REQUESTS BY POD  ", "the panel that was zoomed is the main chart")
+
+	// The all-detail key shows the grid of every panel, as the page was
+	// before the calm layout. There the arrows move between panels.
+	key(calmDetailKey)
+	require.True(t, v.detail)
+	frame = drawnText(t, v, 80, 20)
+	require.Contains(t, frame, "Dashboard · GitLab / Webservice overview · last 1h to 05:00Z · step 30s")
+	require.Contains(t, frame, "> Requests by pod")
+	require.Contains(t, frame, "a calm · Esc")
+	key(tcell.KeyHome)
+	frame = drawnText(t, v, 80, 20)
+	require.Contains(t, frame, "> Requests per second")
+	require.Contains(t, frame, "Panel 1 of 11 · stat")
+	key(tcell.KeyRight)
+	require.Contains(t, drawnText(t, v, 80, 20), "> Slowest pod p99")
+	key(tcell.KeyDown)
+	require.Contains(t, drawnText(t, v, 80, 20), "> CPU throttled, worst pod")
+	key(tcell.KeyDown)
+	require.Contains(t, drawnText(t, v, 80, 20), "> Request duration p99 by pod")
+	key(tcell.KeyHome)
+	for range 4 {
+		key(calmNextChartAltKey)
+	}
+	require.Equal(t, 5, v.selected, "Tab is the next panel in the grid")
+	// Enter zooms from the grid too, and Esc goes back to the grid.
+	key(tcell.KeyEnter)
+	require.True(t, v.zoom && v.detail)
+	require.Contains(t, drawnText(t, v, 80, 20), "Esc grid")
+	key(tcell.KeyEscape)
+	require.True(t, v.detail && !v.zoom)
+	// The key toggles: the calm page comes back with the selected panel as
+	// its main chart. Esc does the same.
+	key(tcell.KeyHome)
+	key(tcell.KeyRight)
+	key(calmDetailKey)
+	require.False(t, v.detail)
+	require.Contains(t, drawnText(t, v, 80, 20), "  SLOWEST POD P99  346ms green  max 47.9s red")
+	key(calmDetailKey)
+	key(tcell.KeyEscape)
+	require.False(t, v.detail, "Esc leaves the grid, not the view")
 	require.Equal(t, 1, reads, "moving reads nothing")
 
 	// The report is wrapped on plain text, so brackets are never markup.
@@ -403,11 +708,18 @@ func TestDashboardViewReadsTheDefinitionOnceAndMovesOnRequest(t *testing.T) {
 	v.window = 6 * time.Hour
 	v.render()
 	text := v.text.GetText(true)
-	require.Contains(t, text, "Dashboard · GitLab / Webservice overview · last 6h")
-	require.Contains(t, text, "Reading the panels' last 6h once")
-	require.NotContains(t, text, "Requests by pod")
+	dashHasLines(t, text,
+		"Dashboard  GitLab / Webservice overview · last 6h                       reading…",
+		"  Reading the panels' last 6h once…",
+		"  Esc cancels and goes back",
+	)
+	require.NotContains(t, strings.ToLower(text), "requests by pod")
 	v.accept(v.load(t.Context(), &v.spec, 6*time.Hour, v.snapshot.Dash))
-	require.Contains(t, v.text.GetText(true), "last 6h to 05:00Z · step 5m")
+	dashHasLines(t, v.text.GetText(true),
+		"Dashboard  GitLab / Webservice overview · last 6h  read 05:00 · 11 of 11 queries",
+		"  9 of 11 panels read. 2 cannot be drawn here.         A reading, not a finding.",
+	)
+	require.Equal(t, 5*time.Minute, v.snapshot.Step)
 	require.Equal(t, 1, definitions, "the definition is read once")
 	require.Equal(t, 2, reads)
 	require.Contains(t, dashReport(v.snapshot), "$__interval is the step, 5m. $__rate_interval is 20m")
@@ -428,7 +740,10 @@ func TestDashboardViewDiscardsRepliesAfterItClosedOrTheDestinationChanged(t *tes
 	}
 	v.Start()
 	require.Equal(t, "Reading the dashboard definition, then its panels' last 1h, once…", v.busy)
-	require.Contains(t, v.text.GetText(true), "Reading the dashboard definition, then its panels' last 1h, once…\nEsc cancels and goes back.")
+	waiting := v.text.GetText(true)
+	require.Contains(t, waiting, "Dashboard  GitLab / Webservice overview · last 1h")
+	require.Contains(t, waiting, "  Reading the dashboard definition, then its panels' last 1h, once…\n")
+	require.Contains(t, waiting, "  Esc cancels and goes back")
 	v.Stop()
 	close(release)
 	<-done
@@ -526,12 +841,14 @@ func TestQueryIsRegisteredAsCommandPaletteEntryAndCompletesNames(t *testing.T) {
 	v.active = true
 	command.queryCommand(`query sum(rate(http_requests_total{namespace="$namespace"}[5m]))`)
 	require.Same(t, v, v.app.Content.Top())
-	require.True(t, v.zoom, "one query is drawn alone")
+	require.True(t, v.one(), "one query is drawn alone")
+	require.False(t, v.zoom || v.detail, "on the calm page")
 	require.Equal(t, `sum(rate(http_requests_total{namespace="$namespace"}[5m]))`, v.spec.Query.Expr)
-	require.Contains(t, v.text.GetText(true), "Query · typed expression · last 1h")
+	// A typed expression has no name: the title line says what is read.
+	require.Regexp(t, `^Query  sum\(rate\(http_requests_total\{namespace="\$namespace"\}… · last 1h +reading…\n`, v.text.GetText(true))
 	require.Equal(t, "gitlab-webservice-default", v.SelectedResource().Name)
-	// The page of one query is its zoomed panel: Enter is not offered as a
-	// key that would do nothing. The board offers it again.
+	// The page of one query has its chart at full size already: Enter is
+	// not offered as a key that would do nothing. The board offers it again.
 	enterShown := func() bool {
 		for _, hint := range v.Hints() {
 			if hint.Description == "Zoom panel" {

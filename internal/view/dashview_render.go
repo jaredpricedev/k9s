@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/derailed/k9s/internal/calm"
 	"github.com/derailed/k9s/internal/chart"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/dashboard"
@@ -60,8 +61,17 @@ type dashPage struct {
 	Zoom   bool
 	Cursor int
 	Busy   string
+	// Detail shows all the detail the page had before the calm layout: the
+	// grid of every panel, or the page of one query with its expression.
+	// Without Zoom and Detail the page is laid out the calm way.
+	Detail bool
+	// Calm is the palette of the calm layout.
+	Calm calm.Palette
 	// Lines is the grid for this width.
 	Lines []dashboard.Line
+	// Mains is settled by the calm layout: the panels that can be its main
+	// chart, in the dashboard's order.
+	Mains []int
 	// Style is the chart style of the session.
 	Style chart.Style
 }
@@ -290,11 +300,13 @@ func dashFooter(width int, zoom, single, query, ascii bool, style chart.Style) s
 	var forms []string
 	switch {
 	case zoom && single:
+		// The page of one query with its expression is its all-detail page:
+		// a returns to the calm layout.
 		forms = []string{
-			"←/→ cursor · Home/End · 1 15m  2 1h  3 6h  4 24h · r re-read · s detail · Shift-D Grafana · e edit · Esc back",
-			"←/→ cursor · 1 15m 2 1h 3 6h 4 24h · r re-read · s detail · e edit · Esc back",
-			"←/→ cursor · 1-4 window · r re-read · s detail · e edit · Esc",
-			"←/→ cursor · 1-4 window · r read · e edit",
+			"←/→ cursor · Home/End · 1 15m  2 1h  3 6h  4 24h · r re-read · s detail · Shift-D Grafana · e edit · a calm layout · Esc back",
+			"←/→ cursor · 1 15m 2 1h 3 6h 4 24h · r re-read · s detail · e edit · a calm layout · Esc back",
+			"←/→ cursor · 1-4 window · r re-read · s detail · e edit · a calm · Esc",
+			"←/→ cursor · 1-4 window · r read · e edit · a calm",
 		}
 	case zoom:
 		forms = []string{
@@ -305,13 +317,15 @@ func dashFooter(width int, zoom, single, query, ascii bool, style chart.Style) s
 			"←/→ cursor · ↑/↓ panel · 1-4 · r · Esc grid",
 		}
 	default:
+		// The grid of every panel is the all-detail page of a dashboard: a
+		// returns to the calm layout.
 		forms = []string{
-			"←/→ ↑/↓ panel · Enter zoom · 1 15m  2 1h  3 6h  4 24h · r re-read · s queries · Shift-D Grafana · Esc back",
-			"←/→ ↑/↓ panel · Enter zoom · 1-4 window · r re-read · s queries · Shift-D Grafana · Esc",
-			"←/→ ↑/↓ panel · Enter zoom · 1-4 window · r re-read · s queries · Esc",
-			"←/→ panel · Enter zoom · 1-4 window · r read · s queries",
+			"←/→ ↑/↓ panel · Enter zoom · 1 15m  2 1h  3 6h  4 24h · r re-read · s queries · Shift-D Grafana · a calm layout · Esc back",
+			"←/→ ↑/↓ panel · Enter zoom · 1-4 window · r re-read · s queries · Shift-D Grafana · a calm layout · Esc",
+			"←/→ ↑/↓ panel · Enter zoom · 1-4 window · r re-read · s queries · a calm · Esc",
+			"←/→ panel · Enter zoom · 1-4 window · s queries · a calm",
 			// Short enough for 60 columns when the arrows are written out.
-			"Tab panel · Enter zoom · 1-4 window · r read · s queries",
+			"Tab panel · Enter zoom · 1-4 window · s queries · a calm",
 		}
 	}
 	if !query {
@@ -323,54 +337,47 @@ func dashFooter(width int, zoom, single, query, ascii bool, style chart.Style) s
 }
 
 // renderDash lays the whole page out for a size. Every line fits Width.
+// The calm layout is the default; Zoom shows one panel alone and Detail
+// the page as it was before the calm layout.
 func renderDash(s *dashSnapshot, pg *dashPage) []string {
 	r := &dashRender{s: s, pg: pg, width: max(pg.Width, 20), c: pg.Colors, cache: map[int]dashData{}}
 	if s == nil {
-		r.lines = append(r.lines, graphBold(r.c.Title, "Dashboard"))
-		r.plain("", "Reading once…")
-		return r.lines
+		return r.calmWords(calm.Title{View: dashViewTitle, Busy: "reading…"}, calm.Verdict{Sentences: []string{"Reading once…"}}, nil, []string{"Esc back"})
 	}
-	r.lines = append(r.lines, graphBold(r.c.Title, r.fit(s.headline(r.width, pg.ASCII), r.width)))
 	if failure := s.failure(); failure != nil {
-		if pg.Busy != "" {
-			r.plain(r.c.Muted, pg.Busy)
-		}
-		r.lines = append(r.lines, "")
-		for i, line := range failure {
-			color := ""
-			if i == 0 {
-				color = r.c.Failure
-			}
-			for _, wrapped := range graphWrap(line, r.width, "") {
-				r.plain(color, wrapped)
-			}
-		}
-		source := "grafana"
-		if s.Grafana == nil || s.Grafana.State == observability.StateComplete {
-			source = "prometheus via " + s.Source
-			if s.Prom != nil {
-				source = "prometheus: " + s.Prom.Source
-			}
-		} else if s.Grafana.Source != "" {
-			source = "grafana via " + s.Grafana.Source
-		}
-		r.lines = append(r.lines, "", graphPaint(r.c.Muted, r.fit("Source: "+source, r.width)), "",
-			graphPaint(r.c.Muted, r.words("r re-read · Shift-D Grafana · Esc back")))
-		return r.lines
+		return r.calmFailure(failure)
 	}
+	// What the keys chose, before the grid settles on a panel of its own.
+	chosen := pg.Selected
 	r.settle()
 	if pg.Selected < 0 {
-		r.lines = append(r.lines, "")
-		r.plain("", "The dashboard definition has no panels.")
-		r.lines = append(r.lines, "", graphPaint(r.c.Muted, r.words("Shift-D Grafana · Esc back")))
-		return r.lines
+		return r.calmWords(r.calmTitle(), calm.Verdict{Kind: calm.NothingFound, Sentences: []string{"The dashboard definition has no panels."}},
+			[]calm.Action{{Key: "D", Label: "open in Grafana"}}, []string{"Esc back"})
 	}
-	if pg.Zoom {
+	switch one := s.Spec.isQuery() && !s.Spec.Board; {
+	case pg.Zoom, pg.Detail && one:
+		r.lines = append(r.lines, graphBold(r.c.Title, r.fit(s.headline(r.width, pg.ASCII), r.width)))
 		r.zoom()
-	} else {
+	case pg.Detail:
+		r.lines = append(r.lines, graphBold(r.c.Title, r.fit(s.headline(r.width, pg.ASCII), r.width)))
 		r.grid()
+	default:
+		r.calm(chosen)
 	}
 	return r.lines
+}
+
+// source names where the page's reads went, for a page that drew nothing.
+func (s *dashSnapshot) source() string {
+	switch {
+	case s.Grafana != nil && s.Grafana.State != observability.StateComplete && s.Grafana.Source != "":
+		return "grafana via " + s.Grafana.Source
+	case s.Grafana != nil && s.Grafana.State != observability.StateComplete:
+		return "grafana"
+	case s.Prom != nil:
+		return "prometheus: " + s.Prom.Source
+	}
+	return "prometheus via " + s.Source
 }
 
 // reason is why a panel has no plot in this read: what the plan ruled out,
@@ -412,18 +419,25 @@ func (r *dashRender) frame(width int) chart.Frame {
 // chartPanel builds the plot of a panel from its lines. Keys and colors
 // are assigned here so the legend and the plot always agree.
 func (r *dashRender) chartPanel(index int) chart.Panel {
-	p := &r.s.Dash.Panels[index]
 	data := r.data(index)
+	return r.chartPanelOf(index, &data)
+}
+
+// chartPanelOf is the plot of a panel from the given lines: all of them,
+// or the ones the calm layout keeps for its main chart.
+func (r *dashRender) chartPanelOf(index int, data *dashData) chart.Panel {
+	p := &r.s.Dash.Panels[index]
 	panel := chart.Panel{Unit: p.Unit.Chart, Empty: r.words(data.Problem)}
 	for k := range data.Lines {
 		series := chart.Series{Name: data.Lines[k].Name, Kind: chart.Line, Points: data.Lines[k].Points, Stroke: chart.Solid}
 		if len(r.c.Data) > 0 {
-			series.Color = r.c.Data[k%len(r.c.Data)]
+			series.Color = r.c.Data[data.Lines[k].Tint%len(r.c.Data)]
 		}
 		if len(data.Lines) > 1 {
 			// A line's letter ends it and repeats along it, so that lines are
-			// told apart without color.
-			series.Key = rune('a' + k%26)
+			// told apart without color. The letter is the line's place among
+			// all lines of its panel, so it is the same on every page.
+			series.Key = rune('a' + data.Lines[k].Slot%26)
 			series.Marker = series.Key
 			series.MarkerEvery = max(20, 10*len(data.Lines))
 		}
@@ -439,8 +453,14 @@ func (r *dashRender) chartPanel(index int) chart.Panel {
 // legend names the lines of a panel with their values at a time; a zero
 // time reads each line's last sample.
 func (r *dashRender) legend(index int, panel *chart.Panel, f chart.Frame, at time.Time) []chart.Entry {
-	p := &r.s.Dash.Panels[index]
 	data := r.data(index)
+	return r.legendOf(index, &data, panel, f, at)
+}
+
+// legendOf is the legend of the plot chartPanelOf built from the same
+// lines.
+func (r *dashRender) legendOf(index int, data *dashData, panel *chart.Panel, f chart.Frame, at time.Time) []chart.Entry {
+	p := &r.s.Dash.Panels[index]
 	entries := make([]chart.Entry, 0, len(data.Lines)+1)
 	if at.IsZero() {
 		// A chart drawn from some of its queries says first which ones are
@@ -460,40 +480,50 @@ func (r *dashRender) legend(index int, panel *chart.Panel, f chart.Frame, at tim
 		if series.Key != 0 {
 			entry.Glyph = string(series.Key)
 		}
-		end := series.Points[len(series.Points)-1]
-		switch value, ok := f.ValueAt(series, at); {
-		case at.IsZero():
-			// The grid reads each line where it ends. A line that stopped
-			// before the window did says when, and one that stood well above
-			// where it ends says so: the last sample alone would hide a burst.
-			peak := end.V
-			for _, point := range series.Points {
-				peak = math.Max(peak, point.V)
-			}
-			entry.Value = p.Unit.Chart.Format(end.V)
-			if f.End.Sub(end.T) > f.Step+f.Step/2 {
-				entry.Value = r.words(graphNoSample) + " last " + end.T.UTC().Format("15:04")
-				if peak > 0 {
-					entry.Value += " peak " + p.Unit.Chart.Format(peak)
-				}
-			} else if peak > 2*end.V && p.Unit.Chart.Format(peak) != entry.Value {
-				entry.Value += " peak " + p.Unit.Chart.Format(peak)
-			}
-		case ok:
-			entry.Value = p.Unit.Chart.Format(value)
-		case end.T.Before(at):
-			entry.Value = r.words(graphNoSample) + " last " + end.T.UTC().Format("15:04")
-		case series.Points[0].T.After(at):
-			entry.Value = r.words(graphNoSample) + " first " + series.Points[0].T.UTC().Format("15:04")
-		default:
-			entry.Value = r.words(graphNoSample)
-		}
+		value, peak := r.lineValue(p, series.Points, f, at)
+		entry.Value = strings.TrimSpace(value + " " + peak)
 		entries = append(entries, entry)
 	}
 	if data.Cut > 0 {
 		entries = append(entries, chart.Entry{Name: fmt.Sprintf("+%d series not drawn", data.Cut)})
 	}
 	return entries
+}
+
+// lineValue words one line at a time; a zero time reads its last sample.
+// peak is what stands beside that value so that it does not hide a burst:
+// "peak 47.9s", or empty.
+func (r *dashRender) lineValue(p *dashboard.Panel, points []chart.Point, f chart.Frame, at time.Time) (value, peak string) {
+	unit := p.Unit.Chart
+	end := points[len(points)-1]
+	switch sample, ok := f.ValueAt(&chart.Series{Points: points}, at); {
+	case at.IsZero():
+		// The grid reads each line where it ends. A line that stopped
+		// before the window did says when, and one that stood well above
+		// where it ends says so: the last sample alone would hide a burst.
+		top := end.V
+		for _, point := range points {
+			top = math.Max(top, point.V)
+		}
+		value = unit.Format(end.V)
+		if f.End.Sub(end.T) > f.Step+f.Step/2 {
+			value = r.words(graphNoSample) + " last " + end.T.UTC().Format("15:04")
+			if top > 0 {
+				peak = "peak " + unit.Format(top)
+			}
+		} else if top > 2*end.V && unit.Format(top) != value {
+			peak = "peak " + unit.Format(top)
+		}
+	case ok:
+		value = unit.Format(sample)
+	case end.T.Before(at):
+		value = r.words(graphNoSample) + " last " + end.T.UTC().Format("15:04")
+	case points[0].T.After(at):
+		value = r.words(graphNoSample) + " first " + points[0].T.UTC().Format("15:04")
+	default:
+		value = r.words(graphNoSample)
+	}
+	return value, peak
 }
 
 // dashShortState shortens "A: denied (HTTP 403): nothing was read" to
@@ -1115,6 +1145,10 @@ func (r *dashRender) zoom() {
 	}
 	r.lines = append(r.lines, graphBold(r.c.Text, r.fit(title, r.width)))
 	footer := dashFooter(r.width, true, single, s.Spec.isQuery(), pg.ASCII, pg.Style)
+	if !pg.Detail {
+		// Zoomed from the calm layout, Esc returns to it: there is no grid.
+		footer = strings.Replace(footer, "Esc grid", "Esc back", 1)
+	}
 	detail := r.zoomDetail(index)
 	data := r.data(index)
 	if problem, advice := r.undrawn(index, &data); problem != "" {
@@ -1281,5 +1315,6 @@ func dashReport(s *dashSnapshot) string {
 	fmt.Fprintf(&b, "  One sample is read per step (%s here). Something shorter than the step can fall between two samples and not show, and a rate over $__rate_interval (%s here) flattens a short burst: a flat line in a long window is not proof that nothing happened. A shorter window (1, 2) has a shorter step.\n",
 		graphSpan(s.Step), graphSpan(s.Plan.Bindings.Rate))
 	b.WriteString("  A threshold word (green, orange, red) is the name the dashboard author gave the step; it is the author's rule, not a finding.\n")
+	b.WriteString("  A row is one panel on the time axis of the chart above it. The strip of a stat or gauge whose author gave it a warning or failure step stands over its baseline where the value was in such a step. Any other strip is the series with the highest peak, drawn from zero to that series' own highest sample: the peak beside the number is its scale. A cell without a sample is marked, never drawn as a low value.\n")
 	return b.String()
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/derailed/k9s/internal/calm"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/dashboard"
 	"github.com/derailed/k9s/internal/observability"
@@ -52,9 +53,15 @@ type dashView struct {
 	selected      int
 	first, cursor int
 	lines         []dashboard.Line
-	zoom, report  bool
-	atEnd         bool
-	width, height int
+	// mains are the panels the calm layout can draw at full size.
+	mains []int
+	// The calm layout is the default. zoom shows the selected panel alone,
+	// detail the page as it was before the calm layout (the grid of every
+	// panel, or the page of one query with its expression), report the
+	// queries behind it.
+	zoom, detail, report bool
+	atEnd                bool
+	width, height        int
 }
 
 // dashSelection is what the variables are filled from.
@@ -86,7 +93,6 @@ func newDashView(app *App, spec dashSpec, target *grafanaTarget, origin Selected
 		contextName: app.Config.ActiveContextName(), revision: app.Config.DestinationRevision(), window: window, atEnd: true,
 		selected: -1,
 	}
-	v.zoom = spec.isQuery() && !spec.Board
 	// The declaration and the connection are captured here, on the UI
 	// thread; the reads below run off it and touch neither.
 	sources, restConfig := declaredSources(app), kubeRESTConfig(app)
@@ -167,20 +173,27 @@ func (v *dashView) Init(ctx context.Context) error {
 		v.actions.Add(ui.Key1+tcell.Key(index), ui.NewKeyAction("Window "+graphSpan(window), do(func() { v.setWindow(window) }), true))
 	}
 	v.actions.Bulk(ui.KeyMap{
-		ui.KeyR:          ui.NewKeyAction("Re-read", do(v.refresh), true),
-		ui.KeyS:          ui.NewKeyActionWithOpts("Queries and what was not drawn", do(v.toggleReport), ui.ActionOpts{Visible: true, Priority: 3}),
-		tcell.KeyLeft:    ui.NewKeyAction("Previous panel or cursor earlier", v.moveCmd(-1, false), true),
-		tcell.KeyRight:   ui.NewKeyAction("Next panel or cursor later", v.moveCmd(1, false), true),
-		tcell.KeyUp:      ui.NewKeyAction("Panel above", v.moveCmd(-1, true), true),
-		tcell.KeyDown:    ui.NewKeyAction("Panel below", v.moveCmd(1, true), true),
-		tcell.KeyTab:     ui.NewKeyActionWithOpts("Next panel", v.stepCmd(1), ui.ActionOpts{Priority: 9}),
-		tcell.KeyBacktab: ui.NewKeyAction("Previous panel", v.stepCmd(-1), false),
-		tcell.KeyHome:    ui.NewKeyAction("First panel or window start", v.edgeCmd(-1), false),
-		tcell.KeyEnd:     ui.NewKeyAction("Last panel or window end", v.edgeCmd(1), false),
-		tcell.KeyEscape:  ui.NewKeyAction("Back", v.escape, false),
-		ui.KeyQ:          ui.NewKeyAction("Back", v.escape, false),
-		grafanaKey:       ui.NewKeyActionWithOpts(grafanaKeyLabel, do(v.openInGrafana), ui.ActionOpts{Visible: true, Priority: 5}),
-		chartStyleKey:    chartStyleAction(v.app, v.render),
+		ui.KeyR:       ui.NewKeyAction("Re-read", do(v.refresh), true),
+		ui.KeyS:       ui.NewKeyActionWithOpts("Queries and what was not drawn", do(v.toggleReport), ui.ActionOpts{Visible: true, Priority: 3}),
+		calmDetailKey: ui.NewKeyActionWithOpts(calmDetailLabel, do(v.toggleDetail), ui.ActionOpts{Visible: true, Priority: 2}),
+		// The cursor in the calm layout and in a zoomed panel; the panel
+		// beside in the grid of every panel.
+		tcell.KeyLeft:  ui.NewKeyAction("Cursor earlier or previous panel", v.moveCmd(-1, false), true),
+		tcell.KeyRight: ui.NewKeyAction("Cursor later or next panel", v.moveCmd(1, false), true),
+		tcell.KeyUp:    ui.NewKeyAction("Previous chart or panel above", v.moveCmd(-1, true), true),
+		tcell.KeyDown:  ui.NewKeyAction("Next chart or panel below", v.moveCmd(1, true), true),
+		// The next panel becomes the main chart; in the grid and in a zoomed
+		// panel it is the next panel.
+		calmNextChartKey:    ui.NewKeyAction(calmNextChartLabel, v.stepCmd(1), true),
+		ui.KeyShiftN:        ui.NewKeyAction("Previous chart", v.stepCmd(-1), false),
+		calmNextChartAltKey: ui.NewKeyActionWithOpts(calmNextChartLabel, v.stepCmd(1), ui.ActionOpts{Priority: 9}),
+		tcell.KeyBacktab:    ui.NewKeyAction("Previous chart", v.stepCmd(-1), false),
+		tcell.KeyHome:       ui.NewKeyAction("Window start or first panel", v.edgeCmd(-1), false),
+		tcell.KeyEnd:        ui.NewKeyAction("Window end or last panel", v.edgeCmd(1), false),
+		tcell.KeyEscape:     ui.NewKeyAction("Back", v.escape, false),
+		ui.KeyQ:             ui.NewKeyAction("Back", v.escape, false),
+		grafanaKey:          ui.NewKeyActionWithOpts(grafanaKeyLabel, do(v.openInGrafana), ui.ActionOpts{Visible: true, Priority: 5}),
+		chartStyleKey:       chartStyleAction(v.app, v.render),
 	})
 	if v.spec.isQuery() {
 		v.actions.Add(dashEditKey, ui.NewKeyAction("Edit the expression", do(v.editQuery), true))
@@ -190,11 +203,16 @@ func (v *dashView) Init(ctx context.Context) error {
 	return nil
 }
 
+// one reports whether the page is the page of one query: one panel, and
+// nothing to step through or to zoom.
+func (v *dashView) one() bool { return v.spec.isQuery() && !v.spec.Board }
+
 // bindZoom binds Enter only where it does something: the page of one query
-// is already its zoomed panel. The compact key line names every bound
-// Enter, shown or not, so the key is unbound there rather than hidden.
+// has its panel at full size already. The compact key line names every
+// bound Enter, shown or not, so the key is unbound there rather than
+// hidden.
 func (v *dashView) bindZoom() {
-	if v.spec.isQuery() && !v.spec.Board {
+	if v.one() {
 		v.actions.Delete(tcell.KeyEnter)
 		return
 	}
@@ -212,8 +230,10 @@ func (v *dashView) escape(event *tcell.EventKey) *tcell.EventKey {
 	switch {
 	case v.report:
 		v.toggleReport()
-	case v.zoom && !v.single() && !(v.spec.isQuery() && !v.spec.Board):
+	case v.zoom:
 		v.toggleZoom()
+	case v.detail:
+		v.toggleDetail()
 	default:
 		return v.app.PrevCmd(event)
 	}
@@ -224,23 +244,62 @@ func (v *dashView) ready() bool {
 	return !v.report && v.snapshot != nil && v.snapshot.Dash != nil && v.snapshot.failure() == nil
 }
 
-// moveCmd moves between panels in the grid. In a zoomed panel left and
-// right move the cursor along the sample grid (ten points with Shift) and
-// up and down change the panel. While the report is open the keys scroll.
+// calm reports whether the page is laid out the calm way: the default.
+func (v *dashView) calm() bool { return !v.zoom && !v.detail }
+
+// timed reports whether left and right move the time cursor: in the calm
+// layout, in a zoomed panel and on the all-detail page of one query. In
+// the grid of every panel they move between panels.
+func (v *dashView) timed() bool { return v.zoom || v.calm() || v.one() }
+
+// earliest is the first position of the time cursor. The calm page draws
+// a sample over the step that ends at it, so the sample at the window's
+// start has no column there, in the chart or in a strip: the cursor starts
+// one step in, where the caret has a cell to stand under. A zoomed panel
+// draws the start as well.
+func (v *dashView) earliest() int {
+	if v.calm() {
+		return dashCalmFirst
+	}
+	return 0
+}
+
+// nextMain is the panel delta steps on from the main chart of the calm
+// layout, round the panels that were drawn.
+func (v *dashView) nextMain(delta int) int {
+	if len(v.mains) == 0 {
+		return v.selected
+	}
+	at := 0
+	for i, index := range v.mains {
+		if index == v.selected {
+			at = i
+		}
+	}
+	return v.mains[((at+delta)%len(v.mains)+len(v.mains))%len(v.mains)]
+}
+
+// moveCmd moves the time cursor along the sample grid (ten points with
+// Shift) with left and right, and changes the chart with up and down: the
+// main chart in the calm layout, the panel in a zoomed one. In the grid of
+// every panel all four move between panels. While the report is open the
+// keys scroll.
 func (v *dashView) moveCmd(delta int, vertical bool) ui.ActionHandler {
 	return func(event *tcell.EventKey) *tcell.EventKey {
 		if !v.ready() {
 			return event
 		}
 		switch {
-		case v.zoom && !vertical:
+		case v.timed() && !vertical:
 			step := delta
 			if event != nil && event.Modifiers()&tcell.ModShift != 0 {
 				step *= 10
 			}
 			last := int(v.snapshot.Window / v.snapshot.Step)
-			v.cursor = min(max(v.cursor+step, 0), last)
+			v.cursor = min(max(v.cursor+step, v.earliest()), last)
 			v.atEnd = v.cursor == last
+		case v.calm():
+			v.selected = v.nextMain(delta)
 		case v.zoom || !vertical:
 			v.selected = dashboard.Advance(v.lines, v.selected, delta)
 		default:
@@ -251,12 +310,18 @@ func (v *dashView) moveCmd(delta int, vertical bool) ui.ActionHandler {
 	}
 }
 
+// stepCmd makes the next panel the main chart of the calm layout; in the
+// grid and in a zoomed panel it selects the next panel.
 func (v *dashView) stepCmd(delta int) ui.ActionHandler {
 	return func(event *tcell.EventKey) *tcell.EventKey {
 		if !v.ready() {
 			return event
 		}
-		v.selected = dashboard.Advance(v.lines, v.selected, delta)
+		if v.calm() {
+			v.selected = v.nextMain(delta)
+		} else {
+			v.selected = dashboard.Advance(v.lines, v.selected, delta)
+		}
 		v.render()
 		return nil
 	}
@@ -267,9 +332,9 @@ func (v *dashView) edgeCmd(delta int) ui.ActionHandler {
 		if !v.ready() {
 			return event
 		}
-		if v.zoom {
+		if v.timed() {
 			last := int(v.snapshot.Window / v.snapshot.Step)
-			v.cursor, v.atEnd = 0, delta > 0
+			v.cursor, v.atEnd = min(v.earliest(), last), delta > 0
 			if delta > 0 {
 				v.cursor = last
 			}
@@ -286,6 +351,16 @@ func (v *dashView) toggleZoom() {
 		return
 	}
 	v.zoom = !v.zoom
+	v.render()
+}
+
+// toggleDetail shows all the detail the page had before the calm layout,
+// and returns to the calm layout on the next press.
+func (v *dashView) toggleDetail() {
+	if v.report {
+		return
+	}
+	v.detail, v.zoom = !v.detail, false
 	v.render()
 }
 
@@ -317,8 +392,8 @@ func (v *dashView) editQuery() {
 // setQuery replaces what a query page draws and reads it once.
 func (v *dashView) setQuery(spec *dashSpec) {
 	v.spec = *spec
-	v.zoom, v.report = !spec.Board, false
-	v.snapshot, v.selected, v.first, v.atEnd = nil, -1, 0, true
+	v.zoom, v.detail, v.report = false, false, false
+	v.snapshot, v.selected, v.first, v.atEnd, v.mains = nil, -1, 0, true, nil
 	// The board zooms on Enter, the page of one query does not: the hints
 	// follow what the page now is.
 	v.bindZoom()
@@ -538,8 +613,8 @@ func (v *dashView) render() {
 		return
 	}
 	page := &dashPage{
-		Width: width, Height: height, ASCII: ascii, Colors: dashPalette(v.app.Styles.Semantic()),
-		Selected: v.selected, First: v.first, Zoom: v.zoom, Cursor: v.cursor, Busy: v.busy, Style: v.app.chartStyle(),
+		Width: width, Height: height, ASCII: ascii, Colors: dashPalette(v.app.Styles.Semantic()), Calm: calmPalette(v.app.Styles.Semantic()),
+		Selected: v.selected, First: v.first, Zoom: v.zoom, Detail: v.detail, Cursor: v.cursor, Busy: v.busy, Style: v.app.chartStyle(),
 	}
 	var lines []string
 	if v.snapshot == nil || v.snapshot.Window != v.window {
@@ -553,7 +628,7 @@ func (v *dashView) render() {
 			if v.spec.Query != nil {
 				subject = v.spec.Query.Name
 				if subject == "" {
-					subject = queryTyped
+					subject = safeProviderText(v.spec.Query.Expr)
 				}
 			}
 		}
@@ -561,15 +636,18 @@ func (v *dashView) render() {
 		if busy == "" {
 			busy = v.reading(v.window)
 		}
-		lines = []string{
-			graphBold(page.Colors.Title, dashFit(v.spec.noun()+" · "+safeProviderText(subject)+" · last "+graphSpan(v.window), width, ascii)),
-			graphPaint(page.Colors.Muted, dashFit(busy, width, ascii)),
-			graphPaint(page.Colors.Muted, dashFit("Esc cancels and goes back.", width, ascii)),
+		o := calm.Options{ASCII: ascii, Palette: page.Calm}
+		waiting := calm.Page{
+			Title:   calm.Title{View: v.spec.noun(), Object: safeProviderText(subject), Window: "last " + graphSpan(v.window), Busy: "reading…"},
+			Verdict: calm.Verdict{Sentences: []string{busy}},
+			Keys:    []string{"Esc cancels and goes back"},
 		}
+		plan := calm.Lay(&waiting, width, height, o)
+		lines = calm.Render(&waiting, &plan, o).Lines()
 	} else {
 		lines = renderDash(v.snapshot, page)
 		// The page settles the selection and the scroll position.
-		v.selected, v.first, v.lines = page.Selected, page.First, page.Lines
+		v.selected, v.first, v.lines, v.mains = page.Selected, page.First, page.Lines, page.Mains
 	}
 	v.text.SetText(strings.Join(lines, "\n"))
 	v.text.ScrollToBeginning()
