@@ -254,7 +254,7 @@ func TestDashboardCalmPageDrawsTheGitLabStoryAtEverySize(t *testing.T) {
 		// Two lines of keys: the likely next steps in words, then the rest.
 		"  next  n next chart (Requests by pod)    Enter zoom    a all panels    D open in Grafana",
 		"",
-		"  ←→ time · ↑↓ chart · s queries · 1 15m  2 1h  3 6h  4 24h · r re-read · b dots · Esc back",
+		"  ↑↓ chart · ←→ time · 1-4 window · s queries · b dots · r re-read · Esc back",
 	)
 	// The page settles on its main chart, so Enter zooms it, and on the
 	// panels the next-chart key steps through: every panel that was drawn.
@@ -321,7 +321,7 @@ func TestDashboardCalmPageDrawsTheGitLabStoryAtEverySize(t *testing.T) {
 		"  NOT DRAWN  Pods and nodes (table) +1 more",
 		"",
 		"  next  n next chart (Requests by pod)  Enter zoom",
-		"  ←→ time · ↑↓ chart · s queries · 1-4 window · Esc back",
+		"  ↑↓ chart · ←→ time · 1-4 window · s queries · Esc back",
 	)
 
 	// A page shorter than its evidence still says what was read, draws the
@@ -332,7 +332,9 @@ func TestDashboardCalmPageDrawsTheGitLabStoryAtEverySize(t *testing.T) {
 		"  REQUEST DURATION P99 BY POD  c …hx4mt 350ms peak 47.9s  +2 more",
 		"  NOT DRAWN  Pods and nodes (table) · Webservice log lines with timeout (logs)",
 	)
-	require.Contains(t, short, "not shown at this size (a shows all): ")
+	// The line is too narrow for the long form: it names what is missing in
+	// fewer words before it would cut the list.
+	dashHasLines(t, short, "  not shown (a shows all): PUMA AND CPU, the strips beside the rows, REQUESTS")
 	tiny := dashText(t, s, dashPageOf(80, 4))
 	require.Contains(t, tiny, "9 of 11 panels read.")
 	require.Contains(t, tiny, "a shows all detail")

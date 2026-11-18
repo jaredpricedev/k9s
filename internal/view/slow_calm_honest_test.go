@@ -67,8 +67,8 @@ func TestSlowCalmPageNeverDrawsAStretchWithoutSamplesAsQuiet(t *testing.T) {
 		return cells[len(cells)-v.frame.Width:]
 	}
 	for _, name := range []string{
-		"  ingress ", "pod …-hx4mt  slow p99", "queueing", "no free threads", "CPU throttling", "not Ready",
-		"  pods …-2bq7k, …-8wzpd", "  3 dependencies", "  dns  ", "  restarts",
+		"  ingress ", "pod hx4mt  slow p99", "queueing", "no free threads", "CPU throttling", "not Ready",
+		"  pods 2bq7k, 8wzpd", "  3 dependencies", "  dns  ", "  restarts",
 	} {
 		line, _ := slowRowWith(t, frame, name)
 		cells := strip(line)
@@ -110,7 +110,7 @@ func TestSlowCalmAnswerSaysWhenTheWindowCutsAStall(t *testing.T) {
 	frame := drawnText(t, v, 132, 32)
 	lines := strings.Split(frame, "\n")
 	require.Equal(t, "  1 stall: clients gave up waiting at 08:13:15 UTC, for 1 minute. It was still raised at the last sample: it may not be over.", lines[2])
-	require.Regexp(t, `^  It lines up with .+ on pod …-hx4mt\. Nothing else lines up\.`, lines[3])
+	require.Regexp(t, `^  It lines up with .+ on pod hx4mt\. Nothing else lines up\.`, lines[3])
 	marker, _ := slowLineWith(t, frame, "stall ")
 	require.Regexp(t, `▼$`, marker, "the band runs to the last column of the strips")
 	axis, _ := slowLineWith(t, frame, "━")
@@ -129,7 +129,7 @@ func TestSlowCalmAnswerSaysWhenTheWindowCutsAStall(t *testing.T) {
 	// Narrow, it is a line of its own, before what lines up.
 	narrow := drawnText(t, v, 80, 20)
 	require.Contains(t, narrow, "  1 stall: clients gave up waiting at 07:49:15 UTC, for at least 1m45s.\n  It was already raised when the window began.\n"+
-		"  It lines up with 5 signals on pod …-hx4mt. Nothing else lines up.\n")
+		"  It lines up with 5 signals on pod hx4mt. Nothing else lines up.\n")
 
 	// A window that holds every stall whole adds nothing.
 	v.accept(slowStoryRead(&slowtest.Story{}, time.Hour))

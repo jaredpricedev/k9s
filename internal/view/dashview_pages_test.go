@@ -303,7 +303,7 @@ func TestQueryBoardDrawsEveryNamedQueryForTheSelection(t *testing.T) {
 		"  puma-queue    ▁▁▁▁███▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁██▁▁▁  …hx4mt 0       peak 40",
 		"  hubble-drops  ×××××××××××█××××××××××××××××××××××××  – last 04:20   peak 0.8/s",
 		"  next  n next chart (ingress-499)  Enter zoom  a all charts  D open in Grafana",
-		"  ←→ time · ↑↓ chart · s queries · 1-4 window · r re-read · b dots · Esc back",
+		"  ↑↓ chart · ←→ time · 1-4 window · s queries · b dots · r re-read · Esc back",
 	)
 
 	text := dashText(t, s, dashDetailOf(132, 32))
@@ -378,7 +378,7 @@ func TestQueryPageChartsATypedExpressionAndSaysWhatWentWrong(t *testing.T) {
 		// query are under s; the next line says so.
 		"  next  e edit the expression    s queries, and how to save this one    D open in Grafana",
 		"",
-		"  ←→ time · 1 15m  2 1h  3 6h  4 24h · a all detail · r re-read · b dots · Esc back",
+		"  ←→ time · 1-4 window · a all detail · b dots · r re-read · Esc back",
 	)
 	for _, gone := range []string{"Variables:", "About:", `namespace="gitlab"`, "Cursor ", "Panel 1 of 1"} {
 		require.NotContains(t, calmPage, gone, "the calm page leaves it to s and a")
@@ -402,12 +402,12 @@ func TestQueryPageChartsATypedExpressionAndSaysWhatWentWrong(t *testing.T) {
 		"  3 series; highest …hx4mt, peak 40 at 04:08.          A reading, not a finding.",
 		"  c  …hx4mt  ▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁  0     peak 40",
 		"  next  e edit the expression  s queries, and how to save this one",
-		"  ←→ time · 1-4 window · a all detail · r re-read · b dots · Esc back",
+		"  ←→ time · 1-4 window · a all detail · b dots · r re-read · Esc back",
 	)
 	dashHasLines(t, dashText(t, s, dashPageOf(60, 20)),
 		"  c  …hx4mt  ▁▁▁▁██▁▁▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁▁██▁▁  0     peak 40",
 		"  next  e edit the expression",
-		"  ←→ time · 1-4 window · a all detail · r re-read · Esc back",
+		"  ←→ time · 1-4 window · a all detail · b dots · Esc back",
 	)
 
 	text := dashText(t, s, page)
@@ -468,7 +468,7 @@ func TestQueryPageChartsATypedExpressionAndSaysWhatWentWrong(t *testing.T) {
 	dashHasLines(t, rejected,
 		"Query  up > 3 · last 1h                                                read 05:00 · 0 of 1 queries",
 		"  next  e edit the expression    s the query as it was sent    D open in Grafana",
-		"  1-4 window · r re-read · a all detail · Esc back",
+		"  1-4 window · a all detail · r re-read · Esc back",
 	)
 	require.Contains(t, rejected, "Not read is not healthy.")
 	require.Contains(t, strings.Join(renderDash(s, dashPageOf(100, 20)), "\n"), "[#e7bd73:-:b]NOT DRAWN: expression failed")

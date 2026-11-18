@@ -191,7 +191,7 @@ func Graph(o calm.Options) calm.Page {
 		},
 		Next: []calm.Action{{Key: "n", Label: "next chart (CPU)"}, {Key: "a", Label: "all charts"},
 			{Key: "t", Label: "what changed"}, {Key: "D", Label: "open in Grafana"}},
-		Keys: []string{"←→ time", "1 15m  2 1h  3 6h  4 24h", "s queries", "Esc back"},
+		Keys: []string{"←→ time", "1-4 window", "s queries", "Esc back"},
 	}
 }
 
@@ -228,6 +228,6 @@ func Compare(o calm.Options) calm.Page {
 		},
 		Next: []calm.Action{{Key: "Enter", Label: "open hx4mt"}, {Key: "g", Label: "group by node / revision / zone"},
 			{Key: "B", Label: "probe the pods now"}},
-		Keys: []string{"↑↓ signal", "←→ time", "1-4 window", "a show every signal", "Esc back"},
+		Keys: []string{"↑↓ signal", "←→ time", "1-4 window", "a show every signal", "s queries", "Esc back"},
 	}
 }

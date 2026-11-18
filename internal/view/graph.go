@@ -348,19 +348,10 @@ func (v *graphView) Init(ctx context.Context) error {
 		}
 		return ""
 	}
-	// n and Shift-N step through what the page shows: the chart at full
-	// size, and on the per-Pod page the signal. One object has charts
-	// only, and the key says so.
-	next, previous := "Next signal", "Previous signal"
-	if !pods {
-		next, previous = calmNextChartLabel, "Previous chart"
-	}
 	v.actions.Bulk(ui.KeyMap{
-		ui.KeyP:          perPod,
-		calmNextChartKey: ui.NewKeyActionWithOpts(next, charts(func() { v.step(1) }), ui.ActionOpts{Visible: true, Priority: 2}),
-		ui.KeyG:          ui.NewKeyActionWithOpts("Regroup", charts(func() { v.regroup(1) }), opts(3)),
-		ui.KeyShiftN:     ui.NewKeyActionWithOpts(previous, charts(func() { v.step(-1) }), ui.ActionOpts{Visible: pods}),
-		ui.KeyShiftG:     ui.NewKeyActionWithOpts("Regroup back", charts(func() { v.regroup(-1) }), ui.ActionOpts{Visible: pods}),
+		ui.KeyP:      perPod,
+		ui.KeyG:      ui.NewKeyActionWithOpts("Regroup", charts(func() { v.regroup(1) }), opts(3)),
+		ui.KeyShiftG: ui.NewKeyActionWithOpts("Regroup back", charts(func() { v.regroup(-1) }), ui.ActionOpts{Visible: pods}),
 		// Tab is the next-chart key of every incident view. It is the same
 		// step as n here, so the header names n only: a negative priority
 		// keeps a key out of the header's primary hints.
@@ -369,6 +360,7 @@ func (v *graphView) Init(ctx context.Context) error {
 		calmDetailKey:       ui.NewKeyActionWithOpts(calmDetailLabel, charts(v.toggleDetail), ui.ActionOpts{Visible: true, Priority: 4}),
 		ui.KeyT:             ui.NewKeyAction("Timeline", do(v.openTimeline), true),
 	})
+	v.bindStep()
 	if pods {
 		// The calm comparison names these on its own key lines, where they
 		// apply: Enter opens the Pod it marks, PgUp and PgDn turn its pages.
@@ -503,8 +495,43 @@ func (v *graphView) toggleCompare() {
 		return
 	}
 	v.comparing = !v.comparing
+	v.nameStep()
 	v.ensureCompare()
 	v.render()
+}
+
+// bindStep binds n and Shift-N, which step through what the page shows,
+// under the name of that: the chart at full size on the charts of an
+// object, the marked signal on the per-Pod page. The page writes the same
+// word on its line of next steps.
+func (v *graphView) bindStep() {
+	next, previous := calmNextChartLabel, "Previous chart"
+	if v.comparing {
+		next, previous = "Next signal", "Previous signal"
+	}
+	// While the report is open these keys stay with the text.
+	charts := func(run func()) ui.ActionHandler {
+		return func(event *tcell.EventKey) *tcell.EventKey {
+			if v.report {
+				return event
+			}
+			run()
+			return nil
+		}
+	}
+	v.actions.Bulk(ui.KeyMap{
+		calmNextChartKey: ui.NewKeyActionWithOpts(next, charts(func() { v.step(1) }), ui.ActionOpts{Visible: true, Priority: 2}),
+		ui.KeyShiftN:     ui.NewKeyActionWithOpts(previous, charts(func() { v.step(-1) }), ui.ActionOpts{Visible: v.target.workload()}),
+	})
+}
+
+// nameStep names n again after the page changed between the charts and
+// the per-Pod page, and shows the new name in the menu.
+func (v *graphView) nameStep() {
+	v.bindStep()
+	if v.app.Content != nil && v.app.Content.Top() == v {
+		v.app.Menu().HydrateMenu(v.Hints())
+	}
 }
 
 // regroup cycles how the series are folded: by pod, container, revision,
@@ -514,6 +541,7 @@ func (v *graphView) regroup(delta int) {
 		return
 	}
 	v.comparing = true
+	v.nameStep()
 	v.grouping = (v.grouping + graphGrouping(delta) + graphGroupings) % graphGroupings
 	v.page = 0
 	v.ensureCompare()
@@ -835,7 +863,7 @@ func (v *graphView) render() {
 		Width: width, Height: height, ASCII: v.app.Config.K9s.UI.NoIcons, Colors: graphPalette(v.app.Styles.Semantic()),
 		Cursor: v.cursor, First: v.first, Busy: v.busy, Style: v.app.chartStyle(),
 		Palette: calmPalette(v.app.Styles.Semantic()), Main: v.main, Moved: !v.atEnd, Offers: v.offers(),
-		Episodes: v.episodes, Peers: v.peers,
+		Episodes: v.episodes, Peers: v.peers, Namespace: v.app.Config.ActiveNamespace(),
 	}
 	var lines []string
 	switch {
@@ -845,7 +873,7 @@ func (v *graphView) render() {
 		if v.comparing {
 			name = graphCompareTitle
 		}
-		waiting := graphCalmWaiting(name, v.target.Label(), v.window, "Reading the declared Prometheus source once…")
+		waiting := graphCalmWaiting(name, graphCalmObject(&v.target, page), v.window, "Reading the declared Prometheus source once…")
 		lines = graphCalmLines(&waiting, page)
 	case v.comparing && v.detail:
 		page.First, page.Signal, page.Grouping = v.page, v.signal, v.grouping

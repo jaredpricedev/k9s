@@ -589,7 +589,7 @@ func (v *probeView) selectedLine(summary *probe.Summary) string {
 	}
 	g := v.glyphs()
 	ascii := v.noIcons()
-	parts := []string{probe.ShortName(target.Pod.Name, ascii)}
+	parts := []string{v.plan.ShortName(target.Pod.Name)}
 	where := target.Pod.Node
 	if where != "" && target.Pod.Zone != "" {
 		where += " (" + target.Pod.Zone + ")"
@@ -653,7 +653,7 @@ func (v *probeView) measuredNote(summary *probe.Summary, short bool) string {
 	floor, brief := "", ""
 	switch {
 	case summary.FloorPod >= 0 && v.plan != nil && summary.Compared > 1:
-		name := probe.ShortName(v.plan.Targets[summary.FloorPod].Pod.Name, v.noIcons())
+		name := v.plan.ShortName(v.plan.Targets[summary.FloorPod].Pod.Name)
 		floor = fmt.Sprintf(" The proxy adds its own time to every answer: the fastest Pod here, %s, has a median of %s, which is the floor.",
 			name, probe.Seconds(summary.Floor.Seconds()))
 		brief = " Floor: " + probe.Seconds(summary.Floor.Seconds()) + "."
@@ -684,7 +684,7 @@ func (v *probeView) nextLine(summary *probe.Summary) string {
 	ran := v.run != nil && v.run.Sent() > 0
 	switch {
 	case ran && flagged >= 0:
-		name := probe.ShortName(v.plan.Targets[flagged].Pod.Name, v.noIcons())
+		name := v.plan.ShortName(v.plan.Targets[flagged].Pod.Name)
 		if v.plan.Targets[flagged].Pod.Name != v.selected {
 			parts = append(parts, "select "+name)
 		}

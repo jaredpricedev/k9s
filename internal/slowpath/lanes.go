@@ -26,7 +26,7 @@ type Lane struct {
 	Label, Short string
 	Names        []string
 	// Phrase says what a mark means ("CPU throttling"); Where says where
-	// ("on pod …-hx4mt", "at the ingress").
+	// ("on pod hx4mt", "at the ingress").
 	Phrase, Where string
 	// Pod is the one Pod every mark belongs to, or empty.
 	Pod string

@@ -30,6 +30,93 @@ const (
 	calmNextChartLabel  = "Next chart"
 )
 
+// The words of the two key lines are the same in every incident view: a
+// key that does the same thing is written the same way. A capital letter
+// is the key with Shift, as the approved pages write it (B is Shift-B);
+// the menu at the top of the screen spells the chord out.
+const (
+	calmProbeKeyName   = "B"
+	calmSlowKeyName    = "W"
+	calmGrafanaKeyName = "D"
+
+	calmNextProbe   = "probe the pods now"
+	calmNextCompare = "compare the pods"
+	calmNextGrafana = "open in Grafana"
+	calmNextReread  = "read again"
+
+	calmKeyTime    = "←→ time"
+	calmKeyWindow  = "1-4 window"
+	calmKeyQueries = calm.QueriesKey + " queries"
+	calmKeyReread  = "r re-read"
+	calmKeyBack    = "Esc back"
+)
+
+// calmKeyLine is the second key line of a page. Every incident view
+// writes its keys in this one order: what the arrows move, the window,
+// all detail, the queries, the view's own keys, reading again, the way
+// out. The kit drops from the right what a narrow line has no room for,
+// and keeps the way out, all detail and the queries longest.
+type calmKeyLine struct {
+	// Move is what Up and Down move over: "↑↓ row". Empty when they move
+	// nothing.
+	Move string
+	// Time says Left and Right move the time cursor.
+	Time bool
+	// Window is the window keys: calmKeyWindow, or the view's own words
+	// where the digits mean something else. Empty when there are none.
+	Window string
+	// Detail is what the all-detail key shows, in the view's words:
+	// "show every signal". Empty when the key is on the next line.
+	Detail string
+	// Queries says s shows the queries, the rules and the sample counts.
+	// It is false when the key is on the next line.
+	Queries bool
+	// Own are the keys only this view has, and its hand-offs.
+	Own []string
+	// Reread says r reads again. It is false when the key is on the next
+	// line.
+	Reread bool
+}
+
+func (k *calmKeyLine) parts() []string {
+	parts := make([]string, 0, 8+len(k.Own))
+	if k.Move != "" {
+		parts = append(parts, k.Move)
+	}
+	if k.Time {
+		parts = append(parts, calmKeyTime)
+	}
+	if k.Window != "" {
+		parts = append(parts, k.Window)
+	}
+	if k.Detail != "" {
+		parts = append(parts, calm.DetailKey+" "+k.Detail)
+	}
+	if k.Queries {
+		parts = append(parts, calmKeyQueries)
+	}
+	for _, own := range k.Own {
+		if own != "" {
+			parts = append(parts, own)
+		}
+	}
+	if k.Reread {
+		parts = append(parts, calmKeyReread)
+	}
+	return append(parts, calmKeyBack)
+}
+
+// calmObject names what a calm page looks at: its kind and its name. The
+// namespace is written when it is not the one the session is in, which
+// the first line of the screen already states; a page opened from a list
+// of every namespace always names it.
+func calmObject(active, kind, namespace, name string) string {
+	if namespace == "" || namespace == active {
+		return kind + " " + name
+	}
+	return kind + " " + namespace + "/" + name
+}
+
 // calmPalette maps the semantic palette onto the colours of a calm page:
 // one token per role, never a colour of its own.
 func calmPalette(p config.SemanticPalette) calm.Palette { //nolint:gocritic // The palette is passed by value, as graphPalette takes it.

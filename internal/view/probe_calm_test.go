@@ -44,24 +44,24 @@ func TestProbeCalmPageStatesTheAnswerFirstAtEverySize(t *testing.T) {
 		flat := strings.Join(strings.Fields(frame), " ")
 		// The answer comes first, and the caveat that keeps it honest.
 		require.True(t, strings.HasPrefix(lines[0], "Probe  Service gitlab/gitlab-"), lines[0])
-		require.True(t, strings.HasPrefix(lines[2], "  Only …-hx4mt answered slowly: median 2.73s against "), "%d columns: %q", size[0], lines[2])
+		require.True(t, strings.HasPrefix(lines[2], "  Only hx4mt answered slowly: median 2.73s against "), "%d columns: %q", size[0], lines[2])
 		require.Contains(t, flat, "1 of 5 had no answer within 5s.")
 		require.Contains(t, flat, "The other 2 Pods answered all 10 requests in")
 		require.Contains(t, flat, probeDifferenceCaveat)
 		// A Pod, where it runs, its requests, its median and its word are
 		// one row, and a Pod has one row.
-		require.Regexp(t, `(?m)^> …-hx4mt +worker-f .*\S +2\.73s .*OUTLIER$`, frame, "%d columns", size[0])
-		require.Regexp(t, `(?m)^  …-2bq7k +worker-d .*\S +\d+ms$`, frame, "%d columns", size[0])
-		require.Equal(t, 1, strings.Count(frame, "…-hx4mt  worker-f"))
+		require.Regexp(t, `(?m)^> hx4mt +worker-f .*\S +2\.73s .*OUTLIER$`, frame, "%d columns", size[0])
+		require.Regexp(t, `(?m)^  2bq7k +worker-d .*\S +\d+ms$`, frame, "%d columns", size[0])
+		require.Equal(t, 1, strings.Count(frame, "hx4mt  worker-f"))
 		// The Pod that stands out comes first, under its own label.
-		slow, outlier := strings.Index(frame, probeSlowLabel), strings.Index(frame, "…-hx4mt  worker-f")
-		alike, peer := strings.Index(frame, probeAlikeLabel), strings.Index(frame, "…-2bq7k  worker-d")
+		slow, outlier := strings.Index(frame, probeSlowLabel), strings.Index(frame, "hx4mt  worker-f")
+		alike, peer := strings.Index(frame, probeAlikeLabel), strings.Index(frame, "2bq7k  worker-d")
 		require.True(t, 0 < slow && slow < outlier && outlier < alike && alike < peer, "%d columns: %d %d %d %d", size[0], slow, outlier, alike, peer)
 		// What the time covers is one line, and it is never left out.
 		require.Equal(t, 1, strings.Count(frame, probeMeasuredLabel))
 		require.Regexp(t, `(?m)^  MEASURED  API server → Pod, not ingress or Service`, frame)
 		// Two lines of keys: the likely ones in words, then the rest.
-		require.Regexp(t, `(?m)^  next  Enter open …-hx4mt`, frame)
+		require.Regexp(t, `(?m)^  next  Enter open hx4mt`, frame)
 		require.Regexp(t, `(?m)^  ↑↓ pod · a every time and status code .*Esc back$`, frame)
 		lower := strings.ToLower(flat)
 		require.NotContains(t, lower, "healthy")
@@ -74,23 +74,23 @@ func TestProbeCalmPageStatesTheAnswerFirstAtEverySize(t *testing.T) {
 	wide := drawnText(t, v, 132, 33)
 	require.Empty(t, v.dropped, "132x36 gives nothing up")
 	for _, shown := range []string{"sent 14:02 · 15 of 15 requests", "study-zone-c", ": a slow Pod, not a slow path · full bar █ = ",
-		"  next  Enter open …-hx4mt    m graph its CPU    r run again    W slow requests by hop\n",
+		"  next  Enter open hx4mt    m graph its CPU    r run again    W slow requests by hop\n",
 		"  ↑↓ pod · a every time and status code · +/_ ×5 per pod · u liveness probe · t timeline · m graph · D Grafana · Esc back\n"} {
 		require.Contains(t, wide, shown)
 	}
 	require.Regexp(t, `(?m)^  SLOWER THAN ITS PEERS +median$`, wide)
-	require.Regexp(t, `…-hx4mt  worker-f study-zone-c  (\S ){4}\S +2\.73s +peers [\d.]+ms +OUTLIER`, wide, "one cell per request, with a blank between two")
+	require.Regexp(t, `hx4mt  worker-f study-zone-c  (\S ){4}\S +2\.73s +peers [\d.]+ms +OUTLIER`, wide, "one cell per request, with a blank between two")
 	require.Contains(t, wide, "×", "a request without an answer is a cross, not a bar")
 	require.Regexp(t, `(?m)^  MEASURED  .* · full bar █ = \d+s · floor [\d.]+ms \(fastest Pod\)$`, wide, "the floor says whose time it is")
 
 	// 80x24 keeps every row, every strip and what the median is held
 	// against. At 60 columns that comparison goes first.
-	require.Regexp(t, `…-hx4mt  worker-f study-zone-c  (\S ){4}\S +2\.73s +peers [\d.]+ms +OUTLIER`, drawnText(t, v, 80, 21))
+	require.Regexp(t, `hx4mt  worker-f study-zone-c  (\S ){4}\S +2\.73s +peers [\d.]+ms +OUTLIER`, drawnText(t, v, 80, 21))
 	require.Empty(t, v.dropped)
 	narrow := drawnText(t, v, 60, 21)
 	require.Equal(t, []string{"what each number is compared with"}, v.dropped)
 	require.NotContains(t, narrow, "peers ")
-	require.Regexp(t, `…-hx4mt  worker-f \S+…  (\S ){4}\S +2\.73s +OUTLIER`, narrow, "where it runs shortens before the strip does")
+	require.Regexp(t, `hx4mt  worker-f \S+…  (\S ){4}\S +2\.73s +OUTLIER`, narrow, "where it runs shortens before the strip does")
 
 	// A second run keeps the first as a dimmer strip on the same row, named
 	// once over the rows.
@@ -98,14 +98,14 @@ func TestProbeCalmPageStatesTheAnswerFirstAtEverySize(t *testing.T) {
 	frame := drawnText(t, v, 132, 33)
 	require.Equal(t, 1, strings.Count(frame, "previous 14:02:11Z"))
 	require.Regexp(t, `(?m)^ +this run +previous 14:02:11Z$`, frame)
-	require.Regexp(t, `(?m)^> …-hx4mt  worker-f study-zone-c  (\S ){4}\S +(\S ){4}\S +2\.73s`, frame)
-	require.Equal(t, 1, strings.Count(frame, "…-hx4mt  worker-f"), "the run before is not a second row")
+	require.Regexp(t, `(?m)^> hx4mt  worker-f study-zone-c  (\S ){4}\S +(\S ){4}\S +2\.73s`, frame)
+	require.Equal(t, 1, strings.Count(frame, "hx4mt  worker-f"), "the run before is not a second row")
 	require.Empty(t, v.dropped)
 	// At 80 columns the two strips stand side by side without blanks, and
 	// the text gives way for them.
 	frame = drawnText(t, v, 80, 21)
 	require.Regexp(t, `(?m)^ +this run +previous 14:02:11Z$`, frame)
-	require.Regexp(t, `(?m)^> …-hx4mt  worker-f study-zone-c  \S{5} +\S{5} +2\.73s +OUTLIER$`, frame)
+	require.Regexp(t, `(?m)^> hx4mt  worker-f study-zone-c  \S{5} +\S{5} +2\.73s +OUTLIER$`, frame)
 	require.Equal(t, []string{"what each number is compared with"}, v.dropped)
 	// At 60 the run before is the first evidence to go, and the page says so.
 	frame = drawnText(t, v, 60, 21)
@@ -118,8 +118,8 @@ func TestProbeCalmPageStatesTheAnswerFirstAtEverySize(t *testing.T) {
 	probePress(t, v, tcell.KeyDown)
 	require.Equal(t, probePodA, v.selected)
 	frame = drawnText(t, v, 132, 33)
-	require.Regexp(t, `(?m)^> …-2bq7k `, frame)
-	require.Contains(t, frame, "  next  Enter open …-2bq7k")
+	require.Regexp(t, `(?m)^> 2bq7k `, frame)
+	require.Contains(t, frame, "  next  Enter open 2bq7k")
 	probePress(t, v, tcell.KeyDown)
 	probePress(t, v, tcell.KeyDown)
 	require.Equal(t, probePodB, v.selected, "the cursor stops at the last row")
@@ -148,13 +148,13 @@ func TestProbeCalmNoIconsUsesASCIIOnly(t *testing.T) {
 		for _, glyph := range []string{"▁", "▂", "▇", "█", "×", "≥", "…", "·", "→", "↑", "↓", "▼"} {
 			require.NotContains(t, frame, glyph, "%d columns", size[0])
 		}
-		require.Regexp(t, `(?m)^> \.\.\.-hx4mt +worker-f .* 2\.73s .*OUTLIER$`, frame)
-		require.Contains(t, frame, "Only ...-hx4mt answered slowly")
+		require.Regexp(t, `(?m)^> hx4mt +worker-f .* 2\.73s .*OUTLIER$`, frame)
+		require.Contains(t, frame, "Only hx4mt answered slowly")
 		require.Contains(t, frame, "MEASURED  API server -> Pod, not ingress or Service")
 		require.Regexp(t, `(?m)^  Up/Down pod \| a every time and status code`, frame)
 	}
 	frame := drawnText(t, v, 132, 33)
-	require.Regexp(t, `-hx4mt  worker-f study-zone-c  ([_.:=+*#x-] ){4}[_.:=+*#x-] +([_.:=+*#x-] ){4}[_.:=+*#x-] +2\.73s`, frame)
+	require.Regexp(t, `(?m)^> hx4mt  worker-f study-zone-c  ([_.:=+*#x-] ){4}[_.:=+*#x-] +([_.:=+*#x-] ){4}[_.:=+*#x-] +2\.73s`, frame)
 	require.Contains(t, frame, "full bar # = ")
 }
 
@@ -180,10 +180,10 @@ func TestProbeCalmWhileSendingAndAfterCancel(t *testing.T) {
 	lines := strings.Split(frame, "\n")
 	require.Regexp(t, `^Probe .* sending… 11 of 15 done$`, lines[0], "a request in flight is not done")
 	require.Equal(t, "  Still sending: 11 of 15 requests have an outcome. What follows is not final.", lines[2])
-	require.Less(t, strings.Index(frame, probeRunningLabel), strings.Index(frame, "…-2bq7k"))
-	require.Less(t, strings.Index(frame, "…-2bq7k"), strings.Index(frame, "…-8wzpd"))
-	require.Less(t, strings.Index(frame, "…-8wzpd"), strings.Index(frame, "…-hx4mt  worker-f"), "no row moves while answers arrive")
-	require.Regexp(t, `(?m)^> …-hx4mt  worker-f study-zone-c  \S ~ · · · +2\.32s .*probing$`, frame, "in flight is drawn as such")
+	require.Less(t, strings.Index(frame, probeRunningLabel), strings.Index(frame, "2bq7k"))
+	require.Less(t, strings.Index(frame, "2bq7k"), strings.Index(frame, "8wzpd"))
+	require.Less(t, strings.Index(frame, "8wzpd"), strings.Index(frame, "hx4mt  worker-f"), "no row moves while answers arrive")
+	require.Regexp(t, `(?m)^> hx4mt  worker-f study-zone-c  \S ~ · · · +2\.32s .*probing$`, frame, "in flight is drawn as such")
 	require.Contains(t, frame, "  next  Esc cancel; what was not sent stays unsent\n")
 	require.NotContains(t, frame, "run again")
 
@@ -193,10 +193,10 @@ func TestProbeCalmWhileSendingAndAfterCancel(t *testing.T) {
 	frame = drawnText(t, v, 132, 33)
 	lines = strings.Split(frame, "\n")
 	require.Regexp(t, `^Probe .* sent \d\d:\d\d · 12 of 15 requests$`, lines[0], "what left is counted as sent")
-	require.True(t, strings.HasPrefix(lines[2], "  Only …-hx4mt answered slowly: median 2.32s against 20ms for its 2 peers."), lines[2])
+	require.True(t, strings.HasPrefix(lines[2], "  Only hx4mt answered slowly: median 2.32s against 20ms for its 2 peers."), lines[2])
 	require.Contains(t, strings.Join(strings.Fields(frame), " "), "Canceled: 12 of 15 requests were sent, 1 of them still in flight and abandoned "+
 		"without an answer (the application may still handle it); the rest were not.")
-	require.Regexp(t, `(?m)^> …-hx4mt  worker-f study-zone-c  \S \? · · · `, frame, "abandoned, not unsent")
+	require.Regexp(t, `(?m)^> hx4mt  worker-f study-zone-c  \S \? · · · `, frame, "abandoned, not unsent")
 	require.Contains(t, frame, "r run again")
 }
 
@@ -225,19 +225,19 @@ func TestProbeCalmFlagsTimeoutsWithoutPeers(t *testing.T) {
 	require.Equal(t, probePodB, v.selected)
 	frame := drawnText(t, v, 132, 33)
 	flat := strings.Join(strings.Fields(frame), " ")
-	require.Contains(t, flat, "…-8wzpd gave no answer within 5s to 2 of 20 requests; its 18 answers took 20ms.")
+	require.Contains(t, flat, "8wzpd gave no answer within 5s to 2 of 20 requests; its 18 answers took 20ms.")
 	require.Contains(t, flat, "The other Pod answered all 20 requests in 20ms or less.")
 	require.Less(t, strings.Index(frame, probeFailedLabel), strings.Index(frame, probeAnsweredLabel))
 	row := ""
 	for _, line := range strings.Split(frame, "\n") {
-		if strings.HasPrefix(line, "> …-8wzpd") {
+		if strings.HasPrefix(line, "> 8wzpd") {
 			row = line
 		}
 	}
 	require.Regexp(t, `20ms +2 of 20 unanswered +TIMEOUTS$`, row)
 	require.Equal(t, 2, strings.Count(row, "×"), "each request without an answer is a cross in its place")
 	require.Regexp(t, `study-zone-b  ([▂×] ){19}[▂×] +20ms`, row, "all twenty requests are on the row")
-	require.Regexp(t, `(?m)^  …-2bq7k  worker-d study-zone-a  (▂ ){19}▂ +20ms$`, frame)
+	require.Regexp(t, `(?m)^  2bq7k  worker-d study-zone-a  (▂ ){19}▂ +20ms$`, frame)
 }
 
 func TestProbeCalmStatesWhyNothingCanBeSent(t *testing.T) {
@@ -250,10 +250,10 @@ func TestProbeCalmStatesWhyNothingCanBeSent(t *testing.T) {
 	require.Equal(t, "  Nothing can be sent.", lines[2])
 	require.Contains(t, strings.Join(strings.Fields(frame), " "), "The listed Pod does not declare an httpGet readinessProbe or livenessProbe, "+
 		"and this command sends only a request a Pod declares for itself. The path is never typed.")
-	require.Contains(t, frame, "  NOT CONTACTED\n> gitlab-gitaly-0  no declared HTTP probe\n")
+	require.Contains(t, frame, "  NOT CONTACTED\n> gitaly-0  no declared HTTP probe\n")
 	require.NotContains(t, frame, "r send", "a key that would send nothing is not offered")
 	require.NotContains(t, frame, "+/_")
-	require.Contains(t, frame, "  next  Enter open gitlab-gitaly-0\n")
+	require.Contains(t, frame, "  next  Enter open gitaly-0\n")
 	probePress(t, v, ui.KeyR)
 	require.Nil(t, v.confirm)
 	require.Zero(t, story.calls.Load())
@@ -268,7 +268,7 @@ func TestProbeCalmStatesWhyNothingCanBeSent(t *testing.T) {
 	require.Contains(t, flat, `The API server says this user is missing RBAC verb "get" on resource "pods/proxy" (core API group) in namespace "gitlab".`)
 	require.Contains(t, flat, "Nothing was sent and r will send nothing.")
 	require.NotContains(t, frame, "r send")
-	require.Contains(t, frame, "  NOT ASKED\n> …-2bq7k  worker-d study-zone-a\n", "the Pods are listed, and not as Pods that would be asked")
+	require.Contains(t, frame, "  NOT ASKED\n> 2bq7k  worker-d study-zone-a\n", "the Pods are listed, and not as Pods that would be asked")
 	require.NotContains(t, frame, probeListLabel)
 	probePress(t, v, ui.KeyR)
 	require.Nil(t, v.confirm)
@@ -324,10 +324,10 @@ func TestProbeCalmKeepsTheCursorOnScreen(t *testing.T) {
 	}))
 	require.True(t, strings.HasSuffix(v.selected, "-p03"))
 	frame := drawnText(t, v, 80, 21)
-	require.Regexp(t, `(?m)^> …-p03 .* 2s .*OUTLIER$`, frame)
-	require.Regexp(t, `(?m)^  …-p00 +worker-d .* 20ms$`, frame)
+	require.Regexp(t, `(?m)^> p03 .* 2s .*OUTLIER$`, frame)
+	require.Regexp(t, `(?m)^  p00 +worker-d .* 20ms$`, frame)
 	require.Regexp(t, `not shown at this size \(a shows all\): \d+ of 15 rows of LIKE THEIR PEERS`, frame)
-	require.NotRegexp(t, `(?m)^  …-p15 `, frame)
+	require.NotRegexp(t, `(?m)^  p15 `, frame)
 	// At 132x36 every Pod has its row.
 	frame = drawnText(t, v, 132, 33)
 	require.Equal(t, probe.MaxPods, strings.Count(frame, "worker-d study-zone-a"))
@@ -336,13 +336,13 @@ func TestProbeCalmKeepsTheCursorOnScreen(t *testing.T) {
 	probePress(t, v, tcell.KeyDown)
 	require.True(t, strings.HasSuffix(v.selected, "-p00"), "after the Pod that stands out come its peers, in order")
 	frame = drawnText(t, v, 80, 21)
-	require.Regexp(t, `(?m)^> …-p00 `, frame)
+	require.Regexp(t, `(?m)^> p00 `, frame)
 	probePress(t, v, tcell.KeyEnd)
 	require.True(t, strings.HasSuffix(v.selected, "-p15"))
 	frame = drawnText(t, v, 80, 21)
-	require.Regexp(t, `(?m)^> …-p15 `, frame, "the rows turn to keep the cursor on screen")
-	require.Contains(t, frame, "  next  Enter open …-p15")
-	require.Regexp(t, `(?m)^> …-p03 |^  …-p03 `, frame, "the Pod that stands out keeps its row")
+	require.Regexp(t, `(?m)^> p15 `, frame, "the rows turn to keep the cursor on screen")
+	require.Contains(t, frame, "  next  Enter open p15")
+	require.Regexp(t, `(?m)^> p03 |^  p03 `, frame, "the Pod that stands out keeps its row")
 }
 
 // a changes what is drawn and nothing else: it sends nothing, and the
@@ -364,7 +364,9 @@ func TestProbeAllDetailChangesWhatIsDrawnNeverWhatIsSent(t *testing.T) {
 	frame := drawnText(t, v, 132, 33)
 	for _, shown := range []string{"VS PEERS", "FASTEST", "CODES", "Result", "HTTP 200 ×4", "which is the floor",
 		"The difference is between Pods, now. The request did not pass the ingress or the Service, so neither slowed it."} {
-		require.Contains(t, frame, shown, "everything the view showed before is under a")
+		// A sentence wraps where the width ends: the words are looked for
+		// across the line breaks.
+		require.Contains(t, strings.Join(strings.Fields(frame), " "), shown, "everything the view showed before is under a")
 	}
 	probeDetail(t, v, false)
 	frame = drawnText(t, v, 132, 33)

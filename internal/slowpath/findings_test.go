@@ -89,9 +89,9 @@ func TestTheAnswerStatesTheEpisodesAndWhatLinesUpInPlainWords(t *testing.T) {
 	assert.Equal(t, [2]string{"stall", "stalls"}, [2]string{answer.Noun, answer.Nouns}, "a client that gave up waiting is a stall")
 	assert.Equal(t, "3 stalls: clients gave up waiting at 07:28, 07:47 and 08:13 UTC, for 2 to 4 minutes each.", answer.Lead)
 	assert.Equal(t, "3 stalls: clients gave up waiting, for 2 to 4 minutes each.", answer.Brief, "without the times, for a page that draws them")
-	assert.Equal(t, "All 3 line up with slow p99, queueing, no free threads and CPU throttling on pod …-hx4mt.", answer.Lines)
-	assert.Equal(t, "All 3 line up with 4 signals on pod …-hx4mt.", answer.Counted, "for a page whose rows name the signals")
-	assert.Equal(t, []string{"2 of 3 also line up with not Ready on pod …-hx4mt."}, answer.More)
+	assert.Equal(t, "All 3 line up with slow p99, queueing, no free threads and CPU throttling on pod hx4mt.", answer.Lines)
+	assert.Equal(t, "All 3 line up with 4 signals on pod hx4mt.", answer.Counted, "for a page whose rows name the signals")
+	assert.Equal(t, []string{"2 of 3 also line up with not Ready on pod hx4mt."}, answer.More)
 	assert.Equal(t, "Overlap in time, not proof of cause.", answer.Caveat)
 	assert.Empty(t, answer.Coarse)
 	assert.Empty(t, answer.Differs)
@@ -103,7 +103,7 @@ func TestTheAnswerStatesTheEpisodesAndWhatLinesUpInPlainWords(t *testing.T) {
 	// One episode is "it"; a short window writes seconds.
 	short := slowtest.Report(&slowtest.Story{}, slowtest.Sources(), slowtest.Path(), 15*time.Minute).Answer()
 	assert.Equal(t, "1 stall: clients gave up waiting at 08:13:00 UTC, for 2 minutes.", short.Lead)
-	assert.Equal(t, "It lines up with slow p99, queueing, no free threads and CPU throttling on pod …-hx4mt.", short.Lines)
+	assert.Equal(t, "It lines up with slow p99, queueing, no free threads and CPU throttling on pod hx4mt.", short.Lines)
 	assert.Equal(t, []string{"Nothing else lines up."}, short.More)
 
 	// A wide window says what it cannot show.
@@ -119,9 +119,9 @@ func TestTheAnswerStatesTheEpisodesAndWhatLinesUpInPlainWords(t *testing.T) {
 	direct := slowtest.Report(&slowtest.Story{}, slowtest.Sources(), path, time.Hour)
 	answer = direct.Answer()
 	assert.Equal(t, [2]string{"episode", "episodes"}, [2]string{answer.Noun, answer.Nouns})
-	assert.Equal(t, "2 episodes of not Ready on pod …-hx4mt at 07:29 and 07:48 UTC, for 2 to 3 minutes each.", answer.Lead)
-	assert.Equal(t, "2 episodes of not Ready on pod …-hx4mt, for 2 to 3 minutes each.", answer.Brief)
-	assert.Equal(t, "Both line up with slow p99, queueing, no free threads and CPU throttling on pod …-hx4mt.", answer.Lines)
+	assert.Equal(t, "2 episodes of not Ready on pod hx4mt at 07:29 and 07:48 UTC, for 2 to 3 minutes each.", answer.Lead)
+	assert.Equal(t, "2 episodes of not Ready on pod hx4mt, for 2 to 3 minutes each.", answer.Brief)
+	assert.Equal(t, "Both line up with slow p99, queueing, no free threads and CPU throttling on pod hx4mt.", answer.Lines)
 	assert.Equal(t, []string{"Nothing else that was read lines up."}, answer.More, "the ingress was not read")
 	assert.Equal(t, slowpath.LaneNotRead, relations(direct)[slowpath.HopIngress])
 }
@@ -189,7 +189,7 @@ func TestTheAnswerNeverJoinsLanesThatOverlapDifferentEpisodes(t *testing.T) {
 	report := slowpath.Evaluate(plan, slowpath.Collect(t.Context(), &slowtest.Story{}, plan), alerts, slowtest.Now)
 	answer := report.Answer()
 	assert.Equal(t, []string{
-		"2 of 3 also line up with not Ready on pod …-hx4mt.",
+		"2 of 3 also line up with not Ready on pod hx4mt.",
 		"1 of 3 also lines up with a rollout or new Pod and a firing alert.",
 	}, answer.More)
 	got := relations(report)
@@ -238,7 +238,7 @@ func TestTheAnswerOfAWindowWithoutEpisodesSaysWhatWasReadAndNoMore(t *testing.T)
 	report := slowpath.Evaluate(plan, slowpath.Collect(t.Context(), steady, plan), nil, slowtest.Now)
 	answer := report.Answer()
 	assert.Equal(t, slowpath.AnswerQuiet, answer.Kind)
-	assert.Equal(t, []string{"Pod …-hx4mt usually differs from its peers: p99 2s (peers 305ms)."}, answer.Differs)
+	assert.Equal(t, []string{"Pod hx4mt usually differs from its peers: p99 2s (peers 305ms)."}, answer.Differs)
 	assert.Equal(t, "A difference, not proof of cause.", answer.Caveat)
 	usuals := report.Usuals()
 	require.Len(t, usuals, 1)

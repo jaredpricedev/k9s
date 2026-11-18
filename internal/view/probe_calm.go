@@ -184,7 +184,7 @@ func (v *probeView) calmRow(index int, summary *probe.Summary, strips bool, o ca
 	}
 	// Where a Pod runs is beside the point of its row: dim, also on the row
 	// of a Pod that stands out.
-	row := calm.Row{Subject: probe.ShortName(target.Pod.Name, o.ASCII), What: strings.Join(where, " "), Aside: true, Selected: target.Pod.Name == v.selected}
+	row := calm.Row{Subject: v.plan.ShortName(target.Pod.Name), What: strings.Join(where, " "), Aside: true, Selected: target.Pod.Name == v.selected}
 	if target.Request == nil {
 		row.What, row.Aside = target.Skip, false
 		return row
@@ -324,7 +324,8 @@ func (v *probeView) calmVerdict(summary *probe.Summary, ascii bool) calm.Verdict
 }
 
 func (v *probeView) calmTitle() calm.Title {
-	title := calm.Title{View: probeTitle, Object: v.scope.Label(), Verb: "sent", Unit: "requests"}
+	title := calm.Title{View: probeTitle, Object: calmObject(v.app.Config.ActiveNamespace(), v.scope.Kind, v.scope.Namespace, v.scope.Name),
+		Verb: "sent", Unit: "requests"}
 	_, title.Window = v.requestWords()
 	switch {
 	case !v.destinationCurrent():
@@ -401,7 +402,7 @@ func (v *probeView) calmNext(summary *probe.Summary, ascii bool) []calm.Action {
 	target := v.selectedTarget()
 	open := func() {
 		if target != nil {
-			next = append(next, calm.Action{Key: "Enter", Label: "open " + probe.ShortName(target.Pod.Name, ascii)})
+			next = append(next, calm.Action{Key: "Enter", Label: "open " + v.plan.ShortName(target.Pod.Name)})
 		}
 	}
 	more := func() {
@@ -447,7 +448,7 @@ func (v *probeView) calmNext(summary *probe.Summary, ascii bool) []calm.Action {
 		more()
 	}
 	if _, err := slowTarget(v.scopeTarget()); err == nil {
-		next = append(next, calm.Action{Key: "W", Label: "slow requests by hop"})
+		next = append(next, calm.Action{Key: calmSlowKeyName, Label: "slow requests by hop"})
 	}
 	return next
 }
@@ -455,25 +456,25 @@ func (v *probeView) calmNext(summary *probe.Summary, ascii bool) []calm.Action {
 // calmKeys is every other key, in the order a narrow line keeps them.
 func (v *probeView) calmKeys() []string {
 	if v.plan == nil {
-		return []string{"Esc back"}
+		return (&calmKeyLine{}).parts()
 	}
 	if v.running {
 		// Esc is on the first key line while a probe runs: it cancels.
 		return []string{"↑↓ pod", calm.DetailKey + " every time and status code"}
 	}
 	g := v.glyphs()
-	// a comes early: a narrow line gives up what is at its end.
-	keys := []string{"↑↓ pod", calm.DetailKey + " all detail"}
+	keys := calmKeyLine{Move: "↑↓ pod", Detail: "all detail"}
 	if v.ran() {
-		keys[1] = calm.DetailKey + " every time and status code"
+		keys.Detail = "every time and status code"
 	}
 	if v.runUnavailable() == "" {
-		keys = append(keys, fmt.Sprintf("+/_ %s%d per pod", g.times, v.attempts))
+		keys.Own = append(keys.Own, fmt.Sprintf("+/_ %s%d per pod", g.times, v.attempts))
 		if v.ran() && len(v.plan.Available) > 1 {
-			keys = append(keys, "u "+v.otherKind()+" probe")
+			keys.Own = append(keys.Own, "u "+v.otherKind()+" probe")
 		}
 	}
-	return append(keys, "t timeline", "m graph", "D Grafana", "Esc back")
+	keys.Own = append(keys.Own, "t timeline", "m graph", calmGrafanaKeyName+" Grafana")
+	return keys.parts()
 }
 
 // calmPage builds the page from the plan and the runs.

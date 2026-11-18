@@ -1081,8 +1081,8 @@ func (v *slowView) laneLabel(report *slowpath.Report, lane *slowpath.Lane, width
 	if len(lane.Names) > 1 {
 		more = fmt.Sprintf(" +%d", len(lane.Names)-1)
 	}
-	// What the mark means goes before where the hop is: "not ready …-hx4mt"
-	// says more than "endpoints …-hx4mt".
+	// What the mark means goes before where the hop is: "not ready hx4mt"
+	// says more than "endpoints hx4mt".
 	for _, text := range []string{lane.Short + " " + pod + ": " + lane.Names[0] + more, lane.Names[0] + more + " " + pod, lane.Short + " " + pod} {
 		if runewidth.StringWidth(v.plain(text)) <= width {
 			return v.plain(text)

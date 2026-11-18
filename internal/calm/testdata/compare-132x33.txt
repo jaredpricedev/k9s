@@ -26,4 +26,4 @@ Compare pods  Deployment gitlab-webservice-default · 3 pods · last 1h         
 
   next  Enter open hx4mt    g group by node / revision / zone    B probe the pods now
 
-  ↑↓ signal · ←→ time · 1-4 window · a show every signal · Esc back
+  ↑↓ signal · ←→ time · 1-4 window · a show every signal · s queries · Esc back

@@ -761,12 +761,26 @@ func TestGraphViewComparisonKeysReadOnRequestOnly(t *testing.T) {
 	require.False(t, v.comparing)
 
 	// The header names the keys: the three of the comparison only where
-	// there are Pods to compare, and a for all detail.
-	for k, want := range map[tcell.Key]string{ui.KeyP: "Per pod", ui.KeyN: "Next signal", ui.KeyG: "Regroup", calmDetailKey: calmDetailLabel} {
+	// there are Pods to compare, and a for all detail. n is named after
+	// what the page steps through: the chart here, on the charts.
+	for k, want := range map[tcell.Key]string{ui.KeyP: "Per pod", ui.KeyN: calmNextChartLabel, ui.KeyG: "Regroup", calmDetailKey: calmDetailLabel} {
 		action, _ := v.actions.Get(k)
 		require.Equal(t, want, action.Description)
 		require.True(t, action.Opts.Visible)
 		require.Positive(t, action.Opts.Priority)
+	}
+	// On the per-Pod page it steps the marked signal, and says so; back
+	// on the charts it is the chart again.
+	key(ui.KeyP)
+	for k, want := range map[tcell.Key]string{ui.KeyN: "Next signal", ui.KeyShiftN: "Previous signal"} {
+		action, _ := v.actions.Get(k)
+		require.Equal(t, want, action.Description)
+		require.True(t, action.Opts.Visible)
+	}
+	key(ui.KeyP)
+	for k, want := range map[tcell.Key]string{ui.KeyN: calmNextChartLabel, ui.KeyShiftN: "Previous chart"} {
+		action, _ := v.actions.Get(k)
+		require.Equal(t, want, action.Description)
 	}
 	// Tab and Enter are named on the page where they apply, not in the
 	// header, where their usual place would put them first.

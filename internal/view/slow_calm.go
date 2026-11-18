@@ -14,7 +14,6 @@ import (
 	"github.com/derailed/k9s/internal/chart"
 	"github.com/derailed/k9s/internal/impact"
 	"github.com/derailed/k9s/internal/slowpath"
-	"github.com/derailed/tcell/v2"
 )
 
 // The calm page is what :slow opens on. It states the answer first, then
@@ -522,10 +521,7 @@ func (v *slowView) calmEvidence(report *slowpath.Report, answer *slowpath.Answer
 func (v *slowView) calmTitle() calm.Title {
 	title := calm.Title{View: slowTitle, Object: v.selection.Label()}
 	if path := v.path(); path != nil {
-		title.Object = "Service " + path.Service
-		if path.Namespace != v.app.Config.ActiveNamespace() {
-			title.Object = "Service " + path.Key()
-		}
+		title.Object = calmObject(v.app.Config.ActiveNamespace(), "Service", path.Namespace, path.Service)
 		if v.selection.Kind != slowpath.KindService {
 			title.Object += " (from " + v.selection.Kind + " " + v.selection.Name + ")"
 		}
@@ -561,11 +557,11 @@ func (v *slowView) calmNext(report *slowpath.Report, sel *slowCalmRow) []calm.Ac
 	var next []calm.Action
 	service, pods := v.serviceTarget(), len(report.Path.Pods)
 	if probeAvailability(service) == "" && pods > 0 {
-		next = append(next, calm.Action{Key: probeKeyName, Label: "probe the pods now"})
+		next = append(next, calm.Action{Key: calmProbeKeyName, Label: calmNextProbe})
 	}
 	graphs := graphAvailability(v.app, service) == ""
 	if graphs && pods > 1 {
-		next = append(next, calm.Action{Key: "m", Label: "compare the pods"})
+		next = append(next, calm.Action{Key: "m", Label: calmNextCompare})
 	}
 	switch {
 	case sel == nil:
@@ -575,26 +571,27 @@ func (v *slowView) calmNext(report *slowpath.Report, sel *slowCalmRow) []calm.Ac
 		next = append(next, calm.Action{Key: "Enter", Label: "its queries"})
 	}
 	if grafanaUnavailableShort(v.app, v) == "" {
-		next = append(next, calm.Action{Key: tcell.KeyNames[grafanaKey], Label: "open in Grafana"})
+		next = append(next, calm.Action{Key: calmGrafanaKeyName, Label: calmNextGrafana})
 	}
 	return next
 }
 
-// calmKeys is the second key line: every other key, the way out last. A
-// narrow line drops keys from the end, so the key for all detail and the
-// one for the queries stand before the cursor and the windows.
+// calmKeys is the second key line: every other key in the order every
+// incident view writes them, the way out last. A narrow line drops keys
+// from the end; the kit keeps the key for all detail and the one for the
+// queries longest.
 func (v *slowView) calmKeys(report *slowpath.Report, answer *slowpath.Answer) []string {
-	keys := []string{"↑↓ row", calm.DetailKey + " show every signal", "s queries", "←→ time", "1-4 window"}
+	keys := calmKeyLine{Move: "↑↓ row", Time: true, Window: calmKeyWindow, Detail: "show every signal", Queries: true, Reread: true}
 	if len(report.Episodes) > 0 {
-		keys = append(keys, "n next "+answer.Noun)
+		keys.Own = append(keys.Own, "n next "+answer.Noun)
 	}
 	if _, _, err := timelineScope(v.workloadTarget(), v.app.Config.ActiveNamespace(), ""); err == nil {
-		keys = append(keys, "t timeline")
+		keys.Own = append(keys.Own, "t timeline")
 	}
 	if len(report.Path.Pods) > 0 {
-		keys = append(keys, "h Hubble")
+		keys.Own = append(keys.Own, "h Hubble")
 	}
-	return append(keys, "r re-read", "Esc back")
+	return keys.parts()
 }
 
 // calmPage is the page of a report. brief leaves the times out of the
@@ -654,7 +651,7 @@ func (v *slowView) calmPage(report *slowpath.Report, answer *slowpath.Answer, br
 // calmBlank is the page before a report exists: a read that is under way,
 // or a selection that has no request path.
 func (v *slowView) calmBlank() calm.Page {
-	page := calm.Page{Title: v.calmTitle(), Keys: []string{"r re-read", "Esc back"}}
+	page := calm.Page{Title: v.calmTitle(), Keys: (&calmKeyLine{Reread: true}).parts()}
 	if v.read == nil {
 		page.Verdict = calm.Verdict{
 			Sentences: []string{

@@ -89,7 +89,7 @@ func TestSlowAllDetailStatesEveryHopWhenItHappenedAndWhatOverlapsAtEverySize(t *
 			require.Regexp(t, `(?m)^[> ] `+regexp.QuoteMeta(want[0])+` .*`+regexp.QuoteMeta(want[1]), slowFlatLines(frame), "%dx%d", size[0], size[1])
 		}
 		require.Contains(t, flat, "3 episodes of client give-ups (HTTP 499) at the ingress")
-		require.Contains(t, flat, "All 3 overlap slow p99, queueing, no free threads and CPU throttling on pod …-hx4mt.")
+		require.Contains(t, flat, "All 3 overlap slow p99, queueing, no free threads and CPU throttling on pod hx4mt.")
 		require.Contains(t, flat, "Overlap is order in time, not cause.")
 		require.Contains(t, frame, "██", "the lanes mark when a rule was crossed")
 		require.NotContains(t, flat, "overlap packet drops")
@@ -105,14 +105,14 @@ func TestSlowAllDetailStatesEveryHopWhenItHappenedAndWhatOverlapsAtEverySize(t *
 			require.Contains(t, flat, "client → ingress gitlab.study.example.test")
 			require.Contains(t, flat, "6.29% of requests · p99 10s")
 			require.Contains(t, flat, "> service → pods 3 pods")
-			require.Contains(t, flat, "OUTLIER 1 of 3 pods: …-hx4mt p99 48s vs peers 350ms", "the row says whether one Pod is the outlier")
-			require.Contains(t, flat, "…-hx4mt …default-6f9c7d5b84-hx4mt")
+			require.Contains(t, flat, "OUTLIER 1 of 3 pods: hx4mt p99 48s vs peers 350ms", "the row says whether one Pod is the outlier")
+			require.Contains(t, flat, "hx4mt …default-6f9c7d5b84-hx4mt")
 			require.Contains(t, flat, "p99 48s OUTLIER queued 30 · free-threads 0 · throttled 86%")
 			require.Contains(t, flat, "pods → postgresql gitlab-postgresql")
 			require.Contains(t, flat, "connections 41 quiet up 1 · active 6 · max-connections 100")
 			require.Contains(t, frame, "WHEN IT HAPPENED · 1 column = 1m · █ over its rule · × no data · UTC")
-			for _, label := range []string{"ingress: 499, p99, +1", "endpoints: not ready …-hx4mt", "pods: p99 …-hx4mt", "pods: queued …-hx4mt",
-				"pods: free-threads …-hx4mt", "pods: throttled …-hx4mt", "network: drops …-2bq7k"} {
+			for _, label := range []string{"ingress: 499, p99, +1", "endpoints: not ready hx4mt", "pods: p99 hx4mt", "pods: queued hx4mt",
+				"pods: free-threads hx4mt", "pods: throttled hx4mt", "network: drops 2bq7k"} {
 				require.Contains(t, frame, label)
 			}
 			// One column is one minute: the three stalls and, between the
@@ -120,18 +120,18 @@ func TestSlowAllDetailStatesEveryHopWhenItHappenedAndWhatOverlapsAtEverySize(t *
 			// give-ups are read from a rate over two minutes and the queue
 			// from a gauge; both fill the same cells.
 			require.Contains(t, frame, "ingress: 499, p99, +1          │········███················████······················██·····  9m of 1h")
-			require.Contains(t, frame, "pods: queued …-hx4mt           │········███················████······················██·····  9m of 1h")
-			require.Contains(t, frame, "network: drops …-2bq7k         │···················█········································  1m of 1h")
+			require.Contains(t, frame, "pods: queued hx4mt             │········███················████······················██·····  9m of 1h")
+			require.Contains(t, frame, "network: drops 2bq7k           │···················█········································  1m of 1h")
 			require.Contains(t, frame, "no marks: dependencies, dns, restarts, rollouts")
 			require.Contains(t, frame, "WHAT LINES UP")
-			require.Contains(t, flat, "2 of 3 (07:28, 07:47) overlap not Ready on pod …-hx4mt.")
-			require.Contains(t, flat, "Packet drops (POLICY_DENIED) on pod …-2bq7k: 07:39 for 1m, outside every episode.")
+			require.Contains(t, flat, "2 of 3 (07:28, 07:47) overlap not Ready on pod hx4mt.")
+			require.Contains(t, flat, "Packet drops (POLICY_DENIED) on pod 2bq7k: 07:39 for 1m, outside every episode.")
 			require.Contains(t, flat, "5xx stayed at 0%: clients gave up waiting, they were not refused.")
 			// The next steps name the sibling views by the keys that open
 			// them here: the probe, the Pods side by side on the signal that
 			// set one apart, and that Pod against its limits. The line ends
 			// on a whole step.
-			require.Contains(t, frame, "next: Shift-B probe each pod now · m p99 per pod · Enter on …-hx4mt graphs it · h Hubble · Shift-D Grafana · t timeline\n")
+			require.Contains(t, frame, "next: Shift-B probe each pod now · m p99 per pod · Enter on hx4mt graphs it · h Hubble · Shift-D Grafana · t timeline\n")
 			require.NotContains(t, frame, "p probe", "p is not the probe: Shift-B is, here as on a Service row")
 			require.Contains(t, frame, "↑↓ hop · Enter open · a less detail · ←→ cursor · n/N episode · 1-4 window · s queries · r re-read · b dots · Esc back",
 				"the key back to the calm page is named with the keys of this one")
@@ -140,19 +140,19 @@ func TestSlowAllDetailStatesEveryHopWhenItHappenedAndWhatOverlapsAtEverySize(t *
 			require.Contains(t, frame, "3 episodes of client give-ups (HTTP 499) at the ingress, 2m-4m each.")
 			require.Contains(t, frame, "  HOP                LAST 1h    WORST         STATE    EVIDENCE")
 			require.Contains(t, flat, "pods → 3 deps 3 read quiet no rule crossed: postgre", "quiet dependencies share a row when the screen is short")
-			require.Contains(t, flat, "OUTLIER 1 of 3: …-hx4mt vs 350ms")
-			require.Contains(t, frame, "pods …-hx4mt: p99 +3", "the Pod name survives a narrow label")
-			require.Contains(t, frame, "not ready …-hx4mt", "and so does what its marks mean")
-			require.Contains(t, frame, "network: drops …-2bq7k")
+			require.Contains(t, flat, "OUTLIER 1 of 3: hx4mt vs 350ms")
+			require.Contains(t, frame, "pods hx4mt: p99 +3", "the Pod name survives a narrow label")
+			require.Contains(t, frame, "not ready hx4mt", "and so does what its marks mean")
+			require.Contains(t, frame, "network: drops 2bq7k")
 			require.Contains(t, frame, "when, UTC")
 			require.Contains(t, frame, "1 column = 2m")
-			require.Contains(t, flat, "Packet drops (POLICY_DENIED) on pod …-2bq7k: 07:39 for 1m, outside every episode.")
+			require.Contains(t, flat, "Packet drops (POLICY_DENIED) on pod 2bq7k: 07:39 for 1m, outside every episode.")
 			require.Contains(t, frame, "↑↓ hop · Enter open · a less detail · ←→ cursor · 1-4 window · s queries · Esc")
 		case 60:
 			require.Contains(t, frame, "Enter open · a less detail · 1-4 window · s queries · Esc")
 			require.Contains(t, frame, "  HOP                WORST         STATE    EVIDENCE")
 			require.NotContains(t, frame, "LAST 1h", "the trend gives way before hop, key number or state")
-			for _, label := range []string{"not ready …-hx4mt", "p99 +3 …-hx4mt", "drops …-2bq7k"} {
+			for _, label := range []string{"not ready hx4mt", "p99 +3 hx4mt", "drops 2bq7k"} {
 				require.Contains(t, frame, label, "a narrow label keeps what the mark means and the Pod")
 			}
 		}
@@ -214,14 +214,14 @@ func TestSlowAllDetailNoIconsUsesPlainCharactersOnly(t *testing.T) {
 		require.Contains(t, frame, "client -> ingress")
 		require.Contains(t, frame, "OUTLIER")
 		require.Contains(t, frame, "##", "a mark is a hash")
-		require.Contains(t, frame, "...-hx4mt")
+		require.Contains(t, frame, "hx4mt")
 		lines := strings.Split(strings.TrimRight(frame, "\n "), "\n")
 		require.Regexp(t, `Esc( back)?$`, strings.TrimRight(lines[len(lines)-1], " "),
 			"the key hints are measured in the words that are drawn, and end whole at %d columns", size[0])
 	}
 	frame := drawnText(t, v, 132, 32)
 	require.Contains(t, frame, "WHEN IT HAPPENED · 1 column = 1m · # over its rule · x no data · UTC")
-	require.Contains(t, frame, "pods: queued ...-hx4mt         |........###................####......................##.....  9m of 1h")
+	require.Contains(t, frame, "pods: queued hx4mt             |........###................####......................##.....  9m of 1h")
 	require.Contains(t, frame, "> service -> pods")
 	require.Contains(t, frame, "Up/Down hop · Enter open · a less detail · Left/Right cursor")
 	require.Contains(t, frame, "latency 120us")
@@ -243,7 +243,7 @@ func TestSlowAllDetailSaysNotReadWithTheReasonAndNeverDrawsItAsQuiet(t *testing.
 	require.Contains(t, frame, "Prometheus was not read (denied: HTTP 403), so no hop has latency evidence.")
 	require.Equal(t, 7, strings.Count(frame, "not read prometheus: denied (HTTP 403)"), "every hop but the endpoints says not read, with the reason")
 	require.Contains(t, flat, "client → ingress gitlab.study.example.test - not read prometheus: denied (HTTP 403)", "no number, a dash and the words")
-	require.Contains(t, flat, "ingress → service 3 endpoints 3 of 3 ready elevated …-hx4mt Ready=True since 07:51", "the Kubernetes API still answers")
+	require.Contains(t, flat, "ingress → service 3 endpoints 3 of 3 ready elevated hx4mt Ready=True since 07:51", "the Kubernetes API still answers")
 	require.Contains(t, frame, "ingress                        │××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××  not read")
 	require.Contains(t, frame, "endpoints: Ready changed       │×××××××××××××××××××××××××××××××█····························  1 in 1h",
 		"what the API no longer knows is unknown; the change it does know is drawn")
@@ -302,19 +302,19 @@ func TestSlowAllDetailKeysOpenRowsMoveTheCursorAndShowQueries(t *testing.T) {
 	frame := drawnText(t, v, 132, 32)
 	require.Equal(t, slowRow{hop: slowpath.HopApp}, v.focus, "the table opens on the hop of the strongest finding")
 	require.Contains(t, frame, "> service → pods")
-	require.Contains(t, frame, "    …-hx4mt", "the Pods are listed when one of them is the outlier and there is room")
+	require.Contains(t, frame, "    hx4mt", "the Pods are listed when one of them is the outlier and there is room")
 
 	// Down walks hops and Pods; the focused Pod is what a graph is about.
 	slowPress(t, v, tcell.KeyDown)
 	slowPress(t, v, tcell.KeyDown)
 	slowPress(t, v, tcell.KeyDown)
 	require.Equal(t, slowRow{hop: slowpath.HopApp, pod: slowtest.Outlier}, v.focus)
-	require.Contains(t, drawnText(t, v, 132, 32), ">   …-hx4mt")
+	require.Contains(t, drawnText(t, v, 132, 32), ">   hx4mt")
 	target := v.SelectedResource()
 	require.Equal(t, client.PodGVR, target.GVR)
 	require.Equal(t, slowtest.Outlier, target.Name)
 	require.Equal(t, types.UID("uid-"+slowtest.Outlier), target.UID)
-	require.Contains(t, drawnText(t, v, 132, 32), "· m p99 of each pod side by side · Enter graphs …-hx4mt ·")
+	require.Contains(t, drawnText(t, v, 132, 32), "· m p99 of each pod side by side · Enter graphs hx4mt ·")
 	slowPress(t, v, tcell.KeyUp)
 	slowPress(t, v, tcell.KeyUp)
 	slowPress(t, v, tcell.KeyUp)
@@ -336,9 +336,9 @@ func TestSlowAllDetailKeysOpenRowsMoveTheCursorAndShowQueries(t *testing.T) {
 	slowPress(t, v, ui.KeyN)
 	frame = drawnText(t, v, 132, 32)
 	require.Contains(t, frame, "WHEN IT HAPPENED · cursor 07:28–07:29 UTC · the value of each lane at the cursor is on the right · Esc hides it")
-	require.Contains(t, frame, "pods: p99 …-hx4mt              │········███················████······················██·····  48s")
-	require.Contains(t, frame, "pods: free-threads …-hx4mt     │········███················████······················██·····  0")
-	require.Contains(t, frame, "network: drops …-2bq7k         │········┆··········█········································  0/s")
+	require.Contains(t, frame, "pods: p99 hx4mt                │········███················████······················██·····  48s")
+	require.Contains(t, frame, "pods: free-threads hx4mt       │········███················████······················██·····  0")
+	require.Contains(t, frame, "network: drops 2bq7k           │········┆··········█········································  0/s")
 	slowPress(t, v, ui.KeyN)
 	require.Contains(t, drawnText(t, v, 132, 32), "cursor 07:47–07:48 UTC")
 	slowPress(t, v, ui.KeyShiftN)
@@ -354,7 +354,7 @@ func TestSlowAllDetailKeysOpenRowsMoveTheCursorAndShowQueries(t *testing.T) {
 	frame = drawnText(t, v, 132, 32)
 	require.Contains(t, frame, "QUERIES, SAMPLES AND RULES · s or Enter returns to the lanes · lines 1-")
 	require.Contains(t, frame, "p99 [gitlab-webservice] Rails request duration, 99th percentile")
-	require.Contains(t, frame, "worst 48s at 07:28 (…-hx4mt) · usual 350ms · raised 9m of 1h in 3 stretches · 363 samples in 3 series, step 30s")
+	require.Contains(t, frame, "worst 48s at 07:28 (hx4mt) · usual 350ms · raised 9m of 1h in 3 stretches · 363 samples in 3 series, step 30s")
 	require.Contains(t, frame, "rule: raised at 3x its window median and at least 50ms above it; always raised at 5s")
 	require.Contains(t, frame, `  query: histogram_quantile(0.99, sum by (le,pod) (rate(http_request_duration_seconds_bucket{namespace="gitlab",pod=~"gitlab-web`)
 	require.Contains(t, frame, `6f9c7d5b84-hx4mt"}[120s])))`, "a query is wrapped, never cut")
@@ -488,7 +488,7 @@ func TestSlowCursorKeysAreThoseOfEveryChartView(t *testing.T) {
 	require.Zero(t, v.cursor, "the cursor stops at the start of the window")
 	press(tcell.KeyEnd, tcell.ModNone)
 	require.Equal(t, v.frame.Width-1, v.cursor)
-	require.Contains(t, drawnText(t, v, 132, 32), "cursor 08:19:02–08:20:00 UTC", "the last column of the strips")
+	require.Contains(t, drawnText(t, v, 132, 32), "cursor 08:19:04–08:20:00 UTC", "the last column of the strips")
 	// The cursor keeps its time when the page changes under it: the lanes
 	// of the all-detail page have columns of a whole minute.
 	slowAllDetail(t, v)
@@ -599,14 +599,14 @@ func TestSlowAllDetailKeepsWholeSentencesAndTheFindingWhenRowsAreFew(t *testing.
 	slowPress(t, v, tcell.KeyEnter)
 	frame := drawnText(t, v, 60, 20)
 	lines := strings.Split(strings.TrimRight(frame, "\n "), "\n")
-	require.Contains(t, frame, "    …-hx4mt")
+	require.Contains(t, frame, "    hx4mt")
 	require.Contains(t, frame, "ingress: 499, p9… │", "the lane the episodes are counted from stays")
-	require.Contains(t, frame, "p99 +3 …-hx4mt    │", "then the lane that overlaps every episode: it is what the summary speaks about")
+	require.Contains(t, frame, "p99 +3 hx4mt      │", "then the lane that overlaps every episode: it is what the summary speaks about")
 	require.Contains(t, frame, "2 more lanes with marks do not fit")
-	require.NotContains(t, frame, "not ready …-hx4mt │")
+	require.NotContains(t, frame, "not ready hx4mt   │")
 	summary := strings.TrimRight(lines[len(lines)-2], " ")
 	require.True(t, strings.HasSuffix(summary, "."), "the summary ends with a whole sentence, not in the middle of one: %q", summary)
-	require.Contains(t, strings.Join(strings.Fields(frame), " "), "All 3 overlap slow p99, queueing, no free threads and CPU throttling on pod …-hx4mt.")
+	require.Contains(t, strings.Join(strings.Fields(frame), " "), "All 3 overlap slow p99, queueing, no free threads and CPU throttling on pod hx4mt.")
 
 	// The line that names the rest gives way when exactly the marked lanes
 	// fit without it; one lane is never left out for the sake of saying so.
@@ -632,7 +632,7 @@ func TestSlowAllDetailKeepsWholeSentencesAndTheFindingWhenRowsAreFew(t *testing.
 		slowPress(t, v, tcell.KeyPgDn)
 	}
 	text := strings.Join(strings.Fields(strings.Join(detail, " ")), " ")
-	require.Contains(t, text, "worst 48s at 07:28 (…-hx4mt) · usual 350ms · raised 9m of 1h in 3 stretches · 363 samples in 3 series, step 30s")
+	require.Contains(t, text, "worst 48s at 07:28 (hx4mt) · usual 350ms · raised 9m of 1h in 3 stretches · 363 samples in 3 series, step 30s")
 	require.Contains(t, text, "rule: raised at 3x its window median and at least 50ms above it; always raised at 5s")
 	require.Contains(t, text, "rule: raised at 3x its window median and at least 25 points above it; always raised at 50%")
 	require.Contains(t, text, "stretches: read from a rate over 2m; the time a burst takes to leave that window is not counted")

@@ -339,7 +339,7 @@ func (r *Report) Usuals() []Usual {
 }
 
 // differs states each Pod whose usual level differs from its peers', with
-// the signals it differs on: "Pod …-hx4mt usually differs from its peers:
+// the signals it differs on: "Pod hx4mt usually differs from its peers:
 // p99 2s (peers 305ms)."
 func (r *Report) differs() []string {
 	var pods []string

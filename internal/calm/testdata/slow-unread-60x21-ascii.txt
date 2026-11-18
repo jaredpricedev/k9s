@@ -16,4 +16,4 @@ Slow requests  Service gitlab-we... | last 1h  14:57 | 33/35
 
   next  B probe the pods now  m compare the pods
 
-  Up/Down row | Left/Right time | 1-4 window | Esc back
+  Up/Down row | a show every signal | s queries | Esc back

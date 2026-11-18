@@ -105,11 +105,11 @@ func (r *dashRender) calmWords(title calm.Title, v calm.Verdict, next []calm.Act
 func (r *dashRender) calmFailure(failure []string) []string {
 	v := calm.Unread(failure[0], "")
 	v.Sentences = append(append(v.Sentences, failure[1:]...), "Source: "+r.s.source())
-	next := []calm.Action{{Key: "r", Label: "read again"}, {Key: "D", Label: "open in Grafana"}}
+	next := []calm.Action{{Key: "r", Label: calmNextReread}, {Key: calmGrafanaKeyName, Label: calmNextGrafana}}
 	if r.s.Spec.isQuery() && !r.s.Spec.Board {
 		next = append([]calm.Action{{Key: "e", Label: "edit the expression"}}, next...)
 	}
-	return r.calmWords(r.calmTitle(), v, next, []string{"1-4 window", "Esc back"})
+	return r.calmWords(r.calmTitle(), v, next, (&calmKeyLine{Window: calmKeyWindow}).parts())
 }
 
 // drawnPanels are the panels with at least one line, in the dashboard's
@@ -828,26 +828,19 @@ func (r *dashRender) calmProblem() []string {
 		}
 	}
 	v.Sentences = append(v.Sentences, advice)
-	next := []calm.Action{{Key: "e", Label: "edit the expression"}, {Key: "s", Label: "the query as it was sent"}, {Key: "D", Label: "open in Grafana"}}
-	return r.calmWords(r.calmTitle(), v, next, []string{r.windowKeys(), "r re-read", calm.DetailKey + " all detail", "Esc back"})
-}
-
-func (r *dashRender) windowKeys() string {
-	if r.width >= 110 {
-		return "1 15m  2 1h  3 6h  4 24h"
-	}
-	return "1-4 window"
+	next := []calm.Action{{Key: "e", Label: "edit the expression"}, {Key: calm.QueriesKey, Label: "the query as it was sent"},
+		{Key: calmGrafanaKeyName, Label: calmNextGrafana}}
+	return r.calmWords(r.calmTitle(), v, next, (&calmKeyLine{Window: calmKeyWindow, Detail: "all detail", Reread: true}).parts())
 }
 
 // calmKeys are the two key lines: the likely next steps in words, and the
 // rest in one dim line that ends with the way out.
 func (r *dashRender) calmKeys(main int, drawn []int, one bool) (next []calm.Action, keys []string) {
 	if one {
-		next = []calm.Action{{Key: "e", Label: "edit the expression"}, {Key: "s", Label: "queries, and how to save this one"},
-			{Key: "D", Label: "open in Grafana"}}
-		// A narrow line drops keys from the right, before the way out: the
-		// key for all detail stays longest.
-		return next, []string{"←→ time", r.windowKeys(), calm.DetailKey + " all detail", "r re-read", chartStyleHint(r.pg.Style), "Esc back"}
+		next = []calm.Action{{Key: "e", Label: "edit the expression"}, {Key: calm.QueriesKey, Label: "queries, and how to save this one"},
+			{Key: calmGrafanaKeyName, Label: calmNextGrafana}}
+		line := calmKeyLine{Time: true, Window: calmKeyWindow, Detail: "all detail", Own: []string{chartStyleHint(r.pg.Style)}, Reread: true}
+		return next, line.parts()
 	}
 	if len(drawn) > 1 && main >= 0 {
 		at := 0
@@ -866,20 +859,15 @@ func (r *dashRender) calmKeys(main int, drawn []int, one bool) (next []calm.Acti
 	if r.s.Spec.Board {
 		all = "all charts"
 	}
-	next = append(next, calm.Action{Key: calm.DetailKey, Label: all}, calm.Action{Key: "D", Label: "open in Grafana"})
-	if main >= 0 {
-		keys = append(keys, "←→ time")
-	}
+	next = append(next, calm.Action{Key: calm.DetailKey, Label: all}, calm.Action{Key: calmGrafanaKeyName, Label: calmNextGrafana})
+	line := calmKeyLine{Time: main >= 0, Window: calmKeyWindow, Queries: true, Reread: true}
 	if len(drawn) > 1 {
-		keys = append(keys, "↑↓ chart")
+		line.Move = "↑↓ chart"
 	}
-	// A narrow line drops keys from the right, before the way out: the
-	// key that shows the queries and every reason stays longest.
-	keys = append(keys, "s queries", r.windowKeys(), "r re-read")
 	if main >= 0 {
-		keys = append(keys, chartStyleHint(r.pg.Style))
+		line.Own = append(line.Own, chartStyleHint(r.pg.Style))
 	}
-	return next, append(keys, "Esc back")
+	return next, line.parts()
 }
 
 // calm lays the page out the calm way: what was read, one panel at full

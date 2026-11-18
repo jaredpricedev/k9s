@@ -36,6 +36,9 @@ const (
 	// DetailKey shows all the detail a view had before the calm layout:
 	// every signal, the detail table. It is the same key in every view.
 	DetailKey = "a"
+	// QueriesKey shows the queries, the rules and the sample counts behind
+	// a page. It is the same key in every view.
+	QueriesKey = "s"
 	// NextChartKey makes the next strip the main chart, in the views where
 	// n steps through nothing else (:graph, a dashboard, :query).
 	NextChartKey = "n"

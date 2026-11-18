@@ -1,19 +1,19 @@
 Slow requests  Service gitlab/gitlab-webservice-default · last 1h  08:20 · 35/35
   3 stalls: clients gave up waiting, for 2 to 4 minutes each.
-  All 3 line up with 4 signals on pod …-hx4mt.
-  2 of 3 also line up with not Ready on pod …-hx4mt.
+  All 3 line up with 4 signals on pod hx4mt.
+  2 of 3 also line up with not Ready on pod hx4mt.
   Overlap in time, not proof of cause.
-                                              stalls    ▼▼      ▼▼▼         ▼▼
+                                            stalls    ▼▼▼      ▼▼▼          ▼▼
   LINES UP WITH THE STALLS
-  ingress      client give-ups (HTTP 499) +2  6.29%  ▁▁▁██▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁
-> pod …-hx4mt  slow p99                       48s    ▁▁▁██▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁
-               queueing                       30     ▁▁▁██▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁
-               no free threads                0      ▁▁▁██▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁
-               CPU throttling                 86%    ▁▁▁██▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁
-               not Ready                      twice  ▁▁▁▁█▁▁▁▁▁▁▁██▁▁▁▁▁▁▁▁▁▁▁▁▁
-                                                     ───━┯──────━━━────┬────━━──
-  UTC                                                  07:30         08:00
+  ingress    client give-ups (HTTP 499) +2  6.29%  ▁▁▁███▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁██▁▁
+> pod hx4mt  slow p99                       48s    ▁▁▁███▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁██▁▁
+             queueing                       30     ▁▁▁███▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁██▁▁
+             no free threads                0      ▁▁▁███▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁██▁▁
+             CPU throttling                 86%    ▁▁▁███▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁██▁▁
+             not Ready                      twice  ▁▁▁▁██▁▁▁▁▁▁▁██▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+                                                   ───━┯━──────━━━────┬─────━━──
+  UTC                                                07:30          08:00
   DIFFERS, BUT NOT DURING A STALL  network packet drops (POLICY_DENIED) 0.37/s …
-  QUIET  pods …-2bq7k, …-8wzpd · 3 dependencies · dns · restarts · rollouts
-  next  Shift-B probe the pods now  m compare the pods  Enter open …-hx4mt
-  ↑↓ row · a show every signal · s queries · ←→ time · 1-4 window · Esc back
+  QUIET  pods 2bq7k, 8wzpd · 3 dependencies · dns · restarts · rollouts
+  next  B probe the pods now  m compare the pods  Enter open hx4mt
+  ↑↓ row · ←→ time · 1-4 window · a show every signal · s queries · Esc back

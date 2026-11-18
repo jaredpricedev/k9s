@@ -167,8 +167,8 @@ func TestThePathOfAServiceIsReadOnceFromTheKubernetesAPI(t *testing.T) {
 	service := report.Hop(slowpath.HopService)
 	assert.Equal(t, slowpath.Elevated, service.State)
 	assert.Equal(t, "1 of 2 ready", service.Key)
-	assert.Equal(t, "not ready now: …-bbbbb · …-aaaaa Ready=True since 08:11 · …-bbbbb Ready=False since 08:11 · API only: kube_pod_status_ready not read", service.Evidence)
-	assert.Contains(t, sentences(report), "In the window: a Ready change on the endpoints at 08:11; restarts on pod …-bbbbb at 08:10.")
+	assert.Equal(t, "not ready now: bbbbb · aaaaa Ready=True since 08:11 · bbbbb Ready=False since 08:11 · API only: kube_pod_status_ready not read", service.Evidence)
+	assert.Contains(t, sentences(report), "In the window: a Ready change on the endpoints at 08:11; restarts on pod bbbbb at 08:10.")
 }
 
 func TestTheServiceIsFoundFromAnIngressAWorkloadOrAPod(t *testing.T) {

@@ -706,10 +706,16 @@ func graphCalmReserve(p *graphPanel, f chart.Frame, pg *graphPage) (number, comp
 	return number, compare
 }
 
+// graphCalmObject names the object of a calm page of :graph as every
+// incident view names its own.
+func graphCalmObject(t *graphTarget, pg *graphPage) string {
+	return calmObject(pg.Namespace, t.Kind, t.Namespace, t.Name)
+}
+
 // graphCalmTitle is the title line of a calm page of :graph.
 func graphCalmTitle(view string, s *graphSnapshot, pg *graphPage) calm.Title {
 	t := s.tally()
-	title := calm.Title{View: view, Object: s.Target.Label(), Window: "last " + graphSpan(s.Window), KeepEnd: true}
+	title := calm.Title{View: view, Object: graphCalmObject(&s.Target, pg), Window: "last " + graphSpan(s.Window), KeepEnd: true}
 	if s.Target.workload() && len(s.Pods) > 0 {
 		title.Window = graphPlural(len(s.Pods), "pod") + " · " + title.Window
 	}
@@ -789,8 +795,8 @@ func graphCalmFailure(view string, s *graphSnapshot, failure []string, pg *graph
 	return calm.Page{
 		Title:   title,
 		Verdict: calm.Verdict{Kind: calm.NotRead, Sentences: sentences, Caveat: "Not read is not healthy."},
-		Next:    []calm.Action{{Key: "r", Label: "read again"}, {Key: "s", Label: "what was asked"}},
-		Keys:    []string{"1 15m  2 1h  3 6h  4 24h", "Esc back"},
+		Next:    []calm.Action{{Key: "r", Label: calmNextReread}, {Key: calm.QueriesKey, Label: "what was asked"}},
+		Keys:    (&calmKeyLine{Window: calmKeyWindow}).parts(),
 	}
 }
 
@@ -800,7 +806,7 @@ func graphCalmWaiting(view, object string, window time.Duration, sentence string
 	return calm.Page{
 		Title:   calm.Title{View: view, Object: object, Window: "last " + graphSpan(window), Busy: graphReadingWord, KeepEnd: true},
 		Verdict: calm.Verdict{Sentences: []string{sentence, "Esc cancels and goes back."}},
-		Keys:    []string{"Esc back"},
+		Keys:    []string{calmKeyBack},
 	}
 }
 
@@ -981,7 +987,7 @@ func graphCalmPage(s *graphSnapshot, pg *graphPage) calm.Page {
 	}
 
 	if s.Target.workload() {
-		page.Next = append(page.Next, calm.Action{Key: "p", Label: "compare the pods"})
+		page.Next = append(page.Next, calm.Action{Key: "p", Label: calmNextCompare})
 	}
 	if len(panels) > 1 {
 		_, next := graphPanelWord(panels[(main+1)%len(panels)].Spec)
@@ -992,13 +998,13 @@ func graphCalmPage(s *graphSnapshot, pg *graphPage) calm.Page {
 		page.Next = append(page.Next, calm.Action{Key: "t", Label: "what changed"})
 	}
 	if pg.Offers.Grafana {
-		page.Next = append(page.Next, calm.Action{Key: "D", Label: "open in Grafana"})
+		page.Next = append(page.Next, calm.Action{Key: calmGrafanaKeyName, Label: calmNextGrafana})
 	}
-	page.Keys = []string{"←→ time", "1 15m  2 1h  3 6h  4 24h", "r re-read", "s queries"}
+	keys := calmKeyLine{Time: true, Window: calmKeyWindow, Queries: true, Reread: true}
 	if !pg.ASCII {
-		page.Keys = append(page.Keys, chartStyleHint(pg.Style))
+		keys.Own = append(keys.Own, chartStyleHint(pg.Style))
 	}
-	page.Keys = append(page.Keys, "Esc back")
+	page.Keys = keys.parts()
 	return page
 }
 

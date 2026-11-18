@@ -376,14 +376,14 @@ func TestSummaryNamesTheOutlierAgainstItsPeers(t *testing.T) {
 	require.InDelta(t, 4.0, summary.Top, 1e-9, "the slowest answer, rounded up, is a full bar")
 
 	lines := Result(plan, run, &summary, false)
-	require.Equal(t, "Only …-hx4mt answered slowly: median 3.1s against 22.5ms for its 2 peers; 1 of 5 had no answer within 5s.", lines[0])
+	require.Equal(t, "Only hx4mt answered slowly: median 3.1s against 22.5ms for its 2 peers; 1 of 5 had no answer within 5s.", lines[0])
 	require.Equal(t, "The other 2 Pods answered all 10 requests in 40ms or less.", lines[1])
 	require.Contains(t, lines[2], "did not pass the ingress or the Service")
 	text := strings.ToLower(strings.Join(lines, " "))
 	for _, claim := range []string{"because", "cause", "healthy", "root"} {
 		require.NotContains(t, text, claim, "a difference between Pods is stated, not explained")
 	}
-	require.Equal(t, "Only ...-hx4mt answered slowly: median 3.1s against 22.5ms for its 2 peers; 1 of 5 had no answer within 5s.",
+	require.Equal(t, "Only hx4mt answered slowly: median 3.1s against 22.5ms for its 2 peers; 1 of 5 had no answer within 5s.",
 		Result(plan, run, &summary, true)[0])
 }
 

@@ -72,8 +72,9 @@ func TestChartStyleKeyIsTheSameInEveryChartViewAndFreeElsewhere(t *testing.T) {
 	require.Empty(t, walkKey(impactV.actions, chartStyleKey), "impact")
 
 	// The per-Pod page and its regrouping are modes of :graph: the key
-	// is theirs too, and nothing they bind took it.
-	for key, word := range map[tcell.Key]string{ui.KeyP: "Per pod", ui.KeyG: "Regroup", ui.KeyN: "Next signal", chartStyleKey: chartStyleLabel} {
+	// is theirs too, and nothing they bind took it. n is named after what
+	// the page steps through, the chart on the charts of a workload.
+	for key, word := range map[tcell.Key]string{ui.KeyP: "Per pod", ui.KeyG: "Regroup", ui.KeyN: calmNextChartLabel, chartStyleKey: chartStyleLabel} {
 		require.Equal(t, word, walkKey(workload.actions, key))
 	}
 }
@@ -265,10 +266,10 @@ func TestChartStyleReachesMinisTrendsAndDashboards(t *testing.T) {
 	}
 	require.True(t, hasSteps(calmPage(chart.Auto)), "several series: stepped lines")
 	require.False(t, hasBraille(calmPage(chart.Auto)))
-	require.Contains(t, calmPage(chart.Auto), "r re-read · b dots · Esc back")
+	require.Contains(t, calmPage(chart.Auto), "s queries · b dots · r re-read · Esc back")
 	require.True(t, hasBraille(calmPage(chart.Dots)), "the main chart follows the style")
 	require.False(t, hasSteps(calmPage(chart.Dots)))
-	require.Contains(t, calmPage(chart.Dots), "r re-read · b solid · Esc back")
+	require.Contains(t, calmPage(chart.Dots), "s queries · b solid · r re-read · Esc back")
 
 	// Under the all-detail key: stat trends are blocks, a chart of several
 	// lines is stepped lines; zoomed, a panel of one series is an area.

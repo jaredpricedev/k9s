@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/derailed/k9s/internal/calm"
 	"github.com/derailed/k9s/internal/chart"
 	"github.com/derailed/k9s/internal/impact"
 	"github.com/derailed/k9s/internal/observability"
@@ -337,24 +338,13 @@ func (r *Report) Clock(t time.Time) string {
 func (r *Report) Span() string { return impact.Dur(r.End.Sub(r.Start)) }
 
 // ShortPod shortens a Pod name to its last dash-separated word when that
-// tells it apart from the other Pods of the path: …-hx4mt.
+// tells it apart from the other Pods of the path: hx4mt. It is the short
+// name every incident view writes (calm.ShortName).
 func (r *Report) ShortPod(name string) string {
 	return shortPod(name, r.Path.PodNames())
 }
 
-func shortPod(name string, all []string) string {
-	cut := strings.LastIndex(name, "-")
-	if cut <= 0 {
-		return name
-	}
-	tail := name[cut:]
-	for _, other := range all {
-		if other != name && strings.HasSuffix(other, tail) {
-			return name
-		}
-	}
-	return "…" + tail
-}
+func shortPod(name string, all []string) string { return calm.ShortName(name, all) }
 
 // Evaluate turns the answers of a batch into the report: a state, a key
 // number and evidence per hop, the lanes, the episodes and the summary. It
@@ -678,7 +668,7 @@ func (h *Hop) otherSignals(pod string) []string {
 	return out
 }
 
-// appEvidence states whether one Pod differs: "1 of 3 pods: …-hx4mt p99
+// appEvidence states whether one Pod differs: "1 of 3 pods: hx4mt p99
 // 48s vs peers 350ms".
 func (r *Report) appEvidence(h *Hop) string {
 	main := &h.Signals[h.Main]

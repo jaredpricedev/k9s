@@ -71,12 +71,12 @@ func TestTheHangIsLocatedOnOnePodAndTheUnrelatedBlipIsNotBlamed(t *testing.T) {
 
 	service := report.Hop(slowpath.HopService)
 	assert.Equal(t, "2 of 3 ready", service.Key, "the worst moment of the window, not only now")
-	assert.Equal(t, "…-hx4mt not Ready twice, 3m longest · now 3 of 3 ready · …-hx4mt Ready=True since 07:51", service.Evidence)
+	assert.Equal(t, "hx4mt not Ready twice, 3m longest · now 3 of 3 ready · hx4mt Ready=True since 07:51", service.Evidence)
 
 	app := report.Hop(slowpath.HopApp)
 	assert.Equal(t, "p99 48s", app.Key)
-	assert.Equal(t, "1 of 3 pods: …-hx4mt p99 48s vs peers 350ms · also queued, free-threads, throttled", app.Evidence)
-	assert.Equal(t, []string{"1 of 3 pods: …-hx4mt vs peers 350ms", "1 of 3: …-hx4mt vs 350ms"}, app.Briefs)
+	assert.Equal(t, "1 of 3 pods: hx4mt p99 48s vs peers 350ms · also queued, free-threads, throttled", app.Evidence)
+	assert.Equal(t, []string{"1 of 3 pods: hx4mt vs peers 350ms", "1 of 3: hx4mt vs 350ms"}, app.Briefs)
 	require.Len(t, app.Pods, 3)
 	assert.Equal(t, []slowpath.State{slowpath.Quiet, slowpath.Quiet, slowpath.Outlier}, []slowpath.State{app.Pods[0].State, app.Pods[1].State, app.Pods[2].State})
 	assert.Equal(t, "p99 350ms", app.Pods[0].Key)
@@ -97,7 +97,7 @@ func TestTheHangIsLocatedOnOnePodAndTheUnrelatedBlipIsNotBlamed(t *testing.T) {
 	assert.Equal(t, "servfail 0 · dns-errors 0 · nxdomain 15% · requests 40/s", dns.Evidence, "the Hubble DNS signal is DNS evidence")
 	network := report.Hop(slowpath.HopNetwork)
 	assert.Equal(t, "drops 0.37/s", network.Key, "a one-minute burst of 0.8/s read through a rate over two minutes never shows its own level")
-	assert.Equal(t, "POLICY_DENIED to …-2bq7k · rst 0.17% · flows 360/s", network.Evidence)
+	assert.Equal(t, "POLICY_DENIED to 2bq7k · rst 0.17% · flows 360/s", network.Evidence)
 	assert.Nil(t, network.Signal("dns-errors"))
 
 	// The episodes are the stretches of the first raised signal on the
@@ -113,8 +113,8 @@ func TestTheHangIsLocatedOnOnePodAndTheUnrelatedBlipIsNotBlamed(t *testing.T) {
 	for i := range report.Lanes {
 		labels = append(labels, report.Lanes[i].Label)
 	}
-	assert.Equal(t, []string{"ingress: 499, p99, +1", "endpoints: not ready …-hx4mt", "pods: p99 …-hx4mt", "pods: queued …-hx4mt",
-		"pods: free-threads …-hx4mt", "pods: throttled …-hx4mt", "3 dependencies", "dns", "network: drops …-2bq7k", "restarts", "rollouts, new pods"}, labels)
+	assert.Equal(t, []string{"ingress: 499, p99, +1", "endpoints: not ready hx4mt", "pods: p99 hx4mt", "pods: queued hx4mt",
+		"pods: free-threads hx4mt", "pods: throttled hx4mt", "3 dependencies", "dns", "network: drops 2bq7k", "restarts", "rollouts, new pods"}, labels)
 	drops := lane(t, report, slowpath.HopNetwork)
 	assert.Equal(t, []chart.Interval{{Start: before(41.5), End: before(40.5)}}, drops.Marks,
 		"the minute of the burst, as a gauge would mark it, not the two and a half minutes its rate stayed raised")
@@ -125,10 +125,10 @@ func TestTheHangIsLocatedOnOnePodAndTheUnrelatedBlipIsNotBlamed(t *testing.T) {
 
 	text := sentences(report)
 	for _, want := range []string{
-		"All 3 overlap slow p99, queueing, no free threads and CPU throttling on pod …-hx4mt.",
-		"2 of 3 (07:28, 07:47) overlap not Ready on pod …-hx4mt.",
+		"All 3 overlap slow p99, queueing, no free threads and CPU throttling on pod hx4mt.",
+		"2 of 3 (07:28, 07:47) overlap not Ready on pod hx4mt.",
 		"None overlaps dependencies, dns, restarts, rollouts or network.",
-		"Packet drops (POLICY_DENIED) on pod …-2bq7k: 07:39 for 1m, outside every episode.",
+		"Packet drops (POLICY_DENIED) on pod 2bq7k: 07:39 for 1m, outside every episode.",
 		"At worst 6.29% of requests. 5xx stayed at 0%: clients gave up waiting, they were not refused.",
 		"Overlap is order in time, not cause.",
 	} {
@@ -144,9 +144,9 @@ func TestTheHangIsLocatedOnOnePodAndTheUnrelatedBlipIsNotBlamed(t *testing.T) {
 	for _, sentence := range report.Summary {
 		ranks[sentence.Text] = sentence.Rank
 	}
-	assert.Equal(t, slowpath.RankOverlap, ranks["All 3 overlap slow p99, queueing, no free threads and CPU throttling on pod …-hx4mt."])
+	assert.Equal(t, slowpath.RankOverlap, ranks["All 3 overlap slow p99, queueing, no free threads and CPU throttling on pod hx4mt."])
 	assert.Equal(t, slowpath.RankCaveat, ranks["Overlap is order in time, not cause."])
-	assert.Equal(t, slowpath.RankOutside, ranks["Packet drops (POLICY_DENIED) on pod …-2bq7k: 07:39 for 1m, outside every episode."])
+	assert.Equal(t, slowpath.RankOutside, ranks["Packet drops (POLICY_DENIED) on pod 2bq7k: 07:39 for 1m, outside every episode."])
 }
 
 func quietPath() *slowpath.Path {
@@ -206,7 +206,7 @@ func TestADeniedSourceIsNotReadAndTheAPIFactsRemain(t *testing.T) {
 	service := report.Hop(slowpath.HopService)
 	assert.Equal(t, slowpath.Elevated, service.State, "the Kubernetes API still knows that a Pod changed Ready inside the window")
 	assert.Equal(t, "3 of 3 ready", service.Key)
-	assert.Equal(t, "…-hx4mt Ready=True since 07:51 · API only: kube_pod_status_ready not read", service.Evidence)
+	assert.Equal(t, "hx4mt Ready=True since 07:51 · API only: kube_pod_status_ready not read", service.Evidence)
 	endpoints := lane(t, report, slowpath.HopService)
 	assert.False(t, endpoints.Signal, "a dated fact from the API is not a symptom to count episodes from")
 	assert.Equal(t, []chart.Interval{{Start: report.Start, End: before(28.5)}}, endpoints.Unknown, "what happened before the last change is not kept by the API")
@@ -251,9 +251,9 @@ func TestPodsAreComparedOnlyWithEnoughPeers(t *testing.T) {
 	app := report.Hop(slowpath.HopApp)
 	assert.Equal(t, slowpath.Elevated, app.State, "with two Pods nothing says which one is the odd one")
 	assert.Equal(t, "not enough peers (2 with samples)", app.Signal("p99").PeerNote)
-	assert.Equal(t, "1 of 2 pods raised: …-hx4mt · not enough peers (2 with samples)", app.Evidence)
+	assert.Equal(t, "1 of 2 pods raised: hx4mt · not enough peers (2 with samples)", app.Evidence)
 	assert.Equal(t, slowpath.Elevated, app.Pods[1].State)
-	assert.Contains(t, sentences(report), "All 3 overlap slow p99, queueing, no free threads and CPU throttling on pod …-hx4mt.",
+	assert.Contains(t, sentences(report), "All 3 overlap slow p99, queueing, no free threads and CPU throttling on pod hx4mt.",
 		"the lanes still say which Pod the marks belong to")
 }
 
@@ -293,7 +293,7 @@ func TestAPodThatIsAlwaysSlowerDiffersFromItsPeersWithoutEverCrossingItsOwnRule(
 	report := slowpath.Evaluate(plan, slowpath.Collect(t.Context(), steady, plan), nil, slowtest.Now)
 	app := report.Hop(slowpath.HopApp)
 	assert.Equal(t, slowpath.Outlier, app.State)
-	assert.Equal(t, "1 of 3 pods: …-hx4mt p99 2s usually vs peers 305ms", app.Evidence)
+	assert.Equal(t, "1 of 3 pods: hx4mt p99 2s usually vs peers 305ms", app.Evidence)
 	require.Len(t, app.Signal("p99").Outliers, 1)
 	assert.True(t, app.Signal("p99").Outliers[0].Sustained)
 	assert.Empty(t, app.Signal("p99").Crossed, "two seconds all window is under the always-raised level and no change against itself")
@@ -312,7 +312,7 @@ func TestAWideWindowSaysWhatItCannotShow(t *testing.T) {
 	short := slowtest.Report(&slowtest.Story{}, slowtest.Sources(), slowtest.Path(), 15*time.Minute)
 	assert.Equal(t, "1 episode of client give-ups (HTTP 499) at the ingress: 08:13:00 UTC, for 2m.", short.Headline,
 		"a short window writes seconds; the rate crosses its rule a sample after the stall begins and the stretch is stated from the stall")
-	assert.Contains(t, sentences(short), "It overlaps slow p99, queueing, no free threads and CPU throttling on pod …-hx4mt.")
+	assert.Contains(t, sentences(short), "It overlaps slow p99, queueing, no free threads and CPU throttling on pod hx4mt.")
 	assert.Contains(t, sentences(short), "It does not overlap endpoints, dependencies, dns, network, restarts or rollouts.")
 }
 
@@ -322,10 +322,10 @@ func TestDetailStatesTheRuleTheSamplesAndTheExactQuery(t *testing.T) {
 	for _, want := range []string{
 		"service → pods · 3 pods · profiles gitlab-webservice, container-cpu · outlier",
 		"p99 [gitlab-webservice] Rails request duration, 99th percentile",
-		"  worst 48s at 07:28 (…-hx4mt) · usual 350ms · raised 9m of 1h in 3 stretches · 363 samples in 3 series, step 30s",
+		"  worst 48s at 07:28 (hx4mt) · usual 350ms · raised 9m of 1h in 3 stretches · 363 samples in 3 series, step 30s",
 		"  rule: raised at 3x its window median and at least 50ms above it; always raised at 5s",
 		`  query: histogram_quantile(0.99, sum by (le,pod) (rate(http_request_duration_seconds_bucket{namespace="gitlab",pod=~"`,
-		"  differs from peers: …-hx4mt worst sample 48s vs peers 350ms",
+		"  differs from peers: hx4mt worst sample 48s vs peers 350ms",
 		"memory [cadvisor] memory in use against the limit, fullest container",
 		"restarts [kube-state-metrics] container restarts",
 		"peer rule: a Pod differs when its worst sample deviates from its peers'",
@@ -347,8 +347,8 @@ func TestTheStripForASmallScreenKeepsTheAppHopOnOneLane(t *testing.T) {
 	for i := range compact {
 		labels = append(labels, compact[i].Label)
 	}
-	assert.Equal(t, []string{"ingress: 499, p99, +1", "endpoints: not ready …-hx4mt", "pods: p99, queued, +2 …-hx4mt", "3 dependencies", "dns",
-		"network: drops …-2bq7k", "restarts", "rollouts, new pods"}, labels)
+	assert.Equal(t, []string{"ingress: 499, p99, +1", "endpoints: not ready hx4mt", "pods: p99, queued, +2 hx4mt", "3 dependencies", "dns",
+		"network: drops 2bq7k", "restarts", "rollouts, new pods"}, labels)
 	assert.Equal(t, []string{"p99", "queued", "free-threads", "throttled"}, compact[2].Names)
 	assert.Len(t, report.Lanes, 11, "the full strip is unchanged")
 
@@ -383,7 +383,7 @@ func TestAlertsAndRolloutsAreDatedFactsOnTheirOwnLanes(t *testing.T) {
 	text := sentences(report)
 	assert.Contains(t, text, "1 of 3 (08:13) overlaps a rollout or new Pod and a firing alert.",
 		"lanes that overlap the same episode share a sentence, and the episode is named")
-	assert.Contains(t, text, "Restarts on pod …-2bq7k: 08:00, outside every episode; 13m before the 08:13 one.",
+	assert.Contains(t, text, "Restarts on pod 2bq7k: 08:00, outside every episode; 13m before the 08:13 one.",
 		"a dated fact shortly before an episode is said to be before it: order, never cause")
 
 	unread := slowpath.Evaluate(plan, slowpath.Collect(t.Context(), &slowtest.Story{}, plan), &slowpath.Alerts{Note: "alertmanager: denied (HTTP 403)"}, slowtest.Now)

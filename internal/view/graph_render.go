@@ -90,6 +90,9 @@ type graphPage struct {
 	Palette calm.Palette
 	Main    string
 	Moved   bool
+	// Namespace is the namespace the session is in: the title names the
+	// namespace of an object only when it is another one.
+	Namespace string
 	// Offers are the hand-offs the line of next steps may name, and
 	// Episodes the episodes of the view the page was opened from.
 	Offers   graphOffers
@@ -125,16 +128,14 @@ type graphPanel struct {
 	States []string           // non-empty when a query drew nothing
 }
 
+// graphShortNames is the short name of each Pod: the one every incident
+// view writes (calm.ShortName), and where that would stand for two Pods,
+// the name without the name of its workload.
 func graphShortNames(names []string, prefix string) map[string]string {
 	short := make(map[string]string, len(names))
-	seen := make(map[string]int)
 	for _, name := range names {
-		tail := name[strings.LastIndex(name, "-")+1:]
-		short[name] = tail
-		seen[tail]++
-	}
-	for _, name := range names {
-		if seen[short[name]] > 1 || short[name] == "" {
+		short[name] = calm.ShortName(name, names)
+		if short[name] == name {
 			short[name] = strings.TrimPrefix(name, prefix+"-")
 		}
 	}

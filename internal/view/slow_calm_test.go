@@ -216,8 +216,8 @@ func TestSlowCalmPageStatesTheAnswerThenEveryLaneOnOneRowOfASharedAxis(t *testin
 	require.Equal(t, "Slow requests  Service gitlab/gitlab-webservice-default · last 1h                                    read 08:20 · 35 of 35 queries", lines[0])
 	require.Empty(t, lines[1])
 	require.Equal(t, "  3 stalls: clients gave up waiting at 07:28, 07:47 and 08:13 UTC, for 2 to 4 minutes each.", lines[2], "the answer comes first")
-	require.Equal(t, "  All 3 line up with slow p99, queueing, no free threads and CPU throttling on pod …-hx4mt.", lines[3])
-	require.Regexp(t, `^  2 of 3 also line up with not Ready on pod …-hx4mt\. +Overlap in time, not proof of cause\.$`, lines[4],
+	require.Equal(t, "  All 3 line up with slow p99, queueing, no free threads and CPU throttling on pod hx4mt.", lines[3])
+	require.Regexp(t, `^  2 of 3 also line up with not Ready on pod hx4mt\. +Overlap in time, not proof of cause\.$`, lines[4],
 		"the caveat is at the right of the last line of the answer")
 
 	// The groups, in this order, each a label in capitals. Nothing was left
@@ -236,21 +236,21 @@ func TestSlowCalmPageStatesTheAnswerThenEveryLaneOnOneRowOfASharedAxis(t *testin
 	// One row per lane: subject, what, the number, what it is held
 	// against. A subject is written once for its rows.
 	for _, row := range []string{
-		`^  ingress      client give-ups \(HTTP 499\) \+2  6\.29%   of requests  [▁█]+$`,
-		`^> pod …-hx4mt  slow p99                       48s     peers 350ms  [▁█]+$`,
-		`^               queueing                       30      peers 0      [▁█]+$`,
-		`^               no free threads                0       peers 5      [▁█]+$`,
-		`^               CPU throttling                 86%     peers 1\.2%   [▁█]+$`,
-		`^               not Ready                      twice   up to 3m     [▁█]+$`,
-		`^  network      packet drops \(POLICY_DENIED\)   0\.37/s  to …-2bq7k   [▁█]+$`,
-		`^  pods …-2bq7k, …-8wzpd  p99 350ms +·+$`,
-		`^  3 dependencies         no rule crossed +·+$`,
-		`^  dns                    p99 6ms +·+$`,
-		`^  restarts · rollouts    none in the last 1h +·+$`,
+		`^  ingress    client give-ups \(HTTP 499\) \+2  6\.29%   of requests  [▁█]+$`,
+		`^> pod hx4mt  slow p99                       48s     peers 350ms  [▁█]+$`,
+		`^             queueing                       30      peers 0      [▁█]+$`,
+		`^             no free threads                0       peers 5      [▁█]+$`,
+		`^             CPU throttling                 86%     peers 1\.2%   [▁█]+$`,
+		`^             not Ready                      twice   up to 3m     [▁█]+$`,
+		`^  network    packet drops \(POLICY_DENIED\)   0\.37/s  to 2bq7k     [▁█]+$`,
+		`^  pods 2bq7k, 8wzpd    p99 350ms +·+$`,
+		`^  3 dependencies       no rule crossed +·+$`,
+		`^  dns                  p99 6ms +·+$`,
+		`^  restarts · rollouts  none in the last 1h +·+$`,
 	} {
 		require.Regexp(t, "(?m)"+row, frame)
 	}
-	require.Equal(t, 1, strings.Count(strings.Join(lines[5:], "\n"), "pod …-hx4mt"), "the subject is written once, its signals beneath")
+	require.Equal(t, 1, strings.Count(strings.Join(lines[5:], "\n"), "pod hx4mt"), "the subject is written once, its signals beneath")
 	_, lined := slowLineWith(t, frame, "LINES UP WITH THE STALLS")
 	_, differs := slowLineWith(t, frame, "DIFFERS, BUT NOT DURING A STALL")
 	_, quiet := slowLineWith(t, frame, "  QUIET")
@@ -312,8 +312,8 @@ func TestSlowCalmPageStatesTheAnswerThenEveryLaneOnOneRowOfASharedAxis(t *testin
 	require.Greater(t, axisAt, quiet)
 
 	// Two lines of keys: the likely next steps in words, then the rest.
-	require.Equal(t, "  next  Shift-B probe the pods now    m compare the pods    Enter open …-hx4mt    Shift-D open in Grafana", lines[axisAt+3])
-	require.Equal(t, "  ↑↓ row · a show every signal · s queries · ←→ time · 1-4 window · n next stall · t timeline · h Hubble · r re-read · Esc back",
+	require.Equal(t, "  next  B probe the pods now    m compare the pods    Enter open hx4mt    D open in Grafana", lines[axisAt+3])
+	require.Equal(t, "  ↑↓ row · ←→ time · 1-4 window · a show every signal · s queries · n next stall · t timeline · h Hubble · r re-read · Esc back",
 		lines[axisAt+5])
 	for _, line := range lines[axisAt+6:] {
 		require.Empty(t, line)
@@ -327,19 +327,19 @@ func TestSlowCalmPageStatesTheAnswerThenEveryLaneOnOneRowOfASharedAxis(t *testin
 	require.Equal(t, "Slow requests  Service gitlab/gitlab-webservice-default · last 1h  08:20 · 35/35", lines[0])
 	require.Equal(t, []string{
 		"  3 stalls: clients gave up waiting, for 2 to 4 minutes each.",
-		"  All 3 line up with 4 signals on pod …-hx4mt.",
-		"  2 of 3 also line up with not Ready on pod …-hx4mt.",
+		"  All 3 line up with 4 signals on pod hx4mt.",
+		"  2 of 3 also line up with not Ready on pod hx4mt.",
 		"  Overlap in time, not proof of cause.",
 	}, lines[1:5])
-	require.Regexp(t, `(?m)^ +stalls +▼▼ +▼▼▼ +▼▼$`, frame)
+	require.Regexp(t, `(?m)^ +stalls +▼▼▼ +▼▼▼ +▼▼$`, frame)
 	for _, row := range []string{
-		`^  ingress      client give-ups \(HTTP 499\) \+2  6\.29%  [▁█]+$`,
-		`^> pod …-hx4mt  slow p99                       48s    [▁█]+$`,
-		`^               not Ready                      twice  [▁█]+$`,
+		`^  ingress    client give-ups \(HTTP 499\) \+2  6\.29%  [▁█]+$`,
+		`^> pod hx4mt  slow p99                       48s    [▁█]+$`,
+		`^             not Ready                      twice  [▁█]+$`,
 		`^  DIFFERS, BUT NOT DURING A STALL  network packet drops \(POLICY_DENIED\) 0\.37/s …$`,
-		`^  QUIET  pods …-2bq7k, …-8wzpd · 3 dependencies · dns · restarts · rollouts$`,
-		`^  next  Shift-B probe the pods now  m compare the pods  Enter open …-hx4mt$`,
-		`^  ↑↓ row · a show every signal · s queries · ←→ time · 1-4 window · Esc back$`,
+		`^  QUIET  pods 2bq7k, 8wzpd · 3 dependencies · dns · restarts · rollouts$`,
+		`^  next  B probe the pods now  m compare the pods  Enter open hx4mt$`,
+		`^  ↑↓ row · ←→ time · 1-4 window · a show every signal · s queries · Esc back$`,
 	} {
 		require.Regexp(t, "(?m)"+row, frame)
 	}
@@ -351,11 +351,11 @@ func TestSlowCalmPageStatesTheAnswerThenEveryLaneOnOneRowOfASharedAxis(t *testin
 	frame = drawnText(t, v, 60, 20)
 	for _, row := range []string{
 		`^Slow requests  Service gitlab/gitl… · last 1h  08:20 · 35/35$`,
-		`^  ingress      client give-ups…  6\.29%  [▁█]{20}$`,
-		`^> pod …-hx4mt  slow p99          48s    [▁█]{20}$`,
-		`^               not Ready         twice  [▁█]{20}$`,
-		`^  QUIET  pods …-2bq7k, …-8wzpd · 3 dependencies \+2 more$`,
-		`^  next  Shift-B probe the pods now  m compare the pods$`,
+		`^  ingress    client give-ups \(…  6\.29%  [▁█]{20}$`,
+		`^> pod hx4mt  slow p99            48s    [▁█]{20}$`,
+		`^             not Ready           twice  [▁█]{20}$`,
+		`^  QUIET  pods 2bq7k, 8wzpd · 3 dependencies · dns \+1 more$`,
+		`^  next  B probe the pods now  m compare the pods$`,
 		`^  ↑↓ row · a show every signal · s queries · Esc back$`,
 	} {
 		require.Regexp(t, "(?m)"+row, frame)
@@ -370,7 +370,9 @@ func TestSlowCalmPageStatesTheAnswerThenEveryLaneOnOneRowOfASharedAxis(t *testin
 	frame = drawnText(t, v, 40, 12)
 	require.Contains(t, strings.Join(strings.Fields(frame), " "), "3 stalls: clients gave up waiting at 07:28, 07:47 and 08:13 UTC, for 2 to 4 minutes each.")
 	require.NotContains(t, frame, "▼")
-	require.Contains(t, frame, "not shown at this size (a shows all)")
+	// 40 columns have no room for the long form of that line: the short
+	// one names the rows left out before it is cut.
+	require.Contains(t, frame, "  not shown (a shows all): 5 of 6 rows …\n")
 }
 
 // What a size gives up, in the order it gives it up. The strips shorten
@@ -386,12 +388,12 @@ func TestSlowCalmPageSaysWhatEachSizeGivesUp(t *testing.T) {
 		return p.Layout.Strip, p.Dropped, under
 	}
 	strip, dropped, under := plan(132, 32)
-	assert.Equal(t, 63, strip)
+	assert.Equal(t, 65, strip)
 	assert.Empty(t, dropped, "132x36 gives nothing up")
 	assert.False(t, under)
 
 	strip, dropped, under = plan(80, 20)
-	assert.Equal(t, 27, strip, "the strips shorten first")
+	assert.Equal(t, 29, strip, "the strips shorten first")
 	assert.Equal(t, []string{
 		"blank rows around the verdict and the keys", "QUIET folded to one line", "blank rows between subjects", "blank rows before groups",
 		"DIFFERS, BUT NOT DURING A STALL folded to one line", "the blank rows under the verdict and over the keys", "what each number is compared with",
@@ -450,7 +452,7 @@ func TestSlowCalmPageHasOneColourPerSubjectAndBandsThroughEveryRow(t *testing.T)
 		number = cells[y][utf8.RuneCountInString(before)+2]
 		return cells[y][2], number, cells[y][raised[0]], cells[y][quiet[0]]
 	}
-	name, number, over, under := subject("pod …-hx4mt", "48s")
+	name, number, over, under := subject("pod hx4mt", "48s")
 	require.Equal(t, []string{p.Fail, p.Fail, p.Fail}, []string{name.fg, number.fg, over.fg}, "the Pod that differs from its peers is one colour")
 	require.True(t, name.bold)
 	require.True(t, under.dim, "what is under its rule is the dim baseline")
@@ -499,7 +501,7 @@ func TestSlowCalmCursorsMoveWithoutTheLayoutShifting(t *testing.T) {
 
 	// The rows, top to bottom. Only the marker and what Enter opens change.
 	unmarked := regexp.MustCompile(`(?m)^>`)
-	enter := regexp.MustCompile(`Enter (open …-hx4mt|its queries)  +`)
+	enter := regexp.MustCompile(`Enter (open hx4mt|its queries)  +`)
 	same := func(frame string) string {
 		return enter.ReplaceAllString(unmarked.ReplaceAllString(frame, " "), "Enter ")
 	}
@@ -536,13 +538,13 @@ func TestSlowCalmCursorsMoveWithoutTheLayoutShifting(t *testing.T) {
 	slowPress(t, v, ui.KeyN)
 	frame := drawnText(t, v, 132, 32)
 	lines, before := strings.Split(frame, "\n"), strings.Split(still, "\n")
-	require.Regexp(t, `^Slow requests  Service gitlab/gitlab-webservice-default · last 1h +cursor 07:27:37–07:28:34 UTC · slow p99 48s$`, lines[0])
+	require.Regexp(t, `^Slow requests  Service gitlab/gitlab-webservice-default · last 1h +cursor 07:27:23–07:28:18 UTC · slow p99 48s$`, lines[0])
 	require.Len(t, lines, len(before))
 	axis, axisAt := slowLineWith(t, frame, "┬──")
 	cursor := slowColsOf(axis, "^")
 	require.Len(t, cursor, 1)
 	marker, _ := slowLineWith(t, frame, "stalls  ")
-	require.Equal(t, slowColsOf(marker, "▼")[1], cursor[0], "the column in which the first raised sample ends, inside the band")
+	require.Equal(t, slowColsOf(marker, "▼")[0], cursor[0], "the column in which the first raised sample ends, the first of the band")
 	left, _, found := strings.Cut(before[9], "of requests")
 	require.True(t, found)
 	held := utf8.RuneCountInString(left)
@@ -570,20 +572,20 @@ func TestSlowCalmCursorsMoveWithoutTheLayoutShifting(t *testing.T) {
 		}
 	}
 	for _, row := range []string{
-		`^  ingress      client give-ups \(HTTP 499\) \+2  6\.29%   ┆ 1\.19/s     ▁`,
-		`^> pod …-hx4mt  slow p99                       48s     ┆ 48s        ▁`,
-		`^               no free threads                0       ┆ 0          ▁`,
-		`^               not Ready                      twice   ┆ 0          ▁`,
-		`^  network      packet drops \(POLICY_DENIED\)   0\.37/s  ┆ 0/s        ▁`,
+		`^  ingress    client give-ups \(HTTP 499\) \+2  6\.29%   ┆ 0\.68/s     ▁`,
+		`^> pod hx4mt  slow p99                       48s     ┆ 48s        ▁`,
+		`^             no free threads                0       ┆ 0          ▁`,
+		`^             not Ready                      twice   ┆ 0          ▁`,
+		`^  network    packet drops \(POLICY_DENIED\)   0\.37/s  ┆ 0/s        ▁`,
 	} {
 		require.Regexp(t, "(?m)"+row, frame)
 	}
 	slowPress(t, v, ui.KeyN)
-	require.Contains(t, drawnText(t, v, 132, 32), "cursor 07:46:40–07:47:37 UTC")
+	require.Contains(t, drawnText(t, v, 132, 32), "cursor 07:46:46–07:47:41 UTC")
 	slowPress(t, v, ui.KeyShiftN)
 	slowPress(t, v, tcell.KeyLeft)
-	require.Contains(t, drawnText(t, v, 132, 32), "cursor 07:26:40–07:27:37 UTC")
-	require.Contains(t, drawnText(t, v, 80, 20), "cursor 07:26:40–07:28:53 UTC · slow p99 48s", "narrower strips have wider columns; the cursor keeps its time")
+	require.Contains(t, drawnText(t, v, 132, 32), "cursor 07:26:27–07:27:23 UTC")
+	require.Contains(t, drawnText(t, v, 80, 20), "cursor 07:26:12–07:28:16 UTC · slow p99 48s", "narrower strips have wider columns; the cursor keeps its time")
 	slowPress(t, v, tcell.KeyEscape)
 	require.Equal(t, still, drawnText(t, v, 132, 32), "Esc first puts the cursor away")
 	require.Same(t, v, v.app.Content.Top())
@@ -608,7 +610,7 @@ func TestSlowCalmRowsShowTheirQueriesAndOpenThePod(t *testing.T) {
 	require.Regexp(t, `^  QUERIES, SAMPLES AND RULES · s or Enter returns · lines 1-27 of \d+ · PgDn PgUp$`, lines[2])
 	require.Equal(t, "  service → pods · 3 pods · profiles gitlab-webservice, container-cpu · outlier", lines[3])
 	require.Equal(t, "  throttled [container-cpu] share of CPU periods in which a container was throttled at its limit", lines[4], "the signal of the row is stated first")
-	require.Equal(t, "    worst 86% at 07:30 (…-hx4mt) · usual 4% · raised 9m of 1h in 3 stretches · 363 samples in 3 series, step 30s", lines[5])
+	require.Equal(t, "    worst 86% at 07:30 (hx4mt) · usual 4% · raised 9m of 1h in 3 stretches · 363 samples in 3 series, step 30s", lines[5])
 	require.Equal(t, "    rule: raised at 3x its window median and at least 25 points above it; always raised at 50%", lines[6])
 	require.Contains(t, frame, `    query: (sum by (pod) (rate(container_cpu_cfs_throttled_periods_total{namespace="gitlab",pod=~"gitlab-webservice-default-6f9c7d`)
 	require.Contains(t, frame, "  p99 [gitlab-webservice] Rails request duration, 99th percentile", "then the other signals of the hop")
@@ -632,7 +634,7 @@ func TestSlowCalmRowsShowTheirQueriesAndOpenThePod(t *testing.T) {
 	// Esc closes the queries before it leaves; Enter returns too.
 	slowPress(t, v, tcell.KeyEscape)
 	require.Same(t, v, v.app.Content.Top())
-	require.Contains(t, drawnText(t, v, 132, 32), ">              not Ready")
+	require.Contains(t, drawnText(t, v, 132, 32), ">            not Ready")
 	slowPress(t, v, ui.KeyS)
 	slowPress(t, v, tcell.KeyEnter)
 	require.False(t, v.detail)
@@ -683,7 +685,7 @@ func TestSlowAllDetailKeyTogglesTheHopTableAndTheLanes(t *testing.T) {
 	require.Contains(t, frame, "  HOP                 WHAT                      LAST 1h        WORST          STATE    EVIDENCE")
 	require.Contains(t, frame, "WHEN IT HAPPENED · 1 column = 1m · █ over its rule · × no data · UTC")
 	require.Contains(t, frame, "WHAT LINES UP")
-	require.Contains(t, frame, ">   …-hx4mt", "the Pod the cursor stood on keeps it where its row is listed")
+	require.Contains(t, frame, ">   hx4mt", "the Pod the cursor stood on keeps it where its row is listed")
 	require.Contains(t, frame, "↑↓ hop · Enter open · a less detail · ←→ cursor · n/N episode · 1-4 window · s queries · r re-read · b dots · Esc back")
 	require.NotContains(t, frame, "LINES UP WITH THE STALLS")
 
@@ -698,7 +700,7 @@ func TestSlowAllDetailKeyTogglesTheHopTableAndTheLanes(t *testing.T) {
 	}
 	require.Equal(t, slowRow{hop: slowpath.HopNetwork}, v.focus)
 	slowPress(t, v, calmDetailKey)
-	require.Contains(t, drawnText(t, v, 132, 32), "> network      packet drops (POLICY_DENIED)")
+	require.Contains(t, drawnText(t, v, 132, 32), "> network    packet drops (POLICY_DENIED)")
 	require.Equal(t, "network", v.calmKey)
 
 	// The key reads nothing.
@@ -737,7 +739,7 @@ func TestSlowCalmPageSaysWhatWasNotReadAndWhy(t *testing.T) {
 		require.Regexp(t, `^  `+hop+` +prometheus: denied \(HTTP 403\) +×+$`, lines[unread+1+offset], "every hop that was not read says so, with the reason")
 	}
 	require.Regexp(t, `^  endpoints  1 of 1 signals: prometheus: denied \(HTTP 40…  ×+$`, lines[unread+6], "the history of the endpoints was not read either")
-	require.Regexp(t, `(?m)^  IN THE WINDOW\n> endpoints  …-hx4mt Ready=True  once  at 07:51 +×+▲·+$`, frame,
+	require.Regexp(t, `(?m)^  IN THE WINDOW\n> endpoints  hx4mt Ready=True  once  at 07:51 +×+▲·+$`, frame,
 		"the one Ready change the API still knows is drawn where it happened; the time before it is not known")
 	require.NotContains(t, frame, "▼")
 	for _, hop := range []string{"ingress", "pods", "3 dependencies", "dns", "network"} {
@@ -792,7 +794,7 @@ func TestSlowCalmPageSaysWhatWasNotReadAndWhy(t *testing.T) {
 	lines = strings.Split(frame, "\n")
 	require.Equal(t, "  Re-read failed, the earlier read is shown: Service gitlab/gitlab-webservice-default: the read timed out", lines[1])
 	require.Equal(t, strings.Split(whole, "\n")[2], lines[3], "the answer of the earlier read")
-	require.Contains(t, frame, "  pod …-hx4mt  slow p99", "the evidence of the earlier read")
+	require.Contains(t, frame, "  pod hx4mt  slow p99", "the evidence of the earlier read")
 }
 
 // Without an episode a Pod that differs from its peers all window is still
@@ -811,14 +813,14 @@ func TestSlowCalmPageShowsAPodThatDiffersWithoutAnEpisode(t *testing.T) {
 	v.accept(&slowRead{path: path, report: slowpath.Evaluate(plan, slowpath.Collect(t.Context(), steady, plan), nil, slowtest.Now)})
 	frame := drawnText(t, v, 132, 32)
 	lines := strings.Split(frame, "\n")
-	require.Equal(t, "  Pod …-hx4mt usually differs from its peers: p99 2s (peers 305ms). No signal that was read crossed its rule in the last 1h.", lines[2])
+	require.Equal(t, "  Pod hx4mt usually differs from its peers: p99 2s (peers 305ms). No signal that was read crossed its rule in the last 1h.", lines[2])
 	require.Equal(t, "  A difference, not proof of cause.", lines[3])
-	require.Regexp(t, `(?m)^  DIFFERS FROM ITS PEERS\n> pod …-hx4mt  slow p99, usually +2s +peers 305ms +▁+$`, frame, "it never crossed its rule: the strip is the quiet baseline")
-	require.Regexp(t, `(?m)^  pods …-2bq7k, …-8wzpd +p99 up to 310ms +·+$`, frame)
-	require.Regexp(t, `(?m)^  ingress  no Ingress in namespace gitlab routes to Servic…  ×+$`, frame)
+	require.Regexp(t, `(?m)^  DIFFERS FROM ITS PEERS\n> pod hx4mt  slow p99, usually +2s +peers 305ms +▁+$`, frame, "it never crossed its rule: the strip is the quiet baseline")
+	require.Regexp(t, `(?m)^  pods 2bq7k, 8wzpd +p99 up to 310ms +·+$`, frame)
+	require.Regexp(t, `(?m)^  ingress  no Ingress in namespace gitlab routes to Serv…  ×+$`, frame)
 	require.NotContains(t, frame, "▼")
 	cells := slowCells(t, v, 132, 32)
-	_, y := slowLineWith(t, frame, "> pod …-hx4mt")
+	_, y := slowLineWith(t, frame, "> pod hx4mt")
 	require.Equal(t, calmPalette(v.app.Styles.Semantic()).Fail, cells[y][2].fg)
 }
 
@@ -843,9 +845,9 @@ func TestSlowCalmPagePlacesDatedFactsByOverlapToo(t *testing.T) {
 	alert, at := slowLineWith(t, frame, "  alerts ")
 	require.True(t, at > lined && at < differs)
 	require.Regexp(t, `^  alerts +GitLabSlow +6m +at 08:14 +[▁█]+$`, alert, "a firing alert is a stretch")
-	restart, at := slowLineWith(t, frame, "  pod …-2bq7k ")
+	restart, at := slowLineWith(t, frame, "  pod 2bq7k ")
 	require.Greater(t, at, differs)
-	require.Regexp(t, `^  pod …-2bq7k +restarts +once +at 08:00 +[×·▲]+$`, restart)
+	require.Regexp(t, `^  pod 2bq7k +restarts +once +at 08:00 +[×·▲]+$`, restart)
 	marker, _ := slowLineWith(t, frame, "stalls  ")
 	for _, col := range slowColsOf(restart, "▲") {
 		require.NotContains(t, slowColsOf(marker, "▼"), col)

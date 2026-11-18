@@ -342,7 +342,7 @@ func dashFooter(width int, zoom, single, query, ascii bool, style chart.Style) s
 func renderDash(s *dashSnapshot, pg *dashPage) []string {
 	r := &dashRender{s: s, pg: pg, width: max(pg.Width, 20), c: pg.Colors, cache: map[int]dashData{}}
 	if s == nil {
-		return r.calmWords(calm.Title{View: dashViewTitle, Busy: "reading…"}, calm.Verdict{Sentences: []string{"Reading once…"}}, nil, []string{"Esc back"})
+		return r.calmWords(calm.Title{View: dashViewTitle, Busy: "reading…"}, calm.Verdict{Sentences: []string{"Reading once…"}}, nil, []string{calmKeyBack})
 	}
 	if failure := s.failure(); failure != nil {
 		return r.calmFailure(failure)
@@ -352,7 +352,7 @@ func renderDash(s *dashSnapshot, pg *dashPage) []string {
 	r.settle()
 	if pg.Selected < 0 {
 		return r.calmWords(r.calmTitle(), calm.Verdict{Kind: calm.NothingFound, Sentences: []string{"The dashboard definition has no panels."}},
-			[]calm.Action{{Key: "D", Label: "open in Grafana"}}, []string{"Esc back"})
+			[]calm.Action{{Key: calmGrafanaKeyName, Label: calmNextGrafana}}, []string{calmKeyBack})
 	}
 	switch one := s.Spec.isQuery() && !s.Spec.Board; {
 	case pg.Zoom, pg.Detail && one:

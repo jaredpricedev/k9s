@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/derailed/k9s/internal/calm"
 	"github.com/derailed/k9s/internal/chart"
 )
 
@@ -432,17 +433,15 @@ func (s *PodStats) Mark(ascii bool) string {
 	return ""
 }
 
-// ShortName is the part of a Pod name that tells it from its siblings: the
-// last dash-separated segment, written "…-hx4mt". A short name stays whole.
-func ShortName(name string, ascii bool) string {
-	cut := strings.LastIndex(name, "-")
-	if cut <= 0 || cut == len(name)-1 || len(name) <= 20 {
-		return name
+// ShortName is the part of a Pod name that tells it from the other Pods
+// that are probed: its last dash-separated word, "hx4mt". It is the short
+// name every incident view writes (calm.ShortName).
+func (p *Plan) ShortName(name string) string {
+	siblings := make([]string, len(p.Targets))
+	for i := range p.Targets {
+		siblings[i] = p.Targets[i].Pod.Name
 	}
-	if ascii {
-		return "..." + name[cut:]
-	}
-	return "…" + name[cut:]
+	return calm.ShortName(name, siblings)
 }
 
 func plural(n int, one, many string) string {
@@ -465,7 +464,7 @@ func (r *report) addf(format string, args ...any) {
 	r.lines = append(r.lines, fmt.Sprintf(format, args...))
 }
 
-func (r *report) name(i int) string { return ShortName(r.plan.Targets[i].Pod.Name, r.ascii) }
+func (r *report) name(i int) string { return r.plan.ShortName(r.plan.Targets[i].Pod.Name) }
 
 func (r *report) timeouts(stats *PodStats) string {
 	if stats.TimedOut == 0 {

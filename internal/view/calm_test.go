@@ -120,3 +120,46 @@ func TestCalmStripsLineUpWithTheEpisodesOfSlowpath(t *testing.T) {
 		}
 	}
 }
+
+// The second key line is written in one order in every incident view:
+// what the arrows move, the window, all detail, the queries, the view's
+// own keys, reading again and the way out. The kit keeps the way out, all
+// detail and the queries longest on a narrow line.
+func TestCalmKeyLineIsWrittenInOneOrderInEveryIncidentView(t *testing.T) {
+	full := calmKeyLine{Move: "↑↓ row", Time: true, Window: calmKeyWindow, Detail: "show every signal", Queries: true,
+		Own: []string{"n next stall", "", "t timeline"}, Reread: true}
+	assert.Equal(t, []string{"↑↓ row", "←→ time", "1-4 window", "a show every signal", "s queries", "n next stall", "t timeline", "r re-read", "Esc back"},
+		full.parts(), "an empty key of the view's own is left out")
+	assert.Equal(t, []string{"Esc back"}, (&calmKeyLine{}).parts(), "the way out is always there, and last")
+	assert.Equal(t, []string{"1-5 window", "D Grafana", "Esc back"},
+		(&calmKeyLine{Window: "1-5 window", Own: []string{calmGrafanaKeyName + " Grafana"}}).parts(), "a key on the next line is not named again")
+
+	// Without a palette the line carries only the dim tag and its reset.
+	rest := func(width int) string {
+		return strings.NewReplacer("[-:-:d]", "", "[-:-:-]", "").Replace(calm.RestLine(full.parts(), width, calm.Options{}))
+	}
+	assert.Equal(t, "  ↑↓ row · ←→ time · 1-4 window · a show every signal · s queries · n next stall · t timeline · r re-read · Esc back", rest(132))
+	assert.Equal(t, "  ↑↓ row · ←→ time · 1-4 window · a show every signal · s queries · Esc back", rest(80),
+		"the view's own keys and reading again go first")
+	assert.Equal(t, "  ↑↓ row · a show every signal · s queries · Esc back", rest(60),
+		"then the cursor and the window; all detail and the queries stay")
+
+	// The words of the hand-offs are the ones the approved pages write.
+	assert.Equal(t, "B", calmProbeKeyName)
+	assert.Equal(t, "W", calmSlowKeyName)
+	assert.Equal(t, "D", calmGrafanaKeyName)
+	assert.Equal(t, calm.DetailKey, string(rune(calmDetailKey)))
+}
+
+// Every incident view names its object the same way: the namespace is
+// written only when it is not the one the session is in.
+func TestCalmObjectNamesTheNamespaceOnlyWhenItIsAnotherOne(t *testing.T) {
+	assert.Equal(t, "Service gitlab-webservice-default", calmObject("gitlab", "Service", "gitlab", "gitlab-webservice-default"))
+	assert.Equal(t, "Service gitlab/gitlab-webservice-default", calmObject("apps", "Service", "gitlab", "gitlab-webservice-default"))
+	assert.Equal(t, "Pod apps/checkout-api-x2x9q", calmObject("", "Pod", "apps", "checkout-api-x2x9q"), "a list of every namespace names it")
+	assert.Equal(t, "Node worker-f", calmObject("apps", "Node", "", "worker-f"), "an object without a namespace has none to name")
+
+	target := graphTarget{Kind: "Deployment", Namespace: "apps", Name: "checkout-api"}
+	assert.Equal(t, "Deployment checkout-api", graphCalmObject(&target, &graphPage{Namespace: "apps"}))
+	assert.Equal(t, "Deployment apps/checkout-api", graphCalmObject(&target, &graphPage{Namespace: "gitlab"}))
+}

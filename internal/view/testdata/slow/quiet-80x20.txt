@@ -16,5 +16,5 @@ Slow requests  Service gitlab/gitlab-webservice-default · last 1h  08:20 · 35/
                                                            ───┬──────────┬──────
   UTC                                                       07:30      08:00
 
-  next  Shift-B probe the pods now  m compare the pods  Enter its queries
-  ↑↓ row · a show every signal · s queries · ←→ time · 1-4 window · Esc back
+  next  B probe the pods now  m compare the pods  Enter its queries
+  ↑↓ row · ←→ time · 1-4 window · a show every signal · s queries · Esc back

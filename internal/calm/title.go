@@ -5,6 +5,7 @@ package calm
 
 import (
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -175,35 +176,58 @@ func NextLine(actions []Action, width int, o Options) string {
 	return l.String()
 }
 
-// RestLine is the second key line: every other key, dim, in one line. A
-// narrow line drops parts from the right but keeps the last one, which by
-// convention is the way out ("Esc back").
+// RestLine is the second key line: every other key, dim, in one line. The
+// parts are written in the order given, which is the same in every view:
+// what the arrows move, the window, all detail, the queries, the view's
+// own keys, reading again, and the way out. A narrow line drops parts
+// from the right, but three are the last to go: the way out, which by
+// convention is the last part ("Esc back"), the key for all detail, and
+// before it the key for the queries. Whatever a page leaves out, the key
+// that shows it stays named.
 func RestLine(parts []string, width int, o Options) string {
-	kept := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if part != "" {
-			kept = append(kept, o.words(part))
+	type part struct {
+		text string
+		// rank is how long a part is kept: 0 goes first, from the right.
+		rank int
+	}
+	kept := make([]part, 0, len(parts))
+	for _, text := range parts {
+		if text == "" {
+			continue
 		}
+		rank := 0
+		switch {
+		case strings.HasPrefix(text, QueriesKey+" "):
+			rank = 1
+		case strings.HasPrefix(text, DetailKey+" "):
+			rank = 2
+		}
+		kept = append(kept, part{text: o.words(text), rank: rank})
 	}
 	if len(kept) == 0 {
 		return ""
 	}
+	kept[len(kept)-1].rank = 3
 	room := width - Indent
 	join := func() string {
 		text := ""
-		for i, part := range kept {
+		for i, p := range kept {
 			if i > 0 {
 				text += o.sep()
 			}
-			text += part
+			text += p.text
 		}
 		return text
 	}
-	for len(kept) > 2 && cells(join()) > room {
-		kept = append(kept[:len(kept)-2], kept[len(kept)-1])
-	}
-	if len(kept) == 2 && cells(join()) > room {
-		kept = kept[1:]
+	for len(kept) > 1 && cells(join()) > room {
+		// The rightmost part of the lowest rank goes.
+		at := len(kept) - 1
+		for i := len(kept) - 1; i >= 0; i-- {
+			if kept[i].rank < kept[at].rank {
+				at = i
+			}
+		}
+		kept = append(kept[:at], kept[at+1:]...)
 	}
 	l := newLine(o)
 	l.to(Indent)

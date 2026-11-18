@@ -129,8 +129,8 @@ func TestProbeSendsNothingUntilTheRequestWasReadAndConfirmed(t *testing.T) {
 	require.NotContains(t, frame, "at most 4 Pods at a time")
 	require.Len(t, strings.Split(strings.SplitN(drawnText(t, v, 80, 20), "\n\n", 3)[1], "\n"), 4, "and four at 80 columns")
 	require.Regexp(t, `(?m)^Probe  Service gitlab/gitlab-webservice-default · GET :8080/-/readiness ×5 per pod +nothing sent$`, frame)
-	require.Contains(t, frame, "  WOULD BE ASKED\n> …-2bq7k  worker-d study-zone-a\n  …-8wzpd  worker-e study-zone-b\n  …-hx4mt  worker-f study-zone-c\n")
-	require.Contains(t, frame, "  next  r send 15 requests (asks first)    + 10 per pod    u liveness probe instead    Enter open …-2bq7k\n")
+	require.Contains(t, frame, "  WOULD BE ASKED\n> 2bq7k  worker-d study-zone-a\n  8wzpd  worker-e study-zone-b\n  hx4mt  worker-f study-zone-c\n")
+	require.Contains(t, frame, "  next  r send 15 requests (asks first)    + 10 per pod    u liveness probe instead    Enter open 2bq7k\n")
 	require.NotContains(t, frame, probeMeasuredLabel, "nothing was measured, so nothing is said about a measurement")
 	require.NotRegexp(t, `[▁▂▃▄▅▆▇█]`, frame, "there is no strip before a request")
 	// a shows the table the view had before; it states the same.
@@ -266,7 +266,7 @@ func TestProbeFramesKeepPodMedianAndVerdictAtEverySize(t *testing.T) {
 		require.Contains(t, frame, "VS PEERS")
 		require.Regexp(t, `>! \S*-hx4mt .* 2\.73s .*OUTLIER`, frame, "pod, median and the outlier word at %d columns", size[0])
 		require.Regexp(t, `\S*-2bq7k .* \d+ms .*like peers`, frame)
-		require.Contains(t, flat, "Only …-hx4mt answered slowly: median 2.73s against")
+		require.Contains(t, flat, "Only hx4mt answered slowly: median 2.73s against")
 		require.Contains(t, flat, "1 of 5 had no answer within 5s")
 		require.Regexp(t, `not (through the )?ingress or (the )?Service`, flat, "the measured path is always stated")
 		require.Regexp(t, `a slow Pod, not a slow (network )?path`, flat)
@@ -278,8 +278,10 @@ func TestProbeFramesKeepPodMedianAndVerdictAtEverySize(t *testing.T) {
 	wide := drawnText(t, v, 132, 32)
 	for _, shown := range []string{"FASTEST", "SLOWEST", "OVER 5s", "CODES", "NODE", "ZONE", "worker-f", "study-zone-c", "1 of 5", "≥5s", "200",
 		"EACH REQUEST", "nothing is sent unless you press r", "the fastest Pod here,", "which is the floor",
-		"next: Enter opens …-hx4mt in the Pod list", "m graphs its CPU against its limit"} {
-		require.Contains(t, wide, shown)
+		"next: Enter opens hx4mt in the Pod list", "m graphs its CPU against its limit"} {
+		// A sentence wraps where the width ends: the words are looked for
+		// across the line breaks.
+		require.Contains(t, strings.Join(strings.Fields(wide), " "), shown)
 	}
 	require.Regexp(t, `-hx4mt (\S ){4}\S +2\.73s`, wide, "one cell per request, with a blank between them")
 	require.Contains(t, wide, "×", "a request without an answer is a cross, not a bar")
@@ -299,7 +301,7 @@ func TestProbeFramesKeepPodMedianAndVerdictAtEverySize(t *testing.T) {
 	// Moving the cursor names the Pod under it.
 	probePress(t, v, tcell.KeyUp)
 	require.Equal(t, probePodB, v.selected)
-	require.Contains(t, drawnText(t, v, 132, 32), "…-8wzpd on worker-e (study-zone-b)")
+	require.Contains(t, drawnText(t, v, 132, 32), "8wzpd on worker-e (study-zone-b)")
 	target := v.SelectedResource()
 	require.Equal(t, client.PodGVR, target.GVR)
 	require.Equal(t, "gitlab/"+probePodB, target.Path())
@@ -331,7 +333,7 @@ func TestProbeNoIconsUsesASCIIOnly(t *testing.T) {
 	}
 	v.confirm.InputHandler()(tcell.NewEventKey(tcell.KeyEscape, 0, tcell.ModNone), nil)
 	require.Contains(t, frame, "full bar # = ")
-	require.Contains(t, frame, "Only ...-hx4mt answered slowly")
+	require.Contains(t, frame, "Only hx4mt answered slowly")
 	require.Contains(t, frame, " | ")
 }
 
@@ -409,7 +411,7 @@ func TestProbeFlagsTimeoutsWithoutPeersAndCountsElidedTimes(t *testing.T) {
 	require.Regexp(t, `>! \S*-8wzpd .* 2 of 20 .*TIMEOUTS`, frame)
 	require.Regexp(t, `   \S*-2bq7k .* 0 of 20 .*answered`, frame)
 	flat := strings.Join(strings.Fields(frame), " ")
-	require.Contains(t, flat, "…-8wzpd gave no answer within 5s to 2 of 20 requests; its 18 answers took 20ms.")
+	require.Contains(t, flat, "8wzpd gave no answer within 5s to 2 of 20 requests; its 18 answers took 20ms.")
 	require.Contains(t, flat, "The other Pod answered all 20 requests in 20ms or less.")
 	require.Contains(t, flat, "... (8 more)")
 }

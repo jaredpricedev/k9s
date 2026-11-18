@@ -63,7 +63,15 @@ func (v *slowView) graphEpisodes() *graphEpisodes {
 	if report == nil || len(report.Episodes) == 0 {
 		return nil
 	}
-	return &graphEpisodes{Label: graphEpisodesWord, Start: report.Start, End: report.End,
+	// The marker row keeps the word :slow wrote over its own: "stalls".
+	label := graphEpisodesWord
+	if answer := report.Answer(); answer.Nouns != "" {
+		label = answer.Nouns
+		if len(report.Episodes) == 1 {
+			label = answer.Noun
+		}
+	}
+	return &graphEpisodes{Label: label, Start: report.Start, End: report.End,
 		Intervals: append([]chart.Interval(nil), report.Episodes...)}
 }
 
@@ -660,7 +668,7 @@ func graphCompareCalmPage(s *graphSnapshot, c *graphCompare, pg *graphPage, coun
 	t := c.tally()
 	pods := len(c.pods())
 
-	title := calm.Title{View: graphCompareTitle, Object: s.Target.Label(), Window: graphPlural(pods, "pod") + " · last " + graphSpan(s.Window), KeepEnd: true,
+	title := calm.Title{View: graphCompareTitle, Object: graphCalmObject(&s.Target, pg), Window: graphPlural(pods, "pod") + " · last " + graphSpan(s.Window), KeepEnd: true,
 		Read: c.ReadAt, Done: t.Asked - t.Failed, Total: t.Asked}
 	if by != graphByPod {
 		title.Window = graphPlural(pods, "pod") + " · by " + by.String() + " · last " + graphSpan(s.Window)
@@ -672,13 +680,14 @@ func graphCompareCalmPage(s *graphSnapshot, c *graphCompare, pg *graphPage, coun
 	if when.moved {
 		page.Bands.Cursor = when.at
 	}
-	keys := []string{"↑↓ signal", "←→ time", "1-4 window", calm.DetailKey + " show every signal"}
+	keys := calmKeyLine{Move: "↑↓ signal", Time: true, Window: calmKeyWindow, Detail: "show every signal", Queries: true, Reread: true}
 	finish := func() {
 		page.Next = append(page.Next, calm.Action{Key: "g", Label: "group by " + graphNextGroupings(by)})
 		if pg.Offers.Probe {
-			page.Next = append(page.Next, calm.Action{Key: "B", Label: "probe the pods now"})
+			page.Next = append(page.Next, calm.Action{Key: calmProbeKeyName, Label: calmNextProbe})
 		}
-		page.Keys = append(keys, "p overlaid lines", "r re-read", "s queries", "Esc back")
+		keys.Own = append(keys.Own, "p overlaid lines")
+		page.Keys = keys.parts()
 	}
 
 	if by == graphByContainer && !c.Containers {
@@ -826,7 +835,7 @@ func graphCompareCalmPage(s *graphSnapshot, c *graphCompare, pg *graphPage, coun
 		page.Next = append(page.Next, calm.Action{Key: "Enter", Label: "open " + open})
 	}
 	if pg.PeerPages > 1 {
-		keys = append(keys, fmt.Sprintf("PgUp/PgDn pods (page %d of %d)", pg.Peers+1, pg.PeerPages))
+		keys.Own = append(keys.Own, fmt.Sprintf("PgUp/PgDn pods (page %d of %d)", pg.Peers+1, pg.PeerPages))
 	}
 	finish()
 	return page, groups
@@ -858,11 +867,11 @@ func renderGraphCompareCalm(s *graphSnapshot, c *graphCompare, pg *graphPage) []
 		if sentence == "" {
 			sentence = "The per-Pod series of this window have not been read. r reads again."
 		}
-		page := graphCalmWaiting(graphCompareTitle, s.Target.Label(), s.Window, sentence)
+		page := graphCalmWaiting(graphCompareTitle, graphCalmObject(&s.Target, pg), s.Window, sentence)
 		if pg.Busy == "" {
 			page.Title.Busy = ""
 		}
-		page.Keys = []string{"p overlaid lines", "r re-read", "Esc back"}
+		page.Keys = (&calmKeyLine{Own: []string{"p overlaid lines"}, Reread: true}).parts()
 		return graphCalmLines(&page, pg)
 	}
 	o := pg.calmOptions()

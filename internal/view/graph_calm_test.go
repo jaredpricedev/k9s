@@ -134,7 +134,7 @@ func TestGraphCalmPageAnswersFirstAndDrawsOneChartOverItsStrips(t *testing.T) {
 
 	// Two lines of keys: the likely next steps in words, and the rest.
 	require.Equal(t, "  next  n next chart (CPU)    a all charts    t what changed    D open in Grafana", lines[len(lines)-3])
-	require.Equal(t, "  ←→ time · 1 15m  2 1h  3 6h  4 24h · r re-read · s queries · b dots · Esc back", lines[len(lines)-1])
+	require.Equal(t, "  ←→ time · 1-4 window · s queries · b dots · r re-read · Esc back", lines[len(lines)-1])
 
 	// The colours are the semantic palette's, and every tag names its
 	// fields: no colour of the page's own.

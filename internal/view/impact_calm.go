@@ -39,7 +39,7 @@ const (
 	// the source and the windows of the whole comparison.
 	impactTallPage = 28
 
-	impactOrderCaveat  = `"After" is order in time, not cause.`
+	impactOrderCaveat  = "Order in time, not proof of cause."
 	impactUnreadCaveat = "Not read is not zero and not healthy."
 )
 
@@ -264,7 +264,8 @@ func (v *impactView) calmVerdict() calm.Verdict {
 
 // calmTitle is what is compared and how much of it was read.
 func (v *impactView) calmTitle() calm.Title {
-	title := calm.Title{View: impactTitle, Object: v.workload().Label()}
+	w := v.workload()
+	title := calm.Title{View: impactTitle, Object: calmObject(v.app.Config.ActiveNamespace(), w.Kind, w.Namespace, w.Name)}
 	read := v.read
 	if read != nil && read.rollout != nil {
 		r := read.rollout
@@ -290,26 +291,26 @@ func (v *impactView) calmPage(o calm.Options) calm.Page {
 	p := o.Palette
 	page := calm.Page{Title: v.calmTitle(), Verdict: v.calmVerdict()}
 	read := v.read
-	page.Keys = []string{"Esc back"}
+	keys := calmKeyLine{}
+	page.Keys = keys.parts()
 	if read == nil {
 		return page
 	}
 	// A key that has nothing to step through is not named.
-	rollouts := ""
 	if read.rollout != nil && read.rollout.Total > 1 {
-		rollouts = "n/N later/earlier rollout"
+		keys.Own = append(keys.Own, "n/N later/earlier rollout")
 	}
-	page.Keys = []string{rollouts, "r read again", "Esc back"}
+	keys.Reread = true
+	page.Keys = keys.parts()
 	if read.report == nil {
 		return page
 	}
-	page.Keys = []string{rollouts, "r read again", "D Grafana", "Esc back"}
+	keys.Own = append(keys.Own, calmGrafanaKeyName+" Grafana")
 	report := read.report
-	if report.Failure != "" {
-		// Reading again is the first of the next actions then, and is
-		// named once.
-		page.Keys = []string{rollouts, "D Grafana", "Esc back"}
-	}
+	// Reading again is the first of the next actions when nothing was
+	// read, and is named once.
+	keys.Reread = report.Failure == ""
+	page.Keys = keys.parts()
 	win := &report.Windows
 	if report.Step > 0 && win.After.End.After(win.Before.Start) {
 		page.Frame = chart.Frame{Start: win.Before.Start, End: win.After.End, Step: report.Step}
@@ -388,13 +389,43 @@ func (v *impactView) calmPage(o calm.Options) calm.Page {
 			page.Groups = append(page.Groups, calm.Group{Label: label, Role: calm.NotReadRole, Summary: list})
 		}
 	}
+	// The digits are the width compared on each side of the rollout here.
+	keys.Window = "1-5 window"
 	if len(v.calmOrder()) > 0 {
-		page.Keys = append([]string{"↑↓ signal", "1-5 window"}, page.Keys...)
-	} else {
-		page.Keys = append([]string{"1-5 window"}, page.Keys...)
+		keys.Move = "↑↓ signal"
 	}
+	page.Keys = keys.parts()
 	page.Next = v.calmNext()
+	impactArrows(&page, o)
 	return page
+}
+
+// impactArrow writes "before -> after" the way every calm page writes a
+// change: with an arrow, and in plain characters with noIcons. The words
+// of the comparison are written with "->" where they are made; the page
+// is given them in the form it draws, because its columns are measured
+// from the text.
+func impactArrow(text string, o calm.Options) string { //nolint:gocritic // Options are passed by value, as the kit takes them.
+	if o.ASCII {
+		return text
+	}
+	return strings.ReplaceAll(text, " -> ", " → ")
+}
+
+func impactArrows(page *calm.Page, o calm.Options) { //nolint:gocritic // Options are passed by value, as the kit takes them.
+	for i := range page.Verdict.Sentences {
+		page.Verdict.Sentences[i] = impactArrow(page.Verdict.Sentences[i], o)
+	}
+	for g := range page.Groups {
+		group := &page.Groups[g]
+		group.Head = impactArrow(group.Head, o)
+		for i := range group.Summary {
+			group.Summary[i] = impactArrow(group.Summary[i], o)
+		}
+		for r := range group.Rows {
+			group.Rows[r].Number = impactArrow(group.Rows[r].Number, o)
+		}
+	}
 }
 
 // calmNext is the likely actions, each with the key that really runs it.
@@ -409,7 +440,7 @@ func (v *impactView) calmNext() []calm.Action {
 	timeline := calm.Action{Key: "t", Label: "timeline"}
 	if report.Failure != "" {
 		// Nothing was read: reading again and the declaration come first.
-		return []calm.Action{{Key: "r", Label: "read again"}, {Key: ":sources", Label: "show and probe the declaration"}, timeline, all}
+		return []calm.Action{{Key: "r", Label: calmNextReread}, {Key: ":sources", Label: "show and probe the declaration"}, timeline, all}
 	}
 	graph := calm.Action{Key: "Enter", Label: "graph this workload"}
 	if outcome := v.focusedOutcome(); outcome != nil && impactGraphPanels[v.focused] != "" {
@@ -487,7 +518,7 @@ func (v *impactView) calmQueries(width int, short, whole bool, o calm.Options) [
 				color = p.Info
 			}
 			lines = append(lines, calm.FoldedLine(strings.ToUpper(signal.Label), color, []string{
-				signal.Format(outcome.Before.Value) + " -> " + signal.Format(outcome.After.Value), signal.FormatDelta(outcome.Delta()),
+				impactArrow(signal.Format(outcome.Before.Value)+" -> "+signal.Format(outcome.After.Value), o), signal.FormatDelta(outcome.Delta()),
 				impact.PercentChange(outcome.Before.Value, outcome.After.Value), outcome.Verdict,
 			}, false, width, o))
 			if strip := "the value from zero; in colour where a sample is further from the before value than the rule allows"; !short {

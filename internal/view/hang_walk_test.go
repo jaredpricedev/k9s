@@ -75,8 +75,9 @@ func TestHangViewsShareOneKeyboard(t *testing.T) {
 	require.Equal(t, ui.KeyShiftW, slowKey)
 
 	// n and Shift-N step forward and back through what a view steps
-	// through: episodes, signals, rollouts.
-	for name, words := range map[string][2]string{"slow": {"next episode", "previous episode"}, "graph": {"Next signal", "Previous signal"},
+	// through: episodes, the chart at full size (the signal on the per-Pod
+	// page of :graph), rollouts.
+	for name, words := range map[string][2]string{"slow": {"next episode", "previous episode"}, "graph": {calmNextChartLabel, "Previous chart"},
 		"impact": {"Next (later) rollout", "Previous (earlier) rollout"}} {
 		require.Contains(t, walkKey(views[name], ui.KeyN), words[0], name)
 		require.Contains(t, walkKey(views[name], ui.KeyShiftN), words[1], name)

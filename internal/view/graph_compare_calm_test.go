@@ -92,7 +92,7 @@ func TestGraphCompareCalmPageNamesThePodThatDiffersAndShowsWhatLinesUp(t *testin
 	require.Equal(t, hangPods[2], pg.Open)
 	require.Equal(t, "gitlab-webservice/queued", pg.Signal)
 	require.Equal(t, "  next  Enter open hx4mt    g group by container / revision / node / zone    B probe the pods now", lines[len(lines)-3])
-	require.Equal(t, "  ↑↓ signal · ←→ time · 1-4 window · a show every signal · p overlaid lines · r re-read · s queries · Esc back", lines[len(lines)-1])
+	require.Equal(t, "  ↑↓ signal · ←→ time · 1-4 window · a show every signal · s queries · p overlaid lines · r re-read · Esc back", lines[len(lines)-1])
 
 	// Colours come from the semantic palette only.
 	allowed := map[string]bool{}
@@ -261,7 +261,7 @@ func TestGraphCompareCalmPageSaysWhatASmallerScreenGivesUp(t *testing.T) {
 	require.Contains(t, page, "\n  ALIKE ON ALL 4  memory · restarts · network\n")
 	require.Contains(t, page, "NOT READ  5xx (no data)")
 	require.Contains(t, page, "  next  Enter open hx4mt  g group by container / revision / node / zone")
-	require.Contains(t, page, "  ↑↓ signal · ←→ time · 1-4 window · a show every signal · Esc back")
+	require.Contains(t, page, "  ↑↓ signal · ←→ time · 1-4 window · a show every signal · s queries · Esc back")
 	require.Len(t, calmColumns(calmLine(t, page, calmMarker), "▼"), 4)
 
 	// Regrouped, a signal has three rows. A second signal would cost the
@@ -271,7 +271,7 @@ func TestGraphCompareCalmPageSaysWhatASmallerScreenGivesUp(t *testing.T) {
 	require.Contains(t, page, "\n  QUEUED")
 	require.NotContains(t, page, "\n  P99")
 	require.Contains(t, page, "ALSO DIFFERS  p99 (hx4mt 48s, peers 350ms) +2 more")
-	require.Contains(t, page, "  ↑↓ signal · ←→ time · 1-4 window · a show every signal · Esc back")
+	require.Contains(t, page, "  ↑↓ signal · ←→ time · 1-4 window · a show every signal · s queries · Esc back")
 
 	// 60 columns: the strips shorten; nothing else changes. The number
 	// column keeps the room of a cursor time, so the strips are as wide
@@ -280,7 +280,8 @@ func TestGraphCompareCalmPageSaysWhatASmallerScreenGivesUp(t *testing.T) {
 	require.Empty(t, pg.Missing)
 	require.Regexp(t, `^> hx4mt  worker-f  [▁-█]{22}  14 +differs$`, calmLine(t, page, "> hx4mt"))
 	require.Contains(t, page, "NOT READ  5xx (no data) · free-threads (no data) +1 more")
-	require.Contains(t, page, "  ↑↓ signal · ←→ time · 1-4 window · Esc back")
+	// The narrow key line keeps the way out, all detail and the queries.
+	require.Contains(t, page, "  ↑↓ signal · a show every signal · s queries · Esc back")
 
 	// A very small screen keeps the Pod that differs, says what is not
 	// shown, and never drops what was not read.
@@ -288,7 +289,9 @@ func TestGraphCompareCalmPageSaysWhatASmallerScreenGivesUp(t *testing.T) {
 	require.NotEmpty(t, pg.Missing)
 	require.Contains(t, page, "> hx4mt")
 	require.Contains(t, page, "NOT READ")
-	require.Contains(t, page, "not shown at this size (a shows all)")
+	// 40 columns have no room for the long form of that line: the short
+	// one names the rows left out before it is cut.
+	require.Contains(t, page, "  not shown (a shows all): 3 of 4 rows …")
 
 	for _, by := range []graphGrouping{graphByPod, graphByRevision, graphByNode, graphByZone} {
 		for _, size := range [][2]int{{200, 60}, {132, 33}, {100, 24}, {80, 20}, {72, 20}, {60, 20}, {50, 16}, {40, 12}, {30, 8}} {
@@ -713,5 +716,6 @@ func TestGraphViewCalmComparisonKeysOpenThePodAndTakeTheEpisodesOfSlow(t *testin
 	require.True(t, ok)
 	require.True(t, fromSlow.comparing)
 	require.NotNil(t, fromSlow.episodes)
-	require.Equal(t, graphEpisodes{Label: "episodes", Start: report.Start, End: report.End, Intervals: report.Episodes}, *fromSlow.episodes)
+	// The marker row keeps the word :slow wrote over its own.
+	require.Equal(t, graphEpisodes{Label: "stalls", Start: report.Start, End: report.End, Intervals: report.Episodes}, *fromSlow.episodes)
 }

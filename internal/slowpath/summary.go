@@ -104,7 +104,7 @@ func (r *Report) episodeClock(episode chart.Interval) string {
 }
 
 // grouped joins lane phrases, naming a place once for the lanes that share
-// it: "slow p99, queueing and CPU throttling on pod …-hx4mt".
+// it: "slow p99, queueing and CPU throttling on pod hx4mt".
 func grouped(lanes []*Lane) string {
 	var (
 		order  []string
