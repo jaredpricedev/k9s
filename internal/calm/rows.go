@@ -70,6 +70,10 @@ type Group struct {
 	// Summary is what the group says when folded to one line; empty names
 	// its rows.
 	Summary []string
+	// FoldFirst folds a secondary group to one line before the page gives
+	// any blank row up: for rows the answer does not rest on, on a page
+	// that reads better with its whitespace than with those rows.
+	FoldFirst bool
 	// NumberWidth and CompareWidth are the least widths of the number and
 	// the comparison column, in cells. A view whose numbers are read under
 	// a cursor gives the widest it can write there, so that the columns are

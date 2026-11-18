@@ -15,14 +15,16 @@ import (
 	"github.com/derailed/k9s/internal/ui"
 )
 
-// The calm page of :impact. The sentence that says what was measured after
-// the rollout comes first, with what the revision changed directly under
-// it. Every signal that moved is one row: its name, before -> after, the
+// The calm page of :impact. The answer comes first, as a person would say
+// it: how many signals got worse after the rollout and which kinds, then
+// what the revision changed. It repeats no number of the rows under it.
+// Every signal that moved is one row: its name, before -> after, the
 // change, and a strip over both compared windows in which the rollout is
 // one band through every row. Signals that did not move are one dim line
 // of names; signals without a comparison are one line each and are never
 // left out. The rule, the sample counts and the queries of the selected
-// row are under s, and the table this view had before is under a.
+// row and the full diff of the revision are under s, and the table this
+// view had before, with the sentence that carries the numbers, is under a.
 const (
 	impactQueriesKey   = ui.KeyS
 	impactQueriesLabel = "Queries, rules and samples"
@@ -38,6 +40,10 @@ const (
 	// impactTallPage is the height from which the block of s also states
 	// the source and the windows of the whole comparison.
 	impactTallPage = 28
+
+	// impactNumberRoom is the widest number column the kit writes whole.
+	// Before and after are set in two columns only where that fits it.
+	impactNumberRoom = 16
 
 	impactOrderCaveat  = "Order in time, not proof of cause."
 	impactUnreadCaveat = "Not read is not zero and not healthy."
@@ -197,17 +203,71 @@ func impactStrip(outcome *impact.Outcome, step time.Duration) calm.Strip {
 }
 
 // impactChange is the change of a compared signal: absolute and relative.
-func impactChange(outcome *impact.Outcome) string {
-	change := outcome.Signal.FormatDelta(outcome.Delta())
+func impactChange(outcome *impact.Outcome) (delta, ratio string) {
+	delta = outcome.Signal.FormatDelta(outcome.Delta())
 	if outcome.Delta() == 0 {
-		change = "0"
+		delta = "0"
 	}
-	return change + "  " + impact.PercentChange(outcome.Before.Value, outcome.After.Value)
+	return delta, impact.PercentChange(outcome.Before.Value, outcome.After.Value)
 }
 
-// calmVerdict is the answer at the top: the sentence the comparison comes
-// to, then what the revision changed.
-func (v *impactView) calmVerdict() calm.Verdict {
+// impactFigures are the numbers of one row before they are set in columns.
+type impactFigures struct {
+	before, after, delta, ratio string
+}
+
+// impactColumnsOf sets the numbers of the rows in columns that every row
+// of the page shares, so that one kind of number is read down one column:
+// before ends where the arrow stands and after starts behind it, and the
+// change and its ratio each start at one column. The word over the column
+// is moved with the arrow. Where two columns would be wider than the kit
+// writes a number, before -> after is written as one text, as it is read.
+func impactColumnsOf(figures []impactFigures) (head string, number, compare []string) {
+	head = "before -> after"
+	var before, after, delta, ratio int
+	for _, f := range figures {
+		before, after = max(before, tviewCells(f.before)), max(after, tviewCells(f.after))
+		delta, ratio = max(delta, tviewCells(f.delta)), max(ratio, tviewCells(f.ratio))
+	}
+	before = max(before, len("before"))
+	aligned := before+len(" -> ")+after <= impactNumberRoom
+	if aligned {
+		head = strings.Repeat(" ", before-len("before")) + head
+	}
+	for _, f := range figures {
+		text := f.before + " -> " + f.after
+		if aligned {
+			text = strings.Repeat(" ", before-tviewCells(f.before)) + text + strings.Repeat(" ", after-tviewCells(f.after))
+		}
+		number = append(number, text)
+		// Every row is as wide as the widest, so the columns, and with
+		// them the strips, stand where they are whichever groups are rows.
+		compare = append(compare, f.delta+strings.Repeat(" ", delta-tviewCells(f.delta))+"  "+f.ratio+strings.Repeat(" ", ratio-tviewCells(f.ratio)))
+	}
+	return head, number, compare
+}
+
+// impactOneLine is the first of the forms of a sentence that is one line
+// of the answer at this width, and the last of them when none is: the
+// fullest form comes first.
+func impactOneLine(width int, o calm.Options, forms ...string) string { //nolint:gocritic // Options are passed by value, as the kit takes them.
+	for _, form := range forms {
+		if len(calm.VerdictLines(calm.Verdict{Sentences: []string{impactArrow(form, o)}}, width, o)) <= 1 {
+			return form
+		}
+	}
+	return forms[len(forms)-1]
+}
+
+// calmVerdict is the answer at the top: what the comparison came to, as a
+// person would say it, then what the revision changed. Each sentence is
+// one line where a form of it fits one: the kinds of signal are left out
+// of the first when they do not fit beside it, because the rows name them;
+// the two rates out of the sentence about a changed request rate, because
+// its row or its folded line states them; and the values of the memory
+// limit out of the last, because s states the whole diff. What is missing
+// from the comparison is never left out.
+func (v *impactView) calmVerdict(width int, o calm.Options) calm.Verdict { //nolint:gocritic // Options are passed by value, as the kit takes them.
 	read := v.read
 	// What the revision changed is a statement of its own: it starts a line.
 	out := calm.Verdict{Apart: true}
@@ -223,12 +283,13 @@ func (v *impactView) calmVerdict() calm.Verdict {
 		}
 	default:
 		report := read.report
-		summary := report.Summary()
-		if report.Traffic != "" && strings.HasSuffix(summary, " "+report.Traffic) {
-			out.Sentences = []string{strings.TrimSuffix(summary, " "+report.Traffic), report.Traffic}
-		} else {
-			out.Sentences = []string{summary}
+		answer := report.Answer()
+		out.Sentences = []string{impactOneLine(width, o, answer.Lead, answer.Brief)}
+		if answer.Traffic != "" {
+			// What limits the comparison follows the sentence it limits.
+			out.Sentences = append(out.Sentences, impactOneLine(width, o, answer.Traffic, answer.TrafficBrief))
 		}
+		out.Sentences = append(out.Sentences, impactOneLine(width, o, answer.Changed, answer.ChangedBrief))
 		worse, better, same, _ := report.Counts()
 		out.Caveat = impactOrderCaveat
 		switch {
@@ -236,14 +297,6 @@ func (v *impactView) calmVerdict() calm.Verdict {
 			out.Kind, out.Caveat = calm.NotRead, impactUnreadCaveat
 		case worse == 0:
 			out.Kind = calm.NothingFound
-		}
-		switch {
-		case len(report.Changes) > 0:
-			out.Sentences = append(out.Sentences, report.Rollout.Label()+" changed: "+strings.Join(report.Changes, "; "))
-		case report.Rollout.Previous == nil:
-			out.Sentences = append(out.Sentences, report.Rollout.Label()+" is the earliest retained revision; there is no earlier one to diff.")
-		default:
-			out.Sentences = append(out.Sentences, report.Rollout.Label()+" changed: nothing in images, env keys, resources or commands.")
 		}
 	}
 	// What makes the page unsafe to read as it stands comes before it.
@@ -286,10 +339,77 @@ func (v *impactView) calmTitle() calm.Title {
 	return title
 }
 
+// impactRows is the signals of a comparison as the page groups them.
+type impactRows struct {
+	// rows are the rows of a group, short what a group of rows says when
+	// it is folded to one line, and names the signals of a group.
+	rows         map[string][]calm.Row
+	short, names map[string][]string
+	// head is the word over the column of before and after.
+	head string
+	// reason is why signals were not read, when one reason holds for all
+	// of them.
+	reason string
+}
+
+// calmRows sorts the signals of a report into the groups of the page and
+// makes a row of each that moved. The numbers of the rows are set in
+// columns once all of them are known.
+func (v *impactView) calmRows(report *impact.Report, p *calm.Palette) impactRows {
+	set := impactRows{rows: map[string][]calm.Row{}, short: map[string][]string{}, names: map[string][]string{}}
+	type place struct {
+		class string
+		row   int
+	}
+	var (
+		figures []impactFigures
+		places  []place
+	)
+	reasons := map[string]bool{}
+	for index := range report.Outcomes {
+		outcome := &report.Outcomes[index]
+		signal := &outcome.Signal
+		class := impactClass(outcome)
+		set.names[class] = append(set.names[class], signal.Label)
+		if class == impactNotReadLabel {
+			reasons[outcome.Reason], set.reason = true, outcome.Reason
+		}
+		if outcome.State != impact.Compared || outcome.Verdict == impact.Unchanged {
+			continue
+		}
+		color := p.Accent
+		switch class {
+		case impactWorseLabel:
+			color = p.Fail
+		case impactBetterLabel:
+			color = p.Info
+		}
+		figure := impactFigures{before: signal.Format(outcome.Before.Value), after: signal.Format(outcome.After.Value)}
+		figure.delta, figure.ratio = impactChange(outcome)
+		figures = append(figures, figure)
+		places = append(places, place{class: class, row: len(set.rows[class])})
+		set.short[class] = append(set.short[class], signal.Label+" "+figure.before+" -> "+figure.after)
+		set.rows[class] = append(set.rows[class], calm.Row{
+			Subject: signal.Label, Color: color, Strip: impactStrip(outcome, report.Step), Selected: signal.ID == v.focused,
+		})
+	}
+	if len(reasons) != 1 {
+		set.reason = ""
+	}
+	head, number, compare := impactColumnsOf(figures)
+	set.head = head
+	for index, at := range places {
+		set.rows[at.class][at.row].Number, set.rows[at.class][at.row].Compare = number[index], compare[index]
+	}
+	return set
+}
+
 // calmPage builds the page from the retained comparison.
-func (v *impactView) calmPage(o calm.Options) calm.Page {
+func (v *impactView) calmPage(width int, o calm.Options) calm.Page { //nolint:gocritic // Options are passed by value, as the kit takes them.
 	p := o.Palette
-	page := calm.Page{Title: v.calmTitle(), Verdict: v.calmVerdict()}
+	// The rows of this page are many: a single row to spare sets the
+	// answer apart from them before it sets the keys apart.
+	page := calm.Page{Title: v.calmTitle(), Verdict: v.calmVerdict(width, o), AnswerApart: true}
 	read := v.read
 	keys := calmKeyLine{}
 	page.Keys = keys.parts()
@@ -319,51 +439,26 @@ func (v *impactView) calmPage(o calm.Options) calm.Page {
 		page.Bands = calm.Bands{Label: report.Rollout.Label(), Guide: true,
 			Episodes: []chart.Interval{{Start: win.Rollout, End: win.Rollout}}}
 	}
-	rows := map[string][]calm.Row{}
-	// names are the signals of a group, short what a group of rows says
-	// when it is folded to one line.
-	names, short := map[string][]string{}, map[string][]string{}
-	reasons := map[string]bool{}
-	reason := ""
-	for index := range report.Outcomes {
-		outcome := &report.Outcomes[index]
-		signal := &outcome.Signal
-		class := impactClass(outcome)
-		names[class] = append(names[class], signal.Label)
-		if class == impactNotReadLabel {
-			reasons[outcome.Reason], reason = true, outcome.Reason
-		}
-		if outcome.State != impact.Compared || outcome.Verdict == impact.Unchanged {
-			continue
-		}
-		color := p.Accent
-		switch class {
-		case impactWorseLabel:
-			color = p.Fail
-		case impactBetterLabel:
-			color = p.Info
-		}
-		short[class] = append(short[class], signal.Label+" "+signal.Format(outcome.Before.Value)+" -> "+signal.Format(outcome.After.Value))
-		rows[class] = append(rows[class], calm.Row{
-			Subject: signal.Label, Number: signal.Format(outcome.Before.Value) + " -> " + signal.Format(outcome.After.Value),
-			Compare: impactChange(outcome), Color: color, Strip: impactStrip(outcome, report.Step), Selected: signal.ID == v.focused,
-		})
-	}
+	set := v.calmRows(report, &o.Palette)
+	rows := set.rows
 	headed := false
 	for _, label := range impactRowLabels {
 		if len(rows[label]) == 0 {
 			continue
 		}
-		group := calm.Group{Label: label, Rows: rows[label], Summary: short[label]}
+		group := calm.Group{Label: label, Rows: rows[label], Summary: set.short[label]}
 		switch {
 		case label == impactWorseLabel:
 			group.Color = p.Warn
 		case label == impactMovedLabel || len(rows[impactWorseLabel]) > 0:
-			// What the sentence does not rest on folds first.
-			group.Role = calm.Secondary
+			// What the sentence does not rest on folds first, and what
+			// is only higher or lower before the page gives a blank row
+			// up: the rows that are worse read better apart than beside
+			// two more.
+			group.Role, group.FoldFirst = calm.Secondary, label == impactMovedLabel
 		}
 		if !headed {
-			group.Head, headed = "before -> after", true
+			group.Head, headed = set.head, true
 		}
 		for index := range group.Rows {
 			if group.Rows[index].Selected {
@@ -374,18 +469,18 @@ func (v *impactView) calmPage(o calm.Options) calm.Page {
 		}
 		page.Groups = append(page.Groups, group)
 	}
-	if list := names[impactUnchangedLabel]; len(list) > 0 {
+	if list := set.names[impactUnchangedLabel]; len(list) > 0 {
 		page.Groups = append(page.Groups, calm.Group{Label: impactUnchangedLabel, Role: calm.QuietRole, Summary: list})
 	}
-	if list := names[impactNotReadLabel]; len(list) > 0 {
+	if list := set.names[impactNotReadLabel]; len(list) > 0 {
 		// One reason is said once, before the names it holds for.
-		if len(reasons) == 1 && reason != "" {
-			list = append([]string{reason + ": " + list[0]}, list[1:]...)
+		if set.reason != "" {
+			list = append([]string{set.reason + ": " + list[0]}, list[1:]...)
 		}
 		page.Groups = append(page.Groups, calm.Group{Label: impactNotReadLabel, Color: p.Warn, Role: calm.NotReadRole, Summary: list})
 	}
 	for _, label := range []string{impactMissingLabel, impactTooFewLabel} {
-		if list := names[label]; len(list) > 0 {
+		if list := set.names[label]; len(list) > 0 {
 			page.Groups = append(page.Groups, calm.Group{Label: label, Role: calm.NotReadRole, Summary: list})
 		}
 	}
@@ -492,12 +587,28 @@ func impactQueryLines(text string, room int) []string {
 	return append(out, text)
 }
 
+// impactDiff is what the revision changed, as the list the comparison of
+// the two pod templates wrote.
+func impactDiff(report *impact.Report, o calm.Options) string { //nolint:gocritic // Options are passed by value, as the kit takes them.
+	switch {
+	case len(report.Changes) > 0:
+		return impactArrow(strings.Join(report.Changes, "; "), o)
+	case report.Rollout.Previous == nil:
+		return "not known: " + report.Rollout.Label() + " is the earliest retained revision"
+	}
+	return "nothing in images, env keys, resources or commands"
+}
+
 // calmQueries is the block s shows on the calm page: the selected signal
 // in full, the rule behind its verdict, how many samples stood behind it,
-// its exact queries, and the source and windows of the whole comparison.
+// its exact queries, the full diff of the revision, and the source and
+// windows of the whole comparison.
 // whole writes a query that is wider than the line on as many lines as it
-// needs; without it a query is one line, cut where the line ends.
-func (v *impactView) calmQueries(width int, short, whole bool, o calm.Options) []string {
+// needs; without it a query is one line, cut where the line ends. diff
+// does the same for the diff of the revision.
+//
+//nolint:gocritic // Options are passed by value, as the kit takes them.
+func (v *impactView) calmQueries(width int, short, whole, diff bool, o calm.Options) []string {
 	if v.read == nil || v.read.report == nil {
 		return nil
 	}
@@ -506,6 +617,21 @@ func (v *impactView) calmQueries(width int, short, whole bool, o calm.Options) [
 	var lines []string
 	plain := func(label, text string) {
 		lines = append(lines, calm.RestLine([]string{fmt.Sprintf("%-8s %s", label, text)}, width, o))
+	}
+	// wrapped writes a text that is read to its end: on as many lines as
+	// it needs when it is written whole, and on one line, cut where the
+	// line ends, when it is not.
+	wrapped := func(label, text string, whole bool) {
+		if !whole {
+			plain(label, text)
+			return
+		}
+		for index, part := range impactQueryLines(text, width-calm.Indent-9) {
+			if index > 0 {
+				label = ""
+			}
+			plain(label, part)
+		}
 	}
 	if outcome := v.focusedOutcome(); outcome != nil {
 		signal := &outcome.Signal
@@ -542,27 +668,20 @@ func (v *impactView) calmQueries(width int, short, whole bool, o calm.Options) [
 			plain("note", strings.Join(outcome.Notes, "; "))
 		}
 		for _, query := range outcome.Queries {
-			switch {
-			case query == "":
-			case whole:
+			if query != "" {
 				// A query is read to be run again: it is not cut.
-				for index, part := range impactQueryLines(query, width-calm.Indent-9) {
-					label := ""
-					if index == 0 {
-						label = "query"
-					}
-					plain(label, part)
-				}
-			default:
-				plain("query", query)
+				wrapped("query", query, whole)
 			}
 		}
 	} else if report.Failure != "" {
 		lines = append(lines, calm.RestLine([]string{"Nothing was read, so nothing is shown as a value. That is not a zero and not a sign of health."}, width, o))
 	}
+	// The answer says what kinds of thing the revision changed; this is
+	// the list itself, for a reader who asks which image and which keys.
+	wrapped("changed", impactDiff(report, o), diff)
 	if short {
-		// A short screen keeps the rule, the samples and the queries, and
-		// leaves what holds for every signal to a taller one.
+		// A short screen keeps the rule, the samples, the queries and
+		// the diff, and leaves the source and the windows to a taller one.
 		return lines
 	}
 	if report.Step > 0 {
@@ -605,7 +724,7 @@ func (v *impactView) renderCalm() {
 				height = max(height-1, 1)
 			}
 		}
-		page = v.calmPage(o)
+		page = v.calmPage(width, o)
 		plan = calm.Lay(&page, width, height, o)
 		if calmKeepSelected(&page, &plan) {
 			plan = calm.Lay(&page, width, height, o)
@@ -617,24 +736,33 @@ func (v *impactView) renderCalm() {
 		return !plan.TooSmall && plan.Layout.Strip > 0, !plan.TooSmall && next
 	}
 	if v.queries {
-		// A query is read to be run again, so it is written whole where
-		// that costs the page under it neither its strips nor its next
-		// line: first with a blank row beside the block, then without.
-		// Where it would, each query is one line, cut where the line ends.
+		// A query is read to be run again and the diff to be read to its
+		// end, so both are written whole where that costs the page under
+		// them neither its strips nor its next line: first with a blank
+		// row beside the block, then without. Where it would, each query
+		// is one line, cut where the line ends; the diff is cut last, and
+		// only for a page that would lose its strips or its next line to
+		// it.
 		short := all < impactTallPage
-		cut, whole := v.calmQueries(width, short, false, o), v.calmQueries(width, short, true, o)
-		strips, next := lay(cut, true)
-		if len(whole) > len(cut) {
-			fits := false
+		least := v.calmQueries(width, short, false, false, o)
+		strips, next := lay(least, true)
+		fits := false
+		for _, more := range [][]string{v.calmQueries(width, short, true, true, o), v.calmQueries(width, short, false, true, o)} {
+			if len(more) == len(least) {
+				continue
+			}
 			for _, blank := range []bool{true, false} {
-				if s, n := lay(whole, blank); !plan.TooSmall && (s || !strips) && (n || !next) {
+				if s, n := lay(more, blank); !plan.TooSmall && (s || !strips) && (n || !next) {
 					fits = true
 					break
 				}
 			}
-			if !fits {
-				lay(cut, true)
+			if fits {
+				break
 			}
+		}
+		if !fits {
+			lay(least, true)
 		}
 	} else {
 		lay(nil, false)

@@ -5,6 +5,7 @@ package view
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -38,14 +39,45 @@ func drawnCells(t *testing.T, view tview.Primitive, width, height int) (runes []
 	return runes, back
 }
 
-// The calm page: the sentence first with what the revision changed under
-// it, one row per signal that moved, and one line each for what did not
-// move and what could not be compared. 132x33, 80x21 and 60x21 are what
-// the application leaves the view in terminals of 132x36, 80x24 and 60x24.
+// impactGroupAt finds the label row of a group or its folded line.
+var impactGroupAt = regexp.MustCompile(`^ {2}[A-Z][A-Z ]+[A-Z]( |$)`)
+
+// impactAnswerLines are the lines of the answer on a drawn calm page: the
+// lines between the title and the marker row of the rollout, or the first
+// group when there is no marker row, without the blank ones.
+func impactAnswerLines(t *testing.T, frame string) []string {
+	t.Helper()
+	var out []string
+	lines := strings.Split(frame, "\n")
+	require.Greater(t, len(lines), 1)
+	for _, line := range lines[1:] {
+		if strings.HasSuffix(line, "▼") || strings.HasSuffix(line, " v") || impactGroupAt.MatchString(line) ||
+			strings.HasPrefix(line, "  next ") {
+			return out
+		}
+		if strings.TrimSpace(line) != "" {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+// The calm page: the answer first, as a person would say it, with what
+// the revision changed under it; then one row per signal that moved, and
+// one line each for what did not move and what could not be compared.
+// 132x33, 80x21 and 60x21 are what the application leaves the view in
+// terminals of 132x36, 80x24 and 60x24; one row less where it draws its
+// line of crumbs, which TestImpactCalmFoldsTheNeutralRowsBeforeItGivesABlankRowUp
+// covers.
 func TestImpactCalmPageStatesTheAnswerFirstAtEverySize(t *testing.T) {
 	v := impactViewFixture(t)
 	v.accept(impactStoryRead(t, impactStory()))
 	require.False(t, v.allDetail, "the calm page is the default")
+	const (
+		lead    = "7 signals got worse after rev 2 rolled out at 04:20"
+		kinds   = ": errors, latency, restarts, memory and ready replicas."
+		changed = "Rev 2 changed the image, the memory limit"
+	)
 	for _, size := range [][2]int{{132, 33}, {120, 34}, {80, 21}, {60, 21}, {40, 8}} {
 		frame := drawnText(t, v, size[0], size[1])
 		if size[1] < ui.MinTaskHeight {
@@ -59,20 +91,39 @@ func TestImpactCalmPageStatesTheAnswerFirstAtEverySize(t *testing.T) {
 		flat := strings.Join(strings.Fields(frame), " ")
 		require.True(t, strings.HasPrefix(lines[0], "Impact  Deployment apps/"), lines[0])
 		require.Contains(t, lines[0], "rev 2 (latest of 2)")
-		// The answer comes first, then what the revision changed, on a line
-		// of its own, then the evidence.
-		first := lines[1]
-		if first == "" {
-			first = lines[2]
+		// The answer comes first: what got worse, then what the revision
+		// changed, each on one line, then the evidence. The rows under it
+		// carry every before and after value, so the answer repeats none.
+		answer := impactAnswerLines(t, frame)
+		require.GreaterOrEqual(t, len(answer), 2, "%d columns", size[0])
+		require.True(t, strings.HasPrefix(answer[0], "  "+lead), "%d columns: %q", size[0], answer[0])
+		require.True(t, strings.HasPrefix(answer[1], "  "+changed), "%d columns: %q", size[0], answer[1])
+		for _, line := range answer {
+			require.NotRegexp(t, `\d(%|ms|s)( |,|\.|$)`, line, "%d columns: no value of a row is said twice", size[0])
+			require.NotContains(t, line, "After rev 2 (", "the sentence that lists the values is under a")
 		}
-		require.True(t, strings.HasPrefix(first, "  After rev 2 (04:20): error ratio 0.2% → 14.2%, p99 248ms"), "%d columns: %q", size[0], first)
-		require.Contains(t, flat, "After rev 2 (04:20): error ratio 0.2% → 14.2%, p99 248ms → 2.5s, restarts 0 → 6, "+
-			"memory at limit (limit 512Mi → 256Mi), ready replicas 2 → 1.")
-		require.Regexp(t, `(?m)^  rev 2 changed: image v1 → v2; limits\.memory 512Mi →`, frame)
-		require.Contains(t, flat, "rev 2 changed: image v1 → v2; limits.memory 512Mi → 256Mi; env +FEATURE_FLAGS")
 		require.Contains(t, flat, impactOrderCaveat)
-		answer, changed, evidence := strings.Index(frame, "After rev 2"), strings.Index(frame, "rev 2 changed:"), strings.Index(frame, impactWorseLabel)
-		require.True(t, answer < changed && changed < evidence, "%d columns", size[0])
+		at, evidence := strings.Index(frame, lead), strings.Index(frame, impactWorseLabel)
+		require.True(t, 0 < at && at < strings.Index(frame, changed) && strings.Index(frame, changed) < evidence, "%d columns", size[0])
+		// One blank row sets the answer apart from the evidence at every
+		// size, and one the keys.
+		require.Regexp(t, `(?m)`+regexp.QuoteMeta(impactOrderCaveat)+`\n\n +rev 2 .*▼$`, frame, "%d columns", size[0])
+		require.Regexp(t, `(?m)^  NOT AVAILABLE  CPU throttled\n\n  next  `, frame, "%d columns", size[0])
+		switch size[0] {
+		case 132, 120:
+			// Two lines: the kinds of signal are named, the memory limit
+			// is stated, and the caveat is at the right of the last line.
+			require.Equal(t, []string{"  " + lead + kinds}, answer[:1], "%d columns", size[0])
+			require.Len(t, answer, 2, "%d columns", size[0])
+			require.Regexp(t, `^  Rev 2 changed the image, the memory limit \(512Mi → 256Mi\) and 1 env var\. {3,}Order in time, not proof of cause\.$`, answer[1])
+		case 80:
+			// Three lines: each sentence is one line, in the fullest form
+			// that fits one, and the caveat is the third.
+			require.Equal(t, []string{"  " + lead + ".", "  Rev 2 changed the image, the memory limit (512Mi → 256Mi) and 1 env var.",
+				"  " + impactOrderCaveat}, answer)
+		case 60:
+			require.Equal(t, []string{"  " + lead + ".", "  Rev 2 changed the image, the memory limit and 1 env var.", "  " + impactOrderCaveat}, answer)
+		}
 		// A signal, before -> after and its strip are one row: the value
 		// from zero, with the rollout as a guide where the windows meet.
 		require.Regexp(t, `(?m)^> Error ratio +0\.2% → 14\.2% .*▁+┊█+$`, frame, "%d columns", size[0])
@@ -102,25 +153,27 @@ func TestImpactCalmPageStatesTheAnswerFirstAtEverySize(t *testing.T) {
 			require.Empty(t, v.dropped, "132x36 gives nothing up")
 			require.Contains(t, lines[0], "read 04:32 · 9 of 9 queries")
 			require.Contains(t, frame, "rev 2 rolled out 04:20:00Z · 12m each side")
-			require.Regexp(t, `(?m)^> Error ratio +0\.2% → 14\.2% +\+14pp  x71 +▁`, frame)
+			require.Regexp(t, `(?m)^> Error ratio +0\.2% → 14\.2% +\+14pp +x71 +▁`, frame)
 			// A signal that fell is high before the rollout and low after it.
-			require.Regexp(t, `(?m)^  Ready \(min\) +2 → 1 +-1  -50% +█+┊▅+$`, frame)
+			require.Regexp(t, `(?m)^  Ready \(min\) +2 → 1 +-1 +-50% +█+┊▅+$`, frame)
 			require.Regexp(t, `(?m)^  Memory/limit +36\.7% → 99\.2% +\+62\.5pp  \+170% +▄+┊█+$`, frame)
 			// A restart in the step of the rollout keeps its mark.
-			require.Regexp(t, `(?m)^  Restarts +0 → 6 +\+6  new +·+▲·+$`, frame)
-			require.Regexp(t, `(?m)^  HIGHER OR LOWER AFTER +┊\n  Memory peak   188Mi → 254Mi   \+66Mi  \+35% +▆+┊█+$`, frame)
+			require.Regexp(t, `(?m)^  Restarts +0 → 6 +\+6 +new +·+▲·+$`, frame)
+			require.Regexp(t, `(?m)^  HIGHER OR LOWER AFTER +┊\n  Memory peak +188Mi → 254Mi +\+66Mi +\+35% +▆+┊█+$`, frame)
 			require.Contains(t, frame, "  next  Enter graph this workload    a all 11 signals    s query and rule    t timeline\n")
 			require.Contains(t, frame, "  ↑↓ signal · 1-5 window · n/N later/earlier rollout · D Grafana · r re-read · Esc back\n")
 		case 80:
-			// Every signal that is worse keeps its row and its strip; the
-			// neutral ones fold to one line and the second key line goes.
+			// Every signal that is worse keeps its row and its strip. The
+			// neutral ones fold to one line before any blank row goes, and
+			// the second key line goes before the blank rows that set the
+			// answer and the keys apart.
 			require.Contains(t, lines[0], "04:32 · 9/9")
 			for _, signal := range []string{"Error ratio", "Latency p50", "Latency p95", "Latency p99", "Restarts", "Memory/limit", "Ready (min)"} {
 				require.Regexp(t, `(?m)^[> ] `+strings.NewReplacer("(", `\(`, ")", `\)`).Replace(signal)+` .*[▁▂▄▅█·▲┊]{20,}$`, frame)
 			}
 			require.Contains(t, frame, "  HIGHER OR LOWER AFTER  Memory peak 188Mi → 254Mi · CPU usage 60m → 340m\n")
-			require.Equal(t, []string{"blank rows around the verdict and the keys", "blank rows before groups", "HIGHER OR LOWER AFTER folded to one line",
-				"the second key line", "the blank rows under the verdict and over the keys"}, v.dropped)
+			require.Equal(t, []string{"HIGHER OR LOWER AFTER folded to one line", "blank rows around the verdict and the keys", "blank rows before groups",
+				"the second key line"}, v.dropped)
 		case 60:
 			// The change column goes; every worse signal keeps its row and
 			// its strip.
@@ -128,12 +181,13 @@ func TestImpactCalmPageStatesTheAnswerFirstAtEverySize(t *testing.T) {
 			require.NotContains(t, frame, "+14pp")
 			require.NotContains(t, frame, "not shown", "nothing is left out at 60x24")
 			require.Contains(t, v.dropped, "what each number is compared with")
-			// Three rows fewer, the last rows of the group go (one more for
-			// the line that says so), counted on
-			// a line that names the key for all of it.
+			// Three rows fewer: the two blank rows go, then the last rows
+			// of the group (one more for the line that says so), counted
+			// on a line that names the key for all of it.
 			short := drawnText(t, v, 60, size[1]-3)
-			require.Contains(t, short, "  not shown (a shows all): 4 of 7 rows of WORSE AFTER\n", "the line names the group whole")
-			require.Contains(t, v.dropped, "4 of 7 rows of WORSE AFTER")
+			require.Contains(t, short, "  not shown (a shows all): 2 of 7 rows of WORSE AFTER\n", "the line names the group whole")
+			require.Contains(t, v.dropped, "2 of 7 rows of WORSE AFTER")
+			require.Len(t, impactAnswerLines(t, short), 3, "the answer is whole")
 		}
 	}
 }
@@ -210,8 +264,8 @@ func TestImpactCalmNoIconsUsesASCIIOnly(t *testing.T) {
 }
 
 // s shows the rule, the sample counts and the exact queries of the row
-// under the cursor, and the source and windows of the comparison; a shows
-// the table. The cursor steps through the rows.
+// under the cursor, the diff of the revision, and the source and windows
+// of the comparison; a shows the table. The cursor steps through the rows.
 func TestImpactCalmKeysShowTheDetailOnRequest(t *testing.T) {
 	v := impactViewFixture(t)
 	v.accept(impactStoryRead(t, impactStory()))
@@ -234,6 +288,7 @@ func TestImpactCalmKeysShowTheDetailOnRequest(t *testing.T) {
 		"  rule     counts as changed from 0.1pp and 10% of before; needs 4 samples on each side\n",
 		"  samples  49 before, 41 after; 7 just after the rollout left out (their 2m rate window spans it)\n",
 		`  query    sum(rate(http_requests_total{namespace="apps",pod=~"checkout-api-[a-z0-9]+-[a-z0-9]+",code=~"5.."}[120s]))` + "\n",
+		"  changed  image v1 → v2; limits.memory 512Mi → 256Mi; env +FEATURE_FLAGS\n",
 		"  source   prometheus service monitoring/prometheus:9090 · step 15s · rates over 2m · http: pod=~",
 		"  windows  before 04:08:00-04:20:00Z | after 04:20:00-04:32:00Z · 12m each (asked 30m; the rollout was 12m before this read)\n",
 	} {
@@ -242,10 +297,11 @@ func TestImpactCalmKeysShowTheDetailOnRequest(t *testing.T) {
 	require.Less(t, strings.Index(frame, impactMissingLabel), strings.Index(frame, "ERROR RATIO"), "the detail stands under the evidence")
 	require.Less(t, strings.Index(frame, "windows  before"), strings.Index(frame, "  next  "), "and over the keys")
 	require.Regexp(t, `(?m)^> Error ratio .*█$`, frame, "the page it belongs to stays")
-	// A short screen keeps the rule, the samples and the queries, and the
-	// row they belong to.
+	// A short screen keeps the rule, the samples, the queries and the
+	// diff, and the row they belong to.
 	frame = drawnText(t, v, 80, 21)
-	for _, shown := range []string{"  ERROR RATIO  0.2% → 14.2% · +14pp · x71 · worse\n", "  rule     counts as changed from 0.1pp", "  samples  49 before, 41 after", "  query    sum(rate("} {
+	for _, shown := range []string{"  ERROR RATIO  0.2% → 14.2% · +14pp · x71 · worse\n", "  rule     counts as changed from 0.1pp", "  samples  49 before, 41 after", "  query    sum(rate(",
+		"  changed  image v1 → v2; limits.memory 512Mi → 256Mi; env +FEATURE_FLAGS\n"} {
 		require.Contains(t, frame, shown)
 	}
 	require.NotContains(t, frame, "  source ")
@@ -330,9 +386,9 @@ func TestImpactCalmStatesWhatCouldNotBeRead(t *testing.T) {
 	frame = drawnText(t, v, 100, 30)
 	lines := strings.Split(frame, "\n")
 	require.Contains(t, lines[0], "read 04:32 · 0 of 9 queries")
-	require.True(t, strings.HasPrefix(lines[2], "  After rev 2 (04:20): nothing was read from the source: denied (HTTP 403)."), lines[2])
-	require.Contains(t, frame, impactUnreadCaveat)
-	require.Regexp(t, `(?m)^  rev 2 changed: image v1 → v2`, frame, "what the revision changed needs no metrics source")
+	require.Equal(t, "  Nothing was read around rev 2, rolled out at 04:20: denied (HTTP 403).", lines[2])
+	require.Equal(t, []string{"  Rev 2 changed the image, the memory limit (512Mi → 256Mi) and 1 env var.", "  " + impactUnreadCaveat}, lines[3:5],
+		"what the revision changed needs no metrics source")
 	require.Contains(t, frame, "  NOT READ  denied (HTTP 403): Request rate · Error ratio · Latency p50 · Latency p95 +7 more\n")
 	require.Contains(t, frame, "  next  r read again    :sources show and probe the declaration    t timeline    a all 11 signals\n")
 	require.Contains(t, frame, "  1-5 window · n/N later/earlier rollout · D Grafana · Esc back\n")
@@ -380,12 +436,13 @@ func TestImpactCalmWithoutASourceStillStatesTheRollout(t *testing.T) {
 	frame := drawnText(t, v, 100, 30)
 	require.Regexp(t, `(?m)^Impact  Deployment apps/checkout-api · rev 2 \(latest of 2\) +not read$`, frame)
 	flat := strings.Join(strings.Fields(frame), " ")
-	require.Contains(t, flat, "nothing was read from the source: no Prometheus source is declared for this context; :sources shows how to declare one. No comparison was made.")
-	require.Contains(t, frame, "  rev 2 changed: image v1 → v2; limits.memory 512Mi → 256Mi; env +FEATURE_FLAGS\n")
+	require.Regexp(t, `Nothing was read around rev 2, rolled out at \d\d:\d\d: no Prometheus source is declared for this context; :sources shows how to declare one\.`, flat)
+	require.Contains(t, frame, "  Rev 2 changed the image, the memory limit (512Mi → 256Mi) and 1 env var.\n")
 	require.Contains(t, frame, impactUnreadCaveat)
 	impactPress(t, v, impactQueriesKey)
 	frame = drawnText(t, v, 100, 30)
 	require.Contains(t, frame, "  Nothing was read, so nothing is shown as a value. That is not a zero and not a sign of health.\n")
+	require.Contains(t, frame, "  changed  image v1 → v2; limits.memory 512Mi → 256Mi; env +FEATURE_FLAGS\n", "the diff itself is under s")
 	require.Contains(t, frame, "  source   prometheus: not read\n")
 }
 
@@ -406,13 +463,13 @@ func TestImpactCalmSeparatesWorseBetterAndNeutral(t *testing.T) {
 	}}
 	v.accept(impactStoryRead(t, story))
 	frame := drawnText(t, v, 132, 33)
-	require.Equal(t, "  After rev 2 (04:20): p99 248ms → 2.5s.", strings.Split(frame, "\n")[2])
+	require.Equal(t, "  Latency got worse after rev 2 rolled out at 04:20: p50, p95 and p99.", strings.Split(frame, "\n")[2], "one kind is said by its name")
 	worse, better, moved := strings.Index(frame, impactWorseLabel), strings.Index(frame, impactBetterLabel), strings.Index(frame, impactMovedLabel)
 	require.True(t, 0 < worse && worse < better && better < moved)
 	require.Regexp(t, `(?m)^> Latency p50 +66\.7ms → 593ms .*▂+┊█+$`, frame, "the cursor starts on the first signal that is worse")
 	require.Regexp(t, `(?m)^  Error ratio +14\.9% → 0\.19% +-14\.7pp  -99% +█+┊▁+$`, frame, "a fall is drawn as a fall")
-	require.Regexp(t, `(?m)^  Ready \(min\) +1 → 2 +\+1  \+100% +▅+┊█+$`, frame)
-	require.Regexp(t, `(?m)^  Memory peak +254Mi → 188Mi +-66Mi  -26% +█+┊▆+$`, frame)
+	require.Regexp(t, `(?m)^  Ready \(min\) +1 → 2 +\+1 +\+100% +▅+┊█+$`, frame)
+	require.Regexp(t, `(?m)^  Memory peak +254Mi → 188Mi +-66Mi +-26% +█+┊▆+$`, frame)
 	require.Contains(t, frame, "  UNCHANGED  Request rate · Restarts\n")
 	require.Contains(t, frame, "  NOT AVAILABLE  CPU throttled\n")
 	// At 80x24 what the sentence rests on keeps its rows; the rest is one
@@ -427,8 +484,11 @@ func TestImpactCalmSeparatesWorseBetterAndNeutral(t *testing.T) {
 	story.steady = true
 	v.accept(impactStoryRead(t, story))
 	frame = drawnText(t, v, 132, 33)
-	require.Contains(t, strings.Join(strings.Fields(frame), " "), "After rev 2 (04:20): no compared signal is worse by the stated thresholds "+
-		"(10 compared, 3 better, 1 not compared); better: error ratio 14.9% → 0.19%")
+	require.Equal(t, "  No compared signal got worse after rev 2 rolled out at 04:20: 3 better, 2 higher or lower, 5 unchanged, 1 not compared.",
+		strings.Split(frame, "\n")[2], "every signal is counted, the one that was not compared too")
+	// The short form drops the counts the groups state, never the signal
+	// that was not compared.
+	require.Equal(t, "  No compared signal got worse after rev 2 rolled out at 04:20; 1 not compared.", strings.Split(drawnText(t, v, 80, 21), "\n")[1])
 	require.NotContains(t, frame, impactWorseLabel)
 	require.Regexp(t, `(?m)^  BETTER AFTER +before → after +┊$`, frame)
 	require.Regexp(t, `(?m)^> Error ratio +14\.9% → 0\.19% `, frame)

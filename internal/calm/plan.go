@@ -58,6 +58,11 @@ type Page struct {
 	Keys []string
 	// NumberAfter writes the number of a row after its strip.
 	NumberAfter bool
+	// AnswerApart gives the blank row over the keys up one step before the
+	// one under the verdict, so that a page with a single row to spare
+	// spends it on setting the answer apart from the evidence. Without it
+	// the two go together.
+	AnswerApart bool
 	// Counted says the strips are sequences of counted things (Sequence),
 	// not timelines. Frame is not used: the page has no time axis, a strip
 	// is as wide as its cells need and no wider, and a caption row names
@@ -138,10 +143,13 @@ type drop struct {
 type state struct {
 	airy, spaced, gaps bool
 	rest, next, loose  bool
-	strips             bool
-	folded, hidden     []bool
-	rows               []int
-	drops              []drop
+	// over is the blank row over the keys, which a page that sets its
+	// answer apart gives up before the one under the verdict.
+	over           bool
+	strips         bool
+	folded, hidden []bool
+	rows           []int
+	drops          []drop
 }
 
 func (st *state) clone() state {
@@ -162,9 +170,12 @@ func (st *state) clone() state {
 //  3. the quiet and the not-read groups fold to one line each;
 //  4. the blank rows between subjects and before groups go; then the
 //     secondary groups fold to one line each, then the second key line
-//     goes;
-//  5. the last blank rows go, under the verdict and over the keys; then
-//     the last rows of the primary groups are left out and counted;
+//     goes. A secondary group that sets FoldFirst folds before step 2:
+//     its page keeps its blank rows longer than those rows;
+//  5. the last blank rows go, under the verdict and over the keys (on a
+//     page that sets AnswerApart the one over the keys first, then the
+//     one under the verdict); then the last rows of the primary groups
+//     are left out and counted;
 //  6. the folded lines of the quiet and secondary groups are left out;
 //  7. the strips are left out and the rows are written as text;
 //  8. the primary groups are left out, the last first: a page with a main
@@ -177,7 +188,7 @@ func (st *state) clone() state {
 // the screen is named in one line with the key that shows it.
 func Lay(p *Page, width, height int, o Options) Plan {
 	count := len(p.Groups)
-	st := state{airy: true, spaced: true, gaps: true, rest: true, next: true, loose: true, strips: p.Counted || p.Frame.End.After(p.Frame.Start),
+	st := state{airy: true, spaced: true, gaps: true, rest: true, next: true, loose: true, over: true, strips: p.Counted || p.Frame.End.After(p.Frame.Start),
 		folded: make([]bool, count), hidden: make([]bool, count), rows: make([]int, count)}
 	for i := range p.Groups {
 		st.rows[i] = len(p.Groups[i].Rows)
@@ -199,9 +210,14 @@ func Lay(p *Page, width, height int, o Options) Plan {
 		}
 		return -1
 	}
-	fold := func(role Role) func() bool {
+	// fold folds the last group of a role that is still rows. early is the
+	// step before any blank row goes: it takes only the groups that ask to
+	// fold first.
+	fold := func(role Role, early bool) func() bool {
 		return func() bool {
-			i := last(func(i int) bool { return p.Groups[i].Role == role && !st.folded[i] && !st.hidden[i] })
+			i := last(func(i int) bool {
+				return p.Groups[i].Role == role && !st.folded[i] && !st.hidden[i] && (!early || p.Groups[i].FoldFirst)
+			})
 			if i < 0 {
 				return false
 			}
@@ -267,14 +283,24 @@ func Lay(p *Page, width, height int, o Options) Plan {
 		blank bool
 		apply func() bool
 	}{
+		{width: true, height: true, apply: fold(Secondary, true)},
 		{height: true, blank: true, apply: flag(func() *bool { return &st.airy }, "blank rows around the verdict and the keys")},
-		{width: true, height: true, apply: fold(QuietRole)},
-		{width: true, height: true, apply: fold(NotReadRole)},
+		{width: true, height: true, apply: fold(QuietRole, false)},
+		{width: true, height: true, apply: fold(NotReadRole, false)},
 		{height: true, blank: true, apply: flag(func() *bool { return &st.spaced }, "blank rows between subjects")},
 		{height: true, blank: true, apply: flag(func() *bool { return &st.gaps }, "blank rows before groups")},
-		{width: true, height: true, apply: fold(Secondary)},
+		{width: true, height: true, apply: fold(Secondary, false)},
 		{height: true, apply: flag(func() *bool { return &st.rest }, "the second key line")},
-		{height: true, blank: true, apply: flag(func() *bool { return &st.loose }, "the blank rows under the verdict and over the keys")},
+		{height: true, blank: true, apply: func() bool {
+			return p.AnswerApart && flag(func() *bool { return &st.over }, "the blank row over the keys")()
+		}},
+		{height: true, blank: true, apply: func() bool {
+			words := "the blank rows under the verdict and over the keys"
+			if !st.over {
+				words = "the blank row under the verdict"
+			}
+			return flag(func() *bool { return &st.loose }, words)()
+		}},
 		{height: true, apply: trim},
 		{height: true, apply: func() bool {
 			return hide(last(func(i int) bool { return st.folded[i] && !st.hidden[i] && p.Groups[i].Role != NotReadRole }))
@@ -513,13 +539,13 @@ func (st *state) build(p *Page, width, height int, o Options) Plan {
 	}
 	next := st.next && len(p.Next) > 0
 	if next {
-		if st.loose {
+		if st.loose && st.over {
 			blank(itBlank)
 		}
 		add(itNext, 0, 0)
 	}
 	if st.rest && RestLine(p.Keys, width, o) != "" {
-		if st.airy || !next && st.loose {
+		if st.airy || !next && st.loose && st.over {
 			blank(itBlank)
 		}
 		add(itRest, 0, 0)
