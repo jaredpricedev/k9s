@@ -44,6 +44,11 @@ const (
 	calmNextGrafana = "open in Grafana"
 	calmNextReread  = "read again"
 
+	// calmOrderCaveat is the caveat of a page whose answer is an order in
+	// time: a Pod's graph, :impact and :timeline say that something came
+	// after a change, and none of them says that the change did it.
+	calmOrderCaveat = "Order in time, not proof of cause."
+
 	calmKeyTime    = "←→ time"
 	calmKeyWindow  = "1-4 window"
 	calmKeyQueries = calm.QueriesKey + " queries"

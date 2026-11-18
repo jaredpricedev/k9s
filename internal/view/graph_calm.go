@@ -26,7 +26,7 @@ import (
 // every chart, s the queries.
 
 const (
-	graphOrderCaveat   = "Order in time, not proof of cause."
+	graphOrderCaveat   = calmOrderCaveat
 	graphReadingCaveat = "A reading, not proof of cause."
 	graphNeutralCaveat = "A reading, not a statement of health."
 	graphAlsoLabel     = "ALSO"

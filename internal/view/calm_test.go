@@ -4,6 +4,8 @@
 package view
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -168,4 +170,62 @@ func TestCalmObjectNamesTheNamespaceOnlyWhenItIsAnotherOne(t *testing.T) {
 	target := graphTarget{Kind: "Deployment", Namespace: "apps", Name: "checkout-api"}
 	assert.Equal(t, "Deployment checkout-api", graphCalmObject(&target, &graphPage{Namespace: "apps"}))
 	assert.Equal(t, "Deployment apps/checkout-api", graphCalmObject(&target, &graphPage{Namespace: "gitlab"}))
+}
+
+// :impact and :timeline tell the two halves of one rollout: what was
+// measured before and after it, and what else happened around it, in
+// order. One opens the other, so the two are read as one page after
+// another: the title, the answer and its caveat, the marker of the rollout
+// and the two key lines are written the same way on both.
+func TestImpactAndTimelineReadAsOneProduct(t *testing.T) {
+	impactV := impactViewFixture(t)
+	impactV.accept(impactStoryRead(t, impactStory()))
+	timelineV := timelineIncidentView(t)
+
+	// One sentence for the same limit, from one place; a Pod's graph has it
+	// too.
+	require.Equal(t, calmOrderCaveat, impactOrderCaveat)
+	require.Equal(t, calmOrderCaveat, timelineOrderCaveat)
+	require.Equal(t, calmOrderCaveat, graphOrderCaveat)
+
+	for _, size := range [][2]int{{132, 33}, {80, 21}, {80, 20}} {
+		for name, frame := range map[string]string{
+			"impact":   drawnText(t, impactV, size[0], size[1]),
+			"timeline": drawnText(t, timelineV, size[0], size[1]),
+		} {
+			at := fmt.Sprintf("%s at %dx%d\n%s", name, size[0], size[1], frame)
+			lines := strings.Split(strings.TrimRight(frame, "\n"), "\n")
+			// The title: the view, the object as calmObject writes it, and at
+			// the right how much was read and when.
+			assert.Regexp(t, `^(Impact|Timeline)  Deployment apps/checkout-api · .*  (read \d\d:\d\d · \d+ of \d+ (queries|sources)|\d\d:\d\d · \d+/\d+)$`, lines[0], at)
+			// The answer is directly under it: the rollout by its revision and
+			// its minute, bold first sentence, then the caveat.
+			answer := strings.Join(lines[1:6], "\n")
+			assert.Regexp(t, `(?i)rev 2 rolled out at \d\d:\d\d`, answer, at)
+			assert.Contains(t, answer, calmOrderCaveat, at)
+			if size[0] == 132 {
+				assert.Regexp(t, `(?m)^  \S.*\. {3,}`+regexp.QuoteMeta(calmOrderCaveat)+`$`, answer, "the caveat is at the right of the last line: %s", at)
+			}
+			// The rollout is the marker over the strips, in the same words.
+			assert.Regexp(t, `(?m)^ +rev 2 rolled out \d\d:\d\d.* ▼$`, frame, at)
+			// A change is before → after.
+			assert.Regexp(t, `\S+ → \S+`, frame, at)
+			assert.NotContains(t, frame, "->", at)
+			// The first key line: what Enter does, then the key for all detail.
+			next, _ := timelineLineWith(t, frame, "  next  ")
+			assert.Regexp(t, `^  next  Enter \S.*  a (all 11 signals|full list)\b`, next, at)
+			if size[0] == 132 {
+				// The second: what the arrows move first, reading again and
+				// the way out last.
+				rest := lines[len(lines)-1]
+				assert.Regexp(t, `^  ↑↓ (signal|row) · .* · r re-read · Esc back$`, rest, at)
+				assert.NotContains(t, rest, " a ", "a is on the first line, once: %s", at)
+			}
+		}
+	}
+	// The hand-off from one to the other is named by the name the page it
+	// opens has in its title.
+	frame := drawnText(t, impactV, 132, 33)
+	assert.Contains(t, frame, "    "+impactTimelineKeyName+" "+strings.ToLower(timelineTitle)+"\n")
+	assert.True(t, strings.HasPrefix(drawnText(t, timelineV, 132, 33), timelineTitle+"  "))
 }

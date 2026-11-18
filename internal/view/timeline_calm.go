@@ -34,7 +34,7 @@ import (
 // what the API still holds, at the time it began; an empty column says
 // that nothing retained began there, not that nothing happened.
 const (
-	timelineOrderCaveat   = "Order in time, not proof of cause."
+	timelineOrderCaveat   = calmOrderCaveat
 	timelineNothingCaveat = "Nothing found is not proof of health."
 
 	timelineChangedLabel = "CHANGED"

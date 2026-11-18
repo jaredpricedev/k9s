@@ -54,7 +54,7 @@ const (
 	impactRolloutsKeys  = "n/N later/earlier rollout"
 	impactRolloutsShort = "n/N rollout"
 
-	impactOrderCaveat  = "Order in time, not proof of cause."
+	impactOrderCaveat  = calmOrderCaveat
 	impactUnreadCaveat = "Not read is not zero and not healthy."
 )
 
