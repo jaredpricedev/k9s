@@ -60,7 +60,9 @@ func TestHangViewsShareOneKeyboard(t *testing.T) {
 		views []string
 	}{
 		{ui.KeyM, "raph", []string{"slow", "probe", "timeline"}},
-		{ui.KeyT, "imeline", []string{"slow", "probe", "impact"}},
+		// Every view that states something a change could explain opens
+		// the timeline with t: the per-Pod page of :graph too.
+		{ui.KeyT, "imeline", []string{"slow", "probe", "impact", "graph"}},
 		{grafanaKey, grafanaKeyLabel, []string{"slow", "probe", "graph", "dash", "impact", "timeline"}},
 		{probeKey, "Probe", []string{"slow", "graph"}},
 		{slowKey, "Slow requests", []string{"probe", "graph"}},

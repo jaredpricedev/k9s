@@ -67,7 +67,7 @@ A Service, an Ingress or a workload that reports no problem keeps a plain border
 | Key | Meaning | Where |
 | --- | --- | --- |
 | `m` | `:graph`. From `:slow` it opens the comparison of the Pods, with the signal that set a Pod apart marked and the episodes found there as its bands | rows, `:problems`, `:alerts`, `:timeline`, `:slow`, `:probe` |
-| `t` | `:timeline` | `:problems`, `:alerts`, `:impact`, `:slow`, `:probe` (on a Pod row of the resource list `t` is the upstream Transfer; type `:timeline` there) |
+| `t` | `:timeline`, on its calm page and on the window of its own answer whichever view opens it. From `:slow` it draws the stalls found there as its bands, on the window they were looked for in | `:problems`, `:alerts`, `:impact`, `:graph` and its per-Pod page, `:slow`, `:probe` (on a Pod row of the resource list `t` is the upstream Transfer; type `:timeline` there, as on a workload row) |
 | `Shift-D` | Grafana hand-off for the selection and the window on screen | every one of them |
 | `Shift-W` | `:slow` | rows, `:probe`, `:graph` |
 | `Shift-B` | `:probe`; opening it sends nothing | rows, `:slow`, `:graph` |
