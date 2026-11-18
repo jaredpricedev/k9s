@@ -126,6 +126,58 @@ func TestTheAnswerStatesTheEpisodesAndWhatLinesUpInPlainWords(t *testing.T) {
 	assert.Equal(t, slowpath.LaneNotRead, relations(direct)[slowpath.HopIngress])
 }
 
+// answerAt is the answer of the story read over a window that ends some
+// time before the story does.
+func answerAt(t *testing.T, back, window time.Duration) slowpath.Answer {
+	t.Helper()
+	now := slowtest.Now.Add(-back)
+	plan := slowpath.BuildPlan(slowtest.Sources(), slowtest.Path(), window, now)
+	return slowpath.Evaluate(plan, slowpath.Collect(t.Context(), &slowtest.Story{}, plan), nil, now).Answer()
+}
+
+// A window can cut an episode: begin while it is under way, or end before
+// it is over. What is stated of it is then only what the window holds, and
+// the answer says so instead of stating a length it did not see.
+func TestTheAnswerSaysWhenTheWindowCutsAnEpisode(t *testing.T) {
+	// The window holds every stall whole: nothing to add.
+	whole := slowtest.Report(&slowtest.Story{}, slowtest.Sources(), slowtest.Path(), time.Hour).Answer()
+	assert.Empty(t, whole.Edge)
+
+	// The second stall of the story is 07:47 to 07:51; this window begins
+	// at 07:49.
+	open := answerAt(t, 16*time.Minute, 15*time.Minute)
+	assert.Equal(t, "1 stall: clients gave up waiting at 07:49:15 UTC, for at least 1m45s.", open.Lead)
+	assert.Equal(t, "1 stall: clients gave up waiting, for at least 1m45s.", open.Brief)
+	assert.Equal(t, "It was already raised when the window began.", open.Edge)
+
+	// The third is 08:13 to 08:15; this window ends at 08:14. The length is
+	// what was seen and is not called a least one: a rate stays raised while
+	// a burst leaves its window.
+	ongoing := answerAt(t, 6*time.Minute, 15*time.Minute)
+	assert.Equal(t, "1 stall: clients gave up waiting at 08:13:15 UTC, for 1 minute.", ongoing.Lead)
+	assert.Equal(t, "It was still raised at the last sample: it may not be over.", ongoing.Edge)
+
+	// Of several, the sentence names the one that is cut.
+	last := answerAt(t, 6*time.Minute, time.Hour)
+	assert.Equal(t, "3 stalls: clients gave up waiting at 07:28, 07:47 and 08:13 UTC, for 1m30s to 4m each.", last.Lead)
+	assert.Equal(t, "The last was still raised at the last sample: it may not be over.", last.Edge)
+	first := answerAt(t, -3*time.Minute, 35*time.Minute)
+	assert.Regexp(t, `^2 stalls: clients gave up waiting at 07:48 and 08:13 UTC, for .+ each\.$`, first.Lead)
+	assert.Equal(t, "The first was already raised when the window began: it may be longer.", first.Edge)
+	both := answerAt(t, 6*time.Minute, 26*time.Minute)
+	assert.Equal(t, "The first was already raised when the window began and may be longer; the last was still raised at the last sample and may not be over.", both.Edge)
+
+	// A wide window that ends in a rate that is still raised says so too.
+	wide := slowtest.Report(&slowtest.Story{}, slowtest.Sources(), slowtest.Path(), 6*time.Hour).Answer()
+	assert.Equal(t, "It was still raised at the last sample: it may not be over.", wide.Edge)
+
+	for _, answer := range []slowpath.Answer{open, ongoing, last, first, both, wide} {
+		for _, banned := range []string{"because", "caused", "due to"} {
+			assert.NotContains(t, strings.ToLower(answer.Lead+" "+answer.Edge), banned)
+		}
+	}
+}
+
 // Lanes that overlap the same episodes share a sentence; a dated fact
 // outside every episode is in none.
 func TestTheAnswerNeverJoinsLanesThatOverlapDifferentEpisodes(t *testing.T) {

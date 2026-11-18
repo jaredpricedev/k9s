@@ -213,6 +213,7 @@ func slowCalmFacts(row *calm.Row, lane *slowpath.Lane, marks []chart.Interval, o
 func slowCalmPeers(report *slowpath.Report, app *slowpath.Hop) (slowCalmEntry, bool) {
 	var names []string
 	var values []float64
+	var covered []chart.Interval
 	main := (*slowpath.SignalRead)(nil)
 	if app.Main >= 0 && app.Main < len(app.Signals) {
 		main = &app.Signals[app.Main]
@@ -232,12 +233,18 @@ func slowCalmPeers(report *slowpath.Report, app *slowpath.Hop) (slowCalmEntry, b
 				value = series.Median
 			}
 			values = append(values, value)
+			covered = append(covered, slowpath.Covered(series.Points, report.Step)...)
 		}
 	}
 	if len(names) == 0 {
 		return slowCalmEntry{}, false
 	}
 	row := calm.Row{Subject: "pods " + strings.Join(names, ", "), Strip: calm.Quiet()}
+	if len(values) > 0 {
+		// A stretch none of them has a sample for is not a quiet stretch: it
+		// is drawn as not read, as it is on the row of any hop.
+		row.Strip = calm.Events().Unknown(slowpath.Complement(covered, report.Start, report.End)...)
+	}
 	if len(names) > 3 {
 		row.Subject = fmt.Sprintf("%d other pods", len(names))
 	}
@@ -310,6 +317,14 @@ func (v *slowView) calmEvidence(report *slowpath.Report, answer *slowpath.Answer
 			unread = append(unread, entry)
 			continue
 		case slowpath.LaneQuiet:
+			if unknown := slowpath.Total(slowpath.Clip(lane.Unknown, report.Start, report.End)); lane.Hop == "" && unknown > 0 {
+				// None where it was read, and a stretch of which nothing is
+				// known: the row draws that stretch and says how long it is.
+				what := "none where read, no data for " + impact.Dur(unknown)
+				quiet = append(quiet, slowCalmEntry{row: calm.Row{Subject: subject, What: what, Strip: calm.Events().Unknown(lane.Unknown...)},
+					meta: slowCalmRow{key: lane.ID, facts: []*slowpath.Lane{lane}, what: what}})
+				continue
+			}
 			if lane.Hop == "" {
 				// Dated facts of which there were none share one line.
 				idle = append(idle, lane)
@@ -602,7 +617,14 @@ func (v *slowView) calmPage(report *slowpath.Report, answer *slowpath.Answer, br
 			// The rows under the answer name the signals it counts.
 			lines = answer.Counted
 		}
-		page.Verdict = calm.Verdict{Sentences: append(append([]string{lead, lines}, answer.More...), answer.Differs...), Caveat: answer.Caveat}
+		sentences := []string{lead}
+		if answer.Edge != "" {
+			// An episode the window cuts is said before what lines up with
+			// it: its length is only what the window holds.
+			sentences = append(sentences, answer.Edge)
+		}
+		sentences = append(append(append(sentences, lines), answer.More...), answer.Differs...)
+		page.Verdict = calm.Verdict{Sentences: sentences, Caveat: answer.Caveat}
 		label := answer.Nouns
 		if len(report.Episodes) == 1 {
 			label = answer.Noun

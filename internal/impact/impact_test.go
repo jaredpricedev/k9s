@@ -388,6 +388,9 @@ func checkoutRequest(t *testing.T) *Request {
 func TestCollectStatesWhatWasMeasuredAfterTheRolloutAndNoCause(t *testing.T) {
 	source := checkoutStory()
 	report := Collect(t.Context(), source, checkoutRequest(t))
+	// Collect stamps the wall clock; the story was read 12 minutes after
+	// the rollout, so the sentence does not depend on the day the test runs.
+	report.ReadAt = rolloutAt.Add(12 * time.Minute)
 	require.Len(t, source.queries, 9, "one bounded range read per query template")
 	require.Equal(t, 15*time.Second, report.Step)
 	require.Equal(t, 2*time.Minute, report.RateWindow)
@@ -429,8 +432,14 @@ func TestCollectStatesWhatWasMeasuredAfterTheRolloutAndNoCause(t *testing.T) {
 func TestCollectReportsDeniedTooFewSamplesAndTrafficShiftsHonestly(t *testing.T) {
 	denied := &fakeSource{status: observability.Status{State: observability.StateDenied, HTTPStatus: 403}}
 	report := Collect(t.Context(), denied, checkoutRequest(t))
+	require.False(t, report.ReadAt.IsZero(), "a denied read is still stamped")
+	report.ReadAt = rolloutAt.Add(12 * time.Minute)
 	require.Equal(t, "denied (HTTP 403)", report.Failure)
 	require.Equal(t, "After rev 2 (04:20): nothing was read from the source: denied (HTTP 403). No comparison was made.", report.Summary())
+	// Read on another day, the rollout is stated with its date.
+	report.ReadAt = rolloutAt.Add(30 * time.Hour)
+	require.Equal(t, "After rev 2 (Nov17 04:20): nothing was read from the source: denied (HTTP 403). No comparison was made.", report.Summary())
+	report.ReadAt = rolloutAt.Add(12 * time.Minute)
 	for index := range report.Outcomes {
 		require.Equal(t, NotRead, report.Outcomes[index].State)
 		require.False(t, report.Outcomes[index].After.Valid)

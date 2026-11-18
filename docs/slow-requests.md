@@ -92,7 +92,13 @@ The answer is computed from the episodes and from interval overlap
   signal they are counted from is the ingress's HTTP 499, which is a client
   that closed the request while it waited, and **episodes** for any other
   signal (`2 episodes of not Ready on pod …-hx4mt at 07:29 and 07:48 UTC`).
-- The second states what lines up with every one of them, grouped by where
+- When the window cuts an episode, the next sentence says so, because its
+  length is then only what the window holds: `It was already raised when the
+  window began.` (the first sentence then says `for at least 1m45s`), or
+  `It was still raised at the last sample: it may not be over.` Of several
+  episodes it names the one that is cut (`The last was still raised …`). A
+  window that holds every episode whole adds nothing.
+- The next states what lines up with every one of them, grouped by where
   (`All 3 line up with slow p99, queueing, no free threads and CPU throttling
   on pod …-hx4mt.`).
 - Then what lines up with some (`2 of 3 also line up with not Ready on pod
@@ -151,7 +157,7 @@ sentences do). The view chooses nothing.
 | --- | --- |
 | `LINES UP WITH THE STALLS` (`… THE EPISODES`) | the lane the episodes are counted from, then every lane whose marks overlap at least one episode, the ones that overlap most first |
 | `DIFFERS, BUT NOT DURING A STALL` (`… AN EPISODE`) | a lane that is marked in the window and overlaps no episode; a Pod whose usual level differs from its peers' |
-| `QUIET` | what was read and has no mark, one dim line each. The Pods that crossed no rule while another did share a line (`pods …-2bq7k, …-8wzpd  p99 350ms`), dependencies without a mark share one, and the dated facts of which there were none share one |
+| `QUIET` | what was read and has no mark, one dim line each. The Pods that crossed no rule while another did share a line (`pods …-2bq7k, …-8wzpd  p99 350ms`), dependencies without a mark share one, and the dated facts of which there were none share one. A stretch without samples is `×` on these lines too: on the line of the Pods where none of them has a sample, and the restarts then have a line of their own that says how long nothing is known (`restarts  none where read, no data for 10m`) |
 | `NOT READ` | every lane without data, with the reason; `dependencies  none declared`; and a hop that was read in part (`dns  1 of 5 signals: no series matched …`), which is quiet only for what was read. The group is left out when it is empty |
 
 Without an episode nothing lines up. The first two groups are then

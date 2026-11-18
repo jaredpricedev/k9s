@@ -147,6 +147,12 @@ type Answer struct {
 	// lasted. Brief is Lead without the times, for a page that draws them.
 	// For a quiet window and a read without evidence, Lead says so.
 	Lead, Brief string
+	// Edge states an episode the window cuts: one whose first sample of the
+	// window was already raised, or whose last was still raised. Its length
+	// is then only what the window holds; of a single episode that was
+	// already raised Lead says "at least". Empty when the window holds
+	// every episode whole.
+	Edge string
 	// Lines states what lines up with every episode. Counted is the same
 	// with the signals of one place counted instead of named, for a page
 	// whose rows name them.
@@ -233,7 +239,7 @@ func (r *Report) Answer() Answer {
 		a.Noun, a.Nouns = "stall", "stalls"
 	}
 	a.Caveat = "Overlap in time, not proof of cause."
-	a.Lead, a.Brief = r.lead(symptom, a.Noun, a.Nouns)
+	a.Lead, a.Brief, a.Edge = r.lead(symptom, a.Noun, a.Nouns)
 	r.linesUp(&a, findings, unread)
 	return a
 }
@@ -366,9 +372,51 @@ func onePlace(lanes []*Lane) (where string, ok bool) {
 	return lanes[0].Where, true
 }
 
+// cut reports whether the window cuts the episodes: open says the first
+// was already raised at the first sample of the window, ongoing that the
+// last was still raised at the last one. A stretch keeps such an end where
+// the window puts it (see unsmear), so what is stated of it is only the
+// part the window holds.
+func (r *Report) cut() (open, ongoing bool) {
+	if len(r.Episodes) == 0 {
+		return false, false
+	}
+	first, last := r.Episodes[0], r.Episodes[len(r.Episodes)-1]
+	// The last sample is less than a step before the end of the window.
+	return !first.Start.After(r.Start), last.End.Add(r.Step).After(r.End)
+}
+
+// edge says in a sentence which episode the window cuts, and what that
+// leaves unknown. Of a single episode that was already raised the lead
+// says "at least", so the sentence does not say it again.
+func (r *Report) edge() string {
+	open, ongoing := r.cut()
+	const began, lasts = "was already raised when the window began", "still raised at the last sample"
+	if len(r.Episodes) == 1 {
+		switch {
+		case open && ongoing:
+			return "It " + began + " and " + lasts + ": it may not be over."
+		case open:
+			return "It " + began + "."
+		case ongoing:
+			return "It was " + lasts + ": it may not be over."
+		}
+		return ""
+	}
+	switch {
+	case open && ongoing:
+		return "The first " + began + " and may be longer; the last was " + lasts + " and may not be over."
+	case open:
+		return "The first " + began + ": it may be longer."
+	case ongoing:
+		return "The last was " + lasts + ": it may not be over."
+	}
+	return ""
+}
+
 // lead states the episodes of the symptom lane: with the times they began,
-// and without.
-func (r *Report) lead(symptom *Lane, noun, nouns string) (lead, brief string) {
+// and without; and edge, the episode the window cuts.
+func (r *Report) lead(symptom *Lane, noun, nouns string) (lead, brief, edge string) {
 	count := len(r.Episodes)
 	shortest, longest := time.Duration(0), time.Duration(0)
 	starts := make([]string, 0, count)
@@ -391,6 +439,12 @@ func (r *Report) lead(symptom *Lane, noun, nouns string) (lead, brief string) {
 	case count == 1:
 		lengths = "for " + spoken(shortest)
 		nouns = noun
+		if open, _ := r.cut(); open {
+			// Only the part inside the window was seen. One that is still
+			// raised at the end keeps its length: a rate stays raised while
+			// a burst leaves its window, so it may as well be shorter.
+			lengths = "for at least " + spoken(shortest)
+		}
 	case shortest != longest:
 		lengths = "for " + spokenRange(shortest, longest) + " each"
 	}
@@ -399,7 +453,7 @@ func (r *Report) lead(symptom *Lane, noun, nouns string) (lead, brief string) {
 		// HTTP 499 is a client that closed the request while it waited.
 		what = fmt.Sprintf("%d %s: clients gave up waiting", count, nouns)
 	}
-	return what + " at " + when + ", " + lengths + ".", what + ", " + lengths + "."
+	return what + " at " + when + ", " + lengths + ".", what + ", " + lengths + ".", r.edge()
 }
 
 // LaneDetail states a lane of dated facts in full for the detail area: what
