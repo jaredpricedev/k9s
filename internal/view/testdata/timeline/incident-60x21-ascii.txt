@@ -17,5 +17,5 @@ Timeline  Deployment apps/check... | last 15m  12:00 | 11/11
   ALSO IN THE WINDOW  annotations 11:46 +1 more
   QUIET  scaling | nodes: none now
   WARNINGS  1 entry in the last 15m
-> 11:50:00  pod/checko...x2x9q  Warning BackOff x14: Back...
+> 11:50:00  pod x2x9q  Warning BackOff x14: Back-off rest...
   next  Enter open x2x9q    a full list

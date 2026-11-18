@@ -375,7 +375,11 @@ columns before it began as the baseline: that state was not the case then. It
 does not say that no other state of the kind came and went before it.
 
 **Under the axis** the page lists what the cursor is on, with the time, the
-object and the text the list under **a** has:
+object and the text the list under **a** has. The object is written whole
+where its column holds it (`pod/checkout-api-7d9f8c6b5d-x2x9q`, at most 36
+cells). A Pod whose name does not fit is written as its row, the answer and
+the `next` line write it (`pod x2x9q`), and the text takes the cells that
+leaves free; any other name is cut in its middle:
 
 - `↑` / `↓` select a row, and the list is the entries of that kind, oldest
   first.
@@ -458,12 +462,15 @@ What a smaller screen gives up, in the order of the calm layout:
   without the count beside it; the list has it), `ALSO IN THE WINDOW` and
   `QUIET` are one line each, the second key line goes (`a` is on the first),
   and the list is one or two lines: the entry the keys act on, under its
-  heading where there is a row for one. The count of entries leaves the title
+  heading where there is a row for one. A list of one line names the kind of
+  its entry, and writes a Pod by its short name beside it
+  (`> 11:50:00  warnings  pod x2x9q  Warning BackOff x14: …`). The count of entries leaves the title
   before the object or the window does. A quiet line whose words do not fit
   the column the lines share says them shorter (`none now`, `since 11:00`)
   instead of starting them elsewhere.
 - 60×24 cuts what a row is about to 16 cells, with strips of 20 columns, and
-  the list cuts the name of the object in its middle or leaves it out. The
+  the list writes a Pod by its short name, cuts any other name in its middle
+  or leaves the object out. The
   `next` line names `a` after `Enter open` where the name of the object would
   have filled it.
 - The list never costs a row, a strip, a group or a key line. It folds the

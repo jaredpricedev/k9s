@@ -251,7 +251,7 @@ func (st *timelineStory) detailNeed(width int, o calm.Options) int { //nolint:go
 	need := 0
 	for r := range st.rows {
 		row := &st.rows[r]
-		cols := st.detailCols(row.entries, false, width)
+		cols := st.detailCols(row.entries, false, width, o)
 		for _, entry := range row.entries {
 			_, rest := st.entryLine(entry, true, true, cols, o)
 			need = max(need, 1+len(row.entries)+len(st.entryMore(entry, rest, cols, width, o)))
@@ -624,9 +624,28 @@ type timelineDetailCols struct {
 	clock, kind, object, text int
 }
 
+// listObject is the object of an entry as the list writes it in a column
+// of a width: whole where the column holds it. A Pod whose name does not
+// fit is written as its row, the answer and the next line write it, by the
+// short name every incident view has for it; a third way of writing one
+// Pod on one page says less than the name the page already uses. Any other
+// name is cut in its middle.
+func (st *timelineStory) listObject(e *timeline.Entry, width int, o calm.Options) string { //nolint:gocritic // Options are passed by value, as the kit takes them.
+	whole := e.Ref.Short()
+	if tviewCells(whole) <= width {
+		return whole
+	}
+	if short := st.object(e); e.Ref.Kind == "Pod" && tviewCells(short) <= width {
+		return short
+	}
+	return timelineMiddle(whole, width, o)
+}
+
 // detailCols budgets one line of the list. The time and the text always
-// stay; the object gives way first, as it does in the list under a.
-func (st *timelineStory) detailCols(entries []int, kinds bool, width int) timelineDetailCols {
+// stay; the object gives way first, as it does in the list under a. Its
+// column is as wide as the widest object written in it and no wider: what
+// a short name leaves free is the text's.
+func (st *timelineStory) detailCols(entries []int, kinds bool, width int, o calm.Options) timelineDetailCols { //nolint:gocritic // Options are passed by value, as the kit takes them.
 	const minText = 28
 	cols := timelineDetailCols{clock: 8}
 	object := 0
@@ -643,7 +662,10 @@ func (st *timelineStory) detailCols(entries []int, kinds bool, width int) timeli
 		rest -= cols.kind + 2
 	}
 	if room := rest - minText - 2; room >= 12 && object > 0 {
-		cols.object = min(object, 36, room)
+		budget := min(object, 36, room)
+		for _, i := range entries {
+			cols.object = max(cols.object, tviewCells(st.listObject(&st.s.Entries[i], budget, o)))
+		}
 		rest -= cols.object + 2
 	}
 	cols.text = max(rest, 1)
@@ -691,7 +713,7 @@ func (st *timelineStory) entryLine(entry int, focused, wrap bool, cols timelineD
 		if color == "" {
 			color = p.Text
 		}
-		b.WriteString(timelineSpan(color, attrs, runewidth.FillRight(timelineMiddle(e.Ref.Short(), cols.object, o), cols.object)) + "  ")
+		b.WriteString(timelineSpan(color, attrs, runewidth.FillRight(st.listObject(e, cols.object, o), cols.object)) + "  ")
 	}
 	text := timelineWords(impactArrow(e.Summary, o), o)
 	shown := timelineClip(text, cols.text, o)
@@ -784,7 +806,7 @@ func (v *timelineView) calmDetail(st *timelineStory, sel *timelineCalmRow, entri
 		if v.focused < 0 {
 			return []string{calm.FoldedLine(label, color, []string{nothing}, true, width, o)}
 		}
-		line, _ := st.entryLine(v.focused, true, false, st.detailCols([]int{v.focused}, true, width), o)
+		line, _ := st.entryLine(v.focused, true, false, st.detailCols([]int{v.focused}, true, width, o), o)
 		return []string{line}
 	}
 	if timed && len(entries) == 0 {
@@ -801,7 +823,7 @@ func (v *timelineView) calmDetail(st *timelineStory, sel *timelineCalmRow, entri
 			near = append(near, st.shown[at])
 		}
 		out := []string{calm.FoldedLine(label, color, []string{nothing + "; the entries before and after it:"}, true, width, o)}
-		cols := st.detailCols(near, true, width)
+		cols := st.detailCols(near, true, width, o)
 		for _, entry := range near[:min(len(near), rows-1)] {
 			line, _ := st.entryLine(entry, false, false, cols, o)
 			out = append(out, line)
@@ -827,7 +849,7 @@ func (v *timelineView) calmDetail(st *timelineStory, sel *timelineCalmRow, entri
 		count += " in " + st.windowWords()
 	}
 	out := []string{calm.FoldedLine(label, color, []string{count}, len(entries) == 0, width, o)}
-	cols := st.detailCols(shown, timed, width)
+	cols := st.detailCols(shown, timed, width, o)
 	spare := room - len(shown)
 	for _, entry := range shown {
 		focused := entry == v.focused
