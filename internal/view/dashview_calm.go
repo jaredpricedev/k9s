@@ -263,20 +263,13 @@ func dashSample(p *dashboard.Panel, sample float64) string {
 	return number
 }
 
-// dashPin pads a text to a width in cells. The kit gives a column the
-// width of the widest text in it, and the strips and the plot what the
-// columns leave them. A number that changed its width under the cursor
-// would move them: padded to the widest it is at any time of the window
-// (numberRoom), it keeps its column, and a sample stays in the cell it has.
-func dashPin(text string, width int) string {
-	if gap := width - runewidth.StringWidth(text); gap > 0 {
-		return text + strings.Repeat(" ", gap)
-	}
-	return text
-}
-
 // numberRoom is the width of the widest number a row writes while the
-// cursor moves through its window: every sample in the words of sample,
+// cursor moves through its window. The kit gives a column the width of the
+// widest text in it, and the strips and the plot what the columns leave
+// them, so a number that changed its width under the cursor would move
+// them. A group is given this width as the least its number column has
+// (calm.Group.NumberWidth, as the pages of :graph do), and a sample stays
+// in the cell it has. It counts every sample in the words of sample,
 // and the other texts the row can write (the number the page opens with,
 // the words for a time without a sample). It is no more than the kit gives
 // a number.
@@ -430,7 +423,7 @@ func (r *dashRender) sections(main int, drawn []int, f chart.Frame, when time.Ti
 		g.Summary = append(g.Summary, r.words(item))
 		levels[len(levels)-1] = append(levels[len(levels)-1], worst)
 		if !folded {
-			row.Number = dashPin(row.Number, room)
+			g.NumberWidth = max(g.NumberWidth, room)
 			g.Rows = append(g.Rows, row)
 		}
 	}
@@ -765,8 +758,9 @@ func (r *dashRender) seriesGroup(index int, ranked []dashLine, f chart.Frame, wh
 		line := &ranked[i]
 		value, _ := r.lineValue(p, line.Points, f, when)
 		peak, _ := dashPeak(line.Points)
-		row := calm.Row{What: line.Name, Number: dashPin(value, r.lineRoom(p, line.Points, f)), Compare: "peak " + p.Unit.Chart.Format(peak),
+		row := calm.Row{What: line.Name, Number: value, Compare: "peak " + p.Unit.Chart.Format(peak),
 			Strip: calm.Trend(line.Points).Top(top)}
+		g.NumberWidth = max(g.NumberWidth, r.lineRoom(p, line.Points, f))
 		if line.Tint >= 0 {
 			row.Subject = string(rune('a' + line.Slot%26))
 			if len(r.c.Data) > 0 {

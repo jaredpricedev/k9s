@@ -250,6 +250,11 @@ func (r *Report) headline(symptom *Lane) {
 	switch {
 	case count == 1:
 		lengths = "for " + impact.Dur(shortest)
+		if open, _ := r.cut(); open {
+			// Only the part inside the window was seen, as the answer of
+			// the calm page says of the same episode.
+			lengths = "for at least " + impact.Dur(shortest)
+		}
 	case shortest != longest:
 		lengths = impact.Dur(shortest) + "-" + impact.Dur(longest) + " each"
 	}

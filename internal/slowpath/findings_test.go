@@ -130,9 +130,14 @@ func TestTheAnswerStatesTheEpisodesAndWhatLinesUpInPlainWords(t *testing.T) {
 // time before the story does.
 func answerAt(t *testing.T, back, window time.Duration) slowpath.Answer {
 	t.Helper()
+	return reportAt(t, back, window).Answer()
+}
+
+func reportAt(t *testing.T, back, window time.Duration) *slowpath.Report {
+	t.Helper()
 	now := slowtest.Now.Add(-back)
 	plan := slowpath.BuildPlan(slowtest.Sources(), slowtest.Path(), window, now)
-	return slowpath.Evaluate(plan, slowpath.Collect(t.Context(), &slowtest.Story{}, plan), nil, now).Answer()
+	return slowpath.Evaluate(plan, slowpath.Collect(t.Context(), &slowtest.Story{}, plan), nil, now)
 }
 
 // A window can cut an episode: begin while it is under way, or end before
@@ -149,6 +154,12 @@ func TestTheAnswerSaysWhenTheWindowCutsAnEpisode(t *testing.T) {
 	assert.Equal(t, "1 stall: clients gave up waiting at 07:49:15 UTC, for at least 1m45s.", open.Lead)
 	assert.Equal(t, "1 stall: clients gave up waiting, for at least 1m45s.", open.Brief)
 	assert.Equal(t, "It was already raised when the window began.", open.Edge)
+	// The headline of the all-detail page states the same length of the
+	// same episode: only what the window holds.
+	headline := reportAt(t, 16*time.Minute, 15*time.Minute).Headline
+	assert.Equal(t, "1 episode of client give-ups (HTTP 499) at the ingress: 07:49:15 UTC, for at least 1m45s.", headline)
+	assert.Contains(t, slowtest.Report(&slowtest.Story{}, slowtest.Sources(), slowtest.Path(), time.Hour).Headline, "2m-4m each.",
+		"episodes the window holds whole keep their lengths")
 
 	// The third is 08:13 to 08:15; this window ends at 08:14. The length is
 	// what was seen and is not called a least one: a rate stays raised while

@@ -94,7 +94,8 @@ The answer is computed from the episodes and from interval overlap
   signal (`2 episodes of not Ready on pod hx4mt at 07:29 and 07:48 UTC`).
 - When the window cuts an episode, the next sentence says so, because its
   length is then only what the window holds: `It was already raised when the
-  window began.` (the first sentence then says `for at least 1m45s`), or
+  window began.` (the first sentence then says `for at least 1m45s`, and
+  so does the headline of the page under `a`), or
   `It was still raised at the last sample: it may not be over.` Of several
   episodes it names the one that is cut (`The last was still raised …`). A
   window that holds every episode whole adds nothing.
