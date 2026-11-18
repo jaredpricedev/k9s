@@ -388,6 +388,11 @@ func checkoutRequest(t *testing.T) *Request {
 func TestCollectStatesWhatWasMeasuredAfterTheRolloutAndNoCause(t *testing.T) {
 	source := checkoutStory()
 	report := Collect(t.Context(), source, checkoutRequest(t))
+	require.WithinDuration(t, time.Now(), report.ReadAt, time.Minute, "the read is stamped with the wall clock")
+	// The sentence names the day of a rollout that was not today, so the
+	// read is pinned to the day of the rollout: the text does not depend
+	// on the day the test runs.
+	report.ReadAt = rolloutAt.Add(13 * time.Minute)
 	require.Len(t, source.queries, 9, "one bounded range read per query template")
 	require.Equal(t, 15*time.Second, report.Step)
 	require.Equal(t, 2*time.Minute, report.RateWindow)
@@ -416,6 +421,9 @@ func TestCollectStatesWhatWasMeasuredAfterTheRolloutAndNoCause(t *testing.T) {
 	require.Equal(t, "After rev 2 (04:20): error ratio 0.2% -> 14.1%, p99 248ms -> 2.5s, restarts 0 -> 6, "+
 		"memory at limit (limit 512Mi -> 256Mi), ready replicas 2 -> 1.", report.Summary())
 	require.Equal(t, "not available: CPU throttled", report.Uncompared())
+	later := *report
+	later.ReadAt = rolloutAt.Add(26 * time.Hour)
+	require.True(t, strings.HasPrefix(later.Summary(), "After rev 2 (Nov17 04:20): "), "read on a later day, the rollout carries its date")
 	require.Equal(t, []string{"image v1 -> v2", "limits.memory 512Mi -> 256Mi", "env ~PAYMENT_TOKEN +FEATURE_FLAGS"}, report.Changes)
 	require.Empty(t, report.Traffic)
 	for _, text := range append([]string{report.Summary(), report.Uncompared()}, report.Changes...) {
@@ -429,6 +437,7 @@ func TestCollectStatesWhatWasMeasuredAfterTheRolloutAndNoCause(t *testing.T) {
 func TestCollectReportsDeniedTooFewSamplesAndTrafficShiftsHonestly(t *testing.T) {
 	denied := &fakeSource{status: observability.Status{State: observability.StateDenied, HTTPStatus: 403}}
 	report := Collect(t.Context(), denied, checkoutRequest(t))
+	report.ReadAt = rolloutAt.Add(13 * time.Minute)
 	require.Equal(t, "denied (HTTP 403)", report.Failure)
 	require.Equal(t, "After rev 2 (04:20): nothing was read from the source: denied (HTTP 403). No comparison was made.", report.Summary())
 	for index := range report.Outcomes {

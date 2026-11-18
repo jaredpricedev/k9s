@@ -77,7 +77,7 @@ A Service, an Ingress or a workload that reports no problem keeps a plain border
 | `Tab` / `Shift-Tab` | Next / previous main chart or panel. It is the next-chart key that is free in every one of these views, and the only one in `:slow` and `:impact`, where `n` steps through episodes and rollouts | a dashboard (next panel) today; bound to nothing else in `:slow`, `:probe`, `:graph`, `:impact` |
 | `a` | All detail: every signal and the detail table the view had before the calm layout. One press shows it, the next returns to the calm layout, which is the default | every view laid out the calm way (see below); bound to nothing else in `:slow`, `:probe`, `:graph`, `:impact`, a dashboard |
 | `r` | Read again. In `:probe` it is the one read there is: it sends the requests, after a confirmation | every one of them |
-| `s` | The queries or sources behind the page | `:graph`, `:slow`, dashboards, `:query`, `:timeline` |
+| `s` | The queries or sources behind the page. In `:impact`: the rule, the sample counts and the exact queries of the row under the cursor | `:graph`, `:slow`, `:impact`, dashboards, `:query`, `:timeline` |
 | `p` | One chart per Pod | `:graph` only |
 | `b` | Chart style: filled areas and solid lines (the default), or braille dots, which are finer and harder to read. One press switches, the next returns; the choice holds for the session in every view named here | `:graph` (overlaid, per Pod and regrouped), `:slow`, dashboards, `:query` |
 | `+` / `_` | More / fewer requests per Pod | `:probe` only; the digits stay windows |
@@ -147,6 +147,22 @@ Each glyph means one thing on every page:
 | `┆` and `^` | `:` and `^` | the cursor, through the rows and on the axis |
 
 A sample stands for the step that ends at it, as the request-path rules state when a rule held (`slowpath.Crossings`). Strips, bands and the main chart are all drawn that way, so a strip that is over its rule during an episode stands inside the band, at any width. The clock labels are UTC and say so once.
+
+### A page that counts instead of timing
+
+`:probe` has no clock to share: its rows are requests, sent one after another. Such a page sets `calm.Page.Counted`, and its strips are `calm.Sequence`: one cell per thing, in order, from the left, so the first request to every Pod is the first cell of every row. The shared axis is the position, and no time axis is drawn.
+
+| Cell | `noIcons` | Meaning |
+| --- | --- | --- |
+| `▁` to `█` | `_.:-=+*#` | a value, at its height on the scale all rows share; in the row's colour when it is over its rule, dim when not |
+| a sign the view names (`×`, `!`, `~`, `?`, `·` in `:probe`) | the view's plain form | a thing without a value. It is in the row's colour only when the missing value is itself what stands out (a request without an answer) |
+| `…` | `>` | the strip is narrower than its cells: the rest are cut, and the page counts them |
+
+`Strip.Then` puts an earlier sequence on the same row, after a gap and dim throughout: the run before this one. A caption row over the first group names the two (`this run    previous 14:02:11Z`); one sequence needs no caption. A strip is as wide as its cells and captions need and no wider, so the number stands directly after it. A narrower screen first sets the cells side by side instead of a blank apart, lets the text beside the strip give way as on every page, and then leaves the earlier sequence out and names it in the `not shown at this size` line. The text never gives way for the blanks between cells.
+
+Two more serve `:impact`, whose one episode is a moment and whose signals can get better by falling. `calm.Bands.Guide` draws an episode that has no length as a guide `┊` (`|`) through every row as well, in the colour of its marker: one shaded column is not seen, and a rollout divides every row in two. In a strip the guide stands in place of the level of its column, which holds samples of both sides; it never stands over an event or over a column that was not read. `Strip.Rule` gives a `Trend` a rule: the height stays the value in every column, in the row's colour where the rule holds and dim where it does not, so a signal that fell is high before the guide and low after it instead of a baseline.
+
+Three smaller additions serve the same two views: `calm.Title.Verb` and `Unit` write the status of a page that sends instead of reading (`sent 14:02 · 15 of 15 requests`, in the warning colour when not everything was sent); `calm.Verdict.Apart` starts every sentence on a line of its own, for a second sentence that is a statement of its own kind (`rev 2 changed: …`); and the group the cursor is in is given the primary role by the view, so the rows the keys act on are never folded away.
 
 ### What a smaller screen gives up
 

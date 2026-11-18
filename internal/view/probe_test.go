@@ -101,15 +101,43 @@ func probePress(t *testing.T, v *probeView, key tcell.Key) {
 	action.Action(nil)
 }
 
+// probeDetail presses a until the view shows the table and result pane it
+// had before the calm layout (on), or the calm page again.
+func probeDetail(t *testing.T, v *probeView, on bool) {
+	t.Helper()
+	if v.allDetail != on {
+		probePress(t, v, calmDetailKey)
+	}
+	require.Equal(t, on, v.allDetail)
+}
+
 func TestProbeSendsNothingUntilTheRequestWasReadAndConfirmed(t *testing.T) {
 	v, story := probeViewFixture(t)
 	require.Contains(t, v.runUnavailable(), "still being read")
 	v.acceptPlan(probeTestPlan(), nil)
-	frame := drawnText(t, v, 132, 32)
+	// The calm page is one block before a run: nothing has left, what r
+	// would send, and the Pods it would go to.
+	frame := drawnText(t, v, 132, 33)
+	require.Equal(t, "  Nothing has been sent.", strings.Split(frame, "\n")[2], "the answer comes first")
+	flat := strings.Join(strings.Fields(frame), " ")
+	require.Contains(t, flat, "r sends GET :8080/-/readiness on each pod, 5 times, through the Kubernetes API proxy: 15 requests in all, "+
+		"one after another per Pod, at most 4 Pods at a time. You are asked first.")
+	require.Contains(t, flat, "Path and port are those of each Pod's own readinessProbe, the request the kubelet already makes. "+
+		"The application handles it and will see it in its logs.")
+	require.Contains(t, frame, "Opening this view read Kubernetes objects only.")
+	require.Regexp(t, `(?m)^Probe  Service gitlab/gitlab-webservice-default · GET :8080/-/readiness ×5 per pod +nothing sent$`, frame)
+	require.Contains(t, frame, "  WOULD BE ASKED\n> …-2bq7k  worker-d study-zone-a\n  …-8wzpd  worker-e study-zone-b\n  …-hx4mt  worker-f study-zone-c\n")
+	require.Contains(t, frame, "  next  r send 15 requests (asks first)    + 10 per pod    u liveness probe instead    Enter open …-2bq7k\n")
+	require.NotContains(t, frame, probeMeasuredLabel, "nothing was measured, so nothing is said about a measurement")
+	require.NotRegexp(t, `[▁▂▃▄▅▆▇█]`, frame, "there is no strip before a request")
+	// a shows the table the view had before; it states the same.
+	probeDetail(t, v, true)
+	frame = drawnText(t, v, 132, 32)
 	require.Contains(t, frame, "Nothing has been sent. Opening this view read Kubernetes objects only; r sends 15 read-only GET requests after you confirm.")
 	require.Contains(t, frame, "GET :8080/-/readiness on each pod, 5 times, through the Kubernetes API proxy")
 	require.Contains(t, frame, "not sent")
-	require.Zero(t, story.calls.Load(), "opening the view and reading the plan contact no Pod")
+	probeDetail(t, v, false)
+	require.Zero(t, story.calls.Load(), "opening the view, reading the plan and changing the layout contact no Pod")
 
 	probePress(t, v, ui.KeyR)
 	require.NotNil(t, v.confirm, "r asks before the first request")
@@ -132,7 +160,7 @@ func TestProbeSendsNothingUntilTheRequestWasReadAndConfirmed(t *testing.T) {
 	for _, line := range strings.Split(dialog, "\n") {
 		require.LessOrEqual(t, runewidth.StringWidth(line), 80, line)
 	}
-	flat := strings.Join(strings.Fields(strings.NewReplacer("│", " ").Replace(dialog)), " ")
+	flat = strings.Join(strings.Fields(strings.NewReplacer("│", " ").Replace(dialog)), " ")
 	require.Contains(t, flat, "will see it in its logs", "the whole statement is on screen at 80x24 without scrolling")
 	require.Contains(t, flat, "> Cancel < Send 15 requests")
 	require.True(t, v.confirm.IsDialog())
@@ -204,9 +232,12 @@ func TestProbeRunsOnlyWhatWasConfirmedAndStopsOnEsc(t *testing.T) {
 	require.False(t, v.running)
 }
 
+// The table of all detail (a): every column the width has room for, the
+// run before as a dimmer row, and the result pane under it.
 func TestProbeFramesKeepPodMedianAndVerdictAtEverySize(t *testing.T) {
 	v, story := probeViewFixture(t)
 	v.acceptPlan(probeTestPlan(), nil)
+	probeDetail(t, v, true)
 	probeFinish(t, v, story)
 	require.Equal(t, probePodC, v.selected, "the cursor starts on the Pod that differs")
 	require.NotContains(t, drawnText(t, v, 132, 32), "m graphs", "a check whose key would be refused is not proposed")
@@ -275,6 +306,7 @@ func TestProbeNoIconsUsesASCIIOnly(t *testing.T) {
 	v, story := probeViewFixture(t)
 	v.app.Config.K9s.UI.NoIcons = true
 	v.acceptPlan(probeTestPlan(), nil)
+	probeDetail(t, v, true)
 	probeFinish(t, v, story)
 	frame := drawnText(t, v, 132, 32)
 	for _, glyph := range []string{"▁", "▂", "▇", "█", "×", "≥", "…", "·", "→"} {
@@ -301,6 +333,7 @@ func TestProbeNoIconsUsesASCIIOnly(t *testing.T) {
 func TestProbeCountsARequestInFlightAtCancelAsSent(t *testing.T) {
 	v, _ := probeViewFixture(t)
 	v.acceptPlan(probeTestPlan(), nil)
+	probeDetail(t, v, true)
 	v.selected = probePodC
 	v.run = probe.NewRun(v.plan, probe.Options{Attempts: 5})
 	v.ranAt = time.Now().UTC().Add(-4 * time.Second)
@@ -348,6 +381,7 @@ func TestProbeFlagsTimeoutsWithoutPeersAndCountsElidedTimes(t *testing.T) {
 	}, 2)
 	plan.Access = probe.AccessAllowed
 	v.acceptPlan(plan, nil)
+	probeDetail(t, v, true)
 	v.attempts = 20
 	// Counted per Pod, so the answers do not depend on which Pod is asked
 	// first.
@@ -378,6 +412,7 @@ func TestProbeStatesWhyNothingCanBeSent(t *testing.T) {
 	v, story := probeViewFixture(t)
 	plan := probe.NewPlan(v.scope, []probe.Pod{probeTestPod("gitlab-gitaly-0", "worker-d", "study-zone-a", false)}, 1)
 	v.acceptPlan(plan, nil)
+	probeDetail(t, v, true)
 	frame := drawnText(t, v, 100, 24)
 	require.Contains(t, frame, "not contacted: no declared HTTP probe")
 	require.Contains(t, frame, "The listed Pod does not declare an httpGet readinessProbe or livenessProbe")
@@ -512,10 +547,14 @@ func TestProbeIsRegisteredAndBoundWhereItApplies(t *testing.T) {
 	require.Equal(t, []int{20, 10, 5, 3, 1, 1}, seen, "_ stops at one")
 	require.Equal(t, "1 request per pod is the fewest this view sends", said())
 	v.setAttempts(probe.DefaultAttempts)
+	// The key line of all detail names a as the way back to the calm page.
+	require.Equal(t, calmDetailLabel, label(calmDetailKey))
+	probeDetail(t, v, true)
+	require.Contains(t, drawnText(t, v, 140, 30), "r run · + more  _ fewer per pod (×5) · u liveness probe · Enter open pod · m graph · t timeline · Shift-W slow · a less detail · Esc back")
 	frame := drawnText(t, v, 132, 30)
-	require.Contains(t, frame, "r run · + more  _ fewer per pod (×5) · u liveness probe · Enter open pod · m graph · t timeline · Shift-W slow · Esc back")
-	require.Contains(t, drawnText(t, v, 80, 24), "r run · +/_ ×5 per pod · u probe · Enter pod · m graph · Shift-W slow · Esc\n")
-	require.Contains(t, drawnText(t, v, 60, 24), "r run · +/_ ×5 · Enter pod · m graph · Shift-W slow · Esc\n")
+	require.Contains(t, frame, "r run · + more  _ fewer per pod (×5) · u liveness probe · Enter open pod · m graph · t timeline · Shift-W slow · a less · Esc back")
+	require.Contains(t, drawnText(t, v, 80, 24), "r run · +/_ ×5 · u probe · Enter pod · m graph · Shift-W slow · a less · Esc\n")
+	require.Contains(t, drawnText(t, v, 60, 24), "r run · +/_ ×5 · Enter pod · m graph · a less · Esc\n")
 
 	// Shift-W is :slow here as on a Service row, for the selection the
 	// probe was opened for.

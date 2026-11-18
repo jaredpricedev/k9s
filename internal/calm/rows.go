@@ -128,6 +128,9 @@ type Layout struct {
 	// Strip is the width of every strip, and of the Frame; zero is a
 	// screen too narrow for strips.
 	Strip int
+
+	// seq is how the sequences of a counted page are drawn in the strips.
+	seq sequenceForm
 }
 
 const (
@@ -197,6 +200,13 @@ func natural(groups []Group, width int, numberAfter bool) Layout {
 // shortened and Tag left out, and a Layout with Strip zero has no room
 // for strips at all.
 func Measure(groups []Group, width, gutter int, numberAfter bool) Layout {
+	return measure(groups, width, gutter, numberAfter, goodStrip)
+}
+
+// measure is Measure with the strip width the text gives way for: the
+// comfortable width of a timeline, or what the sequences of a counted page
+// need.
+func measure(groups []Group, width, gutter int, numberAfter bool, want int) Layout {
 	l := natural(groups, width, numberAfter)
 	// rows and quiet are how far left the rows and the quiet lines reach;
 	// the strips start at the larger, or where the chart's plot does.
@@ -260,7 +270,7 @@ func Measure(groups []Group, width, gutter int, numberAfter bool) Layout {
 		return true
 	}
 	fit()
-	for l.Strip < goodStrip && give(false) {
+	for l.Strip < want && give(false) {
 	}
 	for l.Strip < MinStrip && give(true) {
 	}
@@ -430,6 +440,10 @@ func rowLine(g *Group, r *Row, first bool, b Bands, f chart.Frame, l Layout, o O
 		color = ""
 	}
 	row := strip.draw(f, color, o)
+	if strip.kind == stripSequence && l.seq.cells > 0 {
+		// Every row of a counted page is drawn in the page's one form.
+		row = strip.sequence(l.seq, f.Width, color, o)
+	}
 	b.through(row, f, o)
 	out.strip(row)
 	numberAt, compareAt, tagCol := l.after()

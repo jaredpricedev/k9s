@@ -56,6 +56,10 @@ type Report struct {
 	// Failure is set when no query was answered at all.
 	Failure string
 	Notes   []string
+	// Asked is the number of range reads the comparison makes and Answered
+	// how many of them came back usable. Both are zero for a report whose
+	// source was never asked.
+	Asked, Answered int
 }
 
 const (
@@ -211,6 +215,7 @@ func (r *Report) reduce(results map[string]observability.PromResult) {
 	if failed == len(queryOrder) {
 		r.Failure = firstFailure
 	}
+	r.Asked, r.Answered = len(queryOrder), len(queryOrder)-failed
 	for index := range Signals {
 		signal := Signals[index]
 		outcome := Outcome{Signal: signal}

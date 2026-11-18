@@ -829,13 +829,16 @@ func (v *probeView) footerText() string {
 	}
 	g := v.glyphs()
 	count := fmt.Sprintf("%s%d", g.times, v.attempts)
-	// Four forms, longest first; each names the run, the count, the other
-	// probe and the sibling views as far as the width allows.
+	// Six forms, longest first; each names the run, the count, the other
+	// probe, the sibling views and the way back to the calm page (a) as
+	// far as the width allows.
 	forms := [][]string{
-		{"r run", "+ more  _ fewer per pod (" + count + ")", "u " + v.otherKind() + " probe", "Enter open pod", "m graph", "t timeline", slowKeyName + " slow", "Esc back"},
-		{"r run", "+/_ " + count + " per pod", "u probe", "Enter pod", "m graph", "t timeline", slowKeyName + " slow", "Esc back"},
-		{"r run", "+/_ " + count + " per pod", "u probe", "Enter pod", "m graph", slowKeyName + " slow", "Esc"},
-		{"r run", "+/_ " + count, "Enter pod", "m graph", slowKeyName + " slow", "Esc"},
+		{"r run", "+ more  _ fewer per pod (" + count + ")", "u " + v.otherKind() + " probe", "Enter open pod", "m graph", "t timeline", slowKeyName + " slow", "a less detail", "Esc back"},
+		{"r run", "+ more  _ fewer per pod (" + count + ")", "u " + v.otherKind() + " probe", "Enter open pod", "m graph", "t timeline", slowKeyName + " slow", "a less", "Esc back"},
+		{"r run", "+/_ " + count + " per pod", "u probe", "Enter pod", "m graph", "t timeline", slowKeyName + " slow", "a less", "Esc back"},
+		{"r run", "+/_ " + count, "u probe", "Enter pod", "m graph", slowKeyName + " slow", "a less", "Esc"},
+		{"r run", "+/_ " + count, "Enter pod", "m graph", slowKeyName + " slow", "a less", "Esc"},
+		{"r run", "+/_ " + count, "Enter pod", "m graph", "a less", "Esc"},
 	}
 	runnable := v.plan == nil || v.runUnavailable() == ""
 	several := v.plan != nil && len(v.plan.Available) > 1
@@ -864,9 +867,10 @@ func (v *probeView) otherKind() string {
 	return string(v.plan.NextKind())
 }
 
-// render lays the view out: the header, the table, the result pane and the
-// key line. The table keeps at least three Pods in view; the pane gives up
-// air and wording before it loses a line of the result.
+// render draws the calm page or, with all detail, lays the view out as the
+// header, the table, the result pane and the key line. The table keeps at
+// least three Pods in view; the pane gives up air and wording before it
+// loses a line of the result.
 func (v *probeView) render() {
 	if v.header == nil || v.rendering {
 		return
@@ -879,6 +883,10 @@ func (v *probeView) render() {
 		if v.previous != nil {
 			before = probe.Summarize(v.plan, v.previous, nil)
 		}
+	}
+	if !v.allDetail {
+		v.renderCalm(&summary)
+		return
 	}
 	width := v.viewWidth()
 	lines := v.headerLines(&summary)

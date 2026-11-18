@@ -58,6 +58,11 @@ type Page struct {
 	Keys []string
 	// NumberAfter writes the number of a row after its strip.
 	NumberAfter bool
+	// Counted says the strips are sequences of counted things (Sequence),
+	// not timelines. Frame is not used: the page has no time axis, a strip
+	// is as wide as its cells need and no wider, and a caption row names
+	// the two sequences of a row when there are two.
+	Counted bool
 }
 
 // Plan is how a page is laid out in an area: the columns, what folds, and
@@ -110,6 +115,7 @@ const (
 	itNext
 	itRest
 	itTooSmall
+	itCaption
 )
 
 // item is one line of a page: what it is and which group and row or which
@@ -171,7 +177,7 @@ func (st *state) clone() state {
 // the screen is named in one line with the key that shows it.
 func Lay(p *Page, width, height int, o Options) Plan {
 	count := len(p.Groups)
-	st := state{airy: true, spaced: true, gaps: true, rest: true, next: true, loose: true, strips: p.Frame.End.After(p.Frame.Start),
+	st := state{airy: true, spaced: true, gaps: true, rest: true, next: true, loose: true, strips: p.Counted || p.Frame.End.After(p.Frame.Start),
 		folded: make([]bool, count), hidden: make([]bool, count), rows: make([]int, count)}
 	for i := range p.Groups {
 		st.rows[i] = len(p.Groups[i].Rows)
@@ -279,8 +285,11 @@ func Lay(p *Page, width, height int, o Options) Plan {
 			}
 			st.strips = false
 			words := "the time strips"
-			if p.Chart != nil {
+			switch {
+			case p.Chart != nil:
 				words = "the strips beside the rows"
+			case p.Counted:
+				words = "the strips"
 			}
 			st.drops = append(st.drops, drop{words: words, missing: true})
 			return true
@@ -373,9 +382,12 @@ func (st *state) build(p *Page, width, height int, o Options) Plan {
 		gutter = max(p.Chart.Gutter, 1)
 	}
 	rows := st.shown(p)
-	if st.strips {
+	switch {
+	case st.strips && p.Counted:
+		plan.Layout = measureCounted(rows, width, gutter, p.NumberAfter)
+	case st.strips:
 		plan.Layout = Measure(rows, width, gutter, p.NumberAfter)
-	} else {
+	default:
 		// Without strips beside the rows the axis belongs to the chart
 		// alone, and a page of rows has none.
 		plan.TextRows = true
@@ -386,7 +398,10 @@ func (st *state) build(p *Page, width, height int, o Options) Plan {
 	}
 	plan.Frame = p.Frame
 	plan.Frame.Width = plan.Layout.Strip
-	axis := plan.Layout.Strip > 0 && (p.Chart != nil || len(rows) > 0 && st.strips)
+	if p.Counted {
+		plan.Frame = countedFrame(plan.Layout.Strip)
+	}
+	axis := !p.Counted && plan.Layout.Strip > 0 && (p.Chart != nil || len(rows) > 0 && st.strips)
 
 	add := func(kind itemKind, group, n int) {
 		plan.items = append(plan.items, item{kind: kind, group: group, n: n})
@@ -412,6 +427,9 @@ func (st *state) build(p *Page, width, height int, o Options) Plan {
 			blank(itShadedBlank)
 		}
 	}
+	if p.Counted && st.strips && plan.Layout.Strip > 0 && len(rows) > 0 && plan.Layout.seq.captioned() {
+		add(itCaption, 0, 0)
+	}
 	chartAt := -1
 	if p.Chart != nil {
 		if p.Chart.Head != "" {
@@ -428,6 +446,8 @@ func (st *state) build(p *Page, width, height int, o Options) Plan {
 		case chartAt == len(plan.items):
 			// The plot is put in at chartAt once its height is known.
 			add(itShadedBlank, 0, 0)
+		case plan.items[len(plan.items)-1].kind == itCaption:
+			// The caption row is the head of the rows under it.
 		default:
 			blank(itShadedBlank)
 		}
@@ -475,6 +495,13 @@ func (st *state) build(p *Page, width, height int, o Options) Plan {
 		if d.missing {
 			plan.Missing = append(plan.Missing, words)
 		}
+	}
+	if p.Counted && st.strips {
+		// What a narrow strip leaves out of its sequences is not on the
+		// screen at all, and is named with the rest.
+		words := plan.Layout.seq.missing(plan.Layout.Strip)
+		plan.Dropped = append(plan.Dropped, words...)
+		plan.Missing = append(plan.Missing, words...)
 	}
 	if st.strips && plan.Layout.Compare == 0 && natural(rows, width, p.NumberAfter).Compare > 0 {
 		// The number stays; what it is held against is context, and is
@@ -573,6 +600,8 @@ func Render(p *Page, plan *Plan, o Options) Rendered {
 			text, part = verdict[it.n], &out.Verdict
 		case itMarker:
 			text = MarkerRow(b, f, l, o)
+		case itCaption:
+			text = captionRow(l, o)
 		case itShadedBlank:
 			text = blank(b, f, l, o)
 			part = nil

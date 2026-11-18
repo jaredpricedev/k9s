@@ -44,19 +44,28 @@ const (
 	stripHeld
 	stripQuiet
 	stripNotRead
+	stripSequence
 )
 
 // Strip is the timeline of one row: N columns on the shared Frame. Make
 // one with Levels, Trend, Events, Held, Quiet or UnreadStrip; the zero Strip
-// draws nothing (the bands still run through it).
+// draws nothing (the bands still run through it). Sequence makes the strip
+// of a page that counts things instead of timing them (Page.Counted).
 type Strip struct {
-	kind    stripKind
-	points  []chart.Point
-	over    func(float64) bool
-	top     float64
+	kind   stripKind
+	points []chart.Point
+	over   func(float64) bool
+	top    float64
+	// valued draws a strip with a rule at the height of its value in every
+	// column (Rule): the rule then only decides the colour.
+	valued  bool
 	events  []time.Time
 	held    []chart.Interval
 	unknown []chart.Interval
+	// seq and then are the cells of a Sequence and of the earlier one
+	// drawn after it; caption and thenCaption name them.
+	seq, then            []Tick
+	caption, thenCaption string
 }
 
 // Levels is the strip of a value with a rule. A column whose value is over
@@ -77,6 +86,18 @@ func Levels(points []chart.Point, over func(v float64) bool) Strip {
 // column, in the row's colour.
 func Trend(points []chart.Point) Strip {
 	return Strip{kind: stripLevels, points: points}
+}
+
+// Rule gives a Trend a rule. The level stays the value in every sampled
+// column; it is in the row's colour where over holds and dim where it does
+// not. It is for a value that can cross its rule by falling, where the
+// baseline of Levels would hide the fall: :impact draws a signal before
+// and after a rollout with it, high before and low after when it fell.
+func (s Strip) Rule(over func(v float64) bool) Strip {
+	if over != nil && s.kind == stripLevels {
+		s.over, s.valued = over, true
+	}
+	return s
 }
 
 // Events is the strip of moments such as restarts: one mark per column in
@@ -174,6 +195,12 @@ func (s Strip) draw(f chart.Frame, color string, o Options) []cell {
 				out[col] = gap
 			case s.over == nil:
 				out[col] = cell{r: glyphs[level(v, top, len(glyphs))], k: hot}
+			case s.valued:
+				k := dim
+				if s.over(v) {
+					k = hot
+				}
+				out[col] = cell{r: glyphs[level(v, top, len(glyphs))], k: k}
 			case s.over(v):
 				// One step above the baseline at least: over the rule is
 				// a different glyph, not only a different colour.
@@ -215,6 +242,15 @@ func (s Strip) draw(f chart.Frame, color string, o Options) []cell {
 	case stripNotRead:
 		for col := range out {
 			out[col] = gap
+		}
+	case stripSequence:
+		// A sequence alone takes the best form its width has room for.
+		forms := sequenceForms([]Group{{Rows: []Row{{Strip: s}}}})
+		for i, form := range forms {
+			if form.width <= f.Width || i == len(forms)-1 {
+				form.clipped = form.width > f.Width
+				return s.sequence(form, f.Width, color, o)
+			}
 		}
 	}
 	return out
@@ -275,7 +311,10 @@ func (b Bands) cursorCol(f chart.Frame) (int, bool) {
 }
 
 // through draws the labelled moments and the cursor through the cells that
-// hold nothing: a level or an event is never overdrawn.
+// hold nothing: a level or an event is never overdrawn. The guide of an
+// episode without a length (Bands.Guide) divides the row in two, so it
+// stands in place of the level of its column too; an event and a column
+// that was not read are never overdrawn.
 func (b Bands) through(row []cell, f chart.Frame, o Options) {
 	empty := func(c cell) bool {
 		return c.r == ' ' || c.r == quietGlyph || c.r == quietASCII
@@ -283,6 +322,16 @@ func (b Bands) through(row []cell, f chart.Frame, o Options) {
 	guide, cursor := guideGlyph, cursorGlyph
 	if o.ASCII {
 		guide, cursor = guideASCII, cursorASCII
+	}
+	for col := range b.moments(f) {
+		if col >= len(row) {
+			continue
+		}
+		switch row[col].r {
+		case eventGlyph, eventASCII, chart.GapGlyph, chart.GapASCII:
+		default:
+			row[col] = cell{r: guide, k: look{color: o.Palette.Warn}}
+		}
 	}
 	for _, mark := range b.Marks {
 		if col, ok := f.Col(mark.T); ok && col < len(row) && empty(row[col]) {

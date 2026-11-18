@@ -34,6 +34,10 @@ type Verdict struct {
 	// Caveat is the evidential limit, such as "Overlap in time, not proof
 	// of cause.". It is dim, at the right of the last line when it fits.
 	Caveat string
+	// Apart starts every sentence on a line of its own, for a verdict whose
+	// second sentence is a statement of its own kind (what a revision
+	// changed) and not the continuation of the first.
+	Apart bool
 }
 
 // Nothing is the verdict of a read that found nothing. The sentence says
@@ -111,7 +115,7 @@ func VerdictLines(v Verdict, width int, o Options) []string {
 		if index == 0 {
 			k = first
 		}
-		if used > 0 && used+1+cells(sentence) > room {
+		if used > 0 && (v.Apart || used+1+cells(sentence) > room) {
 			open()
 		}
 		for _, word := range strings.Fields(sentence) {

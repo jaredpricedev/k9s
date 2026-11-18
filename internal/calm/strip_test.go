@@ -35,6 +35,8 @@ func TestStripForms(t *testing.T) {
 			Trend(series(0, 5, 10, 10, 2)), "▁▅██▂×××××", "_=##.xxxxx"},
 		"a trend with a top is drawn against it": {
 			Trend(series(3, 3, 3)).Top(6), "▅▅▅×××××××", "===xxxxxxx"},
+		"a trend with a rule keeps the height of its value on both sides of the rule": {
+			Trend(series(8, 8, 8, 4, 1, 0)).Rule(func(v float64) bool { return v < 6 }), "███▅▂▁××××", "###=._xxxx"},
 		"a strip without a sample is gaps, not a baseline": {
 			Levels(nil, over(1)), "××××××××××", "xxxxxxxxxx"},
 		"a missing sample is NaN to the fold, never zero": {
@@ -73,6 +75,15 @@ func TestStripColours(t *testing.T) {
 	// level, so it reads without colour.
 	row = draw(t, []string{StripLine(levels, "", Bands{}, tenMinutes, colorOpts)}, 10)[0]
 	assert.Equal(t, shown{r: '█', fg: testPalette.Muted}, row[1])
+
+	// A trend with a rule: the height is the value, the rule is the colour.
+	fell := Trend(series(8, 8, 1, 0)).Rule(func(v float64) bool { return v < 6 })
+	row = draw(t, []string{StripLine(fell, testPalette.Info, Bands{}, tenMinutes, colorOpts)}, 10)[0]
+	assert.Equal(t, "██▂▁××××××", text(row))
+	assert.Equal(t, shown{r: '█', fg: testPalette.Muted, dim: true}, row[0], "within its rule a value is dim at its own height")
+	assert.Equal(t, shown{r: '▂', fg: testPalette.Info}, row[2], "over its rule it is in the row's colour, low as it is")
+	assert.Equal(t, shown{r: '▁', fg: testPalette.Info}, row[3])
+	assert.Equal(t, "▁█▁××▁××××", plain(StripLine(levels.Rule(nil), "", Bands{}, tenMinutes, plainOpts)), "no rule changes nothing")
 
 	row = draw(t, []string{StripLine(Events(minute(4)), testPalette.Warn, Bands{}, tenMinutes, colorOpts)}, 10)[0]
 	assert.Equal(t, shown{r: '▲', fg: testPalette.Warn, bold: true}, row[4])
