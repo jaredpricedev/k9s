@@ -404,7 +404,7 @@ longer stalls the Pod fails its readiness probe from 90 seconds in until 20
 seconds after the stall (`kube_pod_status_ready`); it is Ready at start. One
 unrelated Hubble drop blip (`POLICY_DENIED`, about 0.8 per second for one
 minute) happens 41 to 40 minutes before start, between two stalls, towards a
-different Pod (`…-2bq7k`): a view must not tie it to the stalls.
+different Pod (`2bq7k`): a view must not tie it to the stalls.
 
 The Ingress list of the resource browser asks the API server for a
 server-side table; the fixture answers it for Ingresses, so `:ingresses

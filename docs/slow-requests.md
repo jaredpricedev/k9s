@@ -48,34 +48,34 @@ terminal gives the view (`internal/view/testdata/slow/hang-132x32.txt`):
 Slow requests  Service gitlab/gitlab-webservice-default · last 1h                                    read 08:20 · 35 of 35 queries
 
   3 stalls: clients gave up waiting at 07:28, 07:47 and 08:13 UTC, for 2 to 4 minutes each.
-  All 3 line up with slow p99, queueing, no free threads and CPU throttling on pod …-hx4mt.
-  2 of 3 also line up with not Ready on pod …-hx4mt.                                          Overlap in time, not proof of cause.
+  All 3 line up with slow p99, queueing, no free threads and CPU throttling on pod hx4mt.
+  2 of 3 also line up with not Ready on pod hx4mt.                                            Overlap in time, not proof of cause.
 
-                                                            stalls        ▼▼▼▼▼               ▼▼▼▼▼▼                      ▼▼▼
+                                                          stalls         ▼▼▼▼                ▼▼▼▼▼▼                      ▼▼▼▼
 
   LINES UP WITH THE STALLS
-  ingress      client give-ups (HTTP 499) +2  6.29%   of requests  ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁
+  ingress    client give-ups (HTTP 499) +2  6.29%   of requests  ▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁
 
-> pod …-hx4mt  slow p99                       48s     peers 350ms  ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁
-               queueing                       30      peers 0      ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁
-               no free threads                0       peers 5      ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁
-               CPU throttling                 86%     peers 1.2%   ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁
-               not Ready                      twice   up to 3m     ▁▁▁▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+> pod hx4mt  slow p99                       48s     peers 350ms  ▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁
+             queueing                       30      peers 0      ▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁
+             no free threads                0       peers 5      ▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁
+             CPU throttling                 86%     peers 1.2%   ▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁
+             not Ready                      twice   up to 3m     ▁▁▁▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
 
   DIFFERS, BUT NOT DURING A STALL
-  network      packet drops (POLICY_DENIED)   0.37/s  to …-2bq7k   ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+  network    packet drops (POLICY_DENIED)   0.37/s  to 2bq7k     ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
 
   QUIET
-  pods …-2bq7k, …-8wzpd  p99 350ms                                 ·······························································
-  3 dependencies         no rule crossed                           ·······························································
-  dns                    p99 6ms                                   ·······························································
-  restarts · rollouts    none in the last 1h                       ·······························································
-                                                                   ┬──────━━━┯━─────────┬─────━━━━┯━─────────┬─────────┬──━━━────┬
-  UTC                                                            07:20     07:30      07:40     07:50      08:00     08:10     08:20
+  pods 2bq7k, 8wzpd    p99 350ms                                 ·································································
+  3 dependencies       no rule crossed                           ·································································
+  dns                  p99 6ms                                   ·································································
+  restarts · rollouts  none in the last 1h                       ·································································
+                                                                 ┬───────━━┯━─────────┬──────━━━━┯━─────────┬──────────┬─━━━━────┬
+  UTC                                                          07:20     07:30      07:40      07:50      08:00      08:10     08:20
 
-  next  Shift-B probe the pods now    m compare the pods    Enter open …-hx4mt    Shift-D open in Grafana
+  next  B probe the pods now    m compare the pods    Enter open hx4mt    D open in Grafana
 
-  ↑↓ row · a show every signal · s queries · ←→ time · 1-4 window · n next stall · t timeline · h Hubble · r re-read · Esc back
+  ↑↓ row · ←→ time · 1-4 window · a show every signal · s queries · n next stall · t timeline · h Hubble · r re-read · Esc back
 ```
 
 Behind the columns under each `▼` runs a band, from the marker row down to
@@ -91,7 +91,7 @@ The answer is computed from the episodes and from interval overlap
   began (UTC) and how long they lasted. They are called **stalls** when the
   signal they are counted from is the ingress's HTTP 499, which is a client
   that closed the request while it waited, and **episodes** for any other
-  signal (`2 episodes of not Ready on pod …-hx4mt at 07:29 and 07:48 UTC`).
+  signal (`2 episodes of not Ready on pod hx4mt at 07:29 and 07:48 UTC`).
 - When the window cuts an episode, the next sentence says so, because its
   length is then only what the window holds: `It was already raised when the
   window began.` (the first sentence then says `for at least 1m45s`), or
@@ -100,13 +100,13 @@ The answer is computed from the episodes and from interval overlap
   window that holds every episode whole adds nothing.
 - The next states what lines up with every one of them, grouped by where
   (`All 3 line up with slow p99, queueing, no free threads and CPU throttling
-  on pod …-hx4mt.`).
+  on pod hx4mt.`).
 - Then what lines up with some (`2 of 3 also line up with not Ready on pod
-  …-hx4mt.`); lanes that overlap different episodes are never joined in one
+  hx4mt.`); lanes that overlap different episodes are never joined in one
   count. When nothing else does: `Nothing else lines up.`, with `that was
   read` when a hop was not read.
 - A Pod whose usual level differs from its peers' is stated whether or not
-  there is an episode (`Pod …-hx4mt usually differs from its peers: p99 2s
+  there is an episode (`Pod hx4mt usually differs from its peers: p99 2s
   (peers 305ms).`).
 - At 6h and 24h the answer ends with what such a window cannot show.
 - The caveat (`Overlap in time, not proof of cause.`) is dim, at the right
@@ -120,7 +120,7 @@ The answer is computed from the episodes and from interval overlap
 
 When the first sentence does not fit on one line, the times are left to the
 marker row and the axis. When the second does not, it counts the signals the
-rows under it name (`All 3 line up with 4 signals on pod …-hx4mt.`). A screen
+rows under it name (`All 3 line up with 4 signals on pod hx4mt.`). A screen
 without room for strips keeps the times in the sentence.
 
 A read that failed after an earlier one succeeded, and a destination that
@@ -134,12 +134,12 @@ One row per lane. The lanes are those of [When it happened](#when-it-happened):
 one per hop, one per raised signal for the Pods of the Service, and the dated
 facts. A row is the subject, what its marks mean, the one number that matters,
 what that number is held against, and the strip. The subject is the hop, or
-`pod …-hx4mt` when every mark of the lane belongs to one Pod of the Service;
+`pod hx4mt` when every mark of the lane belongs to one Pod of the Service;
 it is written once and its rows stand beneath it.
 
 | Row | Number | Held against |
 | --- | --- | --- |
-| a raised signal of a hop | its worst sample; for a rate that is part of a total, its share of that total at worst (`6.29%`) | `of requests`; the Pod its worst series is about (`to …-2bq7k`); else its own usual level (`usual 4%`) |
+| a raised signal of a hop | its worst sample; for a rate that is part of a total, its share of that total at worst (`6.29%`) | `of requests`; the Pod its worst series is about (`to 2bq7k`); else its own usual level (`usual 4%`) |
 | a raised signal of one Pod | that Pod's worst sample | `peers 350ms` when the Pod differs from its peers on it, else its own usual level |
 | a raised signal of several Pods | the worst sample | how many of the Pods crossed it (`2 of 3 pods`) |
 | not Ready | how often (`twice`) | the longest stretch (`up to 3m`) |
@@ -157,7 +157,7 @@ sentences do). The view chooses nothing.
 | --- | --- |
 | `LINES UP WITH THE STALLS` (`… THE EPISODES`) | the lane the episodes are counted from, then every lane whose marks overlap at least one episode, the ones that overlap most first |
 | `DIFFERS, BUT NOT DURING A STALL` (`… AN EPISODE`) | a lane that is marked in the window and overlaps no episode; a Pod whose usual level differs from its peers' |
-| `QUIET` | what was read and has no mark, one dim line each. The Pods that crossed no rule while another did share a line (`pods …-2bq7k, …-8wzpd  p99 350ms`), dependencies without a mark share one, and the dated facts of which there were none share one. A stretch without samples is `×` on these lines too: on the line of the Pods where none of them has a sample, and the restarts then have a line of their own that says how long nothing is known (`restarts  none where read, no data for 10m`) |
+| `QUIET` | what was read and has no mark, one dim line each. The Pods that crossed no rule while another did share a line (`pods 2bq7k, 8wzpd  p99 350ms`), dependencies without a mark share one, and the dated facts of which there were none share one. A stretch without samples is `×` on these lines too: on the line of the Pods where none of them has a sample, and the restarts then have a line of their own that says how long nothing is known (`restarts  none where read, no data for 10m`) |
 | `NOT READ` | every lane without data, with the reason; `dependencies  none declared`; and a hop that was read in part (`dns  1 of 5 signals: no series matched …`), which is quiet only for what was read. The group is left out when it is empty |
 
 Without an episode nothing lines up. The first two groups are then
@@ -220,7 +220,7 @@ cursors are drawn on the plan.
 | `1` `2` `3` `4` | Window: 15m, 1h (default), 6h, 24h. The batch is sent again; the path is not read again |
 | `r` | Read the path and the batch again |
 | `Shift-B` | Open `:probe` for the Service ([probe.md](probe.md)). Opening it sends nothing; a request leaves only after `r` and a confirmation there |
-| `m` | `:graph` with one chart per Pod of the Service, on the signal that set a Pod apart here (for example `p99`) and for the window read here ([graphs.md](graphs.md#which-pod-is-different-p)) |
+| `m` | `:graph` on its page that compares the Pods of the Service (one group of rows per signal, one row per Pod, under the stalls read here), on the signal that set a Pod apart here (for example `p99`) and for the window read here ([graphs.md](graphs.md#which-pod-is-different-p)) |
 | `h` | The existing native Hubble view for the backend Pods ([hubble.md](hubble.md)) |
 | `Shift-D` | Grafana hand-off for the selected Pod or the workload, with the window that was read ([grafana-handoff.md](grafana-handoff.md)) |
 | `t` | `:timeline` for the selected Pod or the workload |
@@ -239,11 +239,14 @@ bound here: it is the per-Pod page of `:graph`.
 A key answers with the reason when its view is unavailable for the selection
 (no Prometheus source for `m`, for example) instead of doing nothing. The
 page has two lines of keys. The `next` line names the likely steps in words,
-and only those that would run: `Shift-B probe the pods now`, `m compare the
-pods`, what `Enter` does on the selected row (`open …-hx4mt`, `its queries`)
-and `Shift-D open in Grafana`; a narrow line drops steps from its end. The
-dim line under it names the rest, `a` and `s` first and the way out last,
-and drops from before the way out.
+and only those that would run: `B probe the pods now`, `m compare the
+pods`, what `Enter` does on the selected row (`open hx4mt`, `its queries`)
+and `D open in Grafana`; a narrow line drops steps from its end. A capital
+letter there is the key with Shift (`B` is `Shift-B`), as on every page laid
+out the calm way. The dim line under it names the rest in the order every
+such page uses (the arrows, the window, `a`, `s`, the keys of this view,
+`r`, the way out); a narrow line drops from its end and keeps the way out,
+`a` and `s` longest.
 
 ## What is read
 
@@ -420,7 +423,7 @@ with `chart.Outliers` (the median and the median absolute deviation; see
   which case the row says `usually`.
 
 Fewer than three Pods with samples are not compared, and the row says so.
-The row then reads `1 of 3 pods: …-hx4mt p99 48s vs peers 350ms`, and
+The row then reads `1 of 3 pods: hx4mt p99 48s vs peers 350ms`, and
 `Enter` lists the Pods, each with its own trend on one shared scale.
 
 ## When it happened
@@ -469,9 +472,9 @@ The answer and the groups of the calm page, and the summary of the
 all-detail page, are computed from interval overlap only. The summary states:
 
 - which lanes overlap every episode, grouped by where ("slow p99, queueing
-  and CPU throttling on pod …-hx4mt");
+  and CPU throttling on pod hx4mt");
 - which overlap some, with the episodes named ("2 of 3 (07:28, 07:47)
-  overlap not Ready on pod …-hx4mt");
+  overlap not Ready on pod hx4mt");
 - which overlap none;
 - what was raised **outside** every episode, with its time, so that an
   unrelated burst is not mistaken for part of the hang; a dated fact shortly
@@ -497,9 +500,9 @@ as far as the size needs (`TestSlowCalmPageSaysWhatEachSizeGivesUp`):
 
 | Terminal | Strips | What the page gives up, in this order |
 | --- | --- | --- |
-| 132x36 | about 63 columns | nothing. With a `NOT READ` group, the blank rows around the answer and the keys |
-| 80x24 | 27 columns | the times in the first sentence and the names of the signals in the second (the marker row and the rows have them); the blank rows; `QUIET` and `NOT READ` to one line each; `DIFFERS, BUT NOT DURING A STALL` to one line; the column of what a number is held against; the hints at the end of the second key line |
-| 60x24 | 20 columns | the same, and what a row measures is shortened and marked (`client give-ups…`) |
+| 132x36 | about 65 columns | nothing. With a `NOT READ` group, the blank rows around the answer and the keys |
+| 80x24 | 29 columns | the times in the first sentence and the names of the signals in the second (the marker row and the rows have them); the blank rows; `QUIET` and `NOT READ` to one line each; `DIFFERS, BUT NOT DURING A STALL` to one line; the column of what a number is held against; the hints at the end of the second key line |
+| 60x24 | 20 columns | the same, and what a row measures is shortened and marked (`client give-ups (…`) |
 | fewer rows than the rows that line up | | the last of those rows, counted in a line that names the key that shows them (`not shown at this size (a shows all): 7 of 8 rows of LINES UP WITH THE STALLS`) |
 | under about 41 columns | none | the strips: the rows are written as text and the times return to the answer |
 
@@ -510,23 +513,23 @@ place of its last blank rows.
 ```text
 Slow requests  Service gitlab/gitlab-webservice-default · last 1h  08:20 · 35/35
   3 stalls: clients gave up waiting, for 2 to 4 minutes each.
-  All 3 line up with 4 signals on pod …-hx4mt.
-  2 of 3 also line up with not Ready on pod …-hx4mt.
+  All 3 line up with 4 signals on pod hx4mt.
+  2 of 3 also line up with not Ready on pod hx4mt.
   Overlap in time, not proof of cause.
-                                              stalls    ▼▼      ▼▼▼         ▼▼
+                                            stalls    ▼▼▼      ▼▼▼          ▼▼
   LINES UP WITH THE STALLS
-  ingress      client give-ups (HTTP 499) +2  6.29%  ▁▁▁██▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁
-> pod …-hx4mt  slow p99                       48s    ▁▁▁██▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁
-               queueing                       30     ▁▁▁██▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁
-               no free threads                0      ▁▁▁██▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁
-               CPU throttling                 86%    ▁▁▁██▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁
-               not Ready                      twice  ▁▁▁▁█▁▁▁▁▁▁▁██▁▁▁▁▁▁▁▁▁▁▁▁▁
-                                                     ───━┯──────━━━────┬────━━──
-  UTC                                                  07:30         08:00
+  ingress    client give-ups (HTTP 499) +2  6.29%  ▁▁▁███▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁██▁▁
+> pod hx4mt  slow p99                       48s    ▁▁▁███▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁██▁▁
+             queueing                       30     ▁▁▁███▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁██▁▁
+             no free threads                0      ▁▁▁███▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁██▁▁
+             CPU throttling                 86%    ▁▁▁███▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁██▁▁
+             not Ready                      twice  ▁▁▁▁██▁▁▁▁▁▁▁██▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+                                                   ───━┯━──────━━━────┬─────━━──
+  UTC                                                07:30          08:00
   DIFFERS, BUT NOT DURING A STALL  network packet drops (POLICY_DENIED) 0.37/s …
-  QUIET  pods …-2bq7k, …-8wzpd · 3 dependencies · dns · restarts · rollouts
-  next  Shift-B probe the pods now  m compare the pods  Enter open …-hx4mt
-  ↑↓ row · a show every signal · s queries · ←→ time · 1-4 window · Esc back
+  QUIET  pods 2bq7k, 8wzpd · 3 dependencies · dns · restarts · rollouts
+  next  B probe the pods now  m compare the pods  Enter open hx4mt
+  ↑↓ row · ←→ time · 1-4 window · a show every signal · s queries · Esc back
 ```
 
 - The all-detail page: at 132x36 every hop and the Pods of an outlying app
@@ -535,7 +538,7 @@ Slow requests  Service gitlab/gitlab-webservice-default · last 1h  08:20 · 35/
   dependencies on one row, the lanes with marks, and the summary; at 60
   columns hop, key number and state word, with the trend column left out
   first. A lane label that does not fit keeps what its marks mean and the
-  Pod (`not ready …-hx4mt`, `p99 +3 …-hx4mt`) before the name of the hop.
+  Pod (`not ready hx4mt`, `p99 +3 hx4mt`) before the name of the hop.
 - The page of queries and rules (`s`) wraps at every width: no number, rule
   or query is cut.
 - With `noIcons` the calm page is ASCII only (`|` for the separator, `#`

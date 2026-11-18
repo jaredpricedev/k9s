@@ -51,44 +51,47 @@ under it, on the same time axis. It is the calm layout of the incident views
 ([Every chart](#every-chart-a)); `a` again returns.
 
 ```
-Graph  Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 15m                                             read 22:14 · 10 of 10 queries
+Graph  Pod checkout-api-7d9f8c6b5d-x2x9q · last 15m                                                  read 04:13 · 10 of 10 queries
 
-  Memory reached its 256Mi limit 6 times. A container restarted after 5 of them.                Order in time, not proof of cause.
+  Memory reached its 256Mi limit 7 times. A container restarted after 5 of them.                Order in time, not proof of cause.
 
   MEMORY  254Mi now  at limit  ─ limit 256Mi  ┄ request 128Mi
-     256Mi ┤                  ─────────────▂▇▇▇▇▇▇▇▇▇────▂▅▇▇▇▇▇▇▇▇────▂▅▇▇▇▇▇▇▇▇─────▂▇▇▇▇▇▇▇▇─────▂▅▇▇▇▇▇▇▇▇────▂▅▇▇▇
-           │                    ┊        ▁▆██████████  ▁▆██████████▄ ▁▆██████████▄  ▁▆█████████▄  ▁▆██████████  ▁▆█████
-           │                    ┊      ▁▅████████████▁▅█████████████▁█████████████▁▅████████████▁▅████████████▁▅███████
-           │                    ┊     ▄████████████████████████████████████████████████████████████████████████████████
-     128Mi ┤                  ┄┄┄┄┄┄┄█┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
-           │                    ┊  ▃▇██████████████████████████████████████████████████████████████████████████████████
-           │                     ▂▆████████████████████████████████████████████████████████████████████████████████████
-           │                    ▆██████████████████████████████████████████████████████████████████████████████████████
-           │                    ███████████████████████████████████████████████████████████████████████████████████████
-         0 ┤                    ███████████████████████████████████████████████████████████████████████████████████████
-                                ┊                                                                       ┊
-  ALSO                          ┊                                                                       ┊
-  restarts  ××××××××××××××××××××┊··············▲············▲·········▲············▲···········▲········┊·▲············  6
-  CPU       ×××××××××××××××××××××▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇  340m
-  network   ×××××××××××××××××××××▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇  9kB/s  tx
-            ─┬──────────────┬───R─────────┬─────────────┬─────────────┬──────────────┬─────────────┬────X────────┬─────
-  UTC      22:00          22:02         22:04         22:06         22:08          22:10         22:12         22:14
+     256Mi ┤─────────────▄▆▇▇▇▇▇▇▇▇────▄▆▇▇▇▇▇▇▇▇────▄▆▇▇▇▇▇▇▇▇─────▄▇▇▇▇▇▇▇▇▇────▄▆▇▇▇▇▇▇▇▇────▄▆▇▇▇▇▇▇▇▇────▄▆▇▇▇▇▇▇▇
+           │  ┊        ▃▇██████████▅ ▃▇██████████▅  ▃██████████▅  ▃▇██████████  ▃▇██████████▅ ▃▇██████████▅  ▃█████████
+           │  ┊      ▂▇█████████████▂█████████████▂▇████████████▂▇████████████▂▇█████████████▂█████████████▂▇██████████
+           │  ┊     ▂██████████████████████████████████████████████████████████████████████████████████████████████████
+     128Mi ┤┄┄┄┄┄┄▁▅┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+           │  ┊  ▄█████████████████████████████████████████████████████████████████████████████████████████████████████
+           │   ▄███████████████████████████████████████████████████████████████████████████████████████████████████████
+           │  ▇████████████████████████████████████████████████████████████████████████████████████████████████████████
+           │  █████████████████████████████████████████████████████████████████████████████████████████████████████████
+         0 ┤  █████████████████████████████████████████████████████████████████████████████████████████████████████████
+              ┊                                                                      ┊
+  ALSO        ┊                                                                      ┊
+  restarts  ××┊··············▲············▲··········▲···········▲···········▲·······┊··▲······························  6
+  CPU       ×××▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇  340m
+  network   ×××▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇  9kB/s  tx
+            ┬─R───────────┬─────────────┬─────────────┬──────────────┬─────────────┬─X───────────┬─────────────┬───────
+  UTC     03:58         04:00         04:02         04:04          04:06         04:08         04:10         04:12
 
   NO DATA  CPU limit · CPU throttled
 
-  R rollout rev 2 at 22:02
-  X last exit Error (1) at 22:12
+  R rollout rev 2 at 03:58
+  X last exit Error (1) at 04:08
 
   next  n next chart (CPU)    a all charts    t what changed    D open in Grafana
 
-  ←→ time · 1 15m  2 1h  3 6h  4 24h · r re-read · s queries · b dots · Esc back
+  ←→ time · 1-4 window · s queries · b dots · r re-read · Esc back
 ```
 
 - **The title** names the view, the object and the window, and at the right
   when the read began and how many queries were answered. A read that is not
   complete is in the warning colour and keeps its count at every width. A
-  workload or Service adds the number of its Pods. A name that does not fit
-  is shortened in the middle, so the generated end of a Pod's name stays.
+  workload or Service adds the number of its Pods. The namespace is written
+  before the name only when it is not the one the session is in (`Pod
+  gitlab/…` from a session in `apps`), as on every page laid out the calm
+  way. A name that does not fit is shortened in the middle, so the
+  generated end of a Pod's name stays.
 - **The answer** is one or two sentences, the first bold, and a caveat that
   says what they do not claim. They are read off the chart the rule below
   chooses, and stay the same when another chart is put at full size:
@@ -154,7 +157,10 @@ Graph  Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 15m                       
 - **Two lines of keys**: `next` names the likely steps in words (`p compare
   the pods` for a workload, the next chart, `a all charts`, `t what
   changed` for `:timeline`, `D open in Grafana` when Grafana is declared);
-  the dim line names the rest and ends with the way out.
+  the dim line names the rest in the order of every calm page (the cursor,
+  `1-4 window`, `s queries`, the chart style, `r re-read`) and ends with
+  the way out. The menu at the top names `n` after what it steps through:
+  `Next chart` here, `Next signal` on the page that compares the Pods.
 
 ### What a smaller screen gives up
 
@@ -163,31 +169,31 @@ In the order the calm layout gives things up
 only as far as the size needs:
 
 1. The strips and the chart shorten with the width; the read status
-   shortens (`22:14 · 10/10`), then the name of the object, in the middle.
+   shortens (`04:13 · 10/10`), then the name of the object, in the middle.
 2. The blank rows go, and the chart gives rows up, down to three, before
    the rows under it do: at 80x24 the page is
 
 ```
-Graph  Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 15m           22:14 · 10/10
-  Memory reached its 256Mi limit 6 times. A container restarted after 5 of them.
+Graph  Pod checkout-api-7d9f8c6b5d-x2x9q · last 15m                04:13 · 10/10
+  Memory reached its 256Mi limit 7 times. A container restarted after 5 of them.
   Order in time, not proof of cause.
 
   MEMORY  254Mi now  at limit  ─ limit 256Mi  ┄ request 128Mi
-     256Mi ┤          ────▁▄▆█████▁▄▆████▁▄▆█████▁▄▆█████▁▄█████▁▄▆██
-     128Mi ┤          ┄▁▄▆┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
-         0 ┤          ▆██████████████████████████████████████████████
-  ALSO                 ┊                                     ┊
-  restarts  ×××××××××××┊·······▲·····▲·····▲······▲·····▲····┊▲······  6
-  CPU       ×××××××××××▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇  340m
-  network   ×××××××××××▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇  9kB/s  tx
-            ┬───────┬──R────┬──────┬───────┬──────┬───────┬──X────┬──
-  UTC     22:00   22:02   22:04  22:06   22:08  22:10   22:12   22:14
+     256Mi ┤─────▁▄▇████▁▄▇█████▁▄▇█████▄▇█████▁▄▇█████▁▄▇████▁▄▇████
+     128Mi ┤┄┄▂▄▇┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+         0 ┤ ▇███████████████████████████████████████████████████████
+  ALSO       ┊                                     ┊
+  restarts  ×┊·······▲······▲····▲······▲······▲···┊▲················  6
+  CPU       ×▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇  340m
+  network   ×▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇  9kB/s  tx
+            ┬R─────┬───────┬──────┬───────┬───────┬X─────┬───────┬───
+  UTC     03:58  04:00   04:02  04:04   04:06   04:08  04:10   04:12
   NO DATA  CPU limit · CPU throttled
-  R rollout rev 2 at 22:02
-  X last exit Error (1) at 22:12
+  R rollout rev 2 at 03:58
+  X last exit Error (1) at 04:08
 
   next  n next chart (CPU)  a all charts  t what changed  D open in Grafana
-  ←→ time · 1 15m  2 1h  3 6h  4 24h · r re-read · s queries · b dots · Esc back
+  ←→ time · 1-4 window · s queries · b dots · r re-read · Esc back
 ```
 
 3. Then `ALSO` folds to one line that keeps every number (`ALSO  restarts
@@ -370,35 +376,35 @@ shared time axis. `a` shows one small chart per Pod and the table of every
 signal, as the page was before ([A chart per Pod](#a-chart-per-pod-a)).
 
 ```
-Compare pods  Service gitlab/gitlab-webservice-default · 3 pods · last 1h                            read 03:00 · 13 of 13 queries
+Compare pods  Service gitlab-webservice-default · 3 pods · last 1h                                   read 04:10 · 13 of 13 queries
 
   Pod hx4mt differs from the other two in 6 of 10 signals. No other Pod differs.                 A difference, not proof of cause.
 
-     hx4mt differs             ▼▼▼▼▼                        ▼▼▼▼▼▼▼                                 ▼▼▼▼
+            stalls            ▼▼▼▼▼▼                       ▼▼▼▼▼▼▼                                 ▼▼▼▼
 
   QUEUED · connections waiting for a free Puma thread                                                            peak
-> hx4mt  worker-f  ▁▁▁▁▁▁▁▁▁▁▁▁▅████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▅██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▅███▁▁▁▁▁▁▁  40        differs
+  hx4mt  worker-f  ▁▁▁▁▁▁▁▁▁▁▁▃▅████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▅█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▅██▁▁▁▁▁▁▁▁  40        differs
   2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0
   8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0
 
   FREE-THREADS · Puma threads free to take a request                                                             low
-  hx4mt  worker-f  ▁▁▁▁▁▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁  0         differs
+  hx4mt  worker-f  ▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁  0         differs
   2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  4
   8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  4
 
   P99 · Rails request duration, 99th percentile                                                                  peak
-  hx4mt  worker-f  ▁▁▁▁▁▁▁▁▁▁▁▁▂▄▇██▅▄▃▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▄▇████▅▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▄▇▇▅▃▁▁▁▁▁  47.9s     differs
+> hx4mt  worker-f  ▁▁▁▁▁▁▁▁▁▁▁▁▃▅███▄▄▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▅████▇▄▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▃▅▇▇▄▂▁▁▁▁▁  47.9s     differs
   2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  346ms
   8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  346ms
-                   ┬───────────━━━┯━─────────────┬──────────━━━━━┯━─────────────┬──────────────┬────━━━━──────┬
-  UTC            02:00          02:10          02:20           02:30          02:40          02:50          03:00
+                   ───────────━━━┯━━────────────┬──────────━━━━━┯━─────────────┬──────────────┬────━━━━───────┬
+  UTC                          03:20          03:30           03:40          03:50          04:00           04:10
 
-  ALSO DIFFERS  throttled (hx4mt 89.1%, peers 1.26%) · cpu (hx4mt 1.55, peers 423m) · busy-threads (hx4mt 8, peers 4)
+  ALSO DIFFERS  throttled (hx4mt 90%, peers 1.26%) · cpu (hx4mt 1.57, peers 423m) · busy-threads (hx4mt 8, peers 4)
   ALIKE ON ALL 3  memory · restarts · 5xx · network
 
   next  Enter open hx4mt    g group by container / revision / node / zone    B probe the pods now
 
-  ↑↓ signal · ←→ time · 1-4 window · a show every signal · p overlaid lines · r re-read · s queries · Esc back
+  ↑↓ signal · ←→ time · 1-4 window · a show every signal · s queries · p overlaid lines · r re-read · Esc back
 ```
 
 - **The answer** counts: `Pod hx4mt differs from the other two in 6 of 10
@@ -473,26 +479,26 @@ Compare pods  Service gitlab/gitlab-webservice-default · 3 pods · last 1h     
   shown and the rest are in `ALSO DIFFERS`:
 
 ```
-Compare pods  Service gitlab/g…service-default · 3 pods · last 1h  03:00 · 13/13
+Compare pods  Service gitlab-w…service-default · 3 pods · last 1h  04:10 · 13/13
   Pod hx4mt differs from the other two in 6 of 10 signals. No other Pod differs.
   A difference, not proof of cause.
 
-     hx4mt differs      ▼▼▼          ▼▼▼▼               ▼▼
-  QUEUED · connections waiting for a free Puma thread          peak
-> hx4mt  worker-f  ▁▁▁▁▁▆██▁▁▁▁▁▁▁▁▁▁▅███▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██▁▁▁  40        differs
-  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0
-  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  0
+            stalls      ▼▼▼          ▼▼▼▼              ▼▼▼
   FREE-THREADS · Puma threads free to take a request           low
-  hx4mt  worker-f  ▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██▁▁▁  0         differs
+  hx4mt  worker-f  ▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁  0         differs
   2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  4
   8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  4
-                   ┬────━━━──┬───────━━━┯─────────┬─────━━──┬
-  UTC            02:00     02:15      02:30     02:45     03:00
-  ALSO DIFFERS  p99 (hx4mt 47.9s, peers 346ms) +3 more
+  P99 · Rails request duration, 99th percentile                peak
+> hx4mt  worker-f  ▁▁▁▁▁▄██▄▁▁▁▁▁▁▁▁▁▃███▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▅▇▄▁▁  47.9s     differs
+  2bq7k  worker-d  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  346ms
+  8wzpd  worker-e  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  346ms
+                   ───┬─━━━─────┬────━━━━──┬─────────┬─━━━───
+  UTC               03:15     03:30      03:45     04:00
+  ALSO DIFFERS  queued (hx4mt 40, peers 0) +3 more
   ALIKE ON ALL 3  memory · restarts · 5xx · network
 
   next  Enter open hx4mt  g group by container / revision / node / zone
-  ↑↓ signal · ←→ time · 1-4 window · a show every signal · Esc back
+  ↑↓ signal · ←→ time · 1-4 window · a show every signal · s queries · Esc back
 ```
 
   At 60 columns the strips shorten and the key lines name fewer keys;
@@ -655,7 +661,7 @@ marked group. So "only the Pods on one Node" or "only revision 2" is one row
 that looks different:
 
 ```
-Compare pods  Deployment apps/checkout-api · 4 pods · by revision · last 1h                          read 03:00 · 15 of 15 queries
+Compare pods  Deployment checkout-api · 4 pods · by revision · last 1h                               read 03:00 · 15 of 15 queries
 
   Pod x2x9q differs from its peers in 5 of 7 signals. No other Pod differs. 1 of 8 signals had no reading.
   A difference, not proof of cause.
@@ -686,7 +692,7 @@ Compare pods  Deployment apps/checkout-api · 4 pods · by revision · last 1h  
 
   next  Enter open x2x9q    g group by node / zone / pod / container    B probe the pods now
 
-  ↑↓ signal · ←→ time · 1-4 window · a show every signal · p overlaid lines · r re-read · s queries · Esc back
+  ↑↓ signal · ←→ time · 1-4 window · a show every signal · s queries · p overlaid lines · r re-read · Esc back
 ```
 
 By container, the rows are the containers of every Pod (`hx4mt/webservice`)

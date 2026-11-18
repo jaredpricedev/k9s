@@ -69,7 +69,7 @@ Dashboard  GitLab / Webservice overview · last 1h                    read 03:16
   NOT DRAWN  Pods and nodes (table) · Webservice log lines with timeout (logs)
 
   next  n next chart (Requests by pod)    Enter zoom    a all panels    D open in Grafana
-  ←→ time · ↑↓ chart · s queries · 1-4 window · r re-read · b dots · Esc back
+  ↑↓ chart · ←→ time · 1-4 window · s queries · b dots · r re-read · Esc back
 ```
 
 - **Title line.** The dashboard, the window, when it was read and how many
@@ -353,7 +353,7 @@ Query  throttled · last 1h                                             read 02:
 
   next  e edit the expression    s queries, and how to save this one    D open in Grafana
 
-  ←→ time · 1-4 window · a all detail · r re-read · b dots · Esc back
+  ←→ time · 1-4 window · a all detail · b dots · r re-read · Esc back
 ```
 
 - The title line names the query, or the expression as it was typed. The

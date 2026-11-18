@@ -38,40 +38,43 @@ Nothing is read until the view is opened. The view never refreshes on a timer.
 The view is laid out the calm way ([presentation.md](presentation.md#calm-layout-the-standard-for-incident-views)):
 
 ```text
-Impact  Deployment apps/checkout-api · rev 2 (latest of 2)                               read 01:53 · 9 of 9 queries
+Impact  Deployment checkout-api · rev 2 (latest of 2)                                                  read 04:14 · 9 of 9 queries
 
-  After rev 2 (01:41): error ratio 0.2% -> 22.0%, p99 500ms -> 3.99s, restarts 0 -> 6, memory at limit (limit 512Mi -> 256Mi),
-  ready replicas 2 -> 1.
-  rev 2 changed: image v1 -> v2; limits.memory 512Mi -> 256Mi; env ~PAYMENT_TOKEN +FEATURE_FLAGS
-  "After" is order in time, not cause.
+  After rev 2 (03:58): error ratio 0.2% → 22.3%, p99 500ms → 4s, restarts 0 → 6, memory at limit (limit 512Mi → 256Mi), ready
+  replicas 2 → 1.
+  rev 2 changed: image v1 → v2; limits.memory 512Mi → 256Mi; env ~PAYMENT_TOKEN +FEATURE_FLAGS
+  Order in time, not proof of cause.
 
-      rev 2 rolled out 01:41:14Z · 12m each side                    ▼
-                                                                    ┊
-  WORSE AFTER   before -> after                                     ┊
-> Error ratio   0.2% -> 22.0%    +21.8pp  x110   ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁┊▃▅▅▆███████████████
-  Latency p99   500ms -> 3.99s   +3.49s  +697%   ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊▅▇▇████████████████
-  Restarts      0 -> 6           +6  new         ···················┊··▲··▲··▲··▲··▲··▲·
-  Memory/limit  36.7% -> 99.2%   +62.5pp  +170%  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄┊▅██▄▇█▄▇█▄▇█▄▇█▄▇█▄
-  Ready (min)   2 -> 1           -1  -50%        ███████████████████┊█▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅
-                                                                    ┊
-  HIGHER OR LOWER AFTER                                             ┊
-  Memory peak   188Mi -> 254Mi   +66Mi  +35%     ▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆┊▆██▅██▅██▅██▅██▅██▅
-                                                 ─┬───────┬───────┬─━─────┬───────┬─────
-  UTC                                           01:30   01:35   01:40   01:45   01:50
+     rev 2 rolled out 03:58:22Z · 15m each side                                          ▼
+                                                                                         ┊
+  WORSE AFTER   before → after                                                           ┊
+> Error ratio   0.2% → 22.3%    +22.1pp  x112   ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁┊▅▅▅▅▆███████████████████████████████████
+  Latency p50   45.5ms → 117ms  +71.3ms  +157%  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄┊▄▄▅▅▆███████████████████████████████████
+  Latency p95   241ms → 1.98s   +1.74s  +723%   ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊▅▅▆▆▇███████████████████████████████████
+  Latency p99   500ms → 4s      +3.5s  +701%    ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊▆▆▆▇▇███████████████████████████████████
+  Restarts      0 → 6           +6  new         ·········································┊···▲···▲·····▲··▲···▲····▲··············
+  Memory/limit  36.7% → 96.1%   +59.3pp  +162%  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄┊▆▆██▅▆▆██▅▅▆██▅▅▆██▃▅▆███▅▆███▅▆▆██▅▆▆██
+  Ready (min)   2 → 1           -1  -50%        █████████████████████████████████████████┊█▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅
+                                                                                         ┊
+  HIGHER OR LOWER AFTER                                                                  ┊
+  Memory peak   188Mi → 246Mi   +57.9Mi  +31%   ▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆┊▆▆██▅▆▆██▅▅▆██▅▅▆██▃▅▆███▅▆███▅▆▆██▅▆▆██
+  CPU usage     60m → 344m      +284m  +474%    ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊██████▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
+                                                ──────┬────────────┬────────────┬────────━───┬────────────┬────────────┬──────────
+  UTC                                               03:45        03:50        03:55        04:00        04:05        04:10
 
   UNCHANGED  Request rate
   NOT AVAILABLE  CPU throttled
 
   next  Enter graph this workload    a all 11 signals    s query and rule    t timeline
 
-  ↑↓ signal · 1-5 window · n/N later/earlier rollout · r read again · D Grafana · Esc back
+  ↑↓ signal · 1-5 window · n/N later/earlier rollout · D Grafana · r re-read · Esc back
 ```
 
 - **The answer** is [the summary line](#the-summary-line), bold, and what
   the revision changed on a line of its own directly under it. A warning
   that makes the page unsafe to read as it stands (the revision list was
   cut, the context changed) comes before both.
-- **One row per signal that moved**: its name, before -> after, the change
+- **One row per signal that moved**: its name, before → after (`->` with `noIcons`), the change
   in the signal's unit and in percent, and a strip over both windows.
 - **The rollout is one column through every row**, at the split of the two
   windows: `▼` over the strips, a guide `┊` down through every line to the
@@ -96,7 +99,7 @@ Impact  Deployment apps/checkout-api · rev 2 (latest of 2)                     
 
 What a smaller screen gives up, in order: in an 80x24 terminal every signal
 that is worse keeps its row and strip, the neutral signals fold to one line
-(`HIGHER OR LOWER AFTER  Memory peak 188Mi -> 254Mi · CPU usage 60m ->
+(`HIGHER OR LOWER AFTER  Memory peak 188Mi → 254Mi · CPU usage 60m →
 345m`) and the second key line goes; `a` is on the first. At 60 columns the
 change column goes, then the last rows of `WORSE AFTER` are left out and
 counted (`not shown (a shows all): 3 of 7 rows of WORSE AFTER`); the
@@ -269,6 +272,10 @@ A missing signal is never a zero and never counts as "unchanged".
 
 `After rev 2 (04:20): error ratio 0.2% -> 14.1%, p99 180ms -> 2.4s, memory at
 limit (limit 512Mi -> 256Mi).`
+
+The page writes each `->` of it as `→`, as every calm page writes a change,
+and as `->` again with `noIcons`; the table under `a` and the report keep
+`->`.
 
 It lists the signals that are worse by the rule above, in a fixed order, with
 one latency figure (the highest percentile that moved). "memory at limit"

@@ -39,7 +39,7 @@ is the same from either layout.
 | `r` | Run. The first time, and whenever the request changed, a dialog states what will be sent and waits for your answer. The same request runs again without a second question. |
 | `+` / `_` | More / fewer requests per Pod for the next run, through 1, 3, 5 (default), 10, 20 and 30. The digits are not used: they are the window keys of `:slow`, `:graph` and the dashboards, and a probe has no window. `-` is the application's last-view key. |
 | `u` | Switch between the Pods' declared readiness and liveness probe, when they declare both. Times for another path are not comparable, so the runs of one probe are put aside while the other is shown and come back when you switch back; the two are never shown together. |
-| Up / Down, `j` / `k` | Move between Pods, in the order on screen: the Pods that stand out first. The first key line names the Pod the keys act on (`Enter open …-hx4mt`). With all detail (`a`) the line under the table states every time, the status codes, the node and zone and the declared probe of the Pod under the cursor. |
+| Up / Down, `j` / `k` | Move between Pods, in the order on screen: the Pods that stand out first. The first key line names the Pod the keys act on (`Enter open hx4mt`). With all detail (`a`) the line under the table states every time, the status codes, the node and zone and the declared probe of the Pod under the cursor. |
 | `a` | All detail: the table with fastest, median, slowest, unanswered count, status codes, node and zone, the run before as a dimmer row under each Pod, every sentence of the result and the long form of what the time means. Press again for the calm page. |
 | `Enter` | Open the Pod under the cursor in the Pod list. |
 | `m` | Graph that Pod ([graphs.md](graphs.md)). |
@@ -132,22 +132,22 @@ Service. So:
 The calm page states the result top to bottom:
 
 ```text
-Probe  Service gitlab/gitlab-webservice-default · GET :8080/-/readiness ×5 per pod        sent 23:00 · 15 of 15 requests
+Probe  Service gitlab-webservice-default · GET :8080/-/readiness ×5 per pod                         sent 04:11 · 15 of 15 requests
 
-  Only …-hx4mt answered slowly: median 2.71s against 23.9ms for its 2 peers; 1 of 5 had no answer within 5s.
-  The other 2 Pods answered all 10 requests in 37.4ms or less.        A difference between Pods now, not proof of cause.
+  Only hx4mt answered slowly: median 2.71s against 23ms for its 2 peers; 1 of 5 had no answer within 5s.
+  The other 2 Pods answered all 10 requests in 37.4ms or less.                  A difference between Pods now, not proof of cause.
 
-                                  this run    previous 23:00:29Z
-  SLOWER THAN ITS PEERS                                           median
-> …-hx4mt  worker-f study-zone-c  × ▅ ▇ ▄ ▆   ▄ ▆ ▇ ▅ ▆           2.71s   peers 23.9ms  OUTLIER
+                                this run    previous 04:11:17Z
+  SLOWER THAN ITS PEERS                                         median
+> hx4mt  worker-f study-zone-c  × ▅ ▇ ▄ ▆   ▄ ▆ ▇ ▅ ▆           2.71s   peers 23ms  OUTLIER
 
   LIKE THEIR PEERS
-  …-2bq7k  worker-d study-zone-a  ▁ ▁ ▁ ▁ ▁   ▁ ▁ ▁ ▁ ▁           26.2ms
-  …-8wzpd  worker-e study-zone-b  ▁ ▁ ▁ ▁ ▁   ▁ ▁ ▁ ▁ ▁           21.5ms
+  2bq7k  worker-d study-zone-a  ▁ ▁ ▁ ▁ ▁   ▁ ▁ ▁ ▁ ▁           24.5ms
+  8wzpd  worker-e study-zone-b  ▁ ▁ ▁ ▁ ▁   ▁ ▁ ▁ ▁ ▁           21.5ms
 
   MEASURED  API server → Pod, not ingress or Service: a slow Pod, not a slow path · full bar █ = 4s · floor 21.5ms (fastest Pod)
 
-  next  Enter open …-hx4mt    m graph its CPU    r run again    W slow requests by hop
+  next  Enter open hx4mt    m graph its CPU    r run again    W slow requests by hop
 
   ↑↓ pod · a every time and status code · +/_ ×5 per pod · u liveness probe · t timeline · m graph · D Grafana · Esc back
 ```

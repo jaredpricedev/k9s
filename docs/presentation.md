@@ -94,7 +94,7 @@ The incident views (`:slow`, `:graph` and its per-Pod page, `:probe`, `:impact`,
 4. **One colour per subject.** The outlier Pod is one colour everywhere on the screen: its name, its number and what is over its rule in its strip. Quiet things are dim. Colours come from the semantic palette only, one token per role (see the table below).
 5. **Rows are grouped by meaning.** A short label in capitals, a blank row before it: `LINES UP WITH THE STALLS`, `DIFFERS, BUT NOT DURING A STALL`, `QUIET`, `NOT READ`. A quiet thing is one dim line. Whitespace separates; there are no borders or boxes.
 6. **One main chart.** A page has at most one chart at full size. Everything else is a one-row strip on the same axis, and one key makes the next strip the main chart.
-7. **Two lines of keys at most.** A `next` line names the three or four likely actions in words; one dim line names the rest, ending with the way out. The key hints the application draws at the top of the screen are not touched.
+7. **Two lines of keys at most.** A `next` line names the three or four likely actions in words; one dim line names the rest, ending with the way out. Both are written in the same words and the same order on every page (see [the same words on every page](#the-same-words-on-every-page)). The key hints the application draws at the top of the screen are not touched.
 8. **Nothing is lost.** `a` shows all the detail the view had before: every signal, the detail table. `s` still shows the queries, the rules and the sample counts. The calm layout is the default.
 
 An annotated page, as `:slow` reads at 104 columns (the reference page `calmtest.Slow`, invented data):
@@ -132,6 +132,25 @@ Slow requests  Service gitlab-webservice-default · last 1h               read 1
 `:slow` is laid out this way; [slow-requests.md](slow-requests.md#the-page) shows the page a read draws, how its rows are sorted into the groups by overlap alone, and what it gives up at each size.
 
 The band is the background of the columns under each `▼`, from the marker row down to the row above the axis: the three blocks of every row above stand inside it. `internal/calm/testdata` holds this page, the Pod graph and the Pod comparison as pinned text in the areas a view is given in terminals of 132×36, 80×24 and 60×24.
+
+### The same words on every page
+
+The pages are opened from one another during one incident, so a thing is written one way on all of them. A view takes these from one place and does not word them again:
+
+| What | How it is written | Where it comes from |
+| --- | --- | --- |
+| A Pod | The last dash-separated word of its name: `hx4mt` for `gitlab-webservice-default-6f9c7d5b84-hx4mt`, in the answer, on its row, on the `next` line and under `a`. The ordinal of a StatefulSet Pod keeps the word before it (`gitaly-0`). The name stays whole when that word is shorter than three characters or a sibling ends in the same one: a short name never stands for two Pods | `calm.ShortName`; `:slow`, the Pod comparison, `:graph` and `:probe` call it |
+| The object in the title | `Kind name`, with the namespace before the name only when it is not the one the session is in, which the first line of the screen states (`Service gitlab-webservice-default`; `Service gitlab/gitlab-webservice-default` from a session in `apps` or in all namespaces) | `calmObject` in `internal/view/calm.go` |
+| A key on the `next` line | The key and what it does, in words. A capital letter is the key with `Shift`: `B probe the pods now`, `W slow requests by hop`, `D open in Grafana`. The menu at the top of the screen spells the chord (`<shift-b>`) | the `calmNext…` and `calm…KeyName` words in `internal/view/calm.go` |
+| The dim key line | Always in this order: what `↑↓` move (`↑↓ row`, `↑↓ signal`, `↑↓ pod`, `↑↓ chart`), `←→ time`, the window (`1-4 window`; `1-5 window` in `:impact`, where the digits are the width compared on each side), `a` and what it shows in the view's words (`a show every signal`) unless it is on the `next` line, `s queries` unless it is there, the keys only this view has and its hand-offs (`n next stall`, `t timeline`, `D Grafana`), `r re-read`, `Esc back`. A narrow line drops parts from the right and keeps `Esc back`, the `a` part and the `s` part longest, so the key that shows everything stays named | `calmKeyLine` in `internal/view/calm.go`; `calm.RestLine` |
+| Reading again | `r re-read` on the dim line, `r read again` on the `next` line of a page that could not be read, never both | the same |
+| A change | `before → after` (`512Mi → 256Mi`), `->` with `noIcons` | the kit's plain words |
+| The caveat | One short sentence that says what the answer does not claim: `Overlap in time, not proof of cause.` (`:slow`), `Order in time, not proof of cause.` (a Pod's graph, `:impact`), `A difference, not proof of cause.` (the Pod comparison, `:probe`), `A reading, not a finding.` (a dashboard, `:query`), `Nothing found is not proof of health.`, `Not read is not healthy.` | `calm.Nothing`, `calm.Unread` and the view |
+| The marker row | The word of the episodes and `▼` over each: `stalls` in `:slow` and on the Pod comparison opened from it, the rollout in `:impact` | `calm.Bands` |
+
+`TestCalmKeyLineIsWrittenInOneOrderInEveryIncidentView` and `TestCalmObjectNamesTheNamespaceOnlyWhenItIsAnotherOne` hold the views to this table, and `TestShortNameIsTheWordThatTellsAPodFromItsSiblings` the name.
+
+The series of a drawn dashboard and of `:query` are the one exception to the short name: their names are legend text of any shape, cut to the room they have with the cut marked (`…hx4mt`), not Pod names the view knows.
 
 ### What a strip draws
 
