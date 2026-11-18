@@ -435,6 +435,15 @@ view:
 | `r` | Read again |
 | `Esc` | Put the time cursor away, then clear the filter, then go back |
 
+**a**, **m** and **D** are on the first key line, because a short screen gives
+the second one up. What **Enter** opens gives way for them, as it does in
+`:impact`: beside a name that would leave no room for the second action the
+line reads `Enter open    a full list` and the list under the axis names the
+entry, so the key that shows every entry is on the page at every size it is
+drawn in. What the first line still has no room for is named on the second,
+in the place every calm page has for it (`a full list` after the window,
+`m graph` and `D Grafana` after the view's own keys).
+
 Narrowing, filtering, marking, both cursors, **a** and **s** work on the
 retained observation and read nothing.
 
@@ -454,7 +463,9 @@ What a smaller screen gives up, in the order of the calm layout:
   the column the lines share says them shorter (`none now`, `since 11:00`)
   instead of starting them elsewhere.
 - 60×24 cuts what a row is about to 16 cells, with strips of 20 columns, and
-  the list cuts the name of the object in its middle or leaves it out.
+  the list cuts the name of the object in its middle or leaves it out. The
+  `next` line names `a` after `Enter open` where the name of the object would
+  have filled it.
 - The list never costs a row, a strip, a group or a key line. It folds the
   reasons of the reads that fell short to one line, which still names each
   read and its state, only when that is the only way to list anything; a page

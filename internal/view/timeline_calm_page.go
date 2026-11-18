@@ -64,10 +64,13 @@ func (st *timelineStory) bands(o calm.Options) (bands calm.Bands, labels []strin
 
 // timelineCalmKeys is the second key line, in the order every incident
 // view writes it. s is the sources and limits here, where the other views
-// have their queries; a is on the next line. x sets the mark on the entry
-// the keys act on; on the entry that is the mark it takes the mark away,
-// and marked says the line names that.
-func timelineCalmKeys(st *timelineStory, marked bool) []string {
+// have their queries. x sets the mark on the entry the keys act on; on the
+// entry that is the mark it takes the mark away, and marked says the line
+// names that. a, the graph and Grafana are on the first key line, because
+// a short page gives this one up; unnamed are those of them the first line
+// has no room for at this width, and this line names them, in the words
+// and the place every calm page has for them. A key that works stays named.
+func timelineCalmKeys(st *timelineStory, marked bool, unnamed []calm.Action) []string {
 	keys := calmKeyLine{Window: calmKeyWindow + ", 0 all", Reread: true, Own: []string{calm.QueriesKey + " sources"}}
 	if len(st.rows) > 0 {
 		mark := "x mark"
@@ -78,14 +81,34 @@ func timelineCalmKeys(st *timelineStory, marked bool) []string {
 		keys.Own = append(keys.Own, "n next entry", mark)
 	}
 	keys.Own = append(keys.Own, "/ filter")
+	for _, action := range unnamed {
+		switch action.Key {
+		case calm.DetailKey:
+			keys.Detail = timelineDetailWords
+		case timelineGraphKeyName:
+			keys.Own = append(keys.Own, timelineGraphKeyName+" graph")
+		case calmGrafanaKeyName:
+			keys.Own = append(keys.Own, calmGrafanaKeyName+" Grafana")
+		}
+	}
 	return keys.parts()
 }
+
+const (
+	// timelineDetailWords is what a shows, on either key line, and
+	// timelineGraphKeyName the key of the hand-off to :graph.
+	timelineDetailWords  = "full list"
+	timelineGraphKeyName = "m"
+)
 
 // calmNext are the likely next steps, and only those that would run: what
 // Enter opens for the entry the cursor is on, the list of every entry, the
 // graph, and Grafana. a is the second of them: a short screen gives the
-// second key line up, and a narrow one the last of these.
-func (v *timelineView) calmNext(st *timelineStory) []calm.Action {
+// second key line up, and a narrow one the last of these. What Enter opens
+// is the first thing a narrow line gives up, as it is in :impact: the list
+// under the axis names the entry, and a name too long for the line would
+// otherwise take the key for all detail off the page with it.
+func (v *timelineView) calmNext(st *timelineStory, width int, o calm.Options) []calm.Action { //nolint:gocritic // Options are passed by value, as the kit takes them.
 	var next []calm.Action
 	graph := "graph this " + strings.ToLower(v.scope.Kind)
 	if e := v.focusedEntry(); e != nil {
@@ -102,25 +125,38 @@ func (v *timelineView) calmNext(st *timelineStory) []calm.Action {
 			next, graph = append(next, calm.Action{Key: "Enter", Label: "open " + name}), "graph it"
 		}
 	}
-	next = append(next, calm.Action{Key: calm.DetailKey, Label: "full list"})
+	next = append(next, calm.Action{Key: calm.DetailKey, Label: timelineDetailWords})
 	if graphAvailability(v.app, v.SelectedResource()) == "" {
-		next = append(next, calm.Action{Key: "m", Label: graph})
+		next = append(next, calm.Action{Key: timelineGraphKeyName, Label: graph})
 	}
 	if grafanaUnavailableShort(v.app, v) == "" {
 		next = append(next, calm.Action{Key: calmGrafanaKeyName, Label: calmNextGrafana})
 	}
+	if next[0].Key == "Enter" {
+		short := append([]calm.Action{{Key: "Enter", Label: "open"}}, next[1:]...)
+		if calm.NextShown(short, width, o) > calm.NextShown(next, width, o) {
+			return short
+		}
+	}
 	return next
+}
+
+// calmKeys is the second key line for the first one it is drawn under.
+func (v *timelineView) calmKeys(st *timelineStory, next []calm.Action, width int, o calm.Options) []string { //nolint:gocritic // Options are passed by value, as the kit takes them.
+	marked := v.snapshot != nil && v.snapshot.Chosen && v.focused >= 0 && v.focused == v.snapshot.Onset
+	return timelineCalmKeys(st, marked, next[min(calm.NextShown(next, width, o), len(next)):])
 }
 
 // calmPage is the page of a story, before its strips and its cursors are
 // drawn on it. metas are the rows the row cursor can stand on, per group.
 //
 //nolint:gocritic // Options are passed by value, as the kit takes them.
-func (v *timelineView) calmPage(st *timelineStory, o calm.Options) (page calm.Page, metas [][]timelineCalmRow, labels []string) {
+func (v *timelineView) calmPage(st *timelineStory, width int, o calm.Options) (page calm.Page, metas [][]timelineCalmRow, labels []string) {
 	page = calm.Page{Title: v.calmTitle(st), Verdict: st.verdict(), Frame: chart.Frame{Start: st.start, End: st.end}}
 	page.Groups, metas = st.calmGroups(o)
 	page.Bands, labels = st.bands(o)
-	page.Keys, page.Next = timelineCalmKeys(st, false), v.calmNext(st)
+	page.Next = v.calmNext(st, width, o)
+	page.Keys = v.calmKeys(st, page.Next, width, o)
 	return page, metas, labels
 }
 
@@ -265,7 +301,7 @@ func (v *timelineView) renderCalm() {
 func (v *timelineView) calmObservation(width, height int, o calm.Options) []string { //nolint:gocritic // Options are passed by value, as the kit takes them.
 	st := timelineStoryOf(v.snapshot, v.window, v.query, v.episodes)
 	v.story = st
-	page, metas, labels := v.calmPage(st, o)
+	page, metas, labels := v.calmPage(st, width, o)
 	plan, list, gap, below := timelineCalmPlan(&page, st.detailNeed(width, o), width, height, o)
 	strips := plan.Layout.Strip > 0 && !plan.TextRows && !plan.TooSmall
 	v.frame = chart.Frame{}
@@ -331,8 +367,8 @@ func (v *timelineView) calmObservation(width, height int, o calm.Options) []stri
 	if sel != nil {
 		page.Groups[sel.group].Rows[sel.index].Selected = true
 	}
-	page.Next = v.calmNext(st)
-	page.Keys = timelineCalmKeys(st, v.snapshot.Chosen && v.focused >= 0 && v.focused == v.snapshot.Onset)
+	page.Next = v.calmNext(st, width, o)
+	page.Keys = v.calmKeys(st, page.Next, width, o)
 	v.calmCursor(&page, st)
 	v.dropped = plan.Dropped
 	rendered := calm.Render(&page, &plan, o)
