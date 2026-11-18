@@ -33,6 +33,10 @@ type Row struct {
 	Color string
 	// Selected marks the row the keys act on with ">".
 	Selected bool
+	// Aside says What is where the subject is, not what is measured: the
+	// node and zone of a Pod. It is then dim on a coloured row too, so
+	// the colour of a row is its subject and its numbers.
+	Aside bool
 }
 
 // Role is how much room a group may claim.
@@ -380,6 +384,9 @@ func rowLine(g *Group, r *Row, first bool, b Bands, f chart.Frame, l Layout, o O
 	quiet := g.quiet()
 	if r.Color == "" || quiet {
 		subject, what, number, tag = o.muted(), o.dim(), o.muted(), o.dim()
+	}
+	if r.Aside {
+		what = o.dim()
 	}
 	strip := r.Strip
 	switch {

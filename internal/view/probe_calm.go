@@ -30,6 +30,7 @@ const (
 	probeOpenLabel     = "NO OUTCOME"
 	probeSkippedLabel  = "NOT CONTACTED"
 	probeListLabel     = "WOULD BE ASKED"
+	probeBarredLabel   = "NOT ASKED"
 	probeRunningLabel  = "ANSWERS SO FAR"
 	probeGapsLabel     = "NOT READ"
 	probeMeasuredLabel = "MEASURED"
@@ -66,6 +67,9 @@ func (v *probeView) calmGroups(summary *probe.Summary) []probeCalmGroup {
 			label = probeSkippedLabel
 		case v.running:
 			label = probeRunningLabel
+		case !v.ran() && v.plan.Access == probe.AccessDenied:
+			// r sends nothing here, so no Pod "would be asked".
+			label = probeBarredLabel
 		case !v.ran():
 		case verdict == probe.Outlier || verdict == probe.Spikes:
 			label = probeSlowLabel
@@ -85,7 +89,7 @@ func (v *probeView) calmGroups(summary *probe.Summary) []probeCalmGroup {
 	// while there is room for some.
 	var out []probeCalmGroup
 	for _, group := range []probeCalmGroup{
-		{label: probeListLabel}, {label: probeRunningLabel},
+		{label: probeListLabel}, {label: probeBarredLabel}, {label: probeRunningLabel},
 		{label: probeSlowLabel, warn: true}, {label: probeFailedLabel, warn: true},
 		{label: probeAlikeLabel}, {label: probeAnsweredLabel},
 		{label: probeOpenLabel, role: calm.Secondary}, {label: probeSkippedLabel, role: calm.NotReadRole},
@@ -178,9 +182,11 @@ func (v *probeView) calmRow(index int, summary *probe.Summary, strips bool, o ca
 	if !target.Pod.Ready {
 		where = append(where, "not Ready")
 	}
-	row := calm.Row{Subject: probe.ShortName(target.Pod.Name, o.ASCII), What: strings.Join(where, " "), Selected: target.Pod.Name == v.selected}
+	// Where a Pod runs is beside the point of its row: dim, also on the row
+	// of a Pod that stands out.
+	row := calm.Row{Subject: probe.ShortName(target.Pod.Name, o.ASCII), What: strings.Join(where, " "), Aside: true, Selected: target.Pod.Name == v.selected}
 	if target.Request == nil {
-		row.What = target.Skip
+		row.What, row.Aside = target.Skip, false
 		return row
 	}
 	if !strips {
@@ -236,16 +242,17 @@ func (v *probeView) calmUnsent() calm.Verdict {
 		return calm.Verdict{Kind: calm.NotRead, Apart: true, Sentences: []string{"Not allowed.",
 			"The API server says this user is " + v.plan.AccessReason + ". Nothing was sent and r will send nothing."}}
 	}
+	// Two sentences and one dim line: nothing has left, what r would send,
+	// and what the application will notice. How the requests are paced and
+	// what else was read are in the question r asks and under a.
 	long, _ := v.requestWords()
-	pace := "one after another"
-	if v.plan.Sendable() > 1 {
-		pace = fmt.Sprintf("one after another per Pod, at most %d Pods at a time", probe.Concurrency)
+	own := "It is each Pod's own " + v.plan.Kind.Field()
+	if v.plan.Sendable() == 1 {
+		own = "It is the Pod's own " + v.plan.Kind.Field()
 	}
-	out := calm.Verdict{Apart: true, Caveat: "Opening this view read Kubernetes objects only.", Sentences: []string{
+	out := calm.Verdict{Apart: true, Caveat: own + "; the application will see it in its logs.", Sentences: []string{
 		"Nothing has been sent.",
-		fmt.Sprintf("r sends %s: %s in all, %s. You are asked first.", long, probePlural(v.plan.Sendable()*v.attempts, "request", "requests"), pace),
-		fmt.Sprintf("Path and port are those of each Pod's own %s, the request the kubelet already makes. "+
-			"The application handles it and will see it in its logs.", v.plan.Kind.Field()),
+		fmt.Sprintf("r sends %s: %s in all. You are asked first.", long, probePlural(v.plan.Sendable()*v.attempts, "request", "requests")),
 	}}
 	if v.plan.Access == probe.AccessUnknown && v.plan.AccessReason != "" {
 		out.Sentences = append(out.Sentences, "Whether this user may use pods/proxy is not known: "+v.plan.AccessReason+".")

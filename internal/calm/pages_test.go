@@ -119,11 +119,19 @@ func TestReferencePagesFitEveryArea(t *testing.T) {
 					}
 					// What is not on the screen is named on it, with the
 					// key that shows it.
+					// A line too narrow for the full note says it in
+					// fewer words before it cuts the list.
 					note := "not shown at this size (a shows all)"
+					if !strings.Contains(text, note) {
+						note = "not shown (a shows all)"
+					}
 					if width < 50 {
 						note = note[:9] // a narrow line cuts the note, never drops it
 					}
 					require.Equal(t, len(plan.Missing) > 0, strings.Contains(text, note), where)
+					if full := "  " + plan.Note(); len(plan.Missing) > 0 && runewidth.StringWidth(full) <= width {
+						require.Contains(t, text, full, "%s: the full note is written where it fits", where)
+					}
 					// Missing data is never left out: the not-read group
 					// is on every page that is not too small for any.
 					if name == "slow-unread" {

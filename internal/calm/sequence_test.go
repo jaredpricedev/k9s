@@ -77,6 +77,31 @@ func TestSequenceColours(t *testing.T) {
 	assert.Equal(t, shown{r: '▆', fg: testPalette.Muted}, quiet[0])
 }
 
+// Where a subject is (Row.Aside) is dim on a coloured row too: the colour
+// of the row is its subject and its numbers.
+func TestAsideIsDimOnAColouredRow(t *testing.T) {
+	page := countedPage()
+	plan := Lay(&page, 132, 30, colorOpts)
+	row := func() []shown {
+		lines := Render(&page, &plan, colorOpts).Lines()
+		for i, line := range plainAll(lines) {
+			if strings.HasPrefix(line, "> hx4mt") {
+				return draw(t, lines, 132)[i]
+			}
+		}
+		t.Fatal("the row of hx4mt is not drawn")
+		return nil
+	}
+	cells := row()
+	where := at(t, cells, "worker-f")
+	assert.Equal(t, shown{r: 'w', fg: testPalette.Text}, cells[where], "what is measured is plain text on a coloured row")
+	page.Groups[0].Rows[0].Aside = true
+	cells = row()
+	assert.Equal(t, shown{r: 'w', fg: testPalette.Muted, dim: true}, cells[where])
+	assert.Equal(t, shown{r: 'h', fg: testPalette.Fail, bold: true}, cells[at(t, cells, "hx4mt")], "the subject keeps the colour")
+	assert.Equal(t, testPalette.Fail, cells[at(t, cells, "2.7s")].fg, "and so does the number")
+}
+
 func countedPage() Page {
 	p := testPalette
 	slow := Sequence("this run", run()).Top(4).Then("previous 14:02:11Z", []Tick{{V: 2.9, Over: true}, {V: 3, Over: true}, {V: 2.7, Over: true}, {V: 2.8, Over: true}, {V: 3.1, Over: true}})
@@ -142,7 +167,7 @@ func TestCountedPage(t *testing.T) {
 	tight := Lay(&page, 48, 20, plainOpts)
 	assert.Equal(t, []string{"previous 14:02:11Z"}, tight.Missing)
 	lines = plainAll(Render(&page, &tight, plainOpts).Lines())
-	assert.Contains(t, lines, "  not shown at this size (a shows all): previou…")
+	assert.Contains(t, lines, "  not shown (a shows all): previous 14:02:11Z", "a narrow line says it in fewer words before it cuts the list")
 	for _, line := range lines {
 		assert.NotContains(t, line, "this run", "one sequence needs no caption")
 		assert.LessOrEqual(t, width(line), 48, line)

@@ -210,6 +210,8 @@ func TestImpactFramesStateBeforeAfterAndVerdictAtEverySize(t *testing.T) {
 		}
 		// The key line names a as the way back to the calm page.
 		require.Regexp(t, `a less( detail)? · Esc`, frame)
+		// It keeps naming the key that reads again, down to 60 columns.
+		require.Regexp(t, `r (re-)?read · a less`, frame, "%d columns", size[0])
 	}
 }
 

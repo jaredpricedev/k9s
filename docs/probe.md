@@ -17,10 +17,15 @@ press `Shift-B`, type `:probe`, or pick "Probe" in the action palette
 (`Ctrl-O`).
 
 Opening the view reads Kubernetes objects and sends nothing to any Pod. The
-page is one block: "Nothing has been sent." in bold, then what `r` would
-send and how often, that the application will see it, and the Pods it would
-go to with the node and zone of each. The title says "nothing sent" until
-you send something.
+page is one block: "Nothing has been sent." in bold, one sentence that says
+what `r` would send, how often and that you are asked first, one dim line
+that says it is each Pod's own declared probe and that the application will
+see it, and the Pods it would go to with the node and zone of each (`WOULD
+BE ASKED`). How the requests are paced and what opening the view read are in
+the question `r` asks and under `a`. The title says "nothing sent" until you
+send something. When the API server says this user may not use `pods/proxy`
+the page says "Not allowed." with the missing rule, and the Pods are listed
+as `NOT ASKED`: `r` sends nothing.
 
 The view is laid out the calm way ([presentation.md](presentation.md#calm-layout-the-standard-for-incident-views)):
 the answer first, one row per Pod, two lines of keys. `a` shows the table

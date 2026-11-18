@@ -120,11 +120,14 @@ func TestProbeSendsNothingUntilTheRequestWasReadAndConfirmed(t *testing.T) {
 	frame := drawnText(t, v, 132, 33)
 	require.Equal(t, "  Nothing has been sent.", strings.Split(frame, "\n")[2], "the answer comes first")
 	flat := strings.Join(strings.Fields(frame), " ")
-	require.Contains(t, flat, "r sends GET :8080/-/readiness on each pod, 5 times, through the Kubernetes API proxy: 15 requests in all, "+
-		"one after another per Pod, at most 4 Pods at a time. You are asked first.")
-	require.Contains(t, flat, "Path and port are those of each Pod's own readinessProbe, the request the kubelet already makes. "+
-		"The application handles it and will see it in its logs.")
-	require.Contains(t, frame, "Opening this view read Kubernetes objects only.")
+	// Two sentences and one dim line; how the requests are paced and what
+	// opening the view read are in the question r asks and under a.
+	require.Equal(t, "  r sends GET :8080/-/readiness on each pod, 5 times, through the Kubernetes API proxy: 15 requests in all. You are asked first.",
+		strings.Split(frame, "\n")[3])
+	require.Equal(t, "  It is each Pod's own readinessProbe; the application will see it in its logs.", strings.Split(frame, "\n")[4])
+	require.Equal(t, "", strings.Split(frame, "\n")[5], "the answer is three lines at this width")
+	require.NotContains(t, frame, "at most 4 Pods at a time")
+	require.Len(t, strings.Split(strings.SplitN(drawnText(t, v, 80, 20), "\n\n", 3)[1], "\n"), 4, "and four at 80 columns")
 	require.Regexp(t, `(?m)^Probe  Service gitlab/gitlab-webservice-default · GET :8080/-/readiness ×5 per pod +nothing sent$`, frame)
 	require.Contains(t, frame, "  WOULD BE ASKED\n> …-2bq7k  worker-d study-zone-a\n  …-8wzpd  worker-e study-zone-b\n  …-hx4mt  worker-f study-zone-c\n")
 	require.Contains(t, frame, "  next  r send 15 requests (asks first)    + 10 per pod    u liveness probe instead    Enter open …-2bq7k\n")
@@ -136,6 +139,10 @@ func TestProbeSendsNothingUntilTheRequestWasReadAndConfirmed(t *testing.T) {
 	require.Contains(t, frame, "Nothing has been sent. Opening this view read Kubernetes objects only; r sends 15 read-only GET requests after you confirm.")
 	require.Contains(t, frame, "GET :8080/-/readiness on each pod, 5 times, through the Kubernetes API proxy")
 	require.Contains(t, frame, "not sent")
+	detail := strings.Join(strings.Fields(frame), " ")
+	require.Contains(t, detail, "15 requests in all, one after another per Pod, at most 4 Pods at a time. You are asked first.")
+	require.Contains(t, detail, "Path and port are those of each Pod's own readinessProbe, the request the kubelet already makes. "+
+		"The application handles it and will see it in its logs.", "what the calm page leaves out is under a")
 	probeDetail(t, v, false)
 	require.Zero(t, story.calls.Load(), "opening the view, reading the plan and changing the layout contact no Pod")
 

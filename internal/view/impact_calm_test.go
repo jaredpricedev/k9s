@@ -126,7 +126,7 @@ func TestImpactCalmPageStatesTheAnswerFirstAtEverySize(t *testing.T) {
 			// counted on a line that names the key for all of it.
 			require.Contains(t, frame, "rev 2 at 04:20:00Z")
 			require.NotContains(t, frame, "+14pp")
-			require.Contains(t, frame, "  not shown at this size (a shows all): 2 of 7 rows of WORS…\n")
+			require.Contains(t, frame, "  not shown (a shows all): 2 of 7 rows of WORSE AFTER\n", "the line names the group whole")
 			require.Contains(t, v.dropped, "2 of 7 rows of WORSE AFTER")
 			require.Contains(t, v.dropped, "what each number is compared with")
 		}
@@ -249,6 +249,29 @@ func TestImpactCalmKeysShowTheDetailOnRequest(t *testing.T) {
 		require.LessOrEqual(t, runewidth.StringWidth(line), 80, line)
 	}
 
+	// A query is read to be run again: where the page under it keeps its
+	// strips and its next line, a query wider than the line is written on
+	// as many lines as it needs and is not cut.
+	whole := []string{
+		`  query    sum(rate(http_requests_total{namespace="apps",` + "\n" + `           pod=~"checkout-api-[a-z0-9]+-[a-z0-9]+"}[120s]))` + "\n",
+		`  query    sum(rate(http_requests_total{namespace="apps",` + "\n" + `           pod=~"checkout-api-[a-z0-9]+-[a-z0-9]+",code=~"5.."}[120s]))` + "\n",
+	}
+	for _, size := range [][2]int{{80, 21}, {80, 20}, {80, 30}} {
+		frame = drawnText(t, v, size[0], size[1])
+		for _, query := range whole {
+			require.Contains(t, frame, query, "%dx%d", size[0], size[1])
+		}
+		require.Regexp(t, `(?m)^> Error ratio +0\.2% -> 14\.2% .*▁+┊█+$`, frame, "%dx%d: the row keeps its strip", size[0], size[1])
+		require.Contains(t, frame, "\n  next  Enter graph this workload", "%dx%d", size[0], size[1])
+	}
+	// Where whole queries would cost the row its strip they are one line
+	// each, cut where the line ends and marked as cut.
+	frame = drawnText(t, v, 60, 21)
+	require.Contains(t, frame, `  query    sum(rate(http_requests_total{namespace="apps",po…`+"\n")
+	require.Regexp(t, `(?m)^> Error ratio +0\.2% -> 14\.2% .*▁+┊█+$`, frame)
+	require.Equal(t, []string{"sum(rate(x{a=\"b\",", "c=\"d\"}[120s]))"}, impactQueryLines(`sum(rate(x{a="b",c="d"}[120s]))`, 20), "a query breaks after a comma where it can")
+	require.Equal(t, []string{"aaaaaaaaaa", "aaaaa"}, impactQueryLines("aaaaaaaaaaaaaaa", 10), "and at the width where it cannot")
+
 	// The cursor steps through the rows, top to bottom, and the detail
 	// follows it.
 	var seen []string
@@ -307,6 +330,8 @@ func TestImpactCalmStatesWhatCouldNotBeRead(t *testing.T) {
 	require.Regexp(t, `(?m)^  rev 2 changed: image v1 -> v2`, frame, "what the revision changed needs no metrics source")
 	require.Contains(t, frame, "  NOT READ  denied (HTTP 403): Request rate · Error ratio · Latency p50 · Latency p95 +7 more\n")
 	require.Contains(t, frame, "  next  r read again    :sources show and probe the declaration    t timeline    a all 11 signals\n")
+	require.Contains(t, frame, "  1-5 window · n/N later/earlier rollout · D Grafana · Esc back\n")
+	require.Equal(t, 1, strings.Count(frame, "r read again"), "a key on the next line is not named again under it")
 	require.NotRegexp(t, `[▁█]`, frame)
 	require.NotRegexp(t, `Request rate +0`, frame)
 	require.NotContains(t, frame, "↑↓ signal", "there is no row to step through")

@@ -268,6 +268,8 @@ func TestProbeCalmStatesWhyNothingCanBeSent(t *testing.T) {
 	require.Contains(t, flat, `The API server says this user is missing RBAC verb "get" on resource "pods/proxy" (core API group) in namespace "gitlab".`)
 	require.Contains(t, flat, "Nothing was sent and r will send nothing.")
 	require.NotContains(t, frame, "r send")
+	require.Contains(t, frame, "  NOT ASKED\n> …-2bq7k  worker-d study-zone-a\n", "the Pods are listed, and not as Pods that would be asked")
+	require.NotContains(t, frame, probeListLabel)
 	probePress(t, v, ui.KeyR)
 	require.Nil(t, v.confirm)
 	require.Zero(t, story.calls.Load())

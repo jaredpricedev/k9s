@@ -305,6 +305,11 @@ func (v *impactView) calmPage(o calm.Options) calm.Page {
 	}
 	page.Keys = []string{rollouts, "r read again", "D Grafana", "Esc back"}
 	report := read.report
+	if report.Failure != "" {
+		// Reading again is the first of the next actions then, and is
+		// named once.
+		page.Keys = []string{rollouts, "D Grafana", "Esc back"}
+	}
 	win := &report.Windows
 	if report.Step > 0 && win.After.End.After(win.Before.Start) {
 		page.Frame = chart.Frame{Start: win.Before.Start, End: win.After.End, Step: report.Step}
@@ -427,10 +432,41 @@ func impactBandLabels(report *impact.Report) []string {
 	return labels
 }
 
+// impactQueryLines cuts text into lines of at most room cells. A line ends after
+// a comma, a blank or a bracket where one stands in its second half, so a
+// query breaks between its parts when it can.
+func impactQueryLines(text string, room int) []string {
+	if room < 8 {
+		return []string{text}
+	}
+	var out []string
+	for tviewCells(text) > room {
+		cut, used, soft := 0, 0, 0
+		for index, r := range text {
+			w := tviewCells(string(r))
+			if used+w > room {
+				break
+			}
+			used, cut = used+w, index+len(string(r))
+			if strings.ContainsRune(", {(", r) && used >= room/2 {
+				soft = cut
+			}
+		}
+		if soft > 0 {
+			cut = soft
+		}
+		out = append(out, strings.TrimRight(text[:cut], " "))
+		text = strings.TrimLeft(text[cut:], " ")
+	}
+	return append(out, text)
+}
+
 // calmQueries is the block s shows on the calm page: the selected signal
 // in full, the rule behind its verdict, how many samples stood behind it,
 // its exact queries, and the source and windows of the whole comparison.
-func (v *impactView) calmQueries(width int, short bool, o calm.Options) []string {
+// whole writes a query that is wider than the line on as many lines as it
+// needs; without it a query is one line, cut where the line ends.
+func (v *impactView) calmQueries(width int, short, whole bool, o calm.Options) []string {
 	if v.read == nil || v.read.report == nil {
 		return nil
 	}
@@ -475,7 +511,18 @@ func (v *impactView) calmQueries(width int, short bool, o calm.Options) []string
 			plain("note", strings.Join(outcome.Notes, "; "))
 		}
 		for _, query := range outcome.Queries {
-			if query != "" {
+			switch {
+			case query == "":
+			case whole:
+				// A query is read to be run again: it is not cut.
+				for index, part := range impactQueryLines(query, width-calm.Indent-9) {
+					label := ""
+					if index == 0 {
+						label = "query"
+					}
+					plain(label, part)
+				}
+			default:
 				plain("query", query)
 			}
 		}
@@ -509,18 +556,57 @@ func (v *impactView) calmQueries(width int, short bool, o calm.Options) []string
 // the rows that are left.
 func (v *impactView) renderCalm() {
 	o := calmOptions(v.app)
-	width, height := v.viewWidth(), calmHeight(v.height)
-	page := v.calmPage(o)
-	var block []string
-	if v.queries {
-		block = v.calmQueries(width, height < impactTallPage, o)
-	}
-	if len(block) > 0 {
-		height = max(height-len(block)-1, 1)
-	}
-	plan := calm.Lay(&page, width, height, o)
-	if calmKeepSelected(&page, &plan) {
+	width, all := v.viewWidth(), calmHeight(v.height)
+	var (
+		page  calm.Page
+		plan  calm.Plan
+		block []string
+		gap   bool
+	)
+	// lay plans the page for the rows a block leaves it, and reports
+	// whether the page still has its strips and its next line.
+	lay := func(lines []string, blank bool) (strips, next bool) {
+		block, gap = lines, blank
+		height := all
+		if len(block) > 0 {
+			height = max(all-len(block), 1)
+			if gap {
+				height = max(height-1, 1)
+			}
+		}
+		page = v.calmPage(o)
 		plan = calm.Lay(&page, width, height, o)
+		if calmKeepSelected(&page, &plan) {
+			plan = calm.Lay(&page, width, height, o)
+		}
+		next = true
+		for _, words := range plan.Dropped {
+			next = next && words != "the next line"
+		}
+		return !plan.TooSmall && plan.Layout.Strip > 0, !plan.TooSmall && next
+	}
+	if v.queries {
+		// A query is read to be run again, so it is written whole where
+		// that costs the page under it neither its strips nor its next
+		// line: first with a blank row beside the block, then without.
+		// Where it would, each query is one line, cut where the line ends.
+		short := all < impactTallPage
+		cut, whole := v.calmQueries(width, short, false, o), v.calmQueries(width, short, true, o)
+		strips, next := lay(cut, true)
+		if len(whole) > len(cut) {
+			fits := false
+			for _, blank := range []bool{true, false} {
+				if s, n := lay(whole, blank); !plan.TooSmall && (s || !strips) && (n || !next) {
+					fits = true
+					break
+				}
+			}
+			if !fits {
+				lay(cut, true)
+			}
+		}
+	} else {
+		lay(nil, false)
 	}
 	if v.read != nil && v.read.report != nil && page.Bands.Any() && plan.Layout.Strip > 0 {
 		// The label does not move a column, so it is chosen once the columns
@@ -533,6 +619,6 @@ func (v *impactView) renderCalm() {
 	}
 	v.dropped = plan.Dropped
 	rendered := calm.Render(&page, &plan, o)
-	v.calm.SetText(strings.Join(calmInsert(rendered, block, plan.TooSmall), "\n"))
+	v.calm.SetText(strings.Join(calmInsert(rendered, block, gap, plan.TooSmall), "\n"))
 	v.calm.ScrollToBeginning()
 }

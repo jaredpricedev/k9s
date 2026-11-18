@@ -59,10 +59,10 @@ func calmHeight(height int) int {
 func tviewCells(text string) int { return runewidth.StringWidth(text) }
 
 // calmInsert puts a block of the view's own lines between the evidence of
-// a rendered page and its keys, with one blank row beside it. The page is
-// planned for the height less the block and that row. A page too small
-// for its evidence takes no block.
-func calmInsert(rendered calm.Rendered, block []string, tooSmall bool) []string {
+// a rendered page and its keys, with one blank row beside it when gap is
+// set. The page is planned for the height less the block and that row. A
+// page too small for its evidence takes no block.
+func calmInsert(rendered calm.Rendered, block []string, gap, tooSmall bool) []string {
 	lines := rendered.Lines()
 	if len(block) == 0 || tooSmall {
 		return lines
@@ -77,6 +77,10 @@ func calmInsert(rendered calm.Rendered, block []string, tooSmall bool) []string 
 		}
 	}
 	out := append(make([]string, 0, len(lines)+len(block)+1), lines[:at]...)
+	if !gap {
+		// No row to spare: the block starts with its own heading.
+		return append(append(out, block...), lines[at:]...)
+	}
 	if at > 0 && lines[at-1] != "" {
 		// A page that gave its blank rows up has none over the keys: the
 		// block is set off from the evidence instead.

@@ -99,10 +99,17 @@ that is worse keeps its row and strip, the neutral signals fold to one line
 (`HIGHER OR LOWER AFTER  Memory peak 188Mi -> 254Mi · CPU usage 60m ->
 345m`) and the second key line goes; `a` is on the first. At 60 columns the
 change column goes, then the last rows of `WORSE AFTER` are left out and
-counted (`not shown at this size (a shows all): 3 of 7 rows of …`); the
+counted (`not shown (a shows all): 3 of 7 rows of WORSE AFTER`); the
 one-line groups stay. The group the cursor is in opens again when the cursor
 moves into it. With `s` open on a short screen the page keeps the row under
 the cursor and the block states the rule, the samples and the queries only.
+
+A query under `s` is there to be read and run again, so one that is wider
+than the line is written on as many lines as it needs, broken after a comma
+where it can be. Only where that would cost the page its strips or its
+`next` line (60 columns in a 24-row terminal) is each query one line, cut
+where the line ends and marked with `…`; `a` on a taller screen shows them
+whole.
 
 ## What is read
 

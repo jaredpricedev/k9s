@@ -117,8 +117,8 @@ func (v *impactView) render() {
 	v.footer.SetText(tview.Escape(impactFit(width,
 		enter+"t timeline · 1 5m  2 15m  3 30m  4 1h  5 3h · n later  N earlier rollout · r re-read · a less detail · Esc back",
 		enter+"t timeline · 1-5 window · n/N rollout · r re-read · a less detail · Esc back",
-		"Enter graph · t timeline · 1-5 · n/N rollout · a less · Esc",
-		"t timeline · 1-5 · n/N rollout · a less · Esc")))
+		"Enter graph · t timeline · 1-5 · n/N rollout · r read · a less · Esc",
+		"t timeline · 1-5 · n/N rollout · r read · a less · Esc")))
 }
 
 // headerLines states what is compared, the two windows in clock time, the

@@ -551,6 +551,17 @@ func (plan *Plan) Note() string {
 	return "not shown at this size (" + DetailKey + " shows all): " + strings.Join(plan.Missing, ", ")
 }
 
+// noteIn is the note for a line with room cells: Note where it fits, and
+// with fewer words before the list where it does not, so that a narrow
+// line names what is missing before it cuts anything.
+func (plan *Plan) noteIn(room int) string {
+	note := plan.Note()
+	if note == "" || cells(note) <= room {
+		return note
+	}
+	return "not shown (" + DetailKey + " shows all): " + strings.Join(plan.Missing, ", ")
+}
+
 // Rendered is a page as lines of tview-tagged text.
 type Rendered struct {
 	// Title, Verdict, Body and Keys are the parts of the page without the
@@ -637,7 +648,7 @@ func Render(p *Page, plan *Plan, o Options) Rendered {
 		case itNote:
 			note := newLine(o)
 			note.to(Indent)
-			note.put(o.muted(), o.clip(plan.Note(), plan.Width-Indent))
+			note.put(o.muted(), o.clip(plan.noteIn(plan.Width-Indent), plan.Width-Indent))
 			text = note.String()
 		case itNext:
 			text, part = NextLine(p.Next, plan.Width, o), &out.Keys
