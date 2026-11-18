@@ -265,7 +265,17 @@ func TestTimelineCalmPageStatesWhatHappenedInOrderAtEverySize(t *testing.T) {
 		// The answer comes first: the change, then what followed it and
 		// how soon, and that this is an order and nothing more.
 		require.Contains(t, flat, "Rev 2 rolled out at 11:48, after 1 other change.", "%d columns", size[0])
-		require.Contains(t, flat, "7 failing signals followed within 10m, the first after 2m: BackOff on pod x2x9q.", "%d columns", size[0])
+		// The second sentence names the first failing signal. It is one
+		// line where a form of it fits one: at 80 columns the whole of it
+		// is one cell too long, and the Pod is written by its name alone;
+		// where no form fits one line it wraps and keeps every word.
+		followed := "7 failing signals followed within 10m, the first after 2m: BackOff on pod x2x9q."
+		if size[0] == 80 {
+			followed = "7 failing signals followed within 10m, the first after 2m: BackOff on x2x9q."
+			require.Contains(t, frame, "\n  "+followed+"\n  "+timelineOrderCaveat+"\n", "each sentence and the caveat are a line of their own")
+			require.NotContains(t, flat, "on pod x2x9q.")
+		}
+		require.Contains(t, flat, followed, "%d columns", size[0])
 		require.Contains(t, flat, timelineOrderCaveat)
 		require.True(t, strings.HasPrefix(lines[1], "  Rev 2 rolled out at 11:48"), "%d columns: %q", size[0], lines[1])
 		answer, changed := strings.Index(frame, "Rev 2 rolled out"), strings.Index(frame, "\n  "+timelineChangedLabel)

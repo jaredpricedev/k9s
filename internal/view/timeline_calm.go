@@ -427,14 +427,26 @@ func (st *timelineStory) fact(e *timeline.Entry) string {
 
 // brief names an entry in a sentence.
 func (st *timelineStory) brief(e *timeline.Entry) string {
+	return st.briefs(e)[0]
+}
+
+// briefs are the ways a sentence of the answer names an entry, the
+// fuller first: with the object it is about, and a Pod also by its name
+// alone, as the answer of a Pod's graph writes it. The second says no
+// less: the short name of a Pod is that of no other object on the page.
+func (st *timelineStory) briefs(e *timeline.Entry) []string {
 	head := timelineHead(e)
 	switch {
 	case e.Source == timeline.SourceAlert:
-		return "alert " + head
+		return []string{"alert " + head}
 	case e.Ref.Name == "" || strings.Contains(head, " on "):
-		return head
+		return []string{head}
 	}
-	return head + " on " + st.object(e)
+	forms := []string{head + " on " + st.object(e)}
+	if e.Ref.Kind == "Pod" {
+		forms = append(forms, head+" on "+calm.ShortName(e.Ref.Name, st.pods))
+	}
+	return forms
 }
 
 // mark is when an entry is drawn: a moment, or a span for a repeated event
@@ -674,13 +686,30 @@ func (st *timelineStory) anchorWords() (sentence string, labels []string) {
 }
 
 // verdict is the answer at the top: what the window holds, in order. It
-// counts and orders what the model read and claims nothing else.
+// counts and orders what the model read and claims nothing else. The
+// sentence that names the first failing signal is one line where a form of
+// it fits one, as the answers of :slow and :impact are: it gives up the
+// word for the kind of a Pod, and nothing that is said nowhere else. A
+// sentence that no form makes one line is written in full: what wraps
+// anyway keeps every word.
 //
-//nolint:funlen // One case per way a window stands: nothing read, nothing in it, a moment to start from, failing signals without one, neither.
-func (st *timelineStory) verdict() calm.Verdict {
+//nolint:funlen,gocritic // One case per way a window stands: nothing read, nothing in it, a moment to start from, failing signals without one, neither; options by value, as the kit takes them.
+func (st *timelineStory) verdict(width int, o calm.Options) calm.Verdict {
 	s := st.s
 	out := calm.Verdict{Caveat: timelineOrderCaveat}
 	say := func(format string, args ...any) { out.Sentences = append(out.Sentences, fmt.Sprintf(format, args...)) }
+	// named says a sentence that ends in the name of an entry.
+	named := func(e *timeline.Entry, format string, args ...any) {
+		forms := st.briefs(e)
+		for _, brief := range forms {
+			sentence := fmt.Sprintf(format, append(args, brief)...)
+			if len(calm.VerdictLines(calm.Verdict{Sentences: []string{sentence}}, width, o)) <= 1 {
+				say("%s", sentence)
+				return
+			}
+		}
+		say(format, append(args, forms[0])...)
+	}
 	failing := func(n int) string { return timelinePlural(n, "failing signal", "failing signals") }
 	switch {
 	case len(s.Entries) == 0:
@@ -711,15 +740,15 @@ func (st *timelineStory) verdict() calm.Verdict {
 			out.Caveat = timelineNothingCaveat
 			say("No failing signal was read after it.")
 		case s.Entries[st.after[n-1]].At.Sub(anchor.At) < time.Second && n == 1:
-			say("1 failing signal began in the same second: %s.", st.brief(&s.Entries[st.after[0]]))
+			named(&s.Entries[st.after[0]], "1 failing signal began in the same second: %s.")
 		case s.Entries[st.after[n-1]].At.Sub(anchor.At) < time.Second:
-			say("%d failing signals began in the same second, among them %s.", n, st.brief(&s.Entries[st.after[0]]))
+			named(&s.Entries[st.after[0]], "%d failing signals began in the same second, among them %s.", n)
 		case n == 1:
-			say("1 failing signal followed after %s: %s.", timeline.Span(s.Entries[st.after[0]].At.Sub(anchor.At)), st.brief(&s.Entries[st.after[0]]))
+			named(&s.Entries[st.after[0]], "1 failing signal followed after %s: %s.", timeline.Span(s.Entries[st.after[0]].At.Sub(anchor.At)))
 		default:
 			first, last := &s.Entries[st.after[0]], &s.Entries[st.after[n-1]]
-			say("%d failing signals followed within %s, the first %s: %s.", n, timeline.Span(last.At.Sub(anchor.At)),
-				timelineAfter(first.At.Sub(anchor.At)), st.brief(first))
+			named(first, "%d failing signals followed within %s, the first %s: %s.", n, timeline.Span(last.At.Sub(anchor.At)),
+				timelineAfter(first.At.Sub(anchor.At)))
 		}
 		if n := len(st.before); n > 0 {
 			say("%s had begun before it.", failing(n))
@@ -731,9 +760,9 @@ func (st *timelineStory) verdict() calm.Verdict {
 			when = "before this window, at " + st.clock(first.At)
 		}
 		if n := len(st.after); n == 1 {
-			say("1 failing signal began %s: %s.", when, st.brief(first))
+			named(first, "1 failing signal began %s: %s.", when)
 		} else {
-			say("%d failing signals began in %s, the first %s: %s.", n, st.windowWords(), when, st.brief(first))
+			named(first, "%d failing signals began in %s, the first %s: %s.", n, st.windowWords(), when)
 		}
 		if n := len(st.changes); n > 0 {
 			say("No change was read before it in this window; %s came later.", timelinePlural(n, "change", "changes"))

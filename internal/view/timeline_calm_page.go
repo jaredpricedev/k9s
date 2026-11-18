@@ -152,7 +152,7 @@ func (v *timelineView) calmKeys(st *timelineStory, next []calm.Action, width int
 //
 //nolint:gocritic // Options are passed by value, as the kit takes them.
 func (v *timelineView) calmPage(st *timelineStory, width int, o calm.Options) (page calm.Page, metas [][]timelineCalmRow, labels []string) {
-	page = calm.Page{Title: v.calmTitle(st), Verdict: st.verdict(), Frame: chart.Frame{Start: st.start, End: st.end}}
+	page = calm.Page{Title: v.calmTitle(st), Verdict: st.verdict(width, o), Frame: chart.Frame{Start: st.start, End: st.end}}
 	page.Groups, metas = st.calmGroups(o)
 	page.Bands, labels = st.bands(o)
 	page.Next = v.calmNext(st, width, o)

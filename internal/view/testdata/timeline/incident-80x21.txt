@@ -1,7 +1,7 @@
 Timeline  Deployment apps/checkout-api · last 15m  read 12:00 · 11 of 11 sources
   Rev 2 rolled out at 11:48, after 1 other change.
-  7 failing signals followed within 10m, the first after 2m: BackOff on pod
-  x2x9q.                                      Order in time, not proof of cause.
+  7 failing signals followed within 10m, the first after 2m: BackOff on x2x9q.
+  Order in time, not proof of cause.
                               rev 2 rolled out 11:48      ▼
   CHANGED                                                 ┊
   config      checkout-config updated by…     11:46  ·▲···┊·····················

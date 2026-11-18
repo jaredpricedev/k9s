@@ -275,6 +275,10 @@ at 11:48`, with the other changes of the window that preceded it. The second
 says how many failing signals followed, within how long, and names the first.
 What began in the second of that moment is said to have begun in the same
 second, not to have followed: entries of one second have no known order.
+Where that sentence is a few cells too long for one line it names a Pod by
+its name alone (`BackOff on x2x9q.`, the page of an 80×24 terminal), so that
+each sentence and the caveat are a line of their own; where no form of it is
+one line it wraps and keeps every word.
 `Order in time, not proof of cause.` stands dim at its right. When failing
 signals began with no change before them in the window it says how many, when
 the first began, and `No change was read in this window.` When no failing

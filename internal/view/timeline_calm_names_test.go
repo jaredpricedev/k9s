@@ -102,3 +102,53 @@ func TestTimelineListObjectIsTheNameThePageUses(t *testing.T) {
 	// The column is as wide as what is written in it: the text has the rest.
 	assert.Equal(t, 132-calm.Indent-cols.clock-2-cols.object-2, cols.text)
 }
+
+// The sentence that names the first failing signal is one line where a
+// form of it fits one, as the answers of :slow and :impact are. The only
+// thing it gives up is the word for the kind of a Pod; it never takes a
+// line more than the whole sentence would, and an object that is not a
+// Pod is named at every width.
+func TestTimelineCalmAnswerIsOneLineWhereAFormOfItFits(t *testing.T) {
+	v := timelineIncidentView(t)
+	drawnText(t, v, 132, 33)
+	st := v.story
+	require.NotNil(t, st)
+	o := calm.Options{}
+	whole := "7 failing signals followed within 10m, the first after 2m: BackOff on pod x2x9q."
+	short := "7 failing signals followed within 10m, the first after 2m: BackOff on x2x9q."
+	full := st.verdict(1<<10, o)
+	require.Equal(t, whole, full.Sentences[1], "with room for anything the sentence is whole")
+
+	shortened := 0
+	for width := 40; width <= 140; width++ {
+		verdict := st.verdict(width, o)
+		require.Len(t, verdict.Sentences, len(full.Sentences), "%d columns", width)
+		require.Equal(t, full.Sentences[0], verdict.Sentences[0], "%d columns", width)
+		got, was := calm.VerdictLines(verdict, width, o), calm.VerdictLines(full, width, o)
+		require.LessOrEqual(t, len(got), len(was), "%d columns: a shorter form never costs a line\n%s", width, strings.Join(got, "\n"))
+		switch verdict.Sentences[1] {
+		case whole:
+		case short:
+			shortened++
+			// It was taken because it is one line, and the whole is not.
+			require.Len(t, calm.VerdictLines(calm.Verdict{Sentences: []string{short}}, width, o), 1, "%d columns", width)
+			require.Greater(t, len(calm.VerdictLines(calm.Verdict{Sentences: []string{whole}}, width, o)), 1, "%d columns", width)
+		default:
+			require.Failf(t, "another sentence", "%d columns: %q", width, verdict.Sentences[1])
+		}
+	}
+	// 80 columns are one of the widths at which the whole sentence is a
+	// few cells too long: the page of an 80x24 terminal.
+	require.Equal(t, 4, shortened, "the widths at which only the shorter form is one line")
+	require.Equal(t, short, st.verdict(80, o).Sentences[1])
+	require.Equal(t, whole, st.verdict(60, o).Sentences[1], "no form is one line: it wraps and keeps every word")
+	require.Equal(t, whole, st.verdict(132, o).Sentences[1])
+
+	// Not a Pod: the object is said at every width, also where it wraps.
+	long := timelineCalmFixture(t, timelineLongName)
+	drawnText(t, long, 132, 33)
+	for _, width := range []int{132, 100, 80, 60, 44} {
+		sentences := long.story.verdict(width, o).Sentences
+		require.Equal(t, "1 failing signal followed after 4m: Progressing=False ProgressDeadlineExceeded on deploy/gitlab-webservice-default.", sentences[1], "%d columns", width)
+	}
+}
