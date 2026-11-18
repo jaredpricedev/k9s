@@ -137,8 +137,13 @@ func TestImpactCalmPageStatesTheAnswerFirstAtEverySize(t *testing.T) {
 		require.Contains(t, frame, "  UNCHANGED  Request rate\n")
 		require.Contains(t, frame, "  NOT AVAILABLE  CPU throttled\n")
 		require.NotRegexp(t, `CPU throttled +0`, frame)
-		// a is on the first key line: the second is the first to go.
-		require.Regexp(t, `(?m)^  next  Enter graph this workload +a all 11 signals`, frame)
+		// a is on the first key line: the second is the first to go. A
+		// line of 60 columns says "graph" alone, so that s is named too.
+		if size[0] == 60 {
+			require.Contains(t, frame, "  next  Enter graph  a all 11 signals  s query and rule\n")
+		} else {
+			require.Regexp(t, `(?m)^  next  Enter graph the workload +a all 11 signals +s query and rule +t timeline$`, frame)
+		}
 		// The table, its pane and the source line are under a and s.
 		for _, gone := range []string{"SIGNAL", "VERDICT", "prometheus", "Gaps, not zeros", "step 15s"} {
 			require.NotContains(t, frame, gone, "%d columns", size[0])
@@ -160,7 +165,7 @@ func TestImpactCalmPageStatesTheAnswerFirstAtEverySize(t *testing.T) {
 			// A restart in the step of the rollout keeps its mark.
 			require.Regexp(t, `(?m)^  Restarts +0 → 6 +\+6 +new +·+▲·+$`, frame)
 			require.Regexp(t, `(?m)^  HIGHER OR LOWER AFTER +┊\n  Memory peak +188Mi → 254Mi +\+66Mi +\+35% +▆+┊█+$`, frame)
-			require.Contains(t, frame, "  next  Enter graph this workload    a all 11 signals    s query and rule    t timeline\n")
+			require.Contains(t, frame, "  next  Enter graph the workload    a all 11 signals    s query and rule    t timeline\n")
 			require.Contains(t, frame, "  ↑↓ signal · 1-5 window · n/N later/earlier rollout · D Grafana · r re-read · Esc back\n")
 		case 80:
 			// Every signal that is worse keeps its row and its strip. The
@@ -323,12 +328,21 @@ func TestImpactCalmKeysShowTheDetailOnRequest(t *testing.T) {
 			require.Contains(t, frame, query, "%dx%d", size[0], size[1])
 		}
 		require.Regexp(t, `(?m)^> Error ratio +0\.2% → 14\.2% .*▁+┊█+$`, frame, "%dx%d: the row keeps its strip", size[0], size[1])
-		require.Contains(t, frame, "\n  next  Enter graph this workload", "%dx%d", size[0], size[1])
+		require.Contains(t, frame, "\n  next  Enter graph the workload  a all 11 signals  s query and rule  t timeline\n", "%dx%d", size[0], size[1])
 	}
-	// Where whole queries would cost the row its strip they are one line
-	// each, cut where the line ends and marked as cut.
+	// At 60 columns a query takes two or three lines. Where the page has
+	// the rows for them it gives them, and the diff of the revision is the
+	// line that is cut for it, and marked: s is the key of the query.
 	frame = drawnText(t, v, 60, 21)
+	require.Contains(t, frame, `  query    sum(rate(http_requests_total{namespace="apps",`+"\n"+`           pod=~"checkout-api-[a-z0-9]+-[a-z0-9]+",`+"\n"+`           code=~"5.."}[120s]))`+"\n")
+	require.Contains(t, frame, "  changed  image v1 → v2; limits.memory 512Mi → 256Mi; env …\n")
+	require.Regexp(t, `(?m)^> Error ratio +0\.2% → 14\.2% .*▁+┊█+$`, frame)
+	// Where whole queries would cost the row its strip they are one line
+	// each, cut where the line ends and marked as cut; the diff is then
+	// written whole.
+	frame = drawnText(t, v, 60, 20)
 	require.Contains(t, frame, `  query    sum(rate(http_requests_total{namespace="apps",po…`+"\n")
+	require.Contains(t, frame, "  changed  image v1 → v2; limits.memory 512Mi → 256Mi; env\n           +FEATURE_FLAGS\n")
 	require.Regexp(t, `(?m)^> Error ratio +0\.2% → 14\.2% .*▁+┊█+$`, frame)
 	require.Equal(t, []string{"sum(rate(x{a=\"b\",", "c=\"d\"}[120s]))"}, impactQueryLines(`sum(rate(x{a="b",c="d"}[120s]))`, 20), "a query breaks after a comma where it can")
 	require.Equal(t, []string{"aaaaaaaaaa", "aaaaa"}, impactQueryLines("aaaaaaaaaaaaaaa", 10), "and at the width where it cannot")
@@ -391,13 +405,32 @@ func TestImpactCalmStatesWhatCouldNotBeRead(t *testing.T) {
 		"what the revision changed needs no metrics source")
 	require.Contains(t, frame, "  NOT READ  denied (HTTP 403): Request rate · Error ratio · Latency p50 · Latency p95 +7 more\n")
 	require.Contains(t, frame, "  next  r read again    :sources show and probe the declaration    t timeline    a all 11 signals\n")
-	require.Contains(t, frame, "  1-5 window · n/N later/earlier rollout · D Grafana · Esc back\n")
+	require.Contains(t, frame, "  1-5 window · s queries · n/N later/earlier rollout · D Grafana · Esc back\n",
+		"s is named: it has the diff of the revision, which the answer only counts")
 	require.Equal(t, 1, strings.Count(frame, "r read again"), "a key on the next line is not named again under it")
 	require.NotContains(t, frame, "r re-read", "nor in the short form of the second key line")
 	require.NotRegexp(t, `[▁█]`, frame)
 	require.NotRegexp(t, `Request rate +0`, frame)
 	require.NotContains(t, frame, "↑↓ signal", "there is no row to step through")
 	require.Contains(t, drawnText(t, v, 60, 21), "  NOT READ  denied (HTTP 403): Request rate +10 more\n", "the line of what was not read is never left out")
+	// The key for all detail is the last of the next line and the first a
+	// narrow line has no room for: the second key line then names it, in
+	// the words and the place every calm page has for it, and keeps it
+	// longest. The timeline is named there too where it fits.
+	frame = drawnText(t, v, 80, 21)
+	require.Contains(t, frame, "  next  r read again  :sources show and probe the declaration  t timeline\n")
+	require.Contains(t, frame, "  1-5 window · a show every signal · s queries · n/N rollout · Esc back\n", "the keys of the rollouts in their short words")
+	frame = drawnText(t, v, 60, 21)
+	require.Contains(t, frame, "  next  r read again\n")
+	require.Contains(t, frame, "  1-5 window · a show every signal · s queries · Esc back\n")
+	require.Contains(t, drawnText(t, v, 132, 33), "  1-5 window · s queries · n/N later/earlier rollout · D Grafana · Esc back\n", "and not twice where the next line has it")
+	// s does what the line says: the diff is there, with nothing drawn
+	// as a value.
+	impactPress(t, v, impactQueriesKey)
+	frame = drawnText(t, v, 80, 21)
+	require.Contains(t, frame, "  REQUEST RATE  not read - denied (HTTP 403)\n")
+	require.Contains(t, frame, "  changed  image v1 → v2; limits.memory 512Mi → 256Mi; env +FEATURE_FLAGS\n")
+	impactPress(t, v, impactQueriesKey)
 
 	// Some queries failed: their signals are one line, with the reason.
 	partial := impactStory()

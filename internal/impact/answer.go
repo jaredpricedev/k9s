@@ -86,6 +86,10 @@ type verdictCount struct {
 	// kinds are the kinds of signal that got worse, in the order of the
 	// signals, and phrases those signals.
 	kinds, phrases []string
+	// label is the name of the last signal that got worse as its row has
+	// it, and shared says its kind is one that other signals have too.
+	label  string
+	shared bool
 }
 
 func (r *Report) verdicts() verdictCount {
@@ -107,6 +111,10 @@ func (r *Report) verdicts() verdictCount {
 				count.kinds = append(count.kinds, kind)
 			}
 			count.phrases = append(count.phrases, outcome.Signal.Phrase)
+			count.label, count.shared = outcome.Signal.Label, false
+			for id, other := range signalKinds {
+				count.shared = count.shared || other == kind && id != outcome.Signal.ID
+			}
 		case outcome.Verdict == Better:
 			count.better++
 		case outcome.Verdict == Unchanged:
@@ -167,8 +175,15 @@ func (r *Report) lead() (lead, brief string) {
 			brief = head + "; " + strconv.Itoa(uncompared) + " not compared."
 		}
 	case len(kinds) == 1:
-		// One kind is said by its name: "Latency got worse".
-		head := strings.ToUpper(kinds[0][:1]) + kinds[0][1:] + " got worse" + after
+		// One kind is said by its name: "Latency got worse". A kind that
+		// stands for several signals is said by the name of the one that
+		// got worse when the others did not: one percentile is not
+		// "latency", and the short form names no other.
+		name := kinds[0]
+		if worse == 1 && count.shared {
+			name = count.label
+		}
+		head := strings.ToUpper(name[:1]) + name[1:] + " got worse" + after
 		lead, brief = head+".", head+"."
 		if worse > 1 {
 			lead = head + ": " + inSeries(count.phrases) + "."

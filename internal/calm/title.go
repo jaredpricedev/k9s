@@ -143,13 +143,33 @@ func NextLine(actions []Action, width int, o Options) string {
 	if len(actions) == 0 {
 		return ""
 	}
-	const word = "next"
-	room := width - Indent - cells(word) - 2
-	texts := make([]string, len(actions))
+	texts, gap, count, room := nextFit(actions, width, &o)
+	l := newLine(o)
+	l.to(Indent)
+	l.put(look{color: o.Palette.Warn, bold: true}, nextWord)
+	l.to(l.col + 2)
+	for i, text := range texts[:count] {
+		if i > 0 {
+			l.to(l.col + gap)
+		}
+		l.put(o.text(), o.clip(text, max(room, 0)))
+	}
+	return l.String()
+}
+
+// nextWord is the word the first key line starts with.
+const nextWord = "next"
+
+// nextFit is the actions of the first key line as a width draws them:
+// their texts, the blanks between them, how many of them are drawn, and
+// the room they have.
+func nextFit(actions []Action, width int, o *Options) (texts []string, gap, count, room int) {
+	room = width - Indent - cells(nextWord) - 2
+	texts = make([]string, len(actions))
 	for i, a := range actions {
 		texts[i] = o.words(a.Key + " " + a.Label)
 	}
-	gap, count := 4, len(texts)
+	gap, count = 4, len(texts)
 	fits := func() bool {
 		need := (count - 1) * gap
 		for _, text := range texts[:count] {
@@ -163,17 +183,19 @@ func NextLine(actions []Action, width int, o Options) string {
 	for count > 1 && !fits() {
 		count--
 	}
-	l := newLine(o)
-	l.to(Indent)
-	l.put(look{color: o.Palette.Warn, bold: true}, word)
-	l.to(l.col + 2)
-	for i, text := range texts[:count] {
-		if i > 0 {
-			l.to(l.col + gap)
-		}
-		l.put(o.text(), o.clip(text, max(room, 0)))
+	return texts, gap, count, room
+}
+
+// NextShown is how many of the actions NextLine names at a width: the
+// first of them, as many as fit. A view whose page must keep a key named
+// asks before it draws, and names on its second key line what the first
+// has no room for.
+func NextShown(actions []Action, width int, o Options) int { //nolint:gocritic // Options are passed by value, as NextLine takes them.
+	if len(actions) == 0 {
+		return 0
 	}
-	return l.String()
+	_, _, count, _ := nextFit(actions, width, &o)
+	return count
 }
 
 // RestLine is the second key line: every other key, dim, in one line. The

@@ -45,6 +45,15 @@ const (
 	// Before and after are set in two columns only where that fits it.
 	impactNumberRoom = 16
 
+	// impactTimelineKeyName is the key of the hand-off to :timeline, and
+	// impactDetailWords what a shows, as the second key line says it.
+	impactTimelineKeyName = "t"
+	impactDetailWords     = "show every signal"
+	// impactRolloutsKeys are the keys that step through the retained
+	// rollouts, and impactRolloutsShort the same on a narrow line.
+	impactRolloutsKeys  = "n/N later/earlier rollout"
+	impactRolloutsShort = "n/N rollout"
+
 	impactOrderCaveat  = "Order in time, not proof of cause."
 	impactUnreadCaveat = "Not read is not zero and not healthy."
 )
@@ -347,6 +356,8 @@ type impactRows struct {
 	short, names map[string][]string
 	// head is the word over the column of before and after.
 	head string
+	// subject is the width of the widest name of a row, in cells.
+	subject int
 	// reason is why signals were not read, when one reason holds for all
 	// of them.
 	reason string
@@ -399,7 +410,9 @@ func (v *impactView) calmRows(report *impact.Report, p *calm.Palette) impactRows
 	head, number, compare := impactColumnsOf(figures)
 	set.head = head
 	for index, at := range places {
-		set.rows[at.class][at.row].Number, set.rows[at.class][at.row].Compare = number[index], compare[index]
+		row := &set.rows[at.class][at.row]
+		row.Number, row.Compare = number[index], compare[index]
+		set.subject = max(set.subject, tviewCells(row.Subject))
 	}
 	return set
 }
@@ -411,26 +424,11 @@ func (v *impactView) calmPage(width int, o calm.Options) calm.Page { //nolint:go
 	// answer apart from them before it sets the keys apart.
 	page := calm.Page{Title: v.calmTitle(), Verdict: v.calmVerdict(width, o), AnswerApart: true}
 	read := v.read
-	keys := calmKeyLine{}
-	page.Keys = keys.parts()
-	if read == nil {
+	page.Keys = v.calmRest(width, o, nil)
+	if read == nil || read.report == nil {
 		return page
 	}
-	// A key that has nothing to step through is not named.
-	if read.rollout != nil && read.rollout.Total > 1 {
-		keys.Own = append(keys.Own, "n/N later/earlier rollout")
-	}
-	keys.Reread = true
-	page.Keys = keys.parts()
-	if read.report == nil {
-		return page
-	}
-	keys.Own = append(keys.Own, calmGrafanaKeyName+" Grafana")
 	report := read.report
-	// Reading again is the first of the next actions when nothing was
-	// read, and is named once.
-	keys.Reread = report.Failure == ""
-	page.Keys = keys.parts()
 	win := &report.Windows
 	if report.Step > 0 && win.After.End.After(win.Before.Start) {
 		page.Frame = chart.Frame{Start: win.Before.Start, End: win.After.End, Step: report.Step}
@@ -446,7 +444,10 @@ func (v *impactView) calmPage(width int, o calm.Options) calm.Page { //nolint:go
 		if len(rows[label]) == 0 {
 			continue
 		}
-		group := calm.Group{Label: label, Rows: rows[label], Summary: set.short[label]}
+		// The names are one column as wide as the widest of all rows: a
+		// group that opens under the cursor, or a row a short page turns
+		// back in, then moves no strip.
+		group := calm.Group{Label: label, Rows: rows[label], Summary: set.short[label], SubjectWidth: set.subject}
 		switch {
 		case label == impactWorseLabel:
 			group.Color = p.Warn
@@ -484,15 +485,62 @@ func (v *impactView) calmPage(width int, o calm.Options) calm.Page { //nolint:go
 			page.Groups = append(page.Groups, calm.Group{Label: label, Role: calm.NotReadRole, Summary: list})
 		}
 	}
+	page.Next = v.calmNext(width, o)
+	page.Keys = v.calmRest(width, o, page.Next)
+	impactArrows(&page, o)
+	return page
+}
+
+// calmRest is the second key line of the page, for the first key line it
+// is drawn under. All detail, the queries and the timeline are on the
+// first, because a short page gives the second one up; a first line too
+// narrow for one of them leaves it to the second, in the words and the
+// place every calm page has for it. A key that works stays named.
+func (v *impactView) calmRest(width int, o calm.Options, next []calm.Action) []string { //nolint:gocritic // Options are passed by value, as the kit takes them.
+	read := v.read
+	keys := calmKeyLine{}
+	if read == nil {
+		return keys.parts()
+	}
+	// A key that has nothing to step through is not named.
+	rollouts := ""
+	if read.rollout != nil && read.rollout.Total > 1 {
+		rollouts = impactRolloutsKeys
+	}
+	keys.Own, keys.Reread = []string{rollouts}, true
+	if read.report == nil {
+		return keys.parts()
+	}
+	// Reading again is the first of the next actions when nothing was
+	// read, and is named once. The first line then names the declaration
+	// instead of the queries; s still has the diff of the revision, which
+	// the answer only counts, so this line names it.
+	failed := read.report.Failure != ""
+	keys.Reread, keys.Queries = !failed, failed
 	// The digits are the width compared on each side of the rollout here.
 	keys.Window = "1-5 window"
 	if len(v.calmOrder()) > 0 {
 		keys.Move = "↑↓ signal"
 	}
-	page.Keys = keys.parts()
-	page.Next = v.calmNext()
-	impactArrows(&page, o)
-	return page
+	timeline := ""
+	for _, action := range next[calm.NextShown(next, width, o):] {
+		switch action.Key {
+		case calm.DetailKey:
+			keys.Detail = impactDetailWords
+		case string(rune(impactQueriesKey)):
+			keys.Queries = true
+		case impactTimelineKeyName:
+			timeline = impactTimelineKeyName + " timeline"
+		}
+	}
+	keys.Own = []string{rollouts, timeline, calmGrafanaKeyName + " Grafana"}
+	if rollouts != "" && !strings.Contains(calm.RestLine(keys.parts(), width, o), rollouts) {
+		// The line drops from the right, and a part too long for it takes
+		// what stands behind it along: the keys of the rollouts are then
+		// said in the words the table under a has for them.
+		keys.Own[0] = impactRolloutsShort
+	}
+	return keys.parts()
 }
 
 // impactArrow writes "before -> after" the way every calm page writes a
@@ -524,7 +572,9 @@ func impactArrows(page *calm.Page, o calm.Options) { //nolint:gocritic // Option
 }
 
 // calmNext is the likely actions, each with the key that really runs it.
-func (v *impactView) calmNext() []calm.Action {
+// What Enter graphs is the first thing a narrow line gives up: the marked
+// row says it, and the keys behind it are then still named.
+func (v *impactView) calmNext(width int, o calm.Options) []calm.Action { //nolint:gocritic // Options are passed by value, as the kit takes them.
 	if v.read == nil || v.read.report == nil {
 		return nil
 	}
@@ -532,16 +582,20 @@ func (v *impactView) calmNext() []calm.Action {
 	// a is on the first key line: a short screen gives the second one up.
 	all := calm.Action{Key: calm.DetailKey, Label: fmt.Sprintf("all %d signals", len(impact.Signals))}
 	queries := calm.Action{Key: string(rune(impactQueriesKey)), Label: "query and rule"}
-	timeline := calm.Action{Key: "t", Label: "timeline"}
+	timeline := calm.Action{Key: impactTimelineKeyName, Label: "timeline"}
 	if report.Failure != "" {
 		// Nothing was read: reading again and the declaration come first.
 		return []calm.Action{{Key: "r", Label: calmNextReread}, {Key: ":sources", Label: "show and probe the declaration"}, timeline, all}
 	}
-	graph := calm.Action{Key: "Enter", Label: "graph this workload"}
+	graph := calm.Action{Key: "Enter", Label: "graph the workload"}
 	if outcome := v.focusedOutcome(); outcome != nil && impactGraphPanels[v.focused] != "" {
 		graph.Label = "graph " + outcome.Signal.Phrase
 	}
-	return []calm.Action{graph, all, queries, timeline}
+	actions := []calm.Action{graph, all, queries, timeline}
+	if short := append([]calm.Action{{Key: graph.Key, Label: "graph"}}, actions[1:]...); calm.NextShown(short, width, o) > calm.NextShown(actions, width, o) {
+		return short
+	}
+	return actions
 }
 
 // impactBandLabels are the words beside the rollout marker, the fullest
@@ -599,39 +653,77 @@ func impactDiff(report *impact.Report, o calm.Options) string { //nolint:gocriti
 	return "nothing in images, env keys, resources or commands"
 }
 
+// impactBlock is how the block of s is written: which of its lines are
+// whole. short leaves the lines that hold for every signal (what a strip
+// draws, the source, the windows) to a taller screen.
+type impactBlock struct {
+	short bool
+	// queries, diff and rest write the queries, the diff of the revision
+	// and every other line whole.
+	queries, diff, rest bool
+}
+
+// impactBlocks are the forms of the block, the fullest first: what a page
+// without the rows for all of it gives up, in order. The rule, the
+// samples, the source and the windows are one line each before a query or
+// the diff is cut; then the diff is one line, because s is the key of the
+// query and the rule and the answer still says what kinds of thing
+// changed; then, where whole queries do not fit either, each query is one
+// line and the diff is whole again.
+func impactBlocks(short bool) []impactBlock {
+	return []impactBlock{
+		{short: short, queries: true, diff: true, rest: true},
+		{short: short, queries: true, diff: true},
+		{short: short, queries: true},
+		{short: short, diff: true},
+	}
+}
+
 // calmQueries is the block s shows on the calm page: the selected signal
 // in full, the rule behind its verdict, how many samples stood behind it,
 // its exact queries, the full diff of the revision, and the source and
 // windows of the whole comparison.
-// whole writes a query that is wider than the line on as many lines as it
-// needs; without it a query is one line, cut where the line ends. diff
-// does the same for the diff of the revision.
+// form says which of its lines are written whole, on as many lines as
+// each needs; a line that is not is one line, cut where the line ends and
+// marked.
 //
 //nolint:gocritic // Options are passed by value, as the kit takes them.
-func (v *impactView) calmQueries(width int, short, whole, diff bool, o calm.Options) []string {
+func (v *impactView) calmQueries(width int, form impactBlock, o calm.Options) []string {
 	if v.read == nil || v.read.report == nil {
 		return nil
 	}
 	p := o.Palette
 	report := v.read.report
+	short := form.short
 	var lines []string
-	plain := func(label, text string) {
-		lines = append(lines, calm.RestLine([]string{fmt.Sprintf("%-8s %s", label, text)}, width, o))
-	}
 	// wrapped writes a text that is read to its end: on as many lines as
 	// it needs when it is written whole, and on one line, cut where the
-	// line ends, when it is not.
-	wrapped := func(label, text string, whole bool) {
-		if !whole {
-			plain(label, text)
-			return
-		}
-		for index, part := range impactQueryLines(text, width-calm.Indent-9) {
+	// line ends, when it is not. The lines after the first stand under
+	// the text, not under its label.
+	write := func(label string, parts []string) {
+		for index, part := range parts {
 			if index > 0 {
 				label = ""
 			}
-			plain(label, part)
+			lines = append(lines, calm.RestLine([]string{fmt.Sprintf("%-8s %s", label, part)}, width, o))
 		}
+	}
+	room := width - calm.Indent - 9
+	// A query and the diff break between their parts where they can.
+	wrapped := func(label, text string, whole bool) {
+		if whole {
+			write(label, impactQueryLines(text, room))
+			return
+		}
+		write(label, []string{text})
+	}
+	// A sentence breaks between its words.
+	plain := func(label, text string) {
+		if form.rest && room >= 8 {
+			write(label, impactWrap(text, room))
+			return
+		}
+		write(label, []string{text})
 	}
 	if outcome := v.focusedOutcome(); outcome != nil {
 		signal := &outcome.Signal
@@ -670,15 +762,22 @@ func (v *impactView) calmQueries(width int, short, whole, diff bool, o calm.Opti
 		for _, query := range outcome.Queries {
 			if query != "" {
 				// A query is read to be run again: it is not cut.
-				wrapped("query", query, whole)
+				wrapped("query", query, form.queries)
 			}
 		}
 	} else if report.Failure != "" {
-		lines = append(lines, calm.RestLine([]string{"Nothing was read, so nothing is shown as a value. That is not a zero and not a sign of health."}, width, o))
+		const nothing = "Nothing was read, so nothing is shown as a value. That is not a zero and not a sign of health."
+		parts := []string{nothing}
+		if form.rest && width-calm.Indent >= 8 {
+			parts = impactWrap(nothing, width-calm.Indent)
+		}
+		for _, part := range parts {
+			lines = append(lines, calm.RestLine([]string{part}, width, o))
+		}
 	}
 	// The answer says what kinds of thing the revision changed; this is
 	// the list itself, for a reader who asks which image and which keys.
-	wrapped("changed", impactDiff(report, o), diff)
+	wrapped("changed", impactDiff(report, o), form.diff)
 	if short {
 		// A short screen keeps the rule, the samples, the queries and
 		// the diff, and leaves the source and the windows to a taller one.
@@ -737,17 +836,19 @@ func (v *impactView) renderCalm() {
 	}
 	if v.queries {
 		// A query is read to be run again and the diff to be read to its
-		// end, so both are written whole where that costs the page under
-		// them neither its strips nor its next line: first with a blank
-		// row beside the block, then without. Where it would, each query
-		// is one line, cut where the line ends; the diff is cut last, and
-		// only for a page that would lose its strips or its next line to
-		// it.
+		// end, and so is every other line of the block: each is written
+		// whole where that costs the page under it neither its strips nor
+		// its next line, first with a blank row beside the block, then
+		// without. Where the page has not the rows for all of it, it
+		// takes the fullest form that fits (impactBlocks); a page that
+		// would lose its strips or its next line to any of them has one
+		// line of each, with every cut marked.
 		short := all < impactTallPage
-		least := v.calmQueries(width, short, false, false, o)
+		least := v.calmQueries(width, impactBlock{short: short}, o)
 		strips, next := lay(least, true)
 		fits := false
-		for _, more := range [][]string{v.calmQueries(width, short, true, true, o), v.calmQueries(width, short, false, true, o)} {
+		for _, form := range impactBlocks(short) {
+			more := v.calmQueries(width, form, o)
 			if len(more) == len(least) {
 				continue
 			}

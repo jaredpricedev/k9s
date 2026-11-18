@@ -63,7 +63,7 @@ Impact  Deployment checkout-api · rev 2 (latest of 2)                          
   UNCHANGED  Request rate
   NOT AVAILABLE  CPU throttled
 
-  next  Enter graph this workload    a all 11 signals    s query and rule    t timeline
+  next  Enter graph the workload    a all 11 signals    s query and rule    t timeline
 
   ↑↓ signal · 1-5 window · n/N later/earlier rollout · D Grafana · r re-read · Esc back
 ```
@@ -104,6 +104,17 @@ Impact  Deployment checkout-api · rev 2 (latest of 2)                          
   of the revision and the rule, samples and queries of a signal are under
   `s`; the table, with the sentence that lists the values
   ([the summary line](#the-summary-line)), is under `a`.
+- **The keys**: the `next` line names what `Enter` graphs for the row under
+  the cursor (`graph restarts`, `graph memory/limit`, `graph memory peak`,
+  `graph CPU`; `graph the workload` for a signal `:graph` has no chart
+  of), then `a`, `s` and `t`. They are on that line because a short page
+  gives the second key line up. A line too narrow for all four says
+  `Enter graph` without what, which the marked row says, so that `a` and
+  `s` are named at 60 columns too; a key the line still has no room for is
+  named on the second line where the page has one (`a show every signal`,
+  `s queries`, `t timeline`), in the place every calm page has for it, and
+  there the keys of the rollouts are `n/N rollout` when the longer words do
+  not fit.
 
 ### In an 80x24 terminal
 
@@ -127,7 +138,7 @@ Impact  Deployment checkout-api · rev 2 (latest of 2)                10:35 · 9
   HIGHER OR LOWER AFTER  Memory peak 188Mi → 254Mi · CPU usage 60m → 344m
   UNCHANGED  Request rate
   NOT AVAILABLE  CPU throttled
-  next  Enter graph this workload  a all 11 signals  s query and rule
+  next  Enter graph the workload  a all 11 signals  s query and rule  t timeline
 ```
 
 This is the page in the 20 rows the application leaves the view when it
@@ -141,7 +152,15 @@ What a smaller screen gives up, in order:
    Memory peak 188Mi → 254Mi · CPU usage 60m → 344m`) before the page gives
    any blank row up: the answer does not rest on those rows, and the rows
    that are worse read better set apart than beside two more. The group
-   opens again when the cursor moves into it.
+   opens again when the cursor moves into it: its rows are what the keys
+   then act on. In 20 rows the page pays for that with the blank row under
+   the answer and the last two rows of `WORSE AFTER`, which it counts
+   (`not shown at this size (a shows all): 2 of 7 rows of WORSE AFTER`),
+   and takes them back when the cursor leaves the group; in 21 rows it
+   pays with its blank rows alone. No column moves either way: the names
+   are one column as wide as the widest of all rows, so the arrows, the
+   strips, the rollout guide and the axis stand where they stood whichever
+   rows are drawn.
 2. Then the page follows [the order every calm page
    follows](presentation.md#what-a-smaller-screen-gives-up): the blank rows
    around the answer and the keys, the blank rows before the groups, the
@@ -149,8 +168,11 @@ What a smaller screen gives up, in order:
    the answer and the keys apart. With one row to spare the page keeps the
    one under the answer and gives up the one over `next`.
 3. In an 80x24 terminal every signal that is worse keeps its row and its
-   strip, and nothing is left out. At 60 columns the change column goes
-   as well, and `s` or `a` has it.
+   strip, and nothing is left out, while the cursor is on one of those
+   rows. At 60 columns the change column goes as well, and `s` or `a` has
+   it; the folded line of the neutral signals then has room for the first
+   of them and counts the others (`Memory peak 188Mi → 254Mi +1 more`),
+   and the `next` line names `Enter graph`, `a` and `s`.
 4. A screen shorter than that leaves the last rows of `WORSE AFTER` out and
    counts them (`not shown (a shows all): 2 of 7 rows of WORSE AFTER`); the
    one-line groups stay, and the line of what was not read is never left
@@ -160,15 +182,37 @@ With `s` open on a short screen the page keeps the row under the cursor, and
 the block states the rule, the samples, the queries and the diff; the source
 and the windows are added from 28 rows.
 
-A query under `s` is there to be read and run again, and the diff of the
-revision to be read to its end, so one that is wider than the line is
-written on as many lines as it needs, a query broken after a comma where it
-can be. Where that would cost the page its strips or its `next` line, each
-query is one line, cut where the line ends and marked with `…`. In a 24-row
-terminal that is so at 60 columns, and at 80 columns where the view has 20
-rows or the diff takes three lines; a taller terminal shows the queries
-whole. The diff is cut last, and only on a screen that has no room for a row
-with its strip beside it.
+Every line under `s` is there to be read to its end, and a query to be run
+again, so a line that is wider than the screen is written on as many lines
+as it needs: a query broken after a comma where it can be, a sentence
+between its words, each under the text and not under its label. Where the
+page has no rows for all of it without losing its strips or its `next`
+line, it gives the lines up in this order, and marks every cut with `…`:
+
+1. The blank row beside the block.
+2. The rule, the samples, and on a tall screen what a strip draws, the
+   source and the windows are one line each.
+3. The diff becomes one line. `s` is the key of the query and the rule, so
+   the queries stay whole; the answer still says what kinds of thing the
+   revision changed.
+4. Where whole queries do not fit either, each query is one line and the
+   diff is whole again if it then fits.
+5. One line of each.
+
+The rows of the page give way before the block does: with `s` open a short
+page keeps the row under the cursor and counts the others (`not shown (a
+shows all): 6 of 7 rows of WORSE AFTER, …`).
+
+In the 20 rows of an 80x24 or a 60x24 terminal with the line of crumbs the
+two queries of the error ratio are whole and the diff of the example is one
+line, cut after `~PAYMENT_TOKEN` at 80 columns and after `env` at 60; in 21
+rows the diff is whole too, and from 23 rows so are the rule and the
+samples. A signal whose one query takes three lines (memory peak at 80
+columns) has one line of it in 20 rows, and the diff is then whole. A longer
+diff or longer queries need more rows in the same order. A taller or wider
+terminal shows what a cut left out; no key does at that size, because the
+table under `a` has the diff on one line of its header and its pane of the
+selected signal on one line too.
 
 ## The answer
 
@@ -188,7 +232,7 @@ Nov17 at 04:20`).
 | The comparison | The first sentence |
 | --- | --- |
 | Signals of several kinds are worse | `7 signals got worse after rev 2 rolled out at 04:20: errors, latency, restarts, memory and ready replicas.` |
-| Signals of one kind are worse | `Latency got worse after rev 2 rolled out at 04:20: p50, p95 and p99.` |
+| Signals of one kind are worse | `Latency got worse after rev 2 rolled out at 04:20: p50, p95 and p99.` One percentile alone is named as its row is (`Latency p99 got worse after …`): one percentile is not "latency" |
 | None is worse | `No compared signal got worse after rev 2 rolled out at 04:20: 3 better, 2 higher or lower, 5 unchanged, 1 not compared.` Every signal is counted, so a quiet sentence is never read as health when signals are missing; signals that are only higher or lower are counted as that, never as worse or better |
 | Nothing could be compared | `No signal could be compared around rev 2, rolled out at 04:20: 2 not available, 9 with too few samples before or after.` |
 | Nothing was read | `Nothing was read around rev 2, rolled out at 04:20: denied (HTTP 403).` in the warning colour, with the caveat `Not read is not zero and not healthy.` |
@@ -288,7 +332,9 @@ page says so.
 
 The answer says it in a sentence (`Rev 2 changed the image, the memory limit
 (512Mi → 256Mi) and 2 env vars.`). The list itself is under `s`, written
-whole on as many lines as it needs:
+whole on as many lines as it needs wherever the page has the rows for it
+beside the queries ([in an 80x24 terminal](#in-an-80x24-terminal) it is the
+first of the two to be cut, and the cut is marked):
 
 ```text
   changed  image v1 → v2; limits.memory 512Mi → 256Mi; env ~PAYMENT_TOKEN +FEATURE_FLAGS

@@ -79,6 +79,12 @@ type Group struct {
 	// a cursor gives the widest it can write there, so that the columns are
 	// the same wherever the cursor is and no strip moves when it does.
 	NumberWidth, CompareWidth int
+	// SubjectWidth is the least width of the subject column, in cells. A
+	// view whose row cursor can open a folded group, or turn rows that a
+	// short page left out back in, gives the widest subject of all its
+	// rows: the columns are measured from the rows that are drawn, and
+	// would otherwise move with the cursor.
+	SubjectWidth int
 }
 
 // items is what a folded group names: its summary, or its rows. A quiet
@@ -198,6 +204,9 @@ func natural(groups []Group, width int, numberAfter bool) Layout {
 		}
 		if len(g.Rows) > 0 {
 			l.Number, l.Compare = max(l.Number, g.NumberWidth), max(l.Compare, g.CompareWidth)
+			if !g.quiet() {
+				l.Subject = max(l.Subject, g.SubjectWidth)
+			}
 		}
 	}
 	l.Subject, l.What = min(l.Subject, maxSubject), min(l.What, maxWhat)

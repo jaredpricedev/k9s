@@ -213,6 +213,19 @@ func TestKeyLines(t *testing.T) {
 	}
 	assert.Empty(t, NextLine(nil, 80, plainOpts))
 	assert.Empty(t, RestLine(nil, 80, plainOpts))
+	// A view that must keep a key named asks how many the line names.
+	for width, shown := range map[int]int{132: 4, 85: 4, 84: 3, 60: 2, 34: 1, 12: 1} {
+		assert.Equal(t, shown, NextShown(next, width, plainOpts), "%d columns", width)
+		for _, action := range next[:shown] {
+			if width > 34 {
+				assert.Contains(t, plain(NextLine(next, width, plainOpts)), action.Key+" "+action.Label, "%d columns", width)
+			}
+		}
+		for _, action := range next[shown:] {
+			assert.NotContains(t, plain(NextLine(next, width, plainOpts)), action.Label, "%d columns", width)
+		}
+	}
+	assert.Zero(t, NextShown(nil, 80, plainOpts))
 	assert.Empty(t, RestLine([]string{"", ""}, 80, plainOpts))
 
 	rows := draw(t, []string{NextLine(next, 132, colorOpts), RestLine(keys, 132, colorOpts)}, 132)

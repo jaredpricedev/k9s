@@ -91,6 +91,17 @@ func TestAnswerSaysOneKindByItsName(t *testing.T) {
 	require.Equal(t, "Latency got worse after rev 2 rolled out at 04:20: p50, p95 and p99.", answer.Lead)
 	require.Equal(t, "Latency got worse after rev 2 rolled out at 04:20.", answer.Brief)
 
+	// One percentile is not "latency": the sentence names the one that
+	// got worse, as its row does, in the short form too, and says nothing
+	// of the two that did not.
+	report.Outcomes = []Outcome{signal(SigP50, Unchanged), signal(SigP95, Unchanged), signal(SigP99, Worse)}
+	answer = report.Answer()
+	require.Equal(t, "Latency p99 got worse after rev 2 rolled out at 04:20.", answer.Lead)
+	require.Equal(t, answer.Lead, answer.Brief)
+	report.Outcomes = []Outcome{signal(SigP50, Unchanged), signal(SigP95, Worse), signal(SigP99, Worse)}
+	answer = report.Answer()
+	require.Equal(t, "Latency got worse after rev 2 rolled out at 04:20: p95 and p99.", answer.Lead)
+
 	report.Outcomes = []Outcome{signal(SigThrottled, Worse), signal(SigErrors, Better)}
 	answer = report.Answer()
 	require.Equal(t, "CPU throttling got worse after rev 2 rolled out at 04:20.", answer.Lead)
