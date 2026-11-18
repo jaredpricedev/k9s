@@ -282,22 +282,26 @@ func TestQueryBoardDrawsEveryNamedQueryForTheSelection(t *testing.T) {
 		"  THROTTLED · CPU THROTTLED SHARE BY POD  c …hx4mt 4% peak 86%  a …2bq7k 1.2%  b …8wzpd 1.2%",
 		"  ALSO",
 		// 499 is a rate in the request-path profile, so it is a rate here.
-		// A name too long for the number gives way to the peak beside it.
-		"  ingress-499   ▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁  0/s           gitla… · peak 0.06/s",
-		"  puma-queue    ▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁  …hx4mt 0      peak 40 · +2 more",
-		"  dns-p99       ██████████████████████████████████████████████████████████████████████████████  p99 6ms",
+		// The name of a query's only series is written whole or not at all:
+		// here it gives way to the peak, and the legend of the chart (n)
+		// and the zoomed panel have it. The numbers are as wide as the
+		// widest of the window: under the cursor a line that starts late
+		// says "– first" and the time.
+		"  ingress-499   ▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁  0/s            peak 0.06/s",
+		"  puma-queue    ▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁  …hx4mt 0       peak 40 · +2 more",
+		"  dns-p99       █████████████████████████████████████████████████████████████████████████████  p99 6ms",
 		// A line that stopped before the window did says when, and where it
 		// has no sample the strip says so: missing is never drawn as quiet.
-		"  hubble-drops  ××××××××××××××××××××××××██××××××××××××××××××××××××××××××××××××××××××××××××××××  – last 04:20  peak 0.8/s · +1 more",
+		"  hubble-drops  ××××××××××××××××××××××××██×××××××××××××××××××××××××××××××××××××××××××××××××××  – last 04:20   peak 0.8/s · +1 more",
 		"  next  n next chart (ingress-499)    Enter zoom    a all charts    D open in Grafana",
 	)
 	dashHasLines(t, dashText(t, s, dashPageOf(80, 20)),
 		"  THROTTLED · CPU THROTTLED SHARE BY POD  c …hx4mt 4% peak 86%  +2 more",
 		// 80 columns keep the peak: a strip is drawn to its own highest
 		// sample, and "0/s" alone would hide the burst.
-		"  ingress-499   ▁▁▁▁███▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁██▁▁▁  0/s           peak 0.06/s",
-		"  puma-queue    ▁▁▁▁███▁▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁██▁▁▁  …hx4mt 0      peak 40",
-		"  hubble-drops  ×××××××××××██××××××××××××××××××××××××  – last 04:20  peak 0.8/s",
+		"  ingress-499   ▁▁▁▁███▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁██▁▁▁  0/s            peak 0.06/s",
+		"  puma-queue    ▁▁▁▁███▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁██▁▁▁  …hx4mt 0       peak 40",
+		"  hubble-drops  ×××××××××××█××××××××××××××××××××××××  – last 04:20   peak 0.8/s",
 		"  next  n next chart (ingress-499)  Enter zoom  a all charts  D open in Grafana",
 		"  ←→ time · ↑↓ chart · s queries · 1-4 window · r re-read · b dots · Esc back",
 	)
@@ -384,9 +388,12 @@ func TestQueryPageChartsATypedExpressionAndSaysWhatWentWrong(t *testing.T) {
 	at.Cursor = 58
 	dashHasLines(t, dashText(t, s, at),
 		// The cursor runs down the page from the line over the chart.
-		"  TYPED EXPRESSION  at 04:29:00Z                          ┆",
-		"  SERIES BY PEAK                                          ┆                                                   at 04:29:00",
-		"  c  …hx4mt  ▁▁▁▁▁▁▁▁▁▁▁███████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁  40           peak 40",
+		"  TYPED EXPRESSION  at 04:29:00Z                             ┆",
+		// The time is in the line over the chart; the word over the numbers
+		// points at the caret on the axis and is as wide as "last".
+		"  SERIES BY PEAK                                             ┆                                                       at ^",
+		"  c  …hx4mt  ▁▁▁▁▁▁▁▁▁▁▁▁███████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁  40    peak 40",
+		"             ┬───────┬────────┬───────┬────────┬───────┬─────^──┬───────┬────────┬───────┬────────┬───────┬───────┬",
 	)
 	// 80x24 and 60 columns keep the chart, every row and the key for all
 	// detail.
@@ -602,12 +609,18 @@ func TestDashboardViewReadsTheDefinitionOnceAndMovesOnRequest(t *testing.T) {
 	frame = drawnText(t, v, 80, 20)
 	dashHasLines(t, frame,
 		"  REQUEST DURATION P99 BY POD  at 04:29:00Z  c …hx4mt 47.9s  +2 more",
-		"  Slowest pod p99           ▁▁▁███▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁██▁▁  47.9s red     max red",
+		"  Slowest pod p99           ▁▁▁███▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁██▁▁  47.9s red      max red",
 	)
 	press(tcell.KeyLeft, tcell.ModShift)
 	require.Contains(t, drawnText(t, v, 80, 20), "  REQUEST DURATION P99 BY POD  at 04:24:00Z  ")
+	// Home is the first sample the page has a column for, one step into
+	// the window, so the caret stands on the axis for every time the page
+	// names. Left does not go further.
 	key(tcell.KeyHome)
-	require.Contains(t, drawnText(t, v, 80, 20), "  REQUEST DURATION P99 BY POD  at 04:00:00Z  ")
+	key(tcell.KeyLeft)
+	frame = drawnText(t, v, 80, 20)
+	require.Contains(t, frame, "  REQUEST DURATION P99 BY POD  at 04:00:30Z  ")
+	require.Contains(t, frame, "                            ^─────────────┬────────────┬")
 	key(tcell.KeyEnd)
 	require.True(t, v.atEnd)
 	require.NotContains(t, drawnText(t, v, 80, 20), "  at 0", "at the window's end the page reads each line where it ends")

@@ -252,6 +252,18 @@ func (v *dashView) calm() bool { return !v.zoom && !v.detail }
 // the grid of every panel they move between panels.
 func (v *dashView) timed() bool { return v.zoom || v.calm() || v.one() }
 
+// earliest is the first position of the time cursor. The calm page draws
+// a sample over the step that ends at it, so the sample at the window's
+// start has no column there, in the chart or in a strip: the cursor starts
+// one step in, where the caret has a cell to stand under. A zoomed panel
+// draws the start as well.
+func (v *dashView) earliest() int {
+	if v.calm() {
+		return dashCalmFirst
+	}
+	return 0
+}
+
 // nextMain is the panel delta steps on from the main chart of the calm
 // layout, round the panels that were drawn.
 func (v *dashView) nextMain(delta int) int {
@@ -284,7 +296,7 @@ func (v *dashView) moveCmd(delta int, vertical bool) ui.ActionHandler {
 				step *= 10
 			}
 			last := int(v.snapshot.Window / v.snapshot.Step)
-			v.cursor = min(max(v.cursor+step, 0), last)
+			v.cursor = min(max(v.cursor+step, v.earliest()), last)
 			v.atEnd = v.cursor == last
 		case v.calm():
 			v.selected = v.nextMain(delta)
@@ -322,7 +334,7 @@ func (v *dashView) edgeCmd(delta int) ui.ActionHandler {
 		}
 		if v.timed() {
 			last := int(v.snapshot.Window / v.snapshot.Step)
-			v.cursor, v.atEnd = 0, delta > 0
+			v.cursor, v.atEnd = min(v.earliest(), last), delta > 0
 			if delta > 0 {
 				v.cursor = last
 			}

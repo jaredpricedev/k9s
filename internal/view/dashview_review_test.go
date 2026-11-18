@@ -39,8 +39,8 @@ func TestDashboardGaugeSaysWhenTheWindowHeldAnotherThresholdStep(t *testing.T) {
 func TestDashboardCalmRowSaysWhenTheWindowHeldAnotherThresholdStep(t *testing.T) {
 	s := dashStorySnapshot(t)
 	dashHasLines(t, dashText(t, s, dashPageOf(132, 32)),
-		"  Puma threads in use       ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  37.5% green",
-		"  CPU throttled, worst pod  ▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁  4% green         max 86% red",
+		"  Puma threads in use       ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  37.5% green",
+		"  CPU throttled, worst pod  ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁  4% green          max 86% red",
 	)
 	// 80 columns give up the number of the maximum, not the fact, and a
 	// line that ends low keeps its peak: the strip is drawn to its own
@@ -58,7 +58,7 @@ func TestDashboardCalmRowSaysWhenTheWindowHeldAnotherThresholdStep(t *testing.T)
 	// the baseline where the author's rule was crossed: the word is not
 	// the only signal, and neither is the colour.
 	tagged := strings.Join(renderDash(s, dashPageOf(132, 32)), "\n")
-	require.Contains(t, tagged, "[#ef8278:-:-]4% green[-:-:-]         [#ef8278:-:-]max 86% red")
+	require.Contains(t, tagged, "[#ef8278:-:-]4% green[-:-:-]          [#ef8278:-:-]max 86% red")
 	require.Contains(t, tagged, "[#79c7d4:-:-]37.5% green")
 
 	// 60 columns have no room for the word beside a row. The rows are not

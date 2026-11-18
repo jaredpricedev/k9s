@@ -5,6 +5,7 @@ package view
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"os"
 	"strings"
@@ -222,28 +223,30 @@ func TestDashboardCalmPageDrawsTheGitLabStoryAtEverySize(t *testing.T) {
 		"",
 		// One panel at full size, its legend on one line, the highest first.
 		"  REQUEST DURATION P99 BY POD  c …hx4mt 350ms peak 47.9s  a …2bq7k 310ms  b …8wzpd 310ms",
-		"                       50s ┤        ╭───╮               ╭────╮                      ╭─╮",
-		"                         0 ┤────────╯───╰──a────b────c──╯────╰───────────a────b────c╯─╰──cba",
+		"                       50s ┤        ╭──╮                ╭───╮                      ╭c─╮",
+		"                         0 ┤────────╯──╰───a────b────c──╯───╰────────────a────b────╯──╰─cba",
 		"",
 		// A dashboard row is a group. A stat is its value with the author's
 		// threshold word, drawn against the author's rule: what stood over
 		// it stands in the same columns as the stalls of the chart above.
 		"  REQUESTS",
-		"  Requests per second       ████████▆▆▆██████████████████▆▆▆▆███████████████████████▆▆██████  36.6/s",
-		"  Slowest pod p99           ▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁  346ms green      max 47.9s red",
-		"  Puma threads in use       ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  37.5% green",
-		"  CPU throttled, worst pod  ▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁  4% green         max 86% red",
+		"  Requests per second       ████████▆▆▆█████████████████▆▆▆▆████████████████████████▆██████  36.6/s",
+		"  Slowest pod p99           ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁  346ms green       max 47.9s red",
+		"  Puma threads in use       ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  37.5% green",
+		"  CPU throttled, worst pod  ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁  4% green          max 86% red",
 		// A chart of several series is its highest one, named.
-		"  Requests by pod           ████████▂▂▂██████████████████▂▂▂▂███████████████████████▂▂██████  …hx4mt 12.2/s    +2 more",
+		"  Requests by pod           ████████▂▂▂█████████████████▂▂▂▂████████████████████████▂██████  …hx4mt 12.2/s     +2 more",
 		"",
 		"  PUMA AND CPU",
-		"  Puma queued connections   ▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁  …hx4mt queued 0  peak 40 · +5 more",
+		// The number column is as wide as the widest number of the window
+		// ("queued 40"), so it is the same wherever the cursor stands.
+		"  Puma queued connections   ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁  …hx4mt queued 0   peak 40 · +5 more",
 		// A level that never moves (the limit) does not stand for the panel.
-		"  CPU usage against limit   ▃▃▃▃▃▃▃▃████▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃██████▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃███▃▃▃▃▃  …hx4mt 480m      peak 1.47 · +3 more",
-		"  CPU throttled periods     ▁▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁  …hx4mt 4%        peak 86% · +2 more",
+		"  CPU usage against limit   ▃▃▃▃▃▃▃█████▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃██████▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃▃███▃▃▃▃▃  …hx4mt 480m       peak 1.47 · +3 more",
+		"  CPU throttled periods     ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁  …hx4mt 4%         peak 86% · +2 more",
 		// One time axis for the chart and every row.
-		"                            ┬─────────┬──────────┬──────────┬─────────┬──────────┬─────────┬",
-		"  UTC                     04:00     04:10      04:20      04:30     04:40      04:50     05:00",
+		"                            ┬─────────┬──────────┬─────────┬──────────┬─────────┬─────────┬",
+		"  UTC                     04:00     04:10      04:20     04:30      04:40     04:50     05:00",
 		"",
 		// What cannot be drawn is one line, with the reason in a word.
 		"  NOT DRAWN  Pods and nodes (table) · Webservice log lines with timeout (logs)",
@@ -348,7 +351,7 @@ func TestDashboardCalmPageDrawsAnyPanelAtFullSize(t *testing.T) {
 		"  SLOWEST POD P99  346ms green  max 47.9s red",
 		"  REQUESTS",
 		// The line chart it replaced is a row now: its highest series.
-		"  Request duration p99 by pod  ▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁  …hx4mt 350ms     peak 47.9s · +2 more",
+		"  Request duration p99 by pod  ▁▁▁▁▁▁▁████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁  …hx4mt 350ms      peak 47.9s · +2 more",
 		"  next  n next chart (Puma threads in use)    Enter zoom    a all panels    D open in Grafana",
 	)
 	require.NotContains(t, stat, "  Slowest pod p99  ", "the main chart is not a row as well")
@@ -389,27 +392,79 @@ func TestDashboardCalmPageReadsEveryRowAtTheCursor(t *testing.T) {
 	text := dashText(t, s, page)
 	dashHasLines(t, text,
 		"  REQUEST DURATION P99 BY POD  at 04:29:00Z  c …hx4mt 47.9s  a …2bq7k 310ms  b …8wzpd 310ms",
-		"  Requests per second       █████████▆▆▆███████████████████▆▆▆▆██████████████████████████▆▆██████  25.1/s",
-		"  Slowest pod p99           ▁▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁  47.9s red         max 47.9s red",
-		"  CPU throttled, worst pod  ▁▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁  86% red           max 86% red",
-		"  Requests by pod           █████████▂▂▂███████████████████▂▂▂▂██████████████████████████▂▂██████  …hx4mt 1.5/s      +2 more",
-		"  Puma queued connections   ▁▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████▁▁▁▁▁  …hx4mt queued 40  +5 more",
+		"  Requests per second       ████████▆▆▆█████████████████▆▆▆▆████████████████████████▆██████  25.1/s",
+		"  Slowest pod p99           ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁  47.9s red         max 47.9s red",
+		"  CPU throttled, worst pod  ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁  86% red           max 86% red",
+		"  Requests by pod           ████████▂▂▂█████████████████▂▂▂▂████████████████████████▂██████  …hx4mt 1.5/s      +2 more",
+		// The number is the sample at the cursor. The peak beside it is the
+		// window's, the scale of the strip, and stays.
+		"  Puma queued connections   ▁▁▁▁▁▁▁█████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁██████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁  …hx4mt queued 40  peak 40 · +5 more",
 		// The caret on the axis stands under the second stall.
-		"                            ┬──────────┬───────────┬─────────^┬───────────┬──────────┬──────────┬",
+		"                            ┬─────────┬──────────┬────────^┬──────────┬─────────┬─────────┬",
 	)
 	// A line of words is no place for the cursor: it runs through the
 	// blank cells of the plot and of the rows between the groups.
 	for _, line := range strings.Split(text, "\n") {
 		if strings.Contains(line, "REQUEST DURATION") {
 			require.NotContains(t, line, "┆")
+			require.NotContains(t, line, "peak", "at the cursor the legend is the samples only")
 		}
 	}
-	require.NotContains(t, text, "peak", "at the cursor a number is a sample only")
 	require.Contains(t, text, "┆", "the cursor runs through the page")
 	// At the window's end no cursor is drawn.
 	end := dashText(t, s, dashPageOf(132, 32))
 	require.NotContains(t, end, "┆")
 	require.NotContains(t, end, "^")
+}
+
+// Moving the cursor changes numbers, never the page: the plot, every
+// strip and the axis stay in the columns they have without the cursor, at
+// every width and wherever the cursor stands, so a sample is read in one
+// cell throughout. The columns are as wide as the widest number of the
+// window, not as the number under the cursor.
+func TestCalmPagesKeepTheirColumnsWhileTheCursorMoves(t *testing.T) {
+	// marks is where the strips, the plot's labelled rows and the time
+	// axis stand on a page: for each line that has one, the columns of its
+	// first and last cell. The caret stands on the axis in place of a cell.
+	marks := func(text string) []string {
+		var out []string
+		for _, line := range strings.Split(text, "\n") {
+			if !strings.ContainsAny(line, "▁▂▃▄▅▆▇█×┬┤") {
+				continue
+			}
+			first, last := -1, -1
+			for at, r := range []rune(line) {
+				if strings.ContainsRune("▁▂▃▄▅▆▇█×┬┤─^", r) {
+					if first < 0 {
+						first = at
+					}
+					last = at
+				}
+			}
+			out = append(out, fmt.Sprintf("%d-%d", first, last))
+		}
+		return out
+	}
+	story := dashStorySnapshot(t)
+	board := loadDash(t.Context(), dashStory(), dashboard.QueryBoard(dashboard.NamedQueries(nil)), &dashSpec{Board: true}, dashLabel, dashDeployment, time.Hour, graphNow)
+	typed := querySpec(nil, `sum by (pod) (puma_queued_connections{namespace="$namespace", pod=~"$pod"})`)
+	query := loadDash(t.Context(), dashStory(), dashboard.QueryPage(typed.Query), &typed, dashLabel, dashDeployment, time.Hour, graphNow)
+	for name, s := range map[string]*dashSnapshot{"dashboard": story, "named queries": board, "one query": query} {
+		for _, size := range [][2]int{{132, 32}, {100, 26}, {80, 20}, {60, 20}} {
+			still := marks(dashText(t, s, dashPageOf(size[0], size[1])))
+			require.NotEmpty(t, still)
+			// The window's start (which has no column on the page, and reads
+			// as the first step), the first step, a quiet minute, the second
+			// stall, and the sample before the end.
+			for _, cursor := range []int{0, 1, 30, 58, int(s.Window/s.Step) - 1} {
+				page := dashPageOf(size[0], size[1])
+				page.Cursor = cursor
+				text := dashText(t, s, page)
+				require.Contains(t, text, "^", "%s at %dx%d: the cursor is on the axis", name, size[0], size[1])
+				require.Equal(t, still, marks(text), "%s at %dx%d, cursor %d: the page moved under the cursor:\n%s", name, size[0], size[1], cursor, text)
+			}
+		}
+	}
 }
 
 // The all-detail key shows the page as it was before the calm layout: the

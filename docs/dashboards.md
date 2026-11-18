@@ -44,28 +44,28 @@ what was read first, one panel at full size, and every other panel as one row
 on the same time axis.
 
 ```
-Dashboard  GitLab / Webservice overview · last 1h                    read 02:18 · 11 of 11 queries
+Dashboard  GitLab / Webservice overview · last 1h                    read 03:16 · 11 of 11 queries
   9 of 11 panels read. 2 cannot be drawn here.                           A reading, not a finding.
 
-  REQUEST DURATION P99 BY POD  c …hx4mt 346ms peak 47.9s  b …8wzpd 346ms  a …2bq7k 346ms
-                       50s ┤      ╭╮           ╭─╮               │
-                           │      ││           │ │               │
-                       25s ┤     ╭╯│           │ │               │
-                           │     │ │          ╭╯ │              ╭┴╮
-                           │     │ ╰╮         │  ╰╮             │ ╰╮
-                         0 ┤─────╯──╰──────a──╯─b─╰──c──────────╯──cba
+  REQUEST DURATION P99 BY POD  c …hx4mt 346ms peak 47.9s  a …2bq7k 346ms  b …8wzpd 346ms
+                       50s ┤      ╭╮           ╭╮
+                           │      ││           ││               │
+                       25s ┤      ││           │╰╮              ├╮
+                           │     ╭╯╰╮         ╭╯ │             ╭╯│
+                           │     │  │         │  │             │ │
+                         0 ┤─────╯──╰──────a──╯─b╰───c─────────╯─cba
   REQUESTS
-  Requests per second       █████▇▆▇███████████▆▆▇███████████████▇████  35.8/s
-  Slowest pod p99           ▁▁▁▁▃██▅▃▁▁▁▁▁▁▁▁▁▅██▅▃▁▁▁▁▁▁▁▁▁▁▁▁▁▄█▅▁▁▁  346ms green      max red
-  Puma threads in use       ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  37.5% green
-  CPU throttled, worst pod  ▁▁▁▁▃██▆▃▁▁▁▁▁▁▁▁▁▆██▆▃▁▁▁▁▁▁▁▁▁▁▁▁▁▄▇▆▁▁▁  4.19% green      max red
-  Requests by pod           ███▇▇▇▇███▇▇▇▇███▇▇▇▇████▇▇▇████▇▇▇████▇▇▇  …8wzpd 11.7/s
+  Requests per second       ██████▆▇███████████▆▆███████████████▇███  35.1/s
+  Slowest pod p99           ▁▁▁▁▁▄██▃▁▁▁▁▁▁▁▁▁▄██▄▁▁▁▁▁▁▁▁▁▁▁▁▁▄▇▄▁▁  346ms green       max red
+  Puma threads in use       ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁  37.5% green
+  CPU throttled, worst pod  ▁▁▁▁▁▄██▃▁▁▁▁▁▁▁▁▁▆██▅▁▁▁▁▁▁▁▁▁▁▁▁▁▄▇▅▁▁  3.93% green       max red
+  Requests by pod           ▇▇▇████▇▇▇███▇▇▇▇███▇▇▇▇███▇▇▇████▇▇▇███  …2bq7k 12.8/s
   PUMA AND CPU
-  Puma queued connections   ▁▁▁▁▅██▁▁▁▁▁▁▁▁▁▁▃███▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▆█▁▁▁▁  …hx4mt queued 0  peak 40
-  CPU usage against limit   ▃▃▃▃▄██▇▄▃▃▃▃▃▃▃▃▃▇██▇▄▃▃▃▃▃▃▃▃▃▃▃▃▃▅▇▆▃▃▃  …hx4mt 502m      peak 1.54
-  CPU throttled periods     ▁▁▁▁▃██▆▃▁▁▁▁▁▁▁▁▁▆██▆▃▁▁▁▁▁▁▁▁▁▁▁▁▁▄▇▆▁▁▁  …hx4mt 4.19%     peak 90%
-                            ────────┬─────────┬──────────┬─────────┬──
-  UTC                             01:30     01:45      02:00     02:15
+  Puma queued connections   ▁▁▁▁▁▆██▁▁▁▁▁▁▁▁▁▁███▁▁▁▁▁▁▁▁▁▁▁▁▁▁▆█▁▁▁  …hx4mt queued 0   peak 40
+  CPU usage against limit   ▃▃▃▃▃▅██▅▃▃▃▃▃▃▃▃▃▆██▆▃▃▃▃▃▃▃▃▃▃▃▃▃▅█▆▃▃  …hx4mt 472m       peak 1.52
+  CPU throttled periods     ▁▁▁▁▁▄██▃▁▁▁▁▁▁▁▁▁▆██▅▁▁▁▁▁▁▁▁▁▁▁▁▁▄▇▅▁▁  …hx4mt 3.93%      peak 88.7%
+                            ─────────┬─────────┬─────────┬─────────┬
+  UTC                              02:30     02:45     03:00     03:15
   NOT DRAWN  Pods and nodes (table) · Webservice log lines with timeout (logs)
 
   next  n next chart (Requests by pod)    Enter zoom    a all panels    D open in Grafana
@@ -116,7 +116,14 @@ Dashboard  GitLab / Webservice overview · last 1h                    read 02:18
 - **Two key lines**: the likely next steps in words, and the rest. `←` `→`
   move a time cursor through the chart and every row; the legend and the
   numbers then read the sample taken at that time, and the line over the
-  chart says which (`at 04:29:00Z`). `Enter` zooms the main chart.
+  chart says which (`at 04:29:00Z`). Only the numbers change: what stands
+  beside a number (`peak 40`, `max 47.9s red`) is the window's and stays,
+  and every number column is as wide as the widest number of the window, so
+  the chart, the strips and the axis stay in the columns they have and a
+  sample is read in one cell throughout. The cursor's first position
+  (`Home`) is one step into the window: a sample is drawn over the step
+  that ends at it, so the one at the window's start has no column on this
+  page. `Enter` zooms the main chart.
 - Nothing on this page is read for it: it is laid out from the one read the
   page already made.
 
@@ -357,7 +364,9 @@ Query  throttled · last 1h                                             read 02:
 - The chart is at full size. With several series, each is one row under it,
   the highest peak first, on the chart's time axis and on its scale: the
   letter that ends its line in the chart, its name, the last sample (the
-  sample at the cursor once `←` `→` moved it), its peak and its strip. A
+  sample at the cursor once `←` `→` moved it: the word over the numbers
+  then reads `at ^`, the caret on the axis, and the line over the chart has
+  the time), its peak and its strip. The rows do not move with the cursor. A
   chart of more than four series draws the four with the highest peak; the
   rows list every series, and one that is not drawn has no letter.
 - An answer without series is the sentence itself (`No series matched:

@@ -80,8 +80,8 @@ func TestDashboardLegendKeepsALoneLongNameReadable(t *testing.T) {
 	// colour from its name to its number, and draws what stood over the
 	// author's rule in that colour too. The value now carries its own word.
 	tagged := strings.Join(renderDash(stalled, dashPageOf(132, 32)), "\n")
-	require.Contains(t, tagged, "[#ef8278:-:-]346ms green[-:-:-]      [#ef8278:-:-]max 47.9s red[-:-:-]")
-	require.Contains(t, tagged, "[#a5b0aa:-:d]▁▁▁▁▁▁▁▁[#ef8278:-:-]████[#a5b0aa:-:d]▁")
+	require.Contains(t, tagged, "[#ef8278:-:-]346ms green[-:-:-]       [#ef8278:-:-]max 47.9s red[-:-:-]")
+	require.Contains(t, tagged, "[#a5b0aa:-:d]▁▁▁▁▁▁▁[#ef8278:-:-]█████[#a5b0aa:-:d]▁")
 	// A stat without a threshold is drawn in the accent, like every panel
 	// that was read and has no rule to stand over.
 	require.Contains(t, tagged, "[#79c7d4:-:-]36.6/s[-:-:-]")

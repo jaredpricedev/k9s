@@ -42,6 +42,10 @@ const (
 	// dashCalmBeside the width it gives what stands beside the number.
 	dashCalmNumber = 16
 	dashCalmBeside = 20
+	// dashCalmFirst is the first step the time cursor stands on: the first
+	// sample the page has a column for. A sample is drawn over the step
+	// that ends at it, and the one at the window's start ends before it.
+	dashCalmFirst = 1
 	// dashCalmCaveat keeps a page that only reads from sounding like a
 	// finding. A threshold word on it is the dashboard author's rule.
 	dashCalmCaveat = "A reading, not a finding."
@@ -237,11 +241,7 @@ func (r *dashRender) calmValue(p *dashboard.Panel, line *dashLine, f chart.Frame
 		if !found {
 			return r.words(graphNoSample), compare, brief, worst
 		}
-		number = unit.Format(sample)
-		if step, has := p.StepFor(sample / dashScale(p)); has {
-			number += " " + step.Word
-		}
-		return number, compare, brief, worst
+		return dashSample(p, sample), compare, brief, worst
 	}
 	number = unit.Format(v.Value)
 	if v.Word != "" {
@@ -253,6 +253,54 @@ func (r *dashRender) calmValue(p *dashboard.Panel, line *dashLine, f chart.Frame
 	return number, compare, brief, worst
 }
 
+// dashSample words one sample of a stat or gauge: its value with the
+// author's threshold word.
+func dashSample(p *dashboard.Panel, sample float64) string {
+	number := p.Unit.Chart.Format(sample)
+	if step, has := p.StepFor(sample / dashScale(p)); has {
+		number += " " + step.Word
+	}
+	return number
+}
+
+// dashPin pads a text to a width in cells. The kit gives a column the
+// width of the widest text in it, and the strips and the plot what the
+// columns leave them. A number that changed its width under the cursor
+// would move them: padded to the widest it is at any time of the window
+// (numberRoom), it keeps its column, and a sample stays in the cell it has.
+func dashPin(text string, width int) string {
+	if gap := width - runewidth.StringWidth(text); gap > 0 {
+		return text + strings.Repeat(" ", gap)
+	}
+	return text
+}
+
+// numberRoom is the width of the widest number a row writes while the
+// cursor moves through its window: every sample in the words of sample,
+// and the other texts the row can write (the number the page opens with,
+// the words for a time without a sample). It is no more than the kit gives
+// a number.
+func numberRoom(points []chart.Point, sample func(v float64) string, others ...string) int {
+	room := 0
+	for _, text := range others {
+		room = max(room, runewidth.StringWidth(text))
+	}
+	for _, point := range points {
+		room = max(room, runewidth.StringWidth(sample(point.V)))
+	}
+	return min(room, dashCalmNumber)
+}
+
+// lineRoom is numberRoom for a line read with lineValue: its samples, the
+// value it ends with, and what it says before its first sample and after
+// its last.
+func (r *dashRender) lineRoom(p *dashboard.Panel, points []chart.Point, f chart.Frame) int {
+	last, _ := r.lineValue(p, points, f, time.Time{})
+	early, _ := r.lineValue(p, points, f, f.Start)
+	late, _ := r.lineValue(p, points, f, f.End.Add(-f.Step))
+	return numberRoom(points, p.Unit.Chart.Format, last, early, late, r.words(graphNoSample))
+}
+
 // calmRow is a panel as one row: its title, its strip and its number. A
 // stat or gauge is its value with the author's threshold word, drawn
 // against the author's rule. A panel of several series is its highest
@@ -260,8 +308,11 @@ func (r *dashRender) calmValue(p *dashboard.Panel, line *dashLine, f chart.Frame
 // rule gave the window. brief is what the number alone would hide, in two
 // words: that the window held another step ("max red"), or the peak of a
 // line that ends low ("peak 40"). Without compare it is all the row says
-// beside its number.
-func (r *dashRender) calmRow(index int, f chart.Frame, when time.Time, compare bool) (row calm.Row, brief string, worst dashboard.Level) {
+// beside its number. Only the number follows the cursor. What stands
+// beside it is the window's, and room is the widest the number is at any
+// time of the window: the columns of the page are the same wherever the
+// cursor stands.
+func (r *dashRender) calmRow(index int, f chart.Frame, when time.Time, compare bool) (row calm.Row, brief string, worst dashboard.Level, room int) {
 	p := &r.s.Dash.Panels[index]
 	data := r.data(index)
 	row = calm.Row{What: r.rowTitle(index), Color: r.pg.Calm.Accent}
@@ -272,6 +323,8 @@ func (r *dashRender) calmRow(index int, f chart.Frame, when time.Time, compare b
 	if p.Kind.Value() && len(data.Lines) == 1 {
 		line := &data.Lines[0]
 		number, beside, short, level := r.calmValue(p, line, f, when)
+		last, _, _, _ := r.calmValue(p, line, f, time.Time{})
+		room = numberRoom(line.Points, func(v float64) string { return dashSample(p, v) }, last, r.words(graphNoSample))
 		row.Number, row.Color, row.Compare, brief, worst = number, r.calmLevel(level), short, short, level
 		if compare {
 			row.Compare = beside
@@ -282,7 +335,7 @@ func (r *dashRender) calmRow(index int, f chart.Frame, when time.Time, compare b
 				step, _ := p.StepFor(v / scale)
 				return step.Level >= dashboard.LevelWarn
 			})
-			return row, brief, worst
+			return row, brief, worst, room
 		}
 		row.Strip = calm.Trend(line.Points)
 		if p.Kind != dashboard.KindStat {
@@ -290,18 +343,22 @@ func (r *dashRender) calmRow(index int, f chart.Frame, when time.Time, compare b
 			_, high := r.span(index)
 			row.Strip = row.Strip.Top(high)
 		}
-		return row, brief, worst
+		return row, brief, worst, room
 	}
 	line := &data.Lines[dashHighest(data.Lines)]
-	value, peak := r.lineValue(p, line.Points, f, when)
+	value, _ := r.lineValue(p, line.Points, f, when)
+	// The peak is the window's: it stays beside the sample at the cursor.
+	_, peak := r.lineValue(p, line.Points, f, time.Time{})
+	room = r.lineRoom(p, line.Points, f)
 	name := ""
 	if len(data.Lines) > 1 || line.Name != "value" {
 		name = line.Name
 	}
 	row.Number = value
-	if name != "" && runewidth.StringWidth(name)+1+runewidth.StringWidth(value) <= dashCalmNumber {
-		// The number of a panel of several series says whose it is.
-		row.Number, name = name+" "+value, ""
+	if named := runewidth.StringWidth(name) + 1; name != "" && named+room <= dashCalmNumber {
+		// The number of a panel of several series says whose it is, when
+		// the widest number of the window leaves the name room.
+		row.Number, name, room = name+" "+value, "", named+room
 	}
 	// A strip is drawn to its own highest sample, so without the peak it
 	// has no scale: a page with no room for more still says it where the
@@ -317,17 +374,22 @@ func (r *dashRender) calmRow(index int, f chart.Frame, when time.Time, compare b
 			parts = append(parts, fmt.Sprintf("+%d more", others))
 		}
 		// A name too long for the number column takes the room the peak
-		// and the count leave it: they are never cut for it.
+		// and the count leave it: they are never cut for it. Of several
+		// series the name says which one the row is, so it may be cut short;
+		// the name of a panel's only series is written whole or not at all.
 		rest := strings.Join(parts, " · ")
-		if room := dashCalmBeside - runewidth.StringWidth(rest) - 3; name != "" && rest == "" {
+		left := dashCalmBeside - runewidth.StringWidth(rest) - 3
+		switch {
+		case name == "":
+		case rest == "":
 			parts = []string{name}
-		} else if name != "" && room >= 6 {
-			parts = append([]string{dashFit(name, room, r.pg.ASCII)}, parts...)
+		case left >= runewidth.StringWidth(name), left >= 6 && len(data.Lines) > 1:
+			parts = append([]string{dashFit(name, left, r.pg.ASCII)}, parts...)
 		}
 		row.Compare = strings.Join(parts, " · ")
 	}
 	row.Strip = calm.Trend(line.Points)
-	return row, brief, worst
+	return row, brief, worst, room
 }
 
 // sections are the panels beside the main chart, grouped as the dashboard
@@ -360,7 +422,7 @@ func (r *dashRender) sections(main int, drawn []int, f chart.Frame, when time.Ti
 			levels = append(levels, nil)
 		}
 		g := &groups[len(groups)-1]
-		row, brief, worst := r.calmRow(index, f, when, compare)
+		row, brief, worst, room := r.calmRow(index, f, when, compare)
 		item := row.What + " " + row.Number
 		if brief != "" {
 			item = row.What + " " + brief + ", " + row.Number
@@ -368,6 +430,7 @@ func (r *dashRender) sections(main int, drawn []int, f chart.Frame, when time.Ti
 		g.Summary = append(g.Summary, r.words(item))
 		levels[len(levels)-1] = append(levels[len(levels)-1], worst)
 		if !folded {
+			row.Number = dashPin(row.Number, room)
 			g.Rows = append(g.Rows, row)
 		}
 	}
@@ -685,9 +748,13 @@ func (r *dashRender) calmHead(index int, keep *dashData, ranked []dashLine, f ch
 // chart has no room for is a row without a letter.
 func (r *dashRender) seriesGroup(index int, ranked []dashLine, f chart.Frame, when time.Time) calm.Group {
 	p := &r.s.Dash.Panels[index]
+	// The word over the numbers is as wide with the cursor as without it,
+	// and each number as wide as the widest of its window: the strips do
+	// not move when the cursor does. The line over the chart says the time;
+	// the caret is the one on the axis.
 	g := calm.Group{Label: "SERIES BY PEAK", Head: "last", Role: calm.Primary}
 	if !when.IsZero() {
-		g.Head = "at " + when.UTC().Format("15:04:05")
+		g.Head = "at ^"
 	}
 	top := 0.0
 	for i := range ranked {
@@ -698,7 +765,8 @@ func (r *dashRender) seriesGroup(index int, ranked []dashLine, f chart.Frame, wh
 		line := &ranked[i]
 		value, _ := r.lineValue(p, line.Points, f, when)
 		peak, _ := dashPeak(line.Points)
-		row := calm.Row{What: line.Name, Number: value, Compare: "peak " + p.Unit.Chart.Format(peak), Strip: calm.Trend(line.Points).Top(top)}
+		row := calm.Row{What: line.Name, Number: dashPin(value, r.lineRoom(p, line.Points, f)), Compare: "peak " + p.Unit.Chart.Format(peak),
+			Strip: calm.Trend(line.Points).Top(top)}
 		if line.Tint >= 0 {
 			row.Subject = string(rune('a' + line.Slot%26))
 			if len(r.c.Data) > 0 {
@@ -835,9 +903,12 @@ func (r *dashRender) calm(chosen int) {
 	frame := chart.Frame{Start: s.Start, End: s.End, Step: s.Step}
 	// The cursor at the window's end is not drawn: the page then reads
 	// each line where it ends, and says when a line stood well above that.
+	// It never stands on the window's start, the one sample with no column
+	// on this page: a cursor left there by a zoomed panel reads the first
+	// sample that has one.
 	var when time.Time
 	if steps := int(s.Window / s.Step); pg.Cursor >= 0 && pg.Cursor < steps {
-		when = s.Start.Add(time.Duration(pg.Cursor) * s.Step)
+		when = s.Start.Add(time.Duration(max(pg.Cursor, dashCalmFirst)) * s.Step)
 	}
 	counts := r.calmCount()
 	noun, nouns := "panel", "panels"
