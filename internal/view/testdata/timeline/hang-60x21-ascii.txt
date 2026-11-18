@@ -1,0 +1,20 @@
+Timeline  Deployment apps/checko... | last 1h  12:00 | 11/11
+
+  Nothing that was read began in the last 1h.
+  0 shows all 2 entries read.
+  The 3 stalls :slow found are shaded.
+  Nothing found is not proof of health.
+
+                                 stalls   vv     vv      vv
+
+  QUIET
+  rollouts | config | scaling           ....................
+  warnings | exits                      ....................
+  annotations                           ....................
+  status | nodes | alerts  none now     xxxxxxxxxxxxxxxxxxx.
+                                        +-==-----=#------==+
+  UTC                                 11:00     11:30
+
+  next  a full list
+
+  1-4 window, 0 all | s sources | / filter | Esc back

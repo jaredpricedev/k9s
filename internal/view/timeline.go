@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/derailed/k9s/internal/alerts"
+	"github.com/derailed/k9s/internal/calm"
+	"github.com/derailed/k9s/internal/chart"
 	"github.com/derailed/k9s/internal/client"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/timeline"
@@ -49,6 +51,30 @@ type timelineView struct {
 	focused                       int
 	width, height, detailHeight   int
 	visibleCount, renderedEntries int
+
+	// calm is the page of the calm layout, the default. allDetail shows
+	// the list and the pane the view had before it instead.
+	calm      *tview.TextView
+	allDetail bool
+	// windowChosen says the user set the window; until then a read picks
+	// the narrowest one that holds what the answer is about.
+	windowChosen bool
+	// story is what the calm page last drew, calmRows its rows that are on
+	// the screen and calmKey the one the row cursor is on.
+	story    *timelineStory
+	calmRows []timelineCalmRow
+	calmKey  string
+	// cursor is the column of the time cursor on the frame the strips were
+	// last drawn in, or -1; cursorAt is the time it stands on.
+	cursor   int
+	cursorAt time.Time
+	frame    chart.Frame
+	// episodes are the episodes of the view the timeline was opened from,
+	// such as the stalls :slow found. They were read there, not here.
+	episodes *graphEpisodes
+	// dropped is what the calm page gave up for the size it was last drawn
+	// at, in the order it gave it up.
+	dropped []string
 }
 
 var timelineKinds = map[string]string{
@@ -135,6 +161,11 @@ func (a *App) openTimeline(target SelectedResourceTarget, argument string) {
 	}
 	readers := &timeline.Readers{Objects: objects, Metadata: meta}
 	v := newTimelineView(a, scope, note)
+	if from, ok := a.Content.Top().(graphEpisodeSource); ok {
+		// The view the timeline is opened from knows when its episodes
+		// were: they are drawn behind the rows, and nothing is read for it.
+		v.episodes = from.graphEpisodes()
+	}
 	// When the context declares an Alertmanager, its alerts are read once
 	// beside the Kubernetes reads and placed in the same order. Undeclared,
 	// nothing is contacted and the timeline does not mention alerts.
@@ -168,7 +199,7 @@ func (a *App) openTimeline(target SelectedResourceTarget, argument string) {
 }
 
 func newTimelineView(app *App, scope *timeline.Scope, note string) *timelineView {
-	return &timelineView{Details: NewDetails(app, timelineTitle, scope.Label(), contentTXT, false), scope: *scope, scopeNote: note, focused: -1}
+	return &timelineView{Details: NewDetails(app, timelineTitle, scope.Label(), contentTXT, false), scope: *scope, scopeNote: note, focused: -1, cursor: -1}
 }
 
 func timelineActions(owner actionOwner, app *App) []ui.ActionDescriptor {
@@ -220,10 +251,11 @@ func (v *timelineView) Init(ctx context.Context) error {
 	v.header = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
 	v.detail = tview.NewTextView().SetDynamicColors(true).SetWrap(true).SetWordWrap(true)
 	v.footer = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	v.calm = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
 	v.text.SetWrap(true).SetWordWrap(true)
 	v.table = tview.NewTable().SetSelectable(true, false).SetFixed(1, 0).SetEvaluateAllRows(false)
 	v.table.SetSelectionChangedFunc(func(row, _ int) {
-		if row > 0 && row <= len(v.rows) && v.rows[row-1] >= 0 {
+		if v.allDetail && row > 0 && row <= len(v.rows) && v.rows[row-1] >= 0 {
 			v.focused = v.rows[row-1]
 			v.renderDetail()
 		}
@@ -231,10 +263,27 @@ func (v *timelineView) Init(ctx context.Context) error {
 	v.detailHeight = 5
 	v.list = tview.NewFlex().SetDirection(tview.FlexRow).AddItem(v.table, 0, 1, true).AddItem(v.detail, v.detailHeight, 0, false)
 	v.pages = tview.NewPages().AddPage(timelineListPage, v.list, true, true).AddPage(timelineSourcesPage, v.text, true, false)
-	v.Flex.Clear().SetDirection(tview.FlexRow).AddItem(v.header, 4, 0, false).AddItem(v.pages, 0, 1, true).AddItem(v.footer, 1, 0, false)
+	v.Flex.SetDirection(tview.FlexRow)
+	v.arrange()
 	v.bindTimelineKeys()
 	v.render()
 	return nil
+}
+
+// arrange puts the widgets of the current page into the view: the one
+// calm page; or the header, the list with its pane and the key line this
+// view had before it, which is also where the sources and limits are
+// written, under the title alone when they are opened from the calm page.
+func (v *timelineView) arrange() {
+	v.Flex.Clear()
+	switch {
+	case v.allDetail:
+		v.Flex.AddItem(v.header, 4, 0, false).AddItem(v.pages, 0, 1, true).AddItem(v.footer, 1, 0, false)
+	case v.showSources:
+		v.Flex.AddItem(v.header, 1, 0, false).AddItem(v.pages, 0, 1, true).AddItem(v.footer, 1, 0, false)
+	default:
+		v.Flex.AddItem(v.calm, 0, 1, true)
+	}
 }
 
 func (v *timelineView) bindTimelineKeys() {
@@ -254,6 +303,47 @@ func (v *timelineView) bindTimelineKeys() {
 	v.actions.Add(ui.Key0, ui.NewKeyAction("Window all read", idle(func() { v.setWindow(0) }), true))
 	v.actions.Add(ui.KeyR, ui.NewKeyAction("Re-read timeline", idle(v.refresh), true))
 	v.actions.Add(ui.KeyS, ui.NewKeyAction("Sources and limits", idle(v.toggleSources), true))
+	// The calm layout is the default; a shows the list and the pane the
+	// view had before it. The cursors are the calm page's: on the list and
+	// on the sources text the same keys scroll, as they did.
+	v.actions.Add(calmDetailKey, ui.NewKeyAction(calmDetailLabel, idle(v.toggleDetail), true))
+	calmly := func(run func()) ui.ActionHandler {
+		return func(event *tcell.EventKey) *tcell.EventKey {
+			if !v.calmShown() {
+				return event
+			}
+			run()
+			return nil
+		}
+	}
+	// Shift moves the time cursor ten columns, as in every chart view.
+	cursor := func(delta int) ui.ActionHandler {
+		return func(event *tcell.EventKey) *tcell.EventKey {
+			if !v.calmShown() {
+				return event
+			}
+			step := delta
+			if event != nil && event.Modifiers()&tcell.ModShift != 0 {
+				step *= 10
+			}
+			v.moveCursor(step)
+			return nil
+		}
+	}
+	v.actions.Bulk(ui.KeyMap{
+		tcell.KeyUp:    ui.NewKeyAction("Previous row", calmly(func() { v.moveRow(-1) }), false),
+		tcell.KeyDown:  ui.NewKeyAction("Next row", calmly(func() { v.moveRow(1) }), false),
+		ui.KeyK:        ui.NewKeyAction("Previous row", calmly(func() { v.moveRow(-1) }), false),
+		ui.KeyJ:        ui.NewKeyAction("Next row", calmly(func() { v.moveRow(1) }), false),
+		tcell.KeyLeft:  ui.NewKeyAction("Cursor earlier", cursor(-1), false),
+		tcell.KeyRight: ui.NewKeyAction("Cursor later", cursor(1), false),
+		tcell.KeyHome:  ui.NewKeyAction("Cursor to window start", calmly(func() { v.cursorEdge(-1) }), false),
+		tcell.KeyEnd:   ui.NewKeyAction("Cursor to window end", calmly(func() { v.cursorEdge(1) }), false),
+		// n and Shift-N step through what a view steps through: here the
+		// entries, in the order they began.
+		ui.KeyN:      ui.NewKeyAction("Cursor to next entry", calmly(func() { v.stepEntry(1) }), false),
+		ui.KeyShiftN: ui.NewKeyAction("Cursor to previous entry", calmly(func() { v.stepEntry(-1) }), false),
+	})
 	// m is the graph key everywhere a row names an object, so the reference
 	// mark is on x here.
 	v.actions.Add(ui.KeyX, ui.NewKeyAction("Mark reference moment", idle(v.markReference), true))
@@ -283,6 +373,11 @@ func (v *timelineView) escape(event *tcell.EventKey) *tcell.EventKey {
 		v.applyQuery("")
 	case v.showSources:
 		v.toggleSources()
+	case v.cursor >= 0 && !v.allDetail:
+		// Esc first puts the time cursor away; the Esc after that clears
+		// the filter or leaves.
+		v.cursor = -1
+		v.render()
 	case v.query != "":
 		v.cmdBuff.Reset()
 		v.applyQuery("")
@@ -319,7 +414,7 @@ func (v *timelineView) applyQuery(text string) {
 }
 
 func (v *timelineView) setWindow(window time.Duration) {
-	v.window = window
+	v.window, v.windowChosen, v.cursor = window, true, -1
 	v.render()
 }
 
@@ -330,6 +425,7 @@ func (v *timelineView) toggleSources() {
 		page = timelineSourcesPage
 	}
 	v.pages.SwitchToPage(page)
+	v.arrange()
 	v.render()
 	if v.active {
 		v.app.SetFocus(v)
@@ -423,6 +519,8 @@ func (v *timelineView) StylesChanged(styles *config.Styles) {
 			item.SetBackgroundColor(p.Panel.Color())
 			item.SetTextColor(p.Text.Color())
 		}
+		v.calm.SetBackgroundColor(p.Canvas.Color())
+		v.calm.SetTextColor(p.Text.Color())
 	}
 	v.render()
 }
@@ -472,7 +570,7 @@ func (v *timelineView) refresh() {
 	generation := v.generation
 	ctx, cancel := context.WithTimeout(context.Background(), timeline.TotalDeadline)
 	v.cancel, v.loading = cancel, true
-	v.renderHeader()
+	v.render()
 	go func() {
 		defer cancel()
 		snapshot, err := v.loader(ctx)
@@ -498,32 +596,104 @@ func (v *timelineView) acceptSnapshot(snapshot *timeline.Snapshot, err error) {
 		v.refreshFailure = ""
 		v.snapshot = snapshot
 		v.focused = snapshot.Onset
+		// The row cursor starts on the row of the first failing signal
+		// again, and the time cursor is put away: its column was a time of
+		// the earlier observation.
+		v.calmKey, v.cursor = "", -1
+		if !v.windowChosen {
+			v.window = timelineDefaultWindow(snapshot, v.episodes)
+		}
 	}
 	v.render()
+}
+
+// timelineDefaultWindow is the window a read opens on, until the user
+// chooses one: the narrowest that holds the first failing signal and the
+// change before it with a tenth to spare, so that the page opens on what
+// its answer is about instead of on every day that was read. A change
+// much older than the fault does not widen it, and without a fault it is
+// the narrowest window that holds the latest change. With nothing recent
+// it is an hour; opened from a view that found episodes, it is the
+// window they were looked for in. 0 still shows everything read.
+func timelineDefaultWindow(s *timeline.Snapshot, episodes *graphEpisodes) time.Duration {
+	fits := func(need time.Duration) (time.Duration, bool) {
+		for _, window := range timeline.Windows {
+			if need+need/10 <= window {
+				return window, true
+			}
+		}
+		return 0, false
+	}
+	if episodes != nil && len(episodes.Intervals) > 0 {
+		if window, ok := fits(episodes.End.Sub(episodes.Start) * 4 / 5); ok {
+			return window
+		}
+	}
+	need := time.Duration(0)
+	onset := s.OnsetEntry()
+	for i := range s.Entries {
+		// The entries are newest first: the first change found is the
+		// latest, or the latest before the first failing signal.
+		e := &s.Entries[i]
+		if !e.Change || onset != nil && !e.At.Before(onset.At) {
+			continue
+		}
+		need = s.CapturedAt.Sub(e.At)
+		break
+	}
+	if onset != nil {
+		fault := s.CapturedAt.Sub(onset.At)
+		if need > max(4*fault, timeline.Windows[0]) || need < fault {
+			need = fault
+		}
+	}
+	if window, ok := fits(need); ok && need > 0 {
+		return window
+	}
+	return time.Hour
 }
 
 func (v *timelineView) render() {
 	if v.header == nil {
 		return
 	}
-	v.renderRows()
-	v.renderHeader()
-	v.renderDetail()
+	if !v.allDetail && !v.showSources {
+		v.renderCalm()
+		return
+	}
+	if v.allDetail {
+		v.renderRows()
+		v.renderHeader()
+		v.renderDetail()
+	} else {
+		// The sources and limits, opened from the calm page: its title
+		// line stays over them.
+		var st *timelineStory
+		if v.snapshot != nil {
+			st = timelineStoryOf(v.snapshot, v.window, v.query, v.episodes)
+		}
+		v.header.SetText(calm.TitleLine(v.calmTitle(st), v.viewWidth(), calmOptions(v.app)))
+	}
 	if v.snapshot != nil {
 		v.text.SetText(tview.Escape(v.snapshot.Report(v.window)))
 	} else {
 		v.text.SetText("No observation yet.")
 	}
 	width := v.viewWidth()
-	footer := "Enter open · / filter · 1 15m  2 1h  3 6h  4 24h  0 all · x mark · m graph · s sources · r re-read · Shift-D Grafana · Esc back"
-	if tview.TaggedStringWidth(footer) > width {
-		footer = "Enter open · / filter · 1 15m  2 1h  3 6h  4 24h  0 all · x mark · m graph · s sources · r re-read · Esc back"
-	}
-	if tview.TaggedStringWidth(footer) > width {
-		footer = "Enter open · / filter · 1-4,0 · x mark · m graph · s sources · r read · Esc"
-	}
-	if tview.TaggedStringWidth(footer) > width {
-		footer = "Enter open · / filter · 1-4 window · s sources · r read"
+	// The key line of the list under a names the way back to the calm
+	// page at every width, and keeps the keys it named before: Shift-D at
+	// 132 columns, the mark and the graph at 80, re-reading at 60.
+	footer := ""
+	for _, footer = range []string{
+		"Enter open · / filter · 1 15m  2 1h  3 6h  4 24h  0 all · x mark · m graph · s sources · r re-read · Shift-D Grafana · a less detail · Esc back",
+		"Enter open · / filter · 1 15m  2 1h  3 6h  4 24h  0 all · x mark · m graph · s sources · r read · Shift-D Grafana · a less · Esc",
+		"Enter open · / filter · 1 15m  2 1h  3 6h  4 24h  0 all · x mark · m graph · s sources · r read · a less · Esc",
+		"Enter open · / filter · 1-4,0 · x mark · m graph · s sources · r read · a less",
+		"Enter open · / filter · 1-4,0 · s sources · r read · a less",
+	} {
+		if tview.TaggedStringWidth(footer) <= width {
+			break
+		}
 	}
 	if v.showSources {
 		footer = "s or Esc returns to the timeline · r re-read"

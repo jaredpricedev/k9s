@@ -2,8 +2,8 @@
 // Modified for k9+; see NOTICE.
 
 // Package calm is the layout kit of the incident views (:slow, :graph and
-// its per-Pod page, :probe, :impact, a drawn dashboard, :query). It lays a
-// page out the same way in every one of them:
+// its per-Pod page, :probe, :impact, :timeline, a drawn dashboard, :query).
+// It lays a page out the same way in every one of them:
 //
 //  1. The answer comes first, in one or two sentences; everything below is
 //     evidence.

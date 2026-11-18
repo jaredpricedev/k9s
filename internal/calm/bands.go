@@ -110,7 +110,13 @@ func AxisLines(b Bands, f chart.Frame, l Layout, o Options) []string {
 			row[col] = cell{r: heavy, k: band}
 		}
 	}
-	const clock = 5 // "15:04"
+	const clock = 5 // "15:04", and "Jan02"
+	// A window of days has a tick a day, each at midnight UTC: the clock
+	// would read 00:00 under every one, so the day is written instead.
+	layout := "15:04"
+	if f.TickInterval() >= 24*time.Hour {
+		layout = "Jan02"
+	}
 	labels := newLine(o)
 	zone := false
 	for _, t := range f.TimeTicks() {
@@ -136,7 +142,7 @@ func AxisLines(b Bands, f chart.Frame, l Layout, o Options) []string {
 			zone = true
 		}
 		labels.to(start)
-		labels.put(o.muted(), t.UTC().Format("15:04"))
+		labels.put(o.muted(), t.UTC().Format(layout))
 	}
 	if !zone && labels.col > 0 && labels.col+4 <= l.Width {
 		labels.to(labels.col + 1)

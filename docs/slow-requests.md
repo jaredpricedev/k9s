@@ -224,7 +224,7 @@ cursors are drawn on the plan.
 | `m` | `:graph` on its page that compares the Pods of the Service (one group of rows per signal, one row per Pod, under the stalls read here), on the signal that set a Pod apart here (for example `p99`) and for the window read here ([graphs.md](graphs.md#which-pod-is-different-p)) |
 | `h` | The existing native Hubble view for the backend Pods ([hubble.md](hubble.md)) |
 | `Shift-D` | Grafana hand-off for the selected Pod or the workload, with the window that was read ([grafana-handoff.md](grafana-handoff.md)) |
-| `t` | `:timeline` for the selected Pod or the workload |
+| `t` | `:timeline` for the selected Pod or the workload, on the window that was read here and with the stalls found here shaded through its rows ([resource-investigation.md](resource-investigation.md#the-page)). The timeline reads nothing for them |
 | `b` | Chart style of the trends on the all-detail page: eighth blocks (the default) or a thin braille line, as in `:graph`, the dashboards and `:query`; the choice holds for the session. The strips of the calm page have one form |
 | `Esc` | Put the time cursor away; then close the queries; then back |
 

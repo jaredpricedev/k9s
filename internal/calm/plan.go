@@ -673,6 +673,20 @@ func Render(p *Page, plan *Plan, o Options) Rendered {
 	return out
 }
 
+// WhatWidth is the width, in cells, of the column the rows of the page are
+// written what they are about in: the Layout's where the rows have strips,
+// and what the text takes of the screen where they are written without. A
+// view that cuts that text itself, to keep something at its end that a cut
+// from the right would lose, cuts it to this width. It is measured from the
+// rows as they are, so a view cuts once the page is planned and never to
+// more than the text it planned with.
+func (plan *Plan) WhatWidth(p *Page) int {
+	if plan.TextRows {
+		return natural(plan.shownGroups(p), plan.Width, false).textOnly().What
+	}
+	return plan.Layout.What
+}
+
 // shownGroups is the groups whose rows the plan draws, cut to those rows.
 func (plan *Plan) shownGroups(p *Page) []Group {
 	var out []Group

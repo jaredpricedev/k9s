@@ -52,6 +52,34 @@ func (s Source) rank() int {
 	return 99
 }
 
+// Reads names the reads an entry of this source is derived from, as
+// Coverage.Source states them. A view that draws one row per kind of entry
+// uses it to tell a kind that was read and has nothing to show from one
+// whose read fell short: only the first is quiet. Grafana annotations are
+// read by the view, which names that read itself.
+func (s Source) Reads() []string {
+	switch s {
+	case SourceEvent:
+		return []string{sourceEvents}
+	case SourceRollout:
+		return []string{sourceReplicaSets, sourceDeployments}
+	case SourceRestart:
+		return []string{sourcePods}
+	case SourceConfig:
+		return []string{sourceConfigMaps, sourceSecrets}
+	case SourceAutoscaler:
+		return []string{sourceAutoscalers}
+	case SourceNode:
+		return []string{sourceNodes}
+	case SourceCondition:
+		return []string{sourcePods, sourceDeployments}
+	case SourceAlert:
+		return []string{sourceAlerts}
+	default:
+		return nil
+	}
+}
+
 // Ref identifies the resource an entry concerns. Resource is the API resource
 // in group/version/resource form, as typed commands accept it.
 type Ref struct {
@@ -89,6 +117,11 @@ type Entry struct {
 	// Failing marks a failing signal. Change marks a change to desired state or
 	// configuration. Neither field states a cause.
 	Failing, Change bool
+	// Earlier counts the earlier occurrences that happened and carry no
+	// time: the restarts before the one exit a container status retains.
+	// They were before At, at moments nothing states, so a view that draws
+	// the entry on a time axis cannot draw the stretch before it as quiet.
+	Earlier int
 }
 
 // Coverage states use the investigation vocabulary in CONTEXT.md.

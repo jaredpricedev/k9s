@@ -970,6 +970,14 @@ func TestTimelineShowsGrafanaAnnotationsForItsScopeAndStatesGaps(t *testing.T) {
 	require.NoError(t, v.Init(t.Context()))
 	t.Cleanup(v.Stop)
 	v.acceptSnapshot(merged, nil)
+	// The calm page draws them as one row of their own, among what is
+	// neither a change nor a failing signal; n reaches each of them.
+	calmFrame := drawnText(t, v, 132, 33)
+	require.Regexp(t, `(?m)^  ALSO IN THE WINDOW\b`, calmFrame)
+	require.Regexp(t, `(?m)^  annotations +Deploy checkout-api… \+1 +11:48 +·+▲·+▲·+$`, calmFrame)
+	require.NotRegexp(t, `(?m)^  [a-z ·]*annotations[a-z ·]* +none retained`, calmFrame, "a kind with entries is not quiet")
+	v.toggleDetail()
+	v.setWindow(0)
 	for _, size := range [][2]int{{120, 34}, {80, 24}, {60, 24}} {
 		frame := drawnText(t, v, size[0], size[1])
 		require.Contains(t, frame, "ANNOT", "%dx%d", size[0], size[1])
@@ -1008,6 +1016,15 @@ func TestTimelineShowsGrafanaAnnotationsForItsScopeAndStatesGaps(t *testing.T) {
 		require.Contains(t, s.Report(0), "Grafana annotations    "+tc.detail, name)
 		v.acceptSnapshot(s, nil)
 		require.Contains(t, drawnText(t, v, 80, 24), "NOT READ: nodes denied, "+tc.gap, name)
+		// The calm page names both reads that fell short, and neither is
+		// one of its quiet kinds.
+		v.toggleDetail()
+		calmFrame := drawnText(t, v, 132, 33)
+		require.Regexp(t, `(?m)^  nodes +denied: access denied`, calmFrame, name)
+		require.Regexp(t, `(?m)^  grafana annotations +`+strings.Fields(tc.gap)[2]+`: .*×+$`, calmFrame, name)
+		require.NotRegexp(t, `(?m)^  .*annotations.* none retained`, calmFrame, name)
+		require.Contains(t, calmFrame, "Not read: nodes denied, "+tc.gap+".", name)
+		v.toggleDetail()
 	}
 	truncated := timelineSnapshot(scope)
 	(&timelineAnnotations{declared: true, result: observability.AnnotationsResult{Status: observability.Status{State: observability.StateIncomplete, Reason: "annotation limit 200 reached; older or newer entries may exist"},

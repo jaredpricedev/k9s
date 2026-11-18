@@ -452,6 +452,21 @@ func TestRenderedPartsAndAPageWithoutAFrame(t *testing.T) {
 	lines := calm.Plain(calm.Render(&slow, &bare, plainOpts).Lines())
 	assert.Contains(t, lines, "> pod hx4mt  response time p99      47.9s  peers 0.35s")
 	assert.NotContains(t, strings.Join(lines, "\n"), "▼")
+	// The column of what a row measures, for a view that cuts that text
+	// itself: the Layout's with strips, and what the text has without.
+	assert.Equal(t, len("clients gave up (499)"), bare.WhatWidth(&slow))
+	whole := calmtest.Slow(plainOpts)
+	wide := calm.Lay(&whole, 132, 30, plainOpts)
+	assert.False(t, wide.TextRows)
+	assert.Equal(t, wide.Layout.What, wide.WhatWidth(&whole))
+	narrow := calm.Lay(&slow, 36, 40, plainOpts)
+	assert.True(t, narrow.TextRows)
+	assert.Less(t, narrow.WhatWidth(&slow), len("clients gave up (499)"))
+	for _, line := range calm.Plain(calm.Render(&slow, &narrow, plainOpts).Lines()) {
+		if strings.HasPrefix(line, "  ingress ") {
+			assert.Contains(t, line, "  "+runewidth.Truncate("clients gave up (499)", narrow.WhatWidth(&slow), "…")+"  ", "the kit cuts the text to that width")
+		}
+	}
 
 	// A page of nothing but a verdict.
 	empty := calm.Page{Title: calm.Title{View: "Probe"}, Verdict: calm.Unread("Nothing was sent.", "")}

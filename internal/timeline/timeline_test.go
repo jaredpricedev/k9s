@@ -175,6 +175,18 @@ func TestCollectOrdersWorkloadEvidenceAndMarksWhatPrecededTheFault(t *testing.T)
 	require.True(t, now.Add(-time.Minute).Equal(onset.Last))
 	require.Equal(t, "FAULT BEGAN", s.RelationLabel(s.Onset))
 
+	// Only the last exit of a container is retained. The five restarts
+	// before it happened at moments nothing states: the entry counts them,
+	// so that a view cannot draw the stretch before it as quiet.
+	for index := range s.Entries {
+		want := 0
+		if s.Entries[index].Source == SourceRestart {
+			want = 5
+			require.Contains(t, strings.Join(s.Entries[index].Detail, " "), "5 earlier restarts have no time")
+		}
+		require.Equal(t, want, s.Entries[index].Earlier, s.Entries[index].Summary)
+	}
+
 	require.Equal(t, "2m after", s.RelationLabel(2))
 	require.Equal(t, "2m before", s.RelationLabel(5))
 	require.Equal(t, "4m before", s.RelationLabel(6))
@@ -330,4 +342,29 @@ func TestAutoscalerDeliberatelyDisabledIsNotAFailingSignal(t *testing.T) {
 	require.Len(t, entries, 2)
 	require.False(t, entries[0].Failing)
 	require.True(t, entries[1].Failing)
+}
+
+// A view draws one row per kind of entry and may call a kind quiet only
+// when the reads it comes from were complete. Every read a source names is
+// one a collection reports, so a kind is never held against a read that
+// does not exist.
+func TestEverySourceNamesTheReadsACollectionReports(t *testing.T) {
+	r, _ := readers(t, incident()...)
+	s, err := Collect(context.Background(), r, deploymentScope(), now)
+	require.NoError(t, err)
+	reported := map[string]bool{sourceAlerts: true}
+	for _, coverage := range s.Coverage {
+		reported[coverage.Source] = true
+	}
+	for _, source := range []Source{SourceEvent, SourceRollout, SourceRestart, SourceConfig, SourceAutoscaler, SourceNode, SourceCondition, SourceAlert} {
+		reads := source.Reads()
+		require.NotEmpty(t, reads, source)
+		for _, read := range reads {
+			require.True(t, reported[read], "%s names the read %q, which no collection reports", source, read)
+		}
+	}
+	for index := range s.Entries {
+		require.NotEmpty(t, s.Entries[index].Source.Reads(), s.Entries[index].Source)
+	}
+	require.Empty(t, SourceAnnotation.Reads(), "the view reads annotations and names that read itself")
 }
