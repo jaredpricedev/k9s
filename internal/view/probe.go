@@ -89,6 +89,13 @@ type probeView struct {
 	rendering bool
 	// confirm is the open question, or nil.
 	confirm *probeConfirm
+	// calm is the page of the calm layout, the default; allDetail shows
+	// the table and the result pane instead.
+	calm      *tview.TextView
+	allDetail bool
+	// dropped is what the calm page gave up for the size it was last drawn
+	// at, in the order it gave it up.
+	dropped []string
 }
 
 // probeRuns are the runs made with one declared probe kind.
@@ -220,19 +227,28 @@ func (v *probeView) selectedTarget() *probe.Target {
 	return nil
 }
 
-// moveSelection moves the cursor by step Pods and stops at either end.
+// moveSelection moves the cursor by step Pods and stops at either end. It
+// follows the order on screen: the groups of the calm page, or the plan's
+// order in the table of all detail.
 func (v *probeView) moveSelection(step int) {
 	if v.plan == nil || len(v.plan.Targets) == 0 {
 		return
 	}
-	index := 0
-	for i := range v.plan.Targets {
+	order := make([]int, len(v.plan.Targets))
+	for i := range order {
+		order[i] = i
+	}
+	if !v.allDetail {
+		order = v.calmOrder()
+	}
+	at := 0
+	for position, i := range order {
 		if v.plan.Targets[i].Pod.Name == v.selected {
-			index = i
+			at = position
 		}
 	}
-	index = min(max(index+step, 0), len(v.plan.Targets)-1)
-	if name := v.plan.Targets[index].Pod.Name; name != v.selected {
+	at = min(max(at+step, 0), len(order)-1)
+	if name := v.plan.Targets[order[at]].Pod.Name; name != v.selected {
 		v.selected = name
 		v.render()
 	}
@@ -275,12 +291,10 @@ func (v *probeView) Init(ctx context.Context) error {
 	// one foreground on its selected row, and the selected Pod is often
 	// the outlier whose colors matter.
 	v.body = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	v.calm = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
 	v.headerHeight, v.detailHeight = 2, 4
-	v.Flex.Clear().SetDirection(tview.FlexRow).
-		AddItem(v.header, v.headerHeight, 0, false).
-		AddItem(v.body, 0, 1, true).
-		AddItem(v.detail, v.detailHeight, 0, false).
-		AddItem(v.footer, 1, 0, false)
+	v.Flex.SetDirection(tview.FlexRow)
+	v.arrange()
 	v.bindProbeKeys()
 	v.render()
 	return nil
@@ -310,6 +324,10 @@ func (v *probeView) bindProbeKeys() {
 		return ""
 	}
 	v.actions.Add(ui.KeyU, kindAction)
+	// The calm layout is the default; a shows the table and the result
+	// pane the view had before it. It changes what is drawn, never what
+	// is sent.
+	v.actions.Add(calmDetailKey, ui.NewKeyAction(calmDetailLabel, do(v.toggleDetail), true))
 	for key, step := range map[tcell.Key]int{tcell.KeyUp: -1, ui.KeyK: -1, tcell.KeyDown: 1, ui.KeyJ: 1,
 		tcell.KeyHome: -probe.MaxPods, tcell.KeyEnd: probe.MaxPods, tcell.KeyPgUp: -4, tcell.KeyPgDn: 4} {
 		v.actions.Add(key, ui.NewKeyAction("Select pod", do(func() { v.moveSelection(step) }), false))
@@ -369,7 +387,7 @@ func (v *probeView) StylesChanged(styles *config.Styles) {
 	v.applyStyles(styles)
 	if v.body != nil {
 		p := styles.Semantic()
-		for _, item := range []*tview.TextView{v.header, v.body, v.detail, v.footer} {
+		for _, item := range []*tview.TextView{v.header, v.body, v.detail, v.footer, v.calm} {
 			item.SetBackgroundColor(p.Canvas.Color())
 			item.SetTextColor(p.Text.Color())
 		}

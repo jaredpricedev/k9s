@@ -79,8 +79,14 @@ func (v *impactView) rolloutMark() string {
 	return "│"
 }
 
+// render draws the calm page, or with all detail the header, the table of
+// every signal, the detail pane and the key line.
 func (v *impactView) render() {
 	if v.header == nil {
+		return
+	}
+	if !v.allDetail {
+		v.renderCalm()
 		return
 	}
 	lines := v.headerLines(false)
@@ -109,10 +115,10 @@ func (v *impactView) render() {
 	width := v.viewWidth()
 	enter := "Enter graph · "
 	v.footer.SetText(tview.Escape(impactFit(width,
-		enter+"t timeline · 1 5m  2 15m  3 30m  4 1h  5 3h · n later  N earlier rollout · r re-read · Esc back",
-		enter+"t timeline · 1-5 window · n/N rollout · r re-read · Esc back",
-		"Enter graph · t timeline · 1-5 · n/N rollout · r read · Esc",
-		"t timeline · 1-5 window · n/N rollout · r read · Esc")))
+		enter+"t timeline · 1 5m  2 15m  3 30m  4 1h  5 3h · n later  N earlier rollout · r re-read · a less detail · Esc back",
+		enter+"t timeline · 1-5 window · n/N rollout · r re-read · a less detail · Esc back",
+		"Enter graph · t timeline · 1-5 · n/N rollout · r read · a less · Esc",
+		"t timeline · 1-5 · n/N rollout · r read · a less · Esc")))
 }
 
 // headerLines states what is compared, the two windows in clock time, the
@@ -393,7 +399,7 @@ func (v *impactView) renderRows() {
 // that produced the verdict, how many samples stood behind it, and the
 // exact query. With one line it keeps the statement and the reason.
 func (v *impactView) renderDetail() {
-	if v.detail == nil {
+	if v.detail == nil || !v.allDetail {
 		return
 	}
 	outcome := v.focusedOutcome()

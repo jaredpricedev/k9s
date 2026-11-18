@@ -60,6 +60,14 @@ type impactView struct {
 	focused                            string
 	width, height                      int
 	headerHeight, detailHeight         int
+	// calm is the page of the calm layout, the default. allDetail shows the
+	// table and detail pane instead; queries adds the rule, samples and
+	// queries of the selected row to the calm page.
+	calm               *tview.TextView
+	allDetail, queries bool
+	// dropped is what the calm page gave up for the size it was last drawn
+	// at, in the order it gave it up.
+	dropped []string
 }
 
 // impactTarget says whether a selection can be compared, and as what kind.
@@ -228,19 +236,17 @@ func (v *impactView) Init(ctx context.Context) error {
 	v.header = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
 	v.detail = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
 	v.footer = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	v.calm = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
 	v.table = tview.NewTable().SetSelectable(true, false).SetFixed(1, 0).SetEvaluateAllRows(false)
 	v.table.SetSelectionChangedFunc(func(row, _ int) {
-		if row > 0 && row <= len(impact.Signals) {
+		if v.allDetail && row > 0 && row <= len(impact.Signals) {
 			v.focused = impact.Signals[row-1].ID
 			v.renderDetail()
 		}
 	})
 	v.headerHeight, v.detailHeight = 6, 1
-	v.Flex.Clear().SetDirection(tview.FlexRow).
-		AddItem(v.header, v.headerHeight, 0, false).
-		AddItem(v.table, 0, 1, true).
-		AddItem(v.detail, v.detailHeight, 0, false).
-		AddItem(v.footer, 1, 0, false)
+	v.Flex.SetDirection(tview.FlexRow)
+	v.arrange()
 	v.bindImpactKeys()
 	v.render()
 	return nil
@@ -258,6 +264,14 @@ func (v *impactView) bindImpactKeys() {
 		v.actions.Add(ui.Key1+tcell.Key(index), ui.NewKeyAction("Window "+impact.Dur(width), do(func() { v.setWidth(width) }), true))
 	}
 	v.actions.Add(ui.KeyR, ui.NewKeyAction("Re-read comparison", do(v.refresh), true))
+	// The calm layout is the default. a shows the table and detail pane
+	// the view had before it, and s the rule, samples and queries behind
+	// the selected row, as s shows the queries in every chart view.
+	v.actions.Add(calmDetailKey, ui.NewKeyAction(calmDetailLabel, do(v.toggleDetail), true))
+	v.actions.Add(impactQueriesKey, ui.NewKeyAction(impactQueriesLabel, do(v.toggleQueries), true))
+	for key, step := range map[tcell.Key]int{tcell.KeyUp: -1, ui.KeyK: -1, tcell.KeyDown: 1, ui.KeyJ: 1} {
+		v.actions.Add(key, ui.NewKeyAction("Select signal", do(func() { v.moveFocus(step) }), false))
+	}
 	// n and Shift-N step forward and back in every view that steps through
 	// something (episodes in :slow, signals in :graph); p is the per-Pod
 	// page of :graph, which Enter opens from here.
@@ -394,6 +408,8 @@ func (v *impactView) StylesChanged(styles *config.Styles) {
 			item.SetBackgroundColor(p.Panel.Color())
 			item.SetTextColor(p.Text.Color())
 		}
+		v.calm.SetBackgroundColor(p.Canvas.Color())
+		v.calm.SetTextColor(p.Text.Color())
 	}
 	v.render()
 }
@@ -452,6 +468,7 @@ func (v *impactView) accept(read *impactRead) {
 	if v.focused == "" || v.focusedOutcome() == nil {
 		v.focused = v.firstInteresting()
 	}
+	v.focusRow()
 	v.render()
 }
 

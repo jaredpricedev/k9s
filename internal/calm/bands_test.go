@@ -166,6 +166,61 @@ func TestShadeLeavesAlone(t *testing.T) {
 	}
 }
 
+// A rollout divides a window in two. One shaded column is not seen, so
+// with Guide the moment runs down through every row, and the marker row
+// and the axis mark the same column.
+func TestAMomentWithAGuideDividesEveryRow(t *testing.T) {
+	tenMinutes := chart.Frame{Start: minute(0), End: minute(10), Step: time.Minute, Width: 10}
+	layout := Layout{Width: 30, StripCol: 12, Strip: 10}
+	rollout := Bands{Label: "rev 2", Guide: true, Episodes: []chart.Interval{{Start: minute(4), End: minute(4)}}}
+	levels := Levels(series(1, 1, 1, 1, 1, 9, 9, 9, 9, 9), over(4))
+	unread := Levels(append(series(1, 1, 1, 1), chart.Point{T: minute(6), V: 9}), over(4))
+	for name, c := range map[string]struct {
+		strip       Strip
+		want, ascii string
+	}{
+		"in place of the level of its column":   {levels, "▁▁▁▁┊█████", "____|#####"},
+		"through a row where nothing happened":  {Events(minute(7)), "····┊··▲··", "....|..^.."},
+		"never over an event":                   {Events(minute(4)), "····▲·····", "....^....."},
+		"never over a column that was not read": {unread, "▁▁▁▁×█××××", "____x#xxxx"},
+		"through a strip that draws nothing":    {Strip{}, "    ┊", "    |"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, c.want, plain(StripLine(c.strip, "", rollout, tenMinutes, plainOpts)))
+			assert.Equal(t, c.ascii, plain(StripLine(c.strip, "", rollout, tenMinutes, asciiOpts)))
+		})
+	}
+
+	// The marker, the guide of every line and the axis stand in one column.
+	lines := []string{MarkerRow(rollout, tenMinutes, layout, colorOpts), Shade("", rollout, tenMinutes, layout, colorOpts),
+		Shade("  WORSE AFTER", rollout, tenMinutes, layout, colorOpts),
+		"            " + StripLine(levels, testPalette.Fail, rollout, tenMinutes, colorOpts)}
+	lines = append(lines, AxisLines(rollout, tenMinutes, layout, colorOpts)...)
+	cells := draw(t, lines, 30)
+	assert.Equal(t, []string{
+		"      rev 2     ▼",
+		"                ┊",
+		"  WORSE AFTER   ┊",
+		"            ▁▁▁▁┊█████",
+		"            ┬───━────┬",
+		"  UTC     14:00    14:10",
+	}, []string{text(cells[0]), text(cells[1]), text(cells[2]), text(cells[3]), text(cells[4]), text(cells[5])})
+	assert.Equal(t, shown{r: '▼', fg: testPalette.Warn, bg: testPalette.Band, bold: true}, cells[0][16])
+	assert.Equal(t, shown{r: '┊', fg: testPalette.Warn, bg: testPalette.Band}, cells[1][16], "the guide has the colour of its marker, on the band")
+	assert.Equal(t, shown{r: '┊', fg: testPalette.Warn, bg: testPalette.Band}, cells[2][16])
+	assert.Equal(t, shown{r: '┊', fg: testPalette.Warn}, cells[3][16], "a strip alone is not shaded")
+	assert.Equal(t, shown{r: '━', fg: testPalette.Warn}, cells[4][16])
+
+	// Without Guide a moment is its marker, its shaded column and its place
+	// on the axis, as an episode is: nothing is drawn over a row.
+	rollout.Guide = false
+	assert.Equal(t, "▁▁▁▁▁█████", plain(StripLine(levels, "", rollout, tenMinutes, plainOpts)))
+	assert.Empty(t, plain(Shade("", rollout, tenMinutes, layout, colorOpts)))
+	// An episode that has a length is a band, never a guide.
+	stall := Bands{Guide: true, Episodes: []chart.Interval{span(3, 5)}}
+	assert.Equal(t, "▁▁▁▁▁█████", plain(StripLine(levels, "", stall, tenMinutes, plainOpts)))
+}
+
 func TestGuidesRunThroughBlankCellsOnly(t *testing.T) {
 	bands := Bands{Marks: []chart.Mark{{Key: 'R', T: minute(4)}}, Cursor: minute(10)}
 	for name, c := range map[string]struct {

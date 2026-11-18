@@ -28,8 +28,88 @@ Nothing is read until the view is opened. The view never refreshes on a timer.
 | `t` | Open `:timeline` for the same workload |
 | `Enter` | Open `:graph` for the workload over the narrowest graph window that reaches back to the start of the before window, scrolled to the chart of the selected signal (memory signals and restarts: MEMORY; CPU signals: CPU). For a signal `:graph` does not draw (request rate, errors, latency, readiness) a message says so and the graph opens at the top |
 | `Shift-D` | Grafana hand-off for the workload, with the range from the start of the before window to the end of the after window ([grafana-handoff.md](grafana-handoff.md)) |
-| `Up` / `Down` | Select a signal; the pane below states its numbers, rule, sample counts and exact queries |
+| `Up` / `Down` | Select a signal: on the calm page a row, with all detail any signal of the table |
+| `s` | The rule, the sample counts and the exact queries of the selected signal, and the source, step, rate range and both windows of the comparison; press again to hide them |
+| `a` | All detail: the table of every signal with before, after, change, percent and verdict, and the pane of the selected one. Press again for the calm page |
 | `Esc` | Back |
+
+## The page
+
+The view is laid out the calm way ([presentation.md](presentation.md#calm-layout-the-standard-for-incident-views)):
+
+```text
+Impact  Deployment apps/checkout-api · rev 2 (latest of 2)                               read 01:53 · 9 of 9 queries
+
+  After rev 2 (01:41): error ratio 0.2% -> 22.0%, p99 500ms -> 3.99s, restarts 0 -> 6, memory at limit (limit 512Mi -> 256Mi),
+  ready replicas 2 -> 1.
+  rev 2 changed: image v1 -> v2; limits.memory 512Mi -> 256Mi; env ~PAYMENT_TOKEN +FEATURE_FLAGS
+  "After" is order in time, not cause.
+
+      rev 2 rolled out 01:41:14Z · 12m each side                    ▼
+                                                                    ┊
+  WORSE AFTER   before -> after                                     ┊
+> Error ratio   0.2% -> 22.0%    +21.8pp  x110   ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁┊▃▅▅▆███████████████
+  Latency p99   500ms -> 3.99s   +3.49s  +697%   ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊▅▇▇████████████████
+  Restarts      0 -> 6           +6  new         ···················┊··▲··▲··▲··▲··▲··▲·
+  Memory/limit  36.7% -> 99.2%   +62.5pp  +170%  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄┊▅██▄▇█▄▇█▄▇█▄▇█▄▇█▄
+  Ready (min)   2 -> 1           -1  -50%        ███████████████████┊█▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅
+                                                                    ┊
+  HIGHER OR LOWER AFTER                                             ┊
+  Memory peak   188Mi -> 254Mi   +66Mi  +35%     ▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆┊▆██▅██▅██▅██▅██▅██▅
+                                                 ─┬───────┬───────┬─━─────┬───────┬─────
+  UTC                                           01:30   01:35   01:40   01:45   01:50
+
+  UNCHANGED  Request rate
+  NOT AVAILABLE  CPU throttled
+
+  next  Enter graph this workload    a all 11 signals    s query and rule    t timeline
+
+  ↑↓ signal · 1-5 window · n/N later/earlier rollout · r read again · D Grafana · Esc back
+```
+
+- **The answer** is [the summary line](#the-summary-line), bold, and what
+  the revision changed on a line of its own directly under it. A warning
+  that makes the page unsafe to read as it stands (the revision list was
+  cut, the context changed) comes before both.
+- **One row per signal that moved**: its name, before -> after, the change
+  in the signal's unit and in percent, and a strip over both windows.
+- **The rollout is one column through every row**, at the split of the two
+  windows: `▼` over the strips, a guide `┊` down through every line to the
+  axis, where it is heavy, and the band shading behind it. What is left of
+  the guide is before the rollout and what is right of it is after. The
+  guide stands in place of the one column whose step holds samples of both
+  sides; a restart in that step keeps its `▲`, and a column that was not
+  read keeps its `×`.
+- **A strip is the value from zero**, so a signal that rose is low before
+  the guide and high after it, and a signal that fell is high before and
+  low after. A column is in the row's colour where its sample is further
+  from the before value than the signal's rule allows, in the direction the
+  signal moved, and dim where it is not. Restarts are counted, not
+  levelled: each is a `▲` where the counter rose.
+- **Groups**: `WORSE AFTER`, `BETTER AFTER`, `HIGHER OR LOWER AFTER` (the
+  neutral signals) are rows; `UNCHANGED` is one dim line of names; `NOT
+  READ` (with the reason), `NOT AVAILABLE` and `TOO FEW SAMPLES` are one
+  line each and are never left out. A missing signal is never a row with a
+  zero.
+- The source, the step, the rate range, the exact windows and the rule,
+  samples and queries of a signal are under `s`; the table is under `a`.
+
+What a smaller screen gives up, in order: in an 80x24 terminal every signal
+that is worse keeps its row and strip, the neutral signals fold to one line
+(`HIGHER OR LOWER AFTER  Memory peak 188Mi -> 254Mi · CPU usage 60m ->
+345m`) and the second key line goes; `a` is on the first. At 60 columns the
+change column goes, then the last rows of `WORSE AFTER` are left out and
+counted (`not shown (a shows all): 3 of 7 rows of WORSE AFTER`); the
+one-line groups stay. The group the cursor is in opens again when the cursor
+moves into it. With `s` open on a short screen the page keeps the row under
+the cursor and the block states the rule, the samples and the queries only.
+
+A query under `s` is there to be read and run again, so one that is wider
+than the line is written on as many lines as it needs, broken after a comma
+where it can be. Only where that would cost the page its strips or its
+`next` line (60 columns in a 24-row terminal) is each query one line, cut
+where the line ends and marked with `…`; `a` on a taller screen shows them
+whole.
 
 ## What is read
 
@@ -52,15 +132,17 @@ Nothing is written anywhere.
 ## The rollout time and the windows
 
 The rollout time is the creation time of the revision's ReplicaSet or
-ControllerRevision. The header shows which revision is compared, how many are
-retained, and the exact time.
+ControllerRevision. The title shows which revision is compared and how many
+are retained; the marker row over the strips shows the exact time and the
+width compared on each side.
 
 - Both windows have the same width. The default is 30 minutes.
 - The after window ends at the read time, or at the next rollout when a later
   one exists. The before window never reaches back past the previous rollout.
-  When either limit makes the windows narrower than asked, the header says so
-  and why, for example `12m each (asked 30m; the rollout was 12m before this
-  read)`.
+  When either limit makes the windows narrower than asked, `s` and the table
+  of all detail say so and why, for example `12m each (asked 30m; the rollout
+  was 12m before this read)`; the marker row says `(asked 30m)` where it has
+  room.
 - Less than one minute on a side is not compared.
 - A revision created *before* the revision it replaced is a rollback onto an
   older ReplicaSet. Kubernetes does not record when a rollback happened, so no
@@ -68,9 +150,10 @@ retained, and the exact time.
   rollout.
 - Revisions pruned by the workload's history limit cannot be shown.
 
-The header also states the source, the read time, the sample step (chosen by
-the shared client so a query asks for at most 120 sample times) and the range
-every rate is taken over: four steps, at least two minutes.
+The title states the read time and how many of the nine queries were
+answered. `s` states the source, the sample step (chosen by the shared client
+so a query asks for at most 120 sample times) and the range every rate is
+taken over: four steps, at least two minutes.
 
 ## What changed
 
@@ -112,9 +195,15 @@ After-samples whose rate range still reaches back across the rollout would
 blend both sides. They are left out of the numbers (the detail pane counts
 them) but still drawn in the trend.
 
-The trend column shows the before half, a rollout mark, and the after half on
-one shared scale from zero. A blank cell had no sample. With `noIcons` the
-trend uses the ASCII ramp `_.:-=+*#` and `|`.
+On the calm page the strip of a row is the value of every sample on one
+scale from zero to the row's largest sample, over both windows. A sample
+further from the before value than the rule allows, in the direction the
+signal moved, is in the row's colour; every other sample is dim. A column
+without a sample is `×`. In the table of all detail (`a`) the trend column
+shows the before half, a rollout mark, and the after half on the same kind
+of scale; a blank cell had no sample. With `noIcons` both use the ASCII ramp
+`_.:-=+*#`; the rollout is `v` over the strips and `|` through the rows and
+in the table.
 
 ### Metric names for HTTP signals
 
@@ -162,8 +251,9 @@ floor **and 10 % of the before value**:
 
 A changed signal is `worse` or `better` when it has a direction and `higher`
 or `lower` when it is neutral; otherwise it is `unchanged`. The rule is shown
-next to the selected signal. Worse rows carry a `!` as well as the word, so
-the meaning does not depend on colour.
+for the selected signal under `s`. On the calm page the group label says the
+verdict; in the table worse rows carry a `!` as well as the word. The
+meaning does not depend on colour in either.
 
 Signals that were not compared say why, and show `-` rather than a number:
 

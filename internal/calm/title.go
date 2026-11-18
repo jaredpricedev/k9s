@@ -28,6 +28,10 @@ type Title struct {
 	// at its end: the end of a generated name (a Pod's) is what tells it
 	// from its siblings.
 	KeepEnd bool
+	// Verb and Unit are the words of the status of a page that does
+	// something other than read queries: "sent" and "requests" write
+	// "sent 14:02 · 15 of 15 requests". Empty is "read" and "queries".
+	Verb, Unit string
 }
 
 // status is what is known about the read, in its forms from full to short,
@@ -40,12 +44,19 @@ func (t Title) status(o Options) (forms []string, complete bool) {
 		return []string{"not read"}, false
 	}
 	clock := t.Read.UTC().Format("15:04")
+	verb, unit := t.Verb, t.Unit
+	if verb == "" {
+		verb = "read"
+	}
+	if unit == "" {
+		unit = "queries"
+	}
 	if t.Total <= 0 {
-		return []string{"read " + clock, clock}, true
+		return []string{verb + " " + clock, clock}, true
 	}
 	done, total := strconv.Itoa(t.Done), strconv.Itoa(t.Total)
 	return []string{
-		"read " + clock + o.sep() + done + " of " + total + " queries",
+		verb + " " + clock + o.sep() + done + " of " + total + " " + unit,
 		clock + o.sep() + done + "/" + total,
 		done + "/" + total,
 	}, t.Done >= t.Total

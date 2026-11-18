@@ -8,6 +8,7 @@ import (
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
+	"github.com/mattn/go-runewidth"
 )
 
 // The incident views (:slow, :graph and its per-Pod page, :probe, :impact,
@@ -43,4 +44,75 @@ func calmPalette(p config.SemanticPalette) calm.Palette { //nolint:gocritic // T
 // colours, and plain characters with noIcons.
 func calmOptions(app *App) calm.Options {
 	return calm.Options{ASCII: app.Config.K9s.UI.NoIcons, Palette: calmPalette(app.Styles.Semantic())}
+}
+
+// calmHeight is the rows a calm page is planned for. A view that has not
+// been drawn yet has no height: its page is then planned without a limit.
+func calmHeight(height int) int {
+	if height <= 0 {
+		return 1 << 10
+	}
+	return height
+}
+
+// tviewCells is the width of plain text in terminal cells.
+func tviewCells(text string) int { return runewidth.StringWidth(text) }
+
+// calmInsert puts a block of the view's own lines between the evidence of
+// a rendered page and its keys, with one blank row beside it when gap is
+// set. The page is planned for the height less the block and that row. A
+// page too small for its evidence takes no block.
+func calmInsert(rendered calm.Rendered, block []string, gap, tooSmall bool) []string {
+	lines := rendered.Lines()
+	if len(block) == 0 || tooSmall {
+		return lines
+	}
+	at := len(lines)
+	if len(rendered.Keys) > 0 {
+		for index := len(lines) - 1; index >= 0; index-- {
+			if lines[index] == rendered.Keys[0] {
+				at = index
+				break
+			}
+		}
+	}
+	out := append(make([]string, 0, len(lines)+len(block)+1), lines[:at]...)
+	if !gap {
+		// No row to spare: the block starts with its own heading.
+		return append(append(out, block...), lines[at:]...)
+	}
+	if at > 0 && lines[at-1] != "" {
+		// A page that gave its blank rows up has none over the keys: the
+		// block is set off from the evidence instead.
+		out = append(append(out, ""), block...)
+	} else {
+		out = append(append(out, block...), "")
+	}
+	return append(out, lines[at:]...)
+}
+
+// calmKeepSelected keeps the selected row on a page that left the last
+// rows of its group out: the rows of the group are turned so that the
+// selected one is the last of those drawn, as a list scrolls to its
+// cursor. It reports whether it moved a row; the page is then planned
+// again, because the columns are measured from the rows that are drawn.
+func calmKeepSelected(page *calm.Page, plan *calm.Plan) bool {
+	moved := false
+	for index := range page.Groups {
+		rows := page.Groups[index].Rows
+		shown := plan.Rows[index]
+		if plan.Folded[index] || plan.Hidden[index] || shown <= 0 || shown >= len(rows) {
+			continue
+		}
+		for at := shown; at < len(rows); at++ {
+			if !rows[at].Selected {
+				continue
+			}
+			turned := append(make([]calm.Row, 0, len(rows)), rows[at-shown+1:at+1]...)
+			turned = append(append(turned, rows[:at-shown+1]...), rows[at+1:]...)
+			page.Groups[index].Rows, moved = turned, true
+			break
+		}
+	}
+	return moved
 }

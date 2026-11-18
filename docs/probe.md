@@ -16,16 +16,31 @@ Select a Service, Deployment, StatefulSet, DaemonSet, ReplicaSet or Pod and
 press `Shift-B`, type `:probe`, or pick "Probe" in the action palette
 (`Ctrl-O`).
 
-Opening the view reads Kubernetes objects and sends nothing to any Pod. It
-lists the Pods, the node and zone of each, and the request that would be
-sent. The header says "Nothing has been sent" until you send something.
+Opening the view reads Kubernetes objects and sends nothing to any Pod. The
+page is one block: "Nothing has been sent." in bold, one sentence that says
+what `r` would send, how often and that you are asked first, one dim line
+that says it is each Pod's own declared probe and that the application will
+see it, and the Pods it would go to with the node and zone of each (`WOULD
+BE ASKED`). How the requests are paced and what opening the view read are in
+the question `r` asks and under `a`. The title says "nothing sent" until you
+send something. When the API server says this user may not use `pods/proxy`
+the page says "Not allowed." with the missing rule, and the Pods are listed
+as `NOT ASKED`: `r` sends nothing.
+
+The view is laid out the calm way ([presentation.md](presentation.md#calm-layout-the-standard-for-incident-views)):
+the answer first, one row per Pod, two lines of keys. `a` shows the table
+and the result pane the view had before, with every column, every time and
+every status code; `a` again returns to the calm page. `a` changes what is
+drawn and nothing else: it sends nothing and the question before a request
+is the same from either layout.
 
 | Key | What it does |
 | --- | --- |
 | `r` | Run. The first time, and whenever the request changed, a dialog states what will be sent and waits for your answer. The same request runs again without a second question. |
 | `+` / `_` | More / fewer requests per Pod for the next run, through 1, 3, 5 (default), 10, 20 and 30. The digits are not used: they are the window keys of `:slow`, `:graph` and the dashboards, and a probe has no window. `-` is the application's last-view key. |
 | `u` | Switch between the Pods' declared readiness and liveness probe, when they declare both. Times for another path are not comparable, so the runs of one probe are put aside while the other is shown and come back when you switch back; the two are never shown together. |
-| Up / Down, `j` / `k` | Move between Pods. The line under the table states every time, the status codes, the node and zone and the declared probe of the Pod under the cursor. |
+| Up / Down, `j` / `k` | Move between Pods, in the order on screen: the Pods that stand out first. The first key line names the Pod the keys act on (`Enter open …-hx4mt`). With all detail (`a`) the line under the table states every time, the status codes, the node and zone and the declared probe of the Pod under the cursor. |
+| `a` | All detail: the table with fastest, median, slowest, unanswered count, status codes, node and zone, the run before as a dimmer row under each Pod, every sentence of the result and the long form of what the time means. Press again for the calm page. |
 | `Enter` | Open the Pod under the cursor in the Pod list. |
 | `m` | Graph that Pod ([graphs.md](graphs.md)). |
 | `t` | Timeline of that Pod. |
@@ -33,9 +48,10 @@ sent. The header says "Nothing has been sent" until you send something.
 | `Shift-W` | Open `:slow` ([slow-requests.md](slow-requests.md)) for the selection the probe was opened for, whichever Pod the cursor is on: the same key as on a Service row. From `:slow`, `Shift-B` opens this view. |
 | `Esc` | Cancel a running probe. When nothing is running, go back. A request that was in flight at that moment has left: it is counted as sent, drawn as `?` and reported as abandoned, because the application may still handle it. Only requests that never left are "not sent". |
 
-After a run, `r` runs again and keeps the run before it as a dimmer row under
-each Pod, so that a Pod which was slow in one run and fast in the next is
-visible as exactly that.
+After a run, `r` runs again and keeps the run before it as a dimmer strip on
+the same row, after this run's and named once over the rows (`this run
+previous 14:02:11Z`), so that a Pod which was slow in one run and fast in
+the next is visible as exactly that.
 
 ## What is sent, and what is never sent
 
@@ -113,9 +129,66 @@ Service. So:
 
 ## Reading the result
 
-Each Pod has one row: a strip with one cell per request in the order they
-were sent, the fastest, median and slowest answer, how many got no answer
-within the deadline, the status codes, the node and zone, and one word.
+The calm page states the result top to bottom:
+
+```text
+Probe  Service gitlab/gitlab-webservice-default · GET :8080/-/readiness ×5 per pod        sent 23:00 · 15 of 15 requests
+
+  Only …-hx4mt answered slowly: median 2.71s against 23.9ms for its 2 peers; 1 of 5 had no answer within 5s.
+  The other 2 Pods answered all 10 requests in 37.4ms or less.        A difference between Pods now, not proof of cause.
+
+                                  this run    previous 23:00:29Z
+  SLOWER THAN ITS PEERS                                           median
+> …-hx4mt  worker-f study-zone-c  × ▅ ▇ ▄ ▆   ▄ ▆ ▇ ▅ ▆           2.71s   peers 23.9ms  OUTLIER
+
+  LIKE THEIR PEERS
+  …-2bq7k  worker-d study-zone-a  ▁ ▁ ▁ ▁ ▁   ▁ ▁ ▁ ▁ ▁           26.2ms
+  …-8wzpd  worker-e study-zone-b  ▁ ▁ ▁ ▁ ▁   ▁ ▁ ▁ ▁ ▁           21.5ms
+
+  MEASURED  API server → Pod, not ingress or Service: a slow Pod, not a slow path · full bar █ = 4s · floor 21.5ms (fastest Pod)
+
+  next  Enter open …-hx4mt    m graph its CPU    r run again    W slow requests by hop
+
+  ↑↓ pod · a every time and status code · +/_ ×5 per pod · u liveness probe · t timeline · m graph · D Grafana · Esc back
+```
+
+- **The answer** is the first sentence of the result, bold, and the one
+  that qualifies it most: why a run ended early comes before how the other
+  Pods answered. The caveat is dim at its end. While a probe is sending the
+  first sentence says so and that nothing under it is final. Every sentence
+  of the result is under `a`.
+- **One row per Pod**: the end of its name, which tells it from its
+  siblings, its node and zone, one cell per request in the order they were
+  sent, its median, what the median is held against and its word. The run
+  before is the dimmer strip on the same row.
+- **Groups**: `SLOWER THAN ITS PEERS` (`OUTLIER`, `SPIKES`) and `NO ANSWER
+  OR AN ERROR` (`NO ANSWER`, `TIMEOUTS`, `ERRORS`) come first and in their
+  colour; `LIKE THEIR PEERS`, or `ANSWERED` when there are too few Pods to
+  compare, are dim; `NO OUTCOME` holds Pods a canceled run sent nothing
+  to or got nothing back from; `NOT CONTACTED` lists a Pod the plan sends
+  nothing to with its reason; `NOT READ` is what the plan could not list
+  (Pods beyond the limit, zones). While a probe is sending the Pods stay in
+  one group, `ANSWERS SO FAR`, in the order of the plan, so no row moves
+  under the eye.
+- **`MEASURED`** is the one line that says what the time covers: the path,
+  the scale of the strips and the floor, which is the median of the fastest Pod. It is never left out. The long
+  form is under `a` and in [What the time means](#what-the-time-means).
+
+What a smaller screen gives up, in order: in an 80x24 terminal nothing but
+the blanks between the cells of two runs and what the median is held
+against (`peers 23.9ms`); one run keeps both. At 60 columns the zone is
+shortened, then the run before is left out and the page says so (`not shown
+at this size (a shows all): previous 23:00:29Z`). With more Pods than rows
+the last peers are left out and counted, never the Pod that stands out, and
+the rows turn to keep the cursor on screen. Under about 44 columns the Pod
+names shorten and the word goes; the group label still says it.
+
+### With all detail
+
+`a` shows the table. Each Pod has one row: a strip with one cell per request
+in the order they were sent, the fastest, median and slowest answer, how
+many got no answer within the deadline, the status codes, the node and
+zone, and one word. The run before is a dimmer row under it.
 
 The width is spent in a fixed order: the Pod, its median and the word always
 remain; then the strip, the slowest answer, the unanswered count and the
@@ -127,8 +200,8 @@ at 80 columns thirty stand side by side. Whatever a column leaves out is in
 the line under the table for the Pod under the cursor: every time, every
 status code, the node and the zone.
 
-The strip uses one scale for every row, stated in the header as
-"full bar █ = 4s". The height of a bar is the time to the first byte. A
+The strip uses one scale for every row, stated on the `MEASURED` line and in
+the header of the table as "full bar █ = 4s". The height of a bar is the time to the first byte. A
 request without an answer is drawn as `×`, one the API server could not
 deliver as `!`, one that is in flight as `~`, one that was in flight when the
 run was canceled as `?`, and one that was never sent as `·`; none of them is
@@ -152,8 +225,9 @@ number. A Pod name that does not fit is cut at a dash and keeps its end.
 | `canceled` | Requests left for it and the run was canceled before any of them had an outcome. |
 | `not contacted` | The plan sends nothing to this Pod; the reason follows. |
 
-A row that needs attention starts with `!`, and the selected row with `>`,
-so the meaning does not depend on colour.
+In the table a row that needs attention starts with `!`, and the selected
+row with `>`. On the calm page the group label and the word carry it, so the
+meaning does not depend on colour in either.
 
 "Far above" is the peer-outlier rule of the chart package (median and median
 absolute deviation, at least three Pods, at least twice the median of the group)
@@ -226,9 +300,12 @@ that is unknown, not "no zone".
 The logic (which request a Pod declares, the plan and its limits, the order
 and bounds of a run, the numbers, the outlier rule, the sentences, the
 transport against a local HTTP server, the Kubernetes reads against a fake
-client) is covered by `internal/probe/probe_test.go`. The view is covered by
-`internal/view/probe_test.go` with terminal-cell frames at 132, 120, 80 and
-60 columns and with `noIcons`. It was run against the synthetic loopback
+client) is covered by `internal/probe/probe_test.go`. The calm page is covered by
+`internal/view/probe_calm_test.go` and the table of all detail by
+`internal/view/probe_test.go`, both with terminal-cell frames at 132, 120,
+80 and 60 columns and with `noIcons`; the first also holds that `a` sends
+nothing and that the question before a request is the same from either
+layout. It was run against the synthetic loopback
 fixture (`scripts/operator-study-fixture.py`, with and without
 `--deny-pod-proxy`), whose third webservice Pod answers its readiness path
 in seconds. It has not been run against a real cluster.

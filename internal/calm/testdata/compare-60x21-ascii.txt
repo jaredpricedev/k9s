@@ -17,5 +17,5 @@ Compare pods  Deployment gitlab-... | last 1h  14:57 | 13/13
   UTC            14:00       14:30       15:00
   ALSO DIFFERS  CPU usage (1.5 cores, peers 0.4)
   SAME ON ALL 3  memory | restarts | errors | network
-  not shown at this size (a shows all): 1 of 3 rows of RE...
+  not shown (a shows all): 1 of 3 rows of REQUESTS WAITIN...
   next  Enter open hx4mt  g group by node / revision / zone

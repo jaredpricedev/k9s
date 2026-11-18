@@ -33,6 +33,8 @@ var impactRolloutAt = time.Date(2026, 11, 17, 4, 20, 0, 0, time.UTC)
 type impactSource struct {
 	answers map[string][2]float64
 	status  observability.Status
+	// steady keeps the latency histogram as it was before the rollout.
+	steady bool
 }
 
 func (s *impactSource) QueryRange(_ context.Context, e observability.Expr, start, end time.Time) observability.PromResult {
@@ -56,6 +58,9 @@ func (s *impactSource) QueryRange(_ context.Context, e observability.Expr, start
 	}
 	if strings.Contains(query, "_bucket") {
 		for le, values := range map[string][2]float64{"0.1": {30, 2}, "0.25": {39.7, 10}, "0.5": {40, 20}, "2.5": {40, 41.6}, "+Inf": {40, 42}} {
+			if s.steady {
+				values[1] = values[0]
+			}
 			result.Series = append(result.Series, observability.PromSeries{Labels: map[string]string{"le": le}, Samples: sample(values)})
 		}
 		return result
@@ -124,9 +129,29 @@ func impactViewFixture(t *testing.T) *impactView {
 	return v
 }
 
+func impactPress(t *testing.T, v *impactView, key tcell.Key) {
+	t.Helper()
+	action, ok := v.actions.Get(key)
+	require.True(t, ok)
+	action.Action(nil)
+}
+
+// impactDetail presses a until the view shows the table and detail pane
+// it had before the calm layout (on), or the calm page again.
+func impactDetail(t *testing.T, v *impactView, on bool) {
+	t.Helper()
+	if v.allDetail != on {
+		impactPress(t, v, calmDetailKey)
+	}
+	require.Equal(t, on, v.allDetail)
+}
+
+// The table of all detail (a): every signal with its numbers and verdict,
+// and the pane of the selected one.
 func TestImpactFramesStateBeforeAfterAndVerdictAtEverySize(t *testing.T) {
 	v := impactViewFixture(t)
 	v.accept(impactStoryRead(t, impactStory()))
+	impactDetail(t, v, true)
 	// 80x20 and 60x20 are what the app leaves the view on an 80x24 or
 	// 60x24 terminal.
 	for _, size := range [][2]int{{120, 34}, {80, 24}, {80, 20}, {60, 20}, {40, 8}} {
@@ -183,6 +208,10 @@ func TestImpactFramesStateBeforeAfterAndVerdictAtEverySize(t *testing.T) {
 			require.NotContains(t, frame, "before│after", "the trend gives way before signal, before, after or verdict")
 			require.Contains(t, frame, "n/N rollout")
 		}
+		// The key line names a as the way back to the calm page.
+		require.Regexp(t, `a less( detail)? · Esc`, frame)
+		// It keeps naming the key that reads again, down to 60 columns.
+		require.Regexp(t, `r (re-)?read · a less`, frame, "%d columns", size[0])
 	}
 }
 
@@ -190,6 +219,7 @@ func TestImpactNoIconsUsesASCIIOnly(t *testing.T) {
 	v := impactViewFixture(t)
 	v.app.Config.K9s.UI.NoIcons = true
 	v.accept(impactStoryRead(t, impactStory()))
+	impactDetail(t, v, true)
 	frame := drawnText(t, v, 100, 30)
 	require.Contains(t, frame, "before|after")
 	require.Contains(t, frame, "Z | after 04:20:00")
@@ -203,6 +233,7 @@ func TestImpactNoIconsUsesASCIIOnly(t *testing.T) {
 
 func TestImpactStatesWhatCouldNotBeReadInsteadOfShowingZeros(t *testing.T) {
 	v := impactViewFixture(t)
+	impactDetail(t, v, true)
 	frame := drawnText(t, v, 80, 24)
 	require.Contains(t, frame, "Impact / Deployment apps/checkout-api")
 	require.Contains(t, frame, "Bounded, read-only, and only because this view was opened.")
@@ -273,6 +304,7 @@ func TestImpactReadNeedsADeclaredSourceButStillStatesTheRollout(t *testing.T) {
 	require.Empty(t, read.report.Outcomes)
 	v := impactViewFixture(t)
 	v.accept(&read)
+	impactDetail(t, v, true)
 	frame := drawnText(t, v, 100, 30)
 	require.Contains(t, frame, "nothing was read from the source: no Prometheus source is declared")
 	require.Contains(t, frame, "rev 2 changed: image v1 -> v2; limits.memory 512Mi -> 256Mi; env +FEATURE_FLAGS")
@@ -341,6 +373,8 @@ func TestImpactKeysReadOnlyOnRequestAndDiscardLateReplies(t *testing.T) {
 	press(ui.KeyR)
 	require.Equal(t, call{0, 5 * time.Minute}, next())
 	require.True(t, v.loading)
+	require.Contains(t, v.calm.GetText(true), "reading again; this comparison is retained")
+	impactDetail(t, v, true)
 	require.Contains(t, v.header.GetText(true), "Reading again; the comparison below is retained")
 
 	generation := v.generation
@@ -426,9 +460,18 @@ func TestImpactWarnsWhenTheRevisionListWasCut(t *testing.T) {
 	read := impactStoryRead(t, impactStory())
 	read.incomplete = "Only the first 200 ReplicaSets were read (limit 200): a later rollout may be missing."
 	v.accept(read)
-	for _, size := range [][2]int{{100, 30}, {80, 20}, {60, 20}} {
-		frame := drawnText(t, v, size[0], size[1])
-		require.Contains(t, frame, "Only the first 200 ReplicaSets were read (limit 200)", "%dx%d", size[0], size[1])
-		require.Contains(t, frame, "Error ratio", "%dx%d", size[0], size[1])
+	// On the calm page the warning is the first sentence, before the one
+	// that states the comparison; in the table of all detail it is the
+	// line under the title.
+	for _, detail := range []bool{false, true} {
+		impactDetail(t, v, detail)
+		for _, size := range [][2]int{{100, 30}, {80, 20}, {60, 20}} {
+			frame := drawnText(t, v, size[0], size[1])
+			require.Contains(t, frame, "Only the first 200 ReplicaSets were read (limit 200)", "%dx%d", size[0], size[1])
+			require.Contains(t, frame, "Error ratio", "%dx%d", size[0], size[1])
+			if !detail {
+				require.Less(t, strings.Index(frame, "Only the first 200"), strings.Index(frame, "After rev 2"), "the warning comes before any number")
+			}
+		}
 	}
 }

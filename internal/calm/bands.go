@@ -19,6 +19,12 @@ type Bands struct {
 	// and on the axis. They are stated as slowpath states them: a sample
 	// that crossed its rule stands for the step that ends at it.
 	Episodes []chart.Interval
+	// Guide draws an episode that has no length as a guide through every
+	// row too, in the colour of its marker. It is for a moment that
+	// divides the window in two, such as the rollout of :impact: one
+	// shaded column is not seen. In a strip the guide stands in place of
+	// the level of its column, which holds samples of both sides.
+	Guide bool
 	// Marks are labelled moments, such as a rollout: a guide through the
 	// rows, the key on the axis and one legend line each.
 	Marks []chart.Mark
@@ -33,6 +39,27 @@ func (b Bands) Any() bool { return len(b.Episodes) > 0 }
 
 // Columns reports, per column of the frame, whether an episode touches it.
 func (b Bands) Columns(f chart.Frame) []bool { return f.Marked(b.Episodes) }
+
+// moments are the columns of the episodes that have no length, when they
+// are drawn as guides.
+func (b Bands) moments(f chart.Frame) map[int]bool {
+	var out map[int]bool
+	if !b.Guide {
+		return nil
+	}
+	for _, episode := range b.Episodes {
+		if episode.End.After(episode.Start) {
+			continue
+		}
+		if col, ok := f.Col(episode.Start); ok {
+			if out == nil {
+				out = map[int]bool{}
+			}
+			out[col] = true
+		}
+	}
+	return out
+}
 
 // MarkerRow is the row above a block that marks the episodes: the label at
 // the left of the strip column and one marker per column an episode
@@ -183,6 +210,10 @@ func (b Bands) shade(row []glyph, f chart.Frame, l Layout, o Options) (out []gly
 	guide, cursor := guideGlyph, cursorGlyph
 	if o.ASCII {
 		guide, cursor = guideASCII, cursorASCII
+	}
+	for col := range b.moments(f) {
+		guides[col] = cell{r: guide, k: look{color: o.Palette.Warn}}
+		last = max(last, col)
 	}
 	for _, mark := range b.Marks {
 		if col, ok := f.Col(mark.T); ok {
