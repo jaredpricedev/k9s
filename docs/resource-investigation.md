@@ -214,7 +214,12 @@ start of each alert about the scope is one more kind of entry
 ([alerts.md](alerts.md#alerts-in-timeline)). With a Pod, Deployment, ReplicaSet, StatefulSet,
 DaemonSet or Job selected it follows that workload and what it depends on. With
 nothing suitable selected it covers the active namespace, and `:timeline <ns>`
-names a namespace directly. It needs one namespace: in all-namespaces mode with
+names a namespace directly. A selected object that is not a workload (a
+Service row, or `t` on the Pod comparison of a Service) gives the timeline of
+its namespace: the title names the namespace, and one muted line under it
+says why (`Selected services is not a workload; showing its namespace`), so
+the title keeps the form it has on every calm page and is not cut for a
+note. It needs one namespace: in all-namespaces mode with
 no selection the action is listed as unavailable and says why, and
 `:timeline all` is refused. For a namespace scope the namespace object is read
 too: lists in a namespace that does not exist succeed with no items, so a

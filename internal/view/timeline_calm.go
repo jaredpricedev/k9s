@@ -819,9 +819,9 @@ func (v *timelineView) calmTitle(st *timelineStory) calm.Title {
 	if v.scope.Kind != "" {
 		object = calmObject(v.app.Config.ActiveNamespace(), v.scope.Kind, v.scope.Namespace, v.scope.Name)
 	}
-	if v.scopeNote != "" {
-		object += " (" + v.scopeNote + ")"
-	}
+	// Why the page is about a namespace when something else was selected
+	// is said under the title (calmNotice): the title names the object,
+	// the window and how much was read, as on every calm page.
 	title := calm.Title{View: timelineTitle, Object: object, KeepEnd: v.scope.Kind == "Pod", Unit: "sources"}
 	if st != nil {
 		s := st.s
@@ -849,13 +849,19 @@ func (v *timelineView) calmTitle(st *timelineStory) calm.Title {
 	return title
 }
 
-// calmNotice is what is true of the page as a whole and is not evidence.
+// calmNotice is what is true of the page as a whole and is not evidence:
+// a warning first, else why the page is about a namespace when what was
+// selected is not a workload. The second is not a warning and is muted.
 func (v *timelineView) calmNotice(o calm.Options) (text, color string) { //nolint:gocritic // Options are passed by value, as the kit takes them.
 	switch {
 	case !v.contextCurrent():
 		return "Context changed; this observation is retained. Reopen the timeline for the current context.", o.Palette.Warn
 	case !v.loading && v.refreshFailure != "" && v.snapshot != nil:
 		return "Re-read failed, the earlier observation is shown: " + v.refreshFailure, o.Palette.Warn
+	case v.scopeNote != "":
+		// The words of the note, as the header under a has them; a Service
+		// row at 60 columns holds them whole.
+		return strings.ToUpper(v.scopeNote[:1]) + v.scopeNote[1:], ""
 	}
 	return "", ""
 }
