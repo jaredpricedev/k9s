@@ -1246,5 +1246,18 @@ func graphCompareReport(c *graphCompare) string {
 	b.WriteString("  node and revision come from the kube_pod_info labels node and created_by_name; zone from kube_node_labels; container from the series.\n")
 	b.WriteString("  A group is drawn as the median of its Pods with thin lines for their minimum and maximum, computed here from the per-Pod series.\n")
 	b.WriteString("  A Pod whose label is missing is drawn in a group of its own named \"not known\", never left out.\n")
+	b.WriteString("\nTHE SHORT PAGE (the default; a shows a chart per Pod and every signal, a again returns)\n")
+	b.WriteString("  Each signal in which a Pod is an OUTLIER by the rule above is a group of rows, one row per Pod (or per group, with g). " +
+		"The signal whose Pod is furthest from the median of its peers, as a share of the larger of the two values, comes first. " +
+		"Signals that have no room as a group are named in one line: ALSO DIFFERS, or ALIKE when no Pod is an OUTLIER in them. ALIKE is not \"identical\", " +
+		"and it is said of the Pods that have samples in the signal: where some have none the line counts those that have (3 of 4 pods sampled), " +
+		"and the answer says \"its peers\" instead of \"the other 3\".\n")
+	fmt.Fprintf(&b, "  The row of a Pod that differs is drawn in its colour at the samples at which it is outside the range of the other Pods, "+
+		"at least the signal's noise floor from their median, and at least %.0f times that median or at most 1/%.0f of it. Every other sample is the baseline; × is a time without a sample.\n",
+		chart.DefaultPeerRatio, chart.DefaultPeerRatio)
+	b.WriteString("  The ▼ columns and the shading behind them are the episodes of the view the page was opened from (:slow), while the window shown lies inside the one that view read. " +
+		"Otherwise they are the samples at which the marked row (>) is apart from the others; ↑ and ↓ mark another signal. They state when, not why.\n")
+	b.WriteString("  Under a moved cursor the number of each row is its sample at the cursor, and the word over the numbers is that time. " +
+		"The number column is as wide as the widest of those samples, so the strips stay where they are when the cursor moves.\n")
 	return b.String()
 }

@@ -676,7 +676,8 @@ func TestGraphViewComparisonKeysReadOnRequestOnly(t *testing.T) {
 		action.Action(tcell.NewEventKey(k, 0, tcell.ModNone))
 	}
 	asked := len(fake.asked)
-	require.Contains(t, drawnText(t, v, 100, 24), "p per pod · g regroup")
+	// The calm page of the charts names the key in its line of next steps.
+	require.Contains(t, drawnText(t, v, 100, 24), "next  p compare the pods")
 	require.Zero(t, reads.Load(), "the overlaid charts read nothing per Pod")
 
 	key(ui.KeyP)
@@ -684,13 +685,20 @@ func TestGraphViewComparisonKeysReadOnRequestOnly(t *testing.T) {
 	require.Contains(t, drawnText(t, v, 132, 33), "Reading every signal once per Pod")
 	deliver()
 	require.Empty(t, v.busy)
-	frame := drawnText(t, v, 132, 33)
-	require.Contains(t, frame, "CPU THROTTLED by pod")
-	require.Contains(t, frame, "hx4mt · worker-f")
+	require.Contains(t, drawnText(t, v, 132, 33), "Compare pods  Deployment gitlab/web · 4 pods · last 1h")
 	require.Len(t, fake.asked, asked+10, "the three per-Pod series the charts already hold are not asked again")
 
-	// n and N cycle the signal, the cursor moves across every chart, and
-	// neither reads anything.
+	// a is the page with a chart per Pod, as it always was. There n and N
+	// cycle the signal in the order they are read in, the cursor moves
+	// across every chart, and neither reads anything.
+	key(calmDetailKey)
+	frame := drawnText(t, v, 132, 33)
+	require.Contains(t, frame, "QUEUED by pod", "the signal the calm page marked")
+	require.Contains(t, frame, "hx4mt · worker-f")
+	for range 4 {
+		key(ui.KeyN)
+	}
+	require.Contains(t, drawnText(t, v, 132, 33), "CPU THROTTLED by pod", "after the last signal comes the first")
 	key(ui.KeyN)
 	require.Contains(t, drawnText(t, v, 132, 33), "CPU by pod")
 	key(ui.KeyShiftN)
@@ -702,6 +710,14 @@ func TestGraphViewComparisonKeysReadOnRequestOnly(t *testing.T) {
 		left.Action(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModShift))
 	}
 	require.Contains(t, drawnText(t, v, 132, 33), "Cursor 04:30:00Z, 30m before window end · hx4mt 86%")
+	// The calm page reads the same sample: the number of each row is its
+	// value under the cursor, and over the numbers is the time it reads.
+	key(calmDetailKey)
+	frame = drawnText(t, v, 132, 33)
+	require.Regexp(t, `P99 · Rails request duration, 99th percentile .* 04:30:00\n`, frame)
+	require.Regexp(t, `  CPU THROTTLED[ ┆]*\n> hx4mt`, frame, "the signal the other page was on is the one marked")
+	require.Regexp(t, `> hx4mt  worker-f  [▁-█]+  86% +differs\n`, frame)
+	key(calmDetailKey)
 	require.EqualValues(t, 1, reads.Load())
 
 	// g regroups; by container asks the per-container series once.
@@ -714,6 +730,12 @@ func TestGraphViewComparisonKeysReadOnRequestOnly(t *testing.T) {
 	require.Contains(t, drawnText(t, v, 132, 33), "webservice · 4 pods")
 	key(ui.KeyG)
 	require.Contains(t, drawnText(t, v, 132, 33), "CPU by revision")
+	// The calm page is regrouped with it: one row per revision.
+	key(calmDetailKey)
+	frame = drawnText(t, v, 132, 33)
+	require.Contains(t, frame, "Deployment gitlab/web · 4 pods · by revision · last 1h")
+	require.Regexp(t, `> 6f9c7d5b84  3 pods  [▁-█]+  1\.47 +hx4mt  differs\n`, frame, "under the cursor the group reads the Pod that differs")
+	key(calmDetailKey)
 	key(ui.KeyShiftG)
 	key(ui.KeyShiftG)
 	require.Contains(t, drawnText(t, v, 132, 33), "CPU by pod")
@@ -729,25 +751,44 @@ func TestGraphViewComparisonKeysReadOnRequestOnly(t *testing.T) {
 	typed := tcell.NewEventKey(tcell.KeyRune, 'g', tcell.ModNone)
 	require.Equal(t, typed, regroup.Action(typed))
 	require.Equal(t, graphByPod, v.grouping)
+	require.Contains(t, v.text.GetText(true), "THE SHORT PAGE (the default; a shows a chart per Pod and every signal, a again")
 	queries.Action(nil)
 	key(ui.KeyP)
 	require.Contains(t, drawnText(t, v, 132, 33), "MEMORY  a ")
+	// Back on the charts, n steps the chart and no longer opens the
+	// comparison: p does.
+	key(ui.KeyN)
+	require.False(t, v.comparing)
 
-	// The header names the three keys only where there are Pods to compare.
-	for k, want := range map[tcell.Key]string{ui.KeyP: "Per pod", ui.KeyN: "Next signal", ui.KeyG: "Regroup"} {
+	// The header names the keys: the three of the comparison only where
+	// there are Pods to compare, and a for all detail.
+	for k, want := range map[tcell.Key]string{ui.KeyP: "Per pod", ui.KeyN: "Next signal", ui.KeyG: "Regroup", calmDetailKey: calmDetailLabel} {
 		action, _ := v.actions.Get(k)
 		require.Equal(t, want, action.Description)
 		require.True(t, action.Opts.Visible)
 		require.Positive(t, action.Opts.Priority)
 	}
+	// Tab and Enter are named on the page where they apply, not in the
+	// header, where their usual place would put them first.
+	for _, k := range []tcell.Key{calmNextChartAltKey, tcell.KeyEnter} {
+		action, ok := v.actions.Get(k)
+		require.True(t, ok)
+		require.Negative(t, ui.PrimaryActionPriority(k, action.Opts.Priority), tcell.KeyNames[k])
+	}
 
 	pod, _, podReads, _ := compareViewFixture(t, graphPod)
-	for _, k := range []tcell.Key{ui.KeyP, ui.KeyG, ui.KeyN} {
+	for _, k := range []tcell.Key{ui.KeyP, ui.KeyG} {
 		action, ok := pod.actions.Get(k)
 		require.True(t, ok)
 		require.False(t, action.Opts.Visible, "one Pod has no peers, so the key is not advertised")
 		action.Action(tcell.NewEventKey(k, 0, tcell.ModNone))
 	}
+	// One Pod has charts to step through, and n says so.
+	next, ok := pod.actions.Get(ui.KeyN)
+	require.True(t, ok)
+	require.Equal(t, calmNextChartLabel, next.Description)
+	require.True(t, next.Opts.Visible)
+	next.Action(tcell.NewEventKey(ui.KeyN, 0, tcell.ModNone))
 	require.False(t, pod.comparing)
 	require.Zero(t, podReads.Load())
 }
@@ -989,13 +1030,22 @@ func TestGraphViewComparisonNeverCancelsAReadOfTheChartsAndResumesItsOwn(t *test
 		}
 	}
 
-	// n is named in the header on the overlaid charts too: it opens the
-	// comparison instead of doing nothing.
+	// n is named in the header on the overlaid charts too: there it makes
+	// the next chart the one at full size, and reads nothing. p opens the
+	// comparison.
+	shown := v.shown
 	key(ui.KeyN)
+	require.False(t, v.comparing)
+	require.NotEqual(t, shown, v.shown)
+	require.Empty(t, v.busy)
+	key(ui.KeyP)
 	require.True(t, v.comparing)
 	require.Equal(t, "Reading every signal once per Pod…", v.busy)
 	deliver()
-	require.Contains(t, drawnText(t, v, 132, 33), "CPU THROTTLED by pod")
+	require.Contains(t, drawnText(t, v, 132, 33), "> hx4mt  worker-f")
+	key(calmDetailKey)
+	require.Contains(t, drawnText(t, v, 132, 33), "QUEUED by pod")
+	key(calmDetailKey)
 
 	// While the charts are read again, g and p wait for that read: they
 	// neither cancel it nor read the comparison of the page being replaced.
@@ -1029,7 +1079,10 @@ func TestGraphViewComparisonNeverCancelsAReadOfTheChartsAndResumesItsOwn(t *test
 	reads.Store(3)
 	deliver()
 	require.True(t, v.compare.Containers)
-	require.Contains(t, drawnText(t, v, 132, 33), "CPU THROTTLED by container")
+	require.Contains(t, drawnText(t, v, 132, 33), "Deployment gitlab/web · 4 pods · by container · last 1h")
+	key(calmDetailKey)
+	require.Contains(t, drawnText(t, v, 132, 33), " by container")
+	key(calmDetailKey)
 	// A page that is complete reads nothing on return.
 	v.Stop()
 	v.Start()
@@ -1045,10 +1098,12 @@ func TestGraphViewComparisonNeverCancelsAReadOfTheChartsAndResumesItsOwn(t *test
 		<-failed.app.Flash().Channel()
 	}
 	v = failed
-	for _, k := range []tcell.Key{ui.KeyP, ui.KeyG, ui.KeyN} {
+	for _, k := range []tcell.Key{ui.KeyP, ui.KeyG} {
 		key(k)
 		require.Equal(t, "Nothing to compare: the read above did not succeed; r reads again", flashed())
 	}
+	key(ui.KeyN)
+	require.Equal(t, "No chart to step to: the read above did not succeed; r reads again", flashed())
 	require.False(t, failed.comparing)
 	require.Zero(t, failedReads.Load())
 }

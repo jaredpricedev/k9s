@@ -22,6 +22,7 @@ import (
 	"github.com/derailed/k9s/internal/ui"
 	"github.com/derailed/tcell/v2"
 	"github.com/derailed/tview"
+	"github.com/mattn/go-runewidth"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/dynamic"
@@ -79,6 +80,20 @@ type graphView struct {
 	// loadCompare reads the comparison for a snapshot; given an earlier
 	// comparison it only adds the per-container series to it.
 	loadCompare func(context.Context, *graphSnapshot, *graphCompare) *graphCompare
+
+	// The calm layout is the default page; detail is the page with every
+	// chart, which a toggles. main names the chart promoted to full size
+	// (empty: the rule's choice) and shown the one the last layout drew.
+	// episodes are the episodes of the view the comparison was opened
+	// from. peers is the page of rows of the calm comparison, peerPages
+	// how many there are, and open the Pod that Enter opens there.
+	// dropped is what the last calm layout gave up for the size.
+	detail           bool
+	main, shown      string
+	episodes         *graphEpisodes
+	peers, peerPages int
+	open             string
+	dropped          []string
 }
 
 func parseGraphWindow(text string) (time.Duration, bool) {
@@ -137,6 +152,11 @@ func (a *App) openGraphAt(target SelectedResourceTarget, window time.Duration, f
 	sources, restConfig := declaredSources(a), kubeRESTConfig(a)
 	objects, objectNote := graphObjectReader(a, t)
 	v := newGraphView(a, t, window)
+	if from, ok := a.Content.Top().(graphEpisodeSource); ok {
+		// The view the graph is opened from knows when its episodes were:
+		// the comparison holds its rows against them.
+		v.episodes = from.graphEpisodes()
+	}
 	if word, signal, _ := strings.Cut(focus, ":"); word == graphPodsWord {
 		// The caller arrives to compare Pods, optionally about one signal.
 		if !t.workload() {
@@ -328,15 +348,139 @@ func (v *graphView) Init(ctx context.Context) error {
 		}
 		return ""
 	}
+	// n and Shift-N step through what the page shows: the chart at full
+	// size, and on the per-Pod page the signal. One object has charts
+	// only, and the key says so.
+	next, previous := "Next signal", "Previous signal"
+	if !pods {
+		next, previous = calmNextChartLabel, "Previous chart"
+	}
 	v.actions.Bulk(ui.KeyMap{
-		ui.KeyP:      perPod,
-		ui.KeyN:      ui.NewKeyActionWithOpts("Next signal", charts(func() { v.stepSignal(1) }), opts(2)),
-		ui.KeyG:      ui.NewKeyActionWithOpts("Regroup", charts(func() { v.regroup(1) }), opts(3)),
-		ui.KeyShiftN: ui.NewKeyActionWithOpts("Previous signal", charts(func() { v.stepSignal(-1) }), ui.ActionOpts{Visible: pods}),
-		ui.KeyShiftG: ui.NewKeyActionWithOpts("Regroup back", charts(func() { v.regroup(-1) }), ui.ActionOpts{Visible: pods}),
+		ui.KeyP:          perPod,
+		calmNextChartKey: ui.NewKeyActionWithOpts(next, charts(func() { v.step(1) }), ui.ActionOpts{Visible: true, Priority: 2}),
+		ui.KeyG:          ui.NewKeyActionWithOpts("Regroup", charts(func() { v.regroup(1) }), opts(3)),
+		ui.KeyShiftN:     ui.NewKeyActionWithOpts(previous, charts(func() { v.step(-1) }), ui.ActionOpts{Visible: pods}),
+		ui.KeyShiftG:     ui.NewKeyActionWithOpts("Regroup back", charts(func() { v.regroup(-1) }), ui.ActionOpts{Visible: pods}),
+		// Tab is the next-chart key of every incident view. It is the same
+		// step as n here, so the header names n only: a negative priority
+		// keeps a key out of the header's primary hints.
+		calmNextChartAltKey: ui.NewKeyActionWithOpts(calmNextChartLabel, charts(func() { v.step(1) }), ui.ActionOpts{Priority: -1}),
+		tcell.KeyBacktab:    ui.NewKeyAction("Previous chart", charts(func() { v.step(-1) }), false),
+		calmDetailKey:       ui.NewKeyActionWithOpts(calmDetailLabel, charts(v.toggleDetail), ui.ActionOpts{Visible: true, Priority: 4}),
+		ui.KeyT:             ui.NewKeyAction("Timeline", do(v.openTimeline), true),
 	})
+	if pods {
+		// The calm comparison names these on its own key lines, where they
+		// apply: Enter opens the Pod it marks, PgUp and PgDn turn its pages.
+		v.actions.Bulk(ui.KeyMap{
+			tcell.KeyEnter: ui.NewKeyActionWithOpts("Open the marked Pod", v.openPodCmd, ui.ActionOpts{Priority: -1}),
+			tcell.KeyPgDn:  ui.NewKeyAction("More Pods", v.pageCmd(1), false),
+			tcell.KeyPgUp:  ui.NewKeyAction("Earlier Pods", v.pageCmd(-1), false),
+		})
+	}
 	v.render()
 	return nil
+}
+
+// toggleDetail switches between the calm page and the page with all the
+// detail: every chart stacked, or on the per-Pod page a chart per Pod and
+// the table of every signal. It reads nothing.
+func (v *graphView) toggleDetail() {
+	v.detail = !v.detail
+	v.page = 0
+	if v.detail && !v.comparing && v.snapshot != nil {
+		// The chart that was at full size is the one the stacked page
+		// starts at.
+		for index := range v.snapshot.Plan.Panels {
+			if v.snapshot.Plan.Panels[index].ID == v.shown {
+				v.first = index
+			}
+		}
+	}
+	v.render()
+}
+
+// step moves to the next or the previous of what the page steps through:
+// the signal on the per-Pod page, the chart elsewhere.
+func (v *graphView) step(delta int) {
+	if v.comparing {
+		v.stepSignal(delta)
+		return
+	}
+	v.stepChart(delta)
+}
+
+// stepChart makes the next chart the one drawn at full size. On the page
+// with every chart it scrolls to it instead.
+func (v *graphView) stepChart(delta int) {
+	if v.snapshot == nil || v.snapshot.Window != v.window {
+		return
+	}
+	if v.snapshot.failure() != nil && !v.loading {
+		// A key named in the header never does nothing.
+		v.app.Flash().Warn("No chart to step to: the read above did not succeed; r reads again")
+		return
+	}
+	panels := v.snapshot.Plan.Panels
+	if v.detail {
+		v.first = min(max(v.first+delta, 0), max(len(panels)-1, 0))
+		v.render()
+		return
+	}
+	if len(panels) < 2 {
+		v.app.Flash().Warn("There is no other chart to show")
+		return
+	}
+	at := 0
+	for index := range panels {
+		if panels[index].ID == v.shown {
+			at = index
+		}
+	}
+	v.main = panels[(at+delta+len(panels))%len(panels)].ID
+	v.render()
+}
+
+// openTimeline opens what changed around the object the charts are of.
+func (v *graphView) openTimeline() {
+	if !v.current() {
+		v.app.Flash().Warn("Destination changed; reopen :graph")
+		return
+	}
+	v.app.openTimeline(v.SelectedResource(), "")
+}
+
+// openPodCmd opens the charts of the Pod the calm comparison marks: the
+// Pod that differs in the selected signal.
+func (v *graphView) openPodCmd(event *tcell.EventKey) *tcell.EventKey {
+	switch {
+	case v.report || !v.comparing || v.detail:
+		return event
+	case !v.current():
+		v.app.Flash().Warn("Destination changed; reopen :graph")
+	case v.open == "":
+		v.app.Flash().Warn("No Pod is marked on this page")
+	default:
+		v.app.openGraphAt(SelectedResourceTarget{Context: v.target.Context, GVR: client.PodGVR, Namespace: v.target.Namespace, Name: v.open}, v.window, "")
+	}
+	return nil
+}
+
+// pageCmd turns the page of the per-Pod comparison when it has more Pods
+// than it shows. Elsewhere the key stays with the text.
+func (v *graphView) pageCmd(delta int) ui.ActionHandler {
+	return func(event *tcell.EventKey) *tcell.EventKey {
+		if v.report || !v.comparing || v.snapshot == nil {
+			return event
+		}
+		if v.detail {
+			v.page = max(v.page+delta*max(v.pageSize, 1), 0)
+		} else {
+			v.peers = min(max(v.peers+delta, 0), max(v.peerPages-1, 0))
+		}
+		v.render()
+		return nil
+	}
 }
 
 // comparable says whether the comparison keys apply now, and tells the user
@@ -376,19 +520,30 @@ func (v *graphView) regroup(delta int) {
 	v.render()
 }
 
-// stepSignal cycles the signal of the comparison. From the overlaid charts
-// it opens the comparison on the signal it would open on anyway.
+// stepSignal cycles the signal of the comparison. The calm page steps in
+// the order it shows them, the ones in which a Pod differs first; the page
+// with a chart per Pod in the order they are read in.
 func (v *graphView) stepSignal(delta int) {
 	if !v.comparable() {
 		return
 	}
-	if !v.comparing {
-		v.comparing = true
-		v.ensureCompare()
-		v.render()
+	if v.compare == nil || v.compare.Base != v.snapshot || len(v.compare.Signals) == 0 {
 		return
 	}
-	if v.compare == nil || v.compare.Base != v.snapshot || len(v.compare.Signals) == 0 {
+	if !v.detail {
+		order, _, _ := graphCalmSignals(v.compare, v.grouping)
+		if len(order) == 0 {
+			return
+		}
+		at := 0
+		for index := range order {
+			if order[index].sig.ID == v.signal {
+				at = index
+			}
+		}
+		v.signal = order[(at+delta+len(order))%len(order)].sig.ID
+		v.peers = 0
+		v.render()
 		return
 	}
 	_, index := v.compare.signal(v.signal)
@@ -499,14 +654,18 @@ func (v *graphView) scrollCmd(delta int) ui.ActionHandler {
 		if v.report || v.snapshot == nil {
 			return event
 		}
-		if v.comparing {
+		switch {
+		case v.comparing && v.detail:
 			// A page of charts at a time; the layout settles the bounds.
 			v.page = max(v.page+delta*max(v.pageSize, 1), 0)
 			v.render()
-			return nil
+		case v.comparing:
+			v.stepSignal(delta)
+		default:
+			// The calm page has one chart at full size: the arrows step it,
+			// as they scroll the page with every chart.
+			v.stepChart(delta)
 		}
-		v.first = min(max(v.first+delta, 0), max(len(v.snapshot.Plan.Panels)-1, 0))
-		v.render()
 		return nil
 	}
 }
@@ -621,7 +780,8 @@ func (v *graphView) accept(snapshot *graphSnapshot) {
 	if v.focus != "" {
 		for index := range snapshot.Plan.Panels {
 			if snapshot.Plan.Panels[index].ID == v.focus {
-				v.first = index
+				// The chart a caller arrives about is the one at full size.
+				v.first, v.main = index, v.focus
 			}
 		}
 		v.focus = ""
@@ -674,25 +834,59 @@ func (v *graphView) render() {
 	page := &graphPage{
 		Width: width, Height: height, ASCII: v.app.Config.K9s.UI.NoIcons, Colors: graphPalette(v.app.Styles.Semantic()),
 		Cursor: v.cursor, First: v.first, Busy: v.busy, Style: v.app.chartStyle(),
+		Palette: calmPalette(v.app.Styles.Semantic()), Main: v.main, Moved: !v.atEnd, Offers: v.offers(),
+		Episodes: v.episodes, Peers: v.peers,
 	}
 	var lines []string
-	if v.snapshot == nil || v.snapshot.Window != v.window {
+	switch {
+	case v.snapshot == nil || v.snapshot.Window != v.window:
 		// Charts of another window are not shown under the new window's name.
-		lines = []string{
-			graphBold(page.Colors.Title, graphFit("Graph · "+v.target.Label()+" · last "+graphSpan(v.window), width)),
-			graphPaint(page.Colors.Muted, graphFit("Reading the declared Prometheus source once… Esc cancels and goes back.", width)),
+		name := graphTitle
+		if v.comparing {
+			name = graphCompareTitle
 		}
-	} else if v.comparing {
+		waiting := graphCalmWaiting(name, v.target.Label(), v.window, "Reading the declared Prometheus source once…")
+		lines = graphCalmLines(&waiting, page)
+	case v.comparing && v.detail:
 		page.First, page.Signal, page.Grouping = v.page, v.signal, v.grouping
 		lines = renderGraphCompare(v.snapshot, v.compare, page)
 		v.page, v.pageSize, v.signal = page.First, page.Shown, page.Signal
-	} else {
+	case v.comparing:
+		page.Signal, page.Grouping = v.signal, v.grouping
+		lines = renderGraphCompareCalm(v.snapshot, v.compare, page)
+		v.signal, v.peers, v.peerPages, v.open = page.Signal, page.Peers, page.PeerPages, page.Open
+	case v.detail:
 		lines = renderGraph(v.snapshot, page)
 		// The page settles the scroll position: a chart that fits is shown.
 		v.first = page.First
+	default:
+		lines = renderGraphCalm(v.snapshot, page)
+		v.shown = page.Main
+	}
+	v.dropped = page.Dropped
+	if v.detail && len(lines) > 0 && v.snapshot != nil && v.snapshot.Window == v.window {
+		// The page with all the detail names the way back where its first
+		// line has room; the key is in the header too.
+		hint := graphWords("  ·  a short page", page.ASCII)
+		if tview.TaggedStringWidth(lines[0])+runewidth.StringWidth(hint) <= width {
+			lines[0] += graphPaint(page.Colors.Muted, hint)
+		}
 	}
 	v.text.SetText(strings.Join(lines, "\n"))
 	v.text.ScrollToBeginning()
+}
+
+// offers are the hand-offs that answer for this object now: the line of
+// next steps names a key only when it opens something.
+func (v *graphView) offers() graphOffers {
+	offers := graphOffers{Timeline: true}
+	if action, ok := v.actions.Get(grafanaKey); ok && action.Availability != nil {
+		offers.Grafana = action.Availability() == ""
+	}
+	if action, ok := v.actions.Get(probeKey); ok && action.Availability != nil {
+		offers.Probe = action.Availability() == ""
+	}
+	return offers
 }
 
 // graphObjectReader captures a client for the bounded object reads behind

@@ -388,8 +388,11 @@ func checkoutRequest(t *testing.T) *Request {
 func TestCollectStatesWhatWasMeasuredAfterTheRolloutAndNoCause(t *testing.T) {
 	source := checkoutStory()
 	report := Collect(t.Context(), source, checkoutRequest(t))
-	// Collect stamps the wall clock; the story was read 12 minutes after
-	// the rollout, so the sentence does not depend on the day the test runs.
+	// Collect stamps the read with the wall clock, and the sentence names
+	// the date of a rollout that was not on the day of the read. The stamp
+	// is pinned to the day of the rollout, so the sentence does not depend
+	// on the day the test runs.
+	require.WithinDuration(t, time.Now(), report.ReadAt, time.Minute, "the read is stamped with the wall clock")
 	report.ReadAt = rolloutAt.Add(12 * time.Minute)
 	require.Len(t, source.queries, 9, "one bounded range read per query template")
 	require.Equal(t, 15*time.Second, report.Step)
@@ -418,6 +421,11 @@ func TestCollectStatesWhatWasMeasuredAfterTheRolloutAndNoCause(t *testing.T) {
 
 	require.Equal(t, "After rev 2 (04:20): error ratio 0.2% -> 14.1%, p99 248ms -> 2.5s, restarts 0 -> 6, "+
 		"memory at limit (limit 512Mi -> 256Mi), ready replicas 2 -> 1.", report.Summary())
+	// Read on another day, the sentence names the date of the rollout.
+	later := *report
+	later.ReadAt = rolloutAt.Add(26 * time.Hour)
+	require.True(t, strings.HasPrefix(later.Summary(), "After rev 2 (Nov17 04:20): error ratio 0.2% -> 14.1%"),
+		"read on a later day, the rollout carries its date")
 	require.Equal(t, "not available: CPU throttled", report.Uncompared())
 	require.Equal(t, []string{"image v1 -> v2", "limits.memory 512Mi -> 256Mi", "env ~PAYMENT_TOKEN +FEATURE_FLAGS"}, report.Changes)
 	require.Empty(t, report.Traffic)
@@ -433,6 +441,7 @@ func TestCollectReportsDeniedTooFewSamplesAndTrafficShiftsHonestly(t *testing.T)
 	denied := &fakeSource{status: observability.Status{State: observability.StateDenied, HTTPStatus: 403}}
 	report := Collect(t.Context(), denied, checkoutRequest(t))
 	require.False(t, report.ReadAt.IsZero(), "a denied read is still stamped")
+	// Pinned as above: the wall clock does not decide the sentence.
 	report.ReadAt = rolloutAt.Add(12 * time.Minute)
 	require.Equal(t, "denied (HTTP 403)", report.Failure)
 	require.Equal(t, "After rev 2 (04:20): nothing was read from the source: denied (HTTP 403). No comparison was made.", report.Summary())

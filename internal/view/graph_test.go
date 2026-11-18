@@ -580,25 +580,39 @@ func TestGraphViewReadsOnceMovesTheCursorAndChangesWindowOnRequest(t *testing.T)
 	v.active = true
 	v.accept(v.load(t.Context(), v.window))
 	require.Equal(t, 1, reads)
+	// The calm page is what opens: the answer, one chart, the rest as rows.
 	frame := drawnText(t, v, 80, 20)
-	require.Contains(t, frame, "Graph · Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 1h to 05:00Z · step 30s")
-	require.Contains(t, frame, "Cursor 05:00:00Z (window end)")
-	require.Contains(t, drawnText(t, v, 60, 20), "· 1h to 05:00Z · step 30s")
+	require.Contains(t, frame, "Graph  Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 1h")
+	require.Contains(t, frame, "Memory is 60Mi now, 23.4% of its 256Mi limit. 6 restarts in the last 1h.")
+	require.Contains(t, frame, "MEMORY  60Mi now")
+	require.NotContains(t, frame, "┆", "at the window end no cursor is drawn")
+	require.Contains(t, drawnText(t, v, 60, 20), "x2x9q · last 1h")
 
+	// The cursor moves along the sample grid, and the page reads the
+	// sample under it.
 	left, _ := v.actions.Get(tcell.KeyLeft)
 	for range 3 {
 		require.Nil(t, left.Action(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone)))
 	}
-	require.Contains(t, drawnText(t, v, 80, 20), "Cursor 04:58:30Z, 1m30s before window end")
+	require.Contains(t, drawnText(t, v, 80, 20), "MEMORY  108Mi at 04:58:30")
 	require.Nil(t, left.Action(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModShift)))
-	require.Contains(t, drawnText(t, v, 80, 20), "Cursor 04:53:30Z")
+	require.Contains(t, drawnText(t, v, 80, 20), "MEMORY  206Mi at 04:53:30")
 	home, _ := v.actions.Get(tcell.KeyHome)
 	home.Action(nil)
-	require.Contains(t, drawnText(t, v, 80, 20), "Cursor 04:00:00Z, 1h00m before window end")
+	require.Contains(t, drawnText(t, v, 80, 20), "MEMORY  – first 04:48")
+	// a is the page with every chart: it has the cursor line it always had.
+	all, _ := v.actions.Get(calmDetailKey)
+	all.Action(nil)
+	frame = drawnText(t, v, 80, 20)
+	require.Contains(t, frame, "Graph · Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 1h to 05:00Z · step 30s")
+	require.Contains(t, frame, "Cursor 04:00:00Z, 1h00m before window end")
+	require.Contains(t, drawnText(t, v, 60, 20), "· 1h to 05:00Z · step 30s")
 	end, _ := v.actions.Get(tcell.KeyEnd)
 	end.Action(nil)
 	require.True(t, v.atEnd)
-	require.Equal(t, 1, reads, "moving the cursor reads nothing")
+	require.Contains(t, drawnText(t, v, 80, 20), "Cursor 05:00:00Z (window end)")
+	all.Action(nil)
+	require.Equal(t, 1, reads, "moving the cursor and changing the page read nothing")
 
 	queries, _ := v.actions.Get(ui.KeyS)
 	queries.Action(nil)
@@ -612,6 +626,11 @@ func TestGraphViewReadsOnceMovesTheCursorAndChangesWindowOnRequest(t *testing.T)
 		require.LessOrEqual(t, runewidth.StringWidth(strings.ReplaceAll(line, "[]", "]")), 80, line)
 	}
 	require.Contains(t, report, "F, when shown, is the first rise of the restart counter inside the window.")
+	// The report says how the short page is derived from the same answers.
+	flat := strings.Join(strings.Fields(report), " ")
+	require.Contains(t, flat, "THE SHORT PAGE (the default; a shows every chart, a again returns)")
+	require.Contains(t, flat, "Here: MEMORY, because nothing was at a limit, so memory.")
+	require.Contains(t, flat, "It states order in time; it does not say that one caused the other.")
 	queries.Action(nil)
 
 	// A window key shows the new window's name only with its own data.
@@ -623,7 +642,7 @@ func TestGraphViewReadsOnceMovesTheCursorAndChangesWindowOnRequest(t *testing.T)
 	require.Contains(t, text, "Reading the declared Prometheus source once")
 	require.NotContains(t, text, "MEMORY")
 	v.accept(loadGraph(t.Context(), fake, &v.target, 6*time.Hour, graphNow))
-	require.Contains(t, v.text.GetText(true), "last 6h to 05:00Z · step 5m")
+	require.Contains(t, v.text.GetText(true), "Graph  Pod apps/checkout-api-7d9f8c6b5d-x2x9q · last 6h")
 }
 
 func TestGraphViewDiscardsRepliesAfterItClosedOrTheDestinationChanged(t *testing.T) {

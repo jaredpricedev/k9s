@@ -24,6 +24,10 @@ type Title struct {
 	Done, Total int
 	// Busy replaces the read status while a read runs: "reading…".
 	Busy string
+	// KeepEnd shortens an Object that does not fit in the middle instead of
+	// at its end: the end of a generated name (a Pod's) is what tells it
+	// from its siblings.
+	KeepEnd bool
 }
 
 // status is what is known about the read, in its forms from full to short,
@@ -79,6 +83,10 @@ func TitleLine(t Title, width int, o Options) string {
 		}
 		return l.String()
 	}
+	shorten := o.clip
+	if t.KeepEnd {
+		shorten = o.clipMiddle
+	}
 	head := cells(t.View) + gap
 	const minObject = 8
 	for index, status := range forms {
@@ -90,9 +98,9 @@ func TitleLine(t Title, width int, o Options) string {
 			// A shorter status comes before a shorter name.
 			continue
 		case room-cells(window) >= minObject:
-			return draw(o.clip(t.Object, room-cells(window)), window, status)
+			return draw(shorten(t.Object, room-cells(window)), window, status)
 		case room >= minObject:
-			return draw(o.clip(t.Object, room), "", status)
+			return draw(shorten(t.Object, room), "", status)
 		}
 	}
 	last := forms[len(forms)-1]

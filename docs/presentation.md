@@ -66,19 +66,19 @@ A Service, an Ingress or a workload that reports no problem keeps a plain border
 
 | Key | Meaning | Where |
 | --- | --- | --- |
-| `m` | `:graph`. From `:slow` it opens one chart per Pod on the signal that set a Pod apart | rows, `:problems`, `:alerts`, `:timeline`, `:slow`, `:probe` |
+| `m` | `:graph`. From `:slow` it opens the comparison of the Pods, with the signal that set a Pod apart marked and the episodes found there as its bands | rows, `:problems`, `:alerts`, `:timeline`, `:slow`, `:probe` |
 | `t` | `:timeline` | `:problems`, `:alerts`, `:impact`, `:slow`, `:probe` (on a Pod row of the resource list `t` is the upstream Transfer; type `:timeline` there) |
 | `Shift-D` | Grafana hand-off for the selection and the window on screen | every one of them |
 | `Shift-W` | `:slow` | rows, `:probe`, `:graph` |
 | `Shift-B` | `:probe`; opening it sends nothing | rows, `:slow`, `:graph` |
 | `1` to `4` | Window 15m, 1h, 6h, 24h (`:impact`: `1` to `5`, the width compared on each side of a rollout) | `:graph`, `:slow`, dashboards, `:query`, `:timeline` |
 | `Left` / `Right`, with `Shift` ten steps, `Home` / `End` | The time cursor | `:graph`, `:slow`, a zoomed panel |
-| `n` / `Shift-N` | Next / previous of what the view steps through: episodes in `:slow`, rollouts in `:impact`, signals in `:graph`. Where a view steps through nothing else, that is its chart: the next strip becomes the main chart | `:slow`, `:graph`, `:impact`; free for the next chart in a dashboard and `:query` |
+| `n` / `Shift-N` | Next / previous of what the view steps through: episodes in `:slow`, rollouts in `:impact`, the chart at full size in `:graph` and the marked signal on its per-Pod page (`Tab`, `↑`/`↓` do the same there). Where a view steps through nothing else, that is its chart: the next strip becomes the main chart | `:slow`, `:graph`, `:impact`; free for the next chart in a dashboard and `:query` |
 | `Tab` / `Shift-Tab` | Next / previous main chart or panel. It is the next-chart key that is free in every one of these views, and the only one in `:slow` and `:impact`, where `n` steps through episodes and rollouts | a dashboard (next panel) today; bound to nothing else in `:slow`, `:probe`, `:graph`, `:impact` |
 | `a` | All detail: every signal and the detail table the view had before the calm layout. One press shows it, the next returns to the calm layout, which is the default | every view laid out the calm way (see below); bound to nothing else in `:slow`, `:probe`, `:graph`, `:impact`, a dashboard |
 | `r` | Read again. In `:probe` it is the one read there is: it sends the requests, after a confirmation | every one of them |
 | `s` | The queries or sources behind the page | `:graph`, `:slow`, dashboards, `:query`, `:timeline` |
-| `p` | One chart per Pod | `:graph` only |
+| `p` | Compare the Pods of a workload or Service, and back | `:graph` only |
 | `b` | Chart style: filled areas and solid lines (the default), or braille dots, which are finer and harder to read. One press switches, the next returns; the choice holds for the session in every view named here | `:graph` (overlaid, per Pod and regrouped), `:slow`, dashboards, `:query` |
 | `+` / `_` | More / fewer requests per Pod | `:probe` only; the digits stay windows |
 
@@ -165,6 +165,8 @@ Every calm page gives up room in the same order, and only as far as the screen n
 
 A view is given 80×21 in an 80×24 terminal: the application keeps two rows at the top and one at the bottom. There the three reference pages keep every row and every strip. `:slow` folds `QUIET` to one line and gives up its blank rows; the Pod graph keeps its chart at five rows over its three strips; the Pod comparison gives up its blank rows and its second key line. At 60 columns `:slow` leaves the comparison column out and shortens what is measured, with strips of 20 columns, and the Pod comparison leaves the last peer row of two signals out and says so. Under 41 columns `:slow` has no room for strips: its rows are written as text, and the page says that the time strips are not shown.
 
+`:graph` and its per-Pod page are laid out this way ([graphs.md](graphs.md#the-page)). In an 80×24 terminal `:graph` is given 20 rows: the strips shorten, the blank rows go and the chart gives rows up, down to three, so that restarts, CPU and network stay rows on the axis of the chart; at 60 columns, where the answer takes three lines, `ALSO` folds to one line that keeps every number; a screen shorter than that ends as the chart alone on its axis, with the guides of the moments folded into one line that is named when it is left out. The per-Pod page shows as many signals as groups as the size holds without giving anything up (three signals of three Pods at 132×36, one or two at 80×24) and names the others in `ALSO DIFFERS`; at 60 columns its strips shorten and nothing else changes. `NO DATA`, `NOT READ` and `NOT COMPARED` are never given up.
+
 ### Colours
 
 | Role | Semantic token | Used for |
@@ -178,7 +180,7 @@ A view is given 80×21 in an 80×24 terminal: the application keeps two rows at 
 | mark | `category` | a labelled moment: the guide, its key, its legend |
 | band | `band` | the background of the columns of an episode |
 
-For a view: build a `calm.Page`, plan it with `calm.Lay(&page, width, height, calmOptions(app))` and draw `calm.Render(&page, &plan, opts).Lines()`. `internal/calm/calmtest` has the three reference pages to model one on. Text handed to the kit is plain; the kit escapes it and writes the tags, each naming foreground, background and attributes, because tview reads a tag as a whole. A layout change adds no request: the kit only draws what a view has already read.
+For a view: build a `calm.Page`, plan it with `calm.Lay(&page, width, height, calmOptions(app))` and draw `calm.Render(&page, &plan, opts).Lines()`. `internal/calm/calmtest` has the three reference pages to model one on. Text handed to the kit is plain; the kit escapes it and writes the tags, each naming foreground, background and attributes, because tview reads a tag as a whole. A layout change adds no request: the kit only draws what a view has already read. A time cursor moves and nothing else does: a view whose numbers are read under the cursor gives its group the widest number and note any sample of the window writes (`Group.NumberWidth`, `Group.CompareWidth`), so the columns after the strips, and with them every strip, band and mark, are the same wherever the cursor is. The cursor is drawn at every sample of the window, the first included.
 
 ## Semantic skin tokens
 

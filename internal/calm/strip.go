@@ -266,12 +266,17 @@ func SampleFrame(f chart.Frame) chart.Frame {
 }
 
 // cursorCol is the column of the sample under the cursor: the step that
-// ends at the cursor's time.
+// ends at the cursor's time. The first sample of a window ends a step
+// that began before it; it stands at the first column, so that a cursor
+// at the window's start is drawn like any other.
 func (b Bands) cursorCol(f chart.Frame) (int, bool) {
 	if b.Cursor.IsZero() || f.Width < 1 || !f.End.After(f.Start) {
 		return 0, false
 	}
-	return f.Col(b.Cursor.Add(-step(f) / 2))
+	if col, ok := f.Col(b.Cursor.Add(-step(f) / 2)); ok {
+		return col, true
+	}
+	return 0, !b.Cursor.Before(f.Start) && !b.Cursor.After(f.End)
 }
 
 // through draws the labelled moments and the cursor through the cells that

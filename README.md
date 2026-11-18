@@ -95,7 +95,7 @@ and [Hubble measurements](docs/hubble-performance-2026-10-04.md).
 | The Grafana dashboard for the selection, at the incident's time range | `Shift-D` on a Pod, workload, Node or namespace; `:dashboards` lists the rest |
 | Did the last rollout make it worse, in numbers | Select a Deployment, StatefulSet, DaemonSet or Pod, then `:impact` ([docs/impact.md](docs/impact.md)) |
 | Usage against limits over time, drawn in the terminal | `m` on a Pod, workload or Node, or `:graph` ([docs/graphs.md](docs/graphs.md)) |
-| Which Pod of a workload or Service is the different one | `p` in `:graph` (one chart per Pod, worst first), `g` regroups by container, revision, node or zone; or `:graph pods` ([docs/graphs.md](docs/graphs.md#which-pod-is-different-p)) |
+| Which Pod of a workload or Service is the different one | `p` in `:graph` (which Pod differs and in which signals, one row per Pod on a shared time axis; `a` for a chart per Pod), `g` regroups by container, revision, node or zone; or `:graph pods` ([docs/graphs.md](docs/graphs.md#which-pod-is-different-p)) |
 | A page that sometimes just waits: which hop of the request path was raised, whether one Pod is the outlier, and when | `Shift-W` on a Service, Ingress, workload or Pod, or `:slow` ([docs/slow-requests.md](docs/slow-requests.md)) |
 | Is one backend slow right now (asks before it sends anything) | `Shift-B` on a Service, workload or Pod, or `:probe`: a timed read-only GET to each Pod's own declared readiness path ([docs/probe.md](docs/probe.md)) |
 | A Grafana dashboard's panels, or any PromQL, drawn in the terminal | `v` on a row of `:dashboards`; `:query`, `:query <name>` or `:query <expression>` ([docs/dashboards.md](docs/dashboards.md)) |

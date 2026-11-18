@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/derailed/k9s/internal/calm"
 	"github.com/derailed/k9s/internal/chart"
 	"github.com/derailed/k9s/internal/config"
 	"github.com/derailed/k9s/internal/observability"
@@ -81,6 +82,33 @@ type graphPage struct {
 	// Style is the chart style of the session: areas and solid lines, or
 	// braille dots.
 	Style chart.Style
+
+	// The calm layout (graph_calm.go) reads the rest. Palette is its
+	// colours. Main names the chart drawn at full size; empty lets the
+	// rule choose, and the choice is written back. Moved says the cursor
+	// was moved off the window end: only then is it drawn and read.
+	Palette calm.Palette
+	Main    string
+	Moved   bool
+	// Offers are the hand-offs the line of next steps may name, and
+	// Episodes the episodes of the view the page was opened from.
+	Offers   graphOffers
+	Episodes *graphEpisodes
+	// Peers is the page of rows of the calm comparison when a signal has
+	// more Pods than it shows; it is read, settled and written back, as
+	// PeerPages is: the number of such pages. Open is written back too:
+	// the Pod that Enter opens.
+	Peers, PeerPages int
+	Open             string
+	// Dropped is what the size gave up, in the order it was given up, and
+	// Missing the part of it that is not on the screen at all.
+	Dropped, Missing []string
+}
+
+// graphOffers are the keys a calm page names only where they answer: a
+// hand-off that would say why it cannot open is left out of the next line.
+type graphOffers struct {
+	Timeline, Grafana, Probe bool
 }
 
 // options are the chart options of the page for a cursor.
@@ -959,5 +987,6 @@ func graphReport(s *graphSnapshot) string {
 	b.WriteString("  A chart with several lines draws each as a stepped line: one row is one level, the legend has the exact value.\n")
 	fmt.Fprintf(&b, "  \"at limit\" is a sample within %s of its limit or above it; an area is drawn in the warning colour there.\n", chart.Ratio.Format(1-chart.NearLimit))
 	b.WriteString("  b draws braille dots instead, which are finer and harder to read; b again returns.\n")
+	b.WriteString(graphCalmReport(s))
 	return b.String()
 }

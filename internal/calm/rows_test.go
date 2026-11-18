@@ -232,3 +232,25 @@ func TestFoldedGroupNamesItsRows(t *testing.T) {
 	assert.Equal(t, []string{"CPU 340m", "restarts 6"}, (&Group{Role: Secondary, Rows: []Row{{What: "CPU", Number: "340m"}, {What: "restarts", Number: "6"}, {What: "CPU", Number: "340m"}}}).items(), "named once")
 	assert.Equal(t, []string{"lookup time"}, (&Group{Role: QuietRole, Rows: []Row{{What: "lookup time"}}}).items(), "what is measured when there is no subject")
 }
+
+// A view whose numbers are read under a cursor reserves the widest it can
+// write: the columns, and with them every strip, then stay where they are
+// whatever the cursor reads.
+func TestMeasureKeepsTheColumnsOfAGroupThatReservesThem(t *testing.T) {
+	group := func(number, compare string) []Group {
+		return []Group{{Label: "ALSO", Role: Secondary, NumberWidth: 7, CompareWidth: 14, Rows: []Row{
+			{What: "CPU", Number: number, Compare: compare},
+			{What: "network", Number: "9kB/s"},
+		}}}
+	}
+	at := Measure(group("340m", ""), 132, 10, true)
+	assert.Equal(t, 7, at.Number)
+	assert.Equal(t, 14, at.Compare)
+	for _, other := range [][]Group{group("1.5", "x2x9q at limit"), group("–", ""), group("907kB/s", "hx4mt")} {
+		assert.Equal(t, at, Measure(other, 132, 10, true))
+	}
+	// Text wider than what was reserved still gets its room.
+	assert.Equal(t, 9, Measure(group("1021.5MiB", ""), 132, 10, true).Number)
+	// A group without rows is one line under the axis and holds no column.
+	assert.Zero(t, Measure([]Group{{Label: "QUIET", Role: QuietRole, NumberWidth: 9, Summary: []string{"dns"}}}, 132, 0, false).Number)
+}
