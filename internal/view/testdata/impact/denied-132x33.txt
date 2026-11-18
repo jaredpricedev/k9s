@@ -1,0 +1,10 @@
+Impact  Deployment apps/checkout-api · rev 2 (latest of 2)                                             read 04:32 · 0 of 9 queries
+
+  Nothing was read around rev 2, rolled out at 04:20: denied (HTTP 403).
+  Rev 2 changed the image, the memory limit (512Mi → 256Mi) and 1 env var.                   Not read is not zero and not healthy.
+
+  NOT READ  denied (HTTP 403): Request rate · Error ratio · Latency p50 · Latency p95 · Latency p99 · Restarts +5 more
+
+  next  r read again    :sources show and probe the declaration    t timeline    a all 11 signals
+
+  1-5 window · s queries · n/N later/earlier rollout · D Grafana · Esc back

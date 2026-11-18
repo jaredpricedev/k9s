@@ -131,7 +131,7 @@ Slow requests  Service gitlab-webservice-default · last 1h               read 1
 
 `:slow` is laid out this way; [slow-requests.md](slow-requests.md#the-page) shows the page a read draws, how its rows are sorted into the groups by overlap alone, and what it gives up at each size.
 
-The band is the background of the columns under each `▼`, from the marker row down to the row above the axis: the three blocks of every row above stand inside it. `internal/calm/testdata` holds this page, the Pod graph and the Pod comparison as pinned text in the areas a view is given in terminals of 132×36, 80×24 and 60×24.
+The band is the background of the columns under each `▼`, from the marker row down to the row above the axis: the three blocks of every row above stand inside it. `internal/calm/testdata` holds this page, the Pod graph and the Pod comparison as pinned text in the areas a view is given in terminals of 132×36, 80×24 and 60×24. `internal/view/testdata` holds the pages of `:timeline` and `:impact` the same way, as their views draw them from invented data: the page of an incident, the page of a read that fell short, and in `:impact` also the page with `s` open and the page whose cursor opened a folded group. `CALM_UPDATE=1` writes a pinned page again; that is done on purpose, and the difference is read before it is committed.
 
 ### The same words on every page
 

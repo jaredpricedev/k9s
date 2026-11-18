@@ -1,0 +1,28 @@
+Impact  Deployment apps/checkout-api · rev 2 (latest of 2)                                             read 04:32 · 9 of 9 queries
+
+  7 signals got worse after rev 2 rolled out at 04:20: errors, latency, restarts, memory and ready replicas.
+  Rev 2 changed the image, the memory limit (512Mi → 256Mi) and 1 env var.                      Order in time, not proof of cause.
+
+     rev 2 rolled out 04:20:00Z · 12m each side                                          ▼
+                                                                                         ┊
+  WORSE AFTER   before → after                                                           ┊
+> Error ratio     0.2% → 14.2%  +14pp    x71    ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁┊████████████████████████████████████████
+  Latency p50   66.7ms → 593ms  +526ms   +789%  ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊████████████████████████████████████████
+  Latency p95    224ms → 2.34s  +2.12s   x10    ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊████████████████████████████████████████
+  Latency p99    248ms → 2.5s   +2.25s   x10    ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊████████████████████████████████████████
+  Restarts           0 → 6      +6       new    ·········································▲········································
+  Memory/limit   36.7% → 99.2%  +62.5pp  +170%  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄┊████████████████████████████████████████
+  Ready (min)        2 → 1      -1       -50%   █████████████████████████████████████████┊▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅
+                                                                                         ┊
+  HIGHER OR LOWER AFTER                                                                  ┊
+  Memory peak    188Mi → 254Mi  +66Mi    +35%   ▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆┊████████████████████████████████████████
+  CPU usage        60m → 340m   +280m    +467%  ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊████████████████████████████████████████
+                                                ──────┬────────────────┬─────────────────┯────────────────┬────────────────┬──────
+  UTC                                               04:10            04:15             04:20            04:25            04:30
+
+  UNCHANGED  Request rate
+  NOT AVAILABLE  CPU throttled
+
+  next  Enter graph the workload    a all 11 signals    s query and rule    t timeline
+
+  ↑↓ signal · 1-5 window · n/N later/earlier rollout · D Grafana · r re-read · Esc back

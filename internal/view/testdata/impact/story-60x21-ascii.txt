@@ -1,0 +1,21 @@
+Impact  Deployment app... | rev 2 (latest of 2)  04:32 | 9/9
+  7 signals got worse after rev 2 rolled out at 04:20.
+  Rev 2 changed the image, the memory limit and 1 env var.
+  Order in time, not proof of cause.
+
+              rev 2 at 04:20:00Z              v
+  WORSE AFTER   before -> after               |
+> Error ratio     0.2% -> 14.2%  _____________|#############
+  Latency p50   66.7ms -> 593ms  .............|#############
+  Latency p95    224ms -> 2.34s  .............|#############
+  Latency p99    248ms -> 2.5s   .............|#############
+  Restarts           0 -> 6      .............^.............
+  Memory/limit   36.7% -> 99.2%  -------------|#############
+  Ready (min)        2 -> 1      #############|=============
+                                 --+----------#----------+--
+  UTC                            04:10      04:20      04:30
+  HIGHER OR LOWER AFTER  Memory peak 188Mi -> 254Mi +1 more
+  UNCHANGED  Request rate
+  NOT AVAILABLE  CPU throttled
+
+  next  Enter graph  a all 11 signals  s query and rule

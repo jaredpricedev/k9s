@@ -129,12 +129,13 @@ func timelineHang(scope *timeline.Scope) *timeline.Snapshot {
 	return timeline.NewSnapshot(scope, at, entries, timelineReads(nil))
 }
 
-// timelinePinned compares a frame with its pinned text. The pinned pages
-// are the acceptance text of the calm :timeline: CALM_UPDATE=1 writes them
-// again, which is done on purpose and read before it is committed.
-func timelinePinned(t *testing.T, name, got string) {
+// calmPinned compares a frame of a view with its pinned text under
+// testdata/<view>. The pinned pages are the acceptance text of a calm
+// page: CALM_UPDATE=1 writes them again, which is done on purpose and read
+// before it is committed.
+func calmPinned(t *testing.T, view, name, got string) {
 	t.Helper()
-	path := filepath.Join("testdata", "timeline", name+".txt")
+	path := filepath.Join("testdata", view, name+".txt")
 	got = strings.TrimRight(got, "\n") + "\n"
 	if os.Getenv("CALM_UPDATE") != "" {
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
@@ -143,6 +144,13 @@ func timelinePinned(t *testing.T, name, got string) {
 	want, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, string(want), got, name)
+}
+
+// timelinePinned compares a frame with its pinned text: the acceptance
+// text of the calm :timeline.
+func timelinePinned(t *testing.T, name, got string) {
+	t.Helper()
+	calmPinned(t, "timeline", name, got)
 }
 
 // The pages a view is given in terminals of 132x36, 80x24 and 60x24: the

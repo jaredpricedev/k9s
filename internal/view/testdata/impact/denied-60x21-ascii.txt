@@ -1,0 +1,12 @@
+Impact  Deployment app... | rev 2 (latest of 2)  04:32 | 0/9
+
+  Nothing was read around rev 2, rolled out at 04:20: denied
+  (HTTP 403).
+  Rev 2 changed the image, the memory limit and 1 env var.
+  Not read is not zero and not healthy.
+
+  NOT READ  denied (HTTP 403): Request rate +10 more
+
+  next  r read again
+
+  1-5 window | a show every signal | s queries | Esc back
