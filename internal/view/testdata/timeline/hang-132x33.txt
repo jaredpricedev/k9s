@@ -3,14 +3,15 @@ Timeline  Deployment apps/checkout-api · last 1h · 0 of 2 entries             
   Nothing that was read began in the last 1h. 0 shows all 2 entries read. The 3 stalls :slow found are shaded.
   Nothing found is not proof of health.
 
-                                          stalls           ▼▼▼▼▼                     ▼▼▼▼▼▼                             ▼▼▼▼
+                                                          stalls         ▼▼▼▼                 ▼▼▼▼▼                       ▼▼▼
 
   QUIET
-  rollouts · config · scaling                    ·················································································
-  warnings · exits · status · nodes · alerts     ·················································································
-  annotations                                    ·················································································
-                                                 ┬─────────━━━┯━────────────┬────────━━━━┯━────────────┬────────────┬───━━━━─────┬
-  UTC                                          11:00        11:10         11:20        11:30         11:40        11:50        12:00
+  rollouts · config · scaling  none retained                     ·································································
+  warnings · exits             none retained                     ·································································
+  annotations                  none retained                     ·································································
+  status · nodes · alerts      none now; what ended is not kept  ××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××××·
+                                                                 ┬───────━━┯━─────────┬───────━━━┯━─────────┬──────────┬──━━━────┬
+  UTC                                                          11:00     11:10      11:20      11:30      11:40      11:50     12:00
 
   next  a full list
 

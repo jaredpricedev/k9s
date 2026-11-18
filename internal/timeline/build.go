@@ -381,6 +381,7 @@ func restartEntries(pod *corev1.Pod) (entries []Entry, untimed []string) {
 					entry.Detail = append(entry.Detail, fmt.Sprintf("Ran %s (started %s)", Span(terminated.FinishedAt.Sub(terminated.StartedAt.Time)), Stamp(terminated.StartedAt.Time)))
 				}
 				if status.RestartCount > 1 && item.field == "lastState" {
+					entry.Earlier = int(status.RestartCount) - 1
 					entry.Detail = append(entry.Detail, fmt.Sprintf("Only the most recent exit is retained; %d earlier restarts have no time.", status.RestartCount-1))
 				}
 				if waiting := status.State.Waiting; waiting != nil && waiting.Reason != "" {

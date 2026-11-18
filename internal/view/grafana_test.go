@@ -974,7 +974,7 @@ func TestTimelineShowsGrafanaAnnotationsForItsScopeAndStatesGaps(t *testing.T) {
 	// neither a change nor a failing signal; n reaches each of them.
 	calmFrame := drawnText(t, v, 132, 33)
 	require.Regexp(t, `(?m)^  ALSO IN THE WINDOW\b`, calmFrame)
-	require.Regexp(t, `(?m)^  annotations +Deploy checkout-api revisi… \+1 +11:48 +·+▲·+▲·+$`, calmFrame)
+	require.Regexp(t, `(?m)^  annotations +Deploy checkout-api… \+1 +11:48 +·+▲·+▲·+$`, calmFrame)
 	require.NotRegexp(t, `(?m)^  [a-z ·]*annotations[a-z ·]* +none retained`, calmFrame, "a kind with entries is not quiet")
 	v.toggleDetail()
 	v.setWindow(0)

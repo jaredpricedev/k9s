@@ -241,30 +241,30 @@ Timeline  Deployment apps/checkout-api · last 15m · 12 of 16 entries          
                                          rev 2 rolled out 11:48              ▼
                                                                              ┊
   CHANGED                                                                    ┊
-  config       checkout-config updated by ku…  11:46            ····▲········┊····················································
-  rollouts     rev 2: image v1 → v2; env ~PA…  11:48            ·············▲····················································
+  config       checkout-config updated by…     11:46            ····▲········┊····················································
+  rollouts     rev 2: image v1 → v2; env…      11:48            ·············▲····················································
                                                                              ┊
   THEN WENT WRONG                                                            ┊
 > warnings     BackOff · pod x2x9q             11:50  14 times  ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁████████████████████████████████████████▁▁▁▁
-  alerts       CheckoutHighErrorRate (cri… +2  11:51  for 9m    ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁████████████████████████████████████████
-  autoscaler   ScalingActive=False FailedGet…  11:52  for 8m    ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████████████████████████████████████
-  exits        api Error (exit 1), restart c…  11:58            ·············┊···········································▲········
-  status       Progressing=False ProgressDea…  11:58  for 2m    ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████████
+  alerts       CheckoutHighErrorRate… +2       11:51  for 9m    ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁████████████████████████████████████████
+  autoscaler   ScalingActive=False…            11:52  for 8m    ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████████████████████████████████████
+  exits        api Error (exit 1) · pod x2x9q  11:58  6 times   ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××▲········
+  status       Progressing=False…              11:58  for 2m    ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████████
                                                                              ┊
   ALSO IN THE WINDOW                                                         ┊
   annotations  ConfigMap apps/checkout-confi…  11:46            ····▲········┊····················································
-  events       ScalingReplicaSet · deploy… +1  11:48  8 times   ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁█████████████████████████████████████████████▁▁▁▁
+  events       ScalingReplicaSet… +1           11:48  8 times   ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁█████████████████████████████████████████████▁▁▁▁
                                                                 ────┬────────┯────────┬───────┬────────┬────────┬────────┬───────┬
   UTC                                                             11:46    11:48    11:50   11:52    11:54    11:56    11:58   12:00
 
-  QUIET  scaling · nodes
+  QUIET  scaling · nodes: none now
 
   WARNINGS  1 entry in the last 15m
 > 11:50:00  pod/checkout-api-7d9f8c6b5d-x2x9q  Warning BackOff x14: Back-off restarting failed container api in pod
             checkout-api-7d9f8c6b5d-x2x9q
             First failing signal that could be read. The fault may have begun earlier than the evidence shows.
             Reported by: kubelet | First 2026-11-17 11:50:00Z, last 2026-11-17 11:59:00Z, 14 occurrences
-            Time from: Event firstTimestamp/lastTimestamp, falling back to eventTime then creationTimestamp
+
   next  Enter open x2x9q    a full list
   ↑↓ row · ←→ time · 1-4 window, 0 all · s sources · n next entry · x mark · / filter · r re-read · Esc back
 ```
@@ -273,6 +273,8 @@ Timeline  Deployment apps/checkout-api · last 15m · 12 of 16 entries          
 first sentence, in bold, is the moment the page starts from: `Rev 2 rolled out
 at 11:48`, with the other changes of the window that preceded it. The second
 says how many failing signals followed, within how long, and names the first.
+What began in the second of that moment is said to have begun in the same
+second, not to have followed: entries of one second have no known order.
 `Order in time, not proof of cause.` stands dim at its right. When failing
 signals began with no change before them in the window it says how many, when
 the first began, and `No change was read in this window.` When no failing
@@ -292,8 +294,12 @@ warning in a namespace may belong to an older, unrelated problem.
 
 **A row is one kind of entry.** It names the kind, what its first entry is
 (`+2` when the row has two more), when that began, how often a repeated event
-occurred or for how long a state has held, and its marks on the shared axis.
-The rows of a group are in the order they began.
+occurred, how often a container exited or for how long a state has held, and
+its marks on the shared axis. The rows of a group are in the order they began.
+What a row is about is cut to its column where the object it names begins or
+between two words (`CheckoutHighErrorRate… +2`), and the count of the other
+entries is never what gives way: it is on the row at every width and with
+`noIcons`.
 
 | Row | Entries | Drawn as |
 | --- | --- | --- |
@@ -301,7 +307,7 @@ The rows of a group are in the order they began.
 | `config` | The last write of each field manager to a referenced ConfigMap or Secret | a mark |
 | `scaling` | The last scale time of an autoscaler | a mark |
 | `warnings` | Warning events, merged by reason and kind | a span from the first to the last occurrence; a single occurrence is a mark |
-| `exits` | The retained exit of a container that was not a clean completion | a mark |
+| `exits` | The retained exit of a container that was not a clean completion, and beside it how often the container exited (`6 times`) | a mark; the stretch before it is not read (`×`) when the container restarted before that exit, because those restarts carry no time |
 | `status` | An abnormal Deployment condition, an unschedulable Pod | a span from when it began to the capture |
 | `autoscaler` | An autoscaler condition that fails | a span to the capture |
 | `nodes` | An abnormal condition of a node the Pods run on | a span to the capture |
@@ -328,6 +334,10 @@ a mark.
 - `ALSO IN THE WINDOW`: everything else, dim.
 - `QUIET`: the kinds whose reads were complete and that have no entry in the
   window, as lines of names: the changes, the failing signals, the annotations.
+  The kinds that are a state of the capture (`status`, `nodes`, `alerts`) are
+  a line of their own, which says `none now; what ended is not kept` and is
+  drawn as not read up to the column of the capture. Folded to one line the
+  group says the same: `QUIET  scaling · nodes: none now`.
 - `NOT READ`: every read that fell short, with its state and its reason
   (`nodes  denied: access denied…`) and the gap glyph all along. A kind that
   comes from such a read is never on a quiet line, and its row is drawn as not
@@ -340,11 +350,29 @@ a mark.
 nothing happened. Each source keeps its latest facts, not a history: the most
 recent exit of a container, the last write of a field manager, the alerts
 Alertmanager still holds. The quiet lines say `none retained` for that reason,
-and **s** lists what each source keeps. Events are the one source that is lost
-wholesale, so the page draws it: a window that reaches further back than
-Kubernetes commonly keeps events (an hour), or than the oldest event that was
-read when that is older, draws that stretch of an event row as not read, and
-a quiet `warnings` line then says `none since 11:00; older events expired`.
+and **s** lists what each source keeps. Where the page knows that something is
+missing it draws the stretch as not read (`×`) instead of as quiet:
+
+- **A state of the capture that is not there now.** An abnormal status, a
+  failing node condition and a firing alert are read as they stand at the
+  capture. One that held ten minutes ago and ended leaves no entry: a Pod
+  that `:slow` found not Ready twice in the hour is, to these sources, a Pod
+  that is Ready. With none of them read the page knows the column of the
+  capture and nothing before it, and the line says `none now; what ended is
+  not kept`.
+- **Restarts without a time.** A container status retains its last exit and
+  counts the restarts before it. They happened before that exit, at moments
+  nothing states, so the `exits` row draws the stretch before its mark as not
+  read and writes the count beside it. After the retained exit the row is
+  quiet: a later exit would have replaced it.
+- **Expired events.** A window that reaches further back than Kubernetes
+  commonly keeps events (an hour), or than the oldest event that was read
+  when that is older, draws that stretch of an event row as not read, and a
+  quiet `warnings` line then says `none since 11:00; older expired`.
+
+A row that has a state (a firing alert, an abnormal condition) draws the
+columns before it began as the baseline: that state was not the case then. It
+does not say that no other state of the kind came and went before it.
 
 **Under the axis** the page lists what the cursor is on, with the time, the
 object and the text the list under **a** has:
@@ -365,7 +393,9 @@ signal or to the mark (`This change preceded the first failing signal by 4m.
 Order is not cause.`), the detail the model carries, and the API field its
 time came from. **Enter** opens its object, **m** its graph, **x** marks it.
 The list has one height for a size of screen and neither cursor is drawn over
-anything, so no row and no column moves when a cursor does.
+anything, so no row and no column moves when a cursor does. A list of four
+rows or more gives its last row up for a blank row over the keys, so that the
+`next` line never stands directly on an entry; a taller screen has both.
 
 **The window** a read opens on is the narrowest of 15m, 1h, 6h and 24h that
 holds the first failing signal and the change before it with a tenth to spare,
@@ -400,7 +430,7 @@ view:
 | `↑` / `↓`, `←` / `→`, `n` / `Shift-N` | The row cursor, the time cursor, the next and previous entry |
 | `1` to `4`, `0` | Window 15m, 1h, 6h, 24h; everything read |
 | `s` | Sources and limits |
-| `x` | Mark the entry as the moment the answer starts from; again to return |
+| `x` | Mark the entry as the moment the answer starts from; on the marked entry, where the key line reads `x clear mark`, take the mark away and return to the rollout |
 | `/` | Filter by text. The rows and the list keep the entries that match; the answer stays about the window and says how many the filter left |
 | `r` | Read again |
 | `Esc` | Put the time cursor away, then clear the filter, then go back |
@@ -412,13 +442,17 @@ What a smaller screen gives up, in the order of the calm layout:
 
 - 132×36 gives up the blank rows around the answer and folds `QUIET` to one
   line, and the list under the axis takes the rows that frees: its heading,
-  the entries, and what it adds under the entry the keys act on.
-- 80×24 keeps every row with a strip of 27 columns. How often or for how long
-  leaves the rows, `ALSO IN THE WINDOW` and `QUIET` are one line each, the
-  second key line goes (`a` is on the first), and the list is one or two
-  lines: the entry the keys act on, under its heading where there is a row
-  for one. The count of entries leaves the title before the object or the
-  window does.
+  the entries, what it adds under the entry the keys act on, and a blank row
+  over the keys.
+- 80×24 keeps every row with a strip of 27 columns or more. How often or for
+  how long leaves the rows (the `exits` row then draws its unread stretch
+  without the count beside it; the list has it), `ALSO IN THE WINDOW` and
+  `QUIET` are one line each, the second key line goes (`a` is on the first),
+  and the list is one or two lines: the entry the keys act on, under its
+  heading where there is a row for one. The count of entries leaves the title
+  before the object or the window does. A quiet line whose words do not fit
+  the column the lines share says them shorter (`none now`, `since 11:00`)
+  instead of starting them elsewhere.
 - 60×24 cuts what a row is about to 16 cells, with strips of 20 columns, and
   the list cuts the name of the object in its middle or leaves it out.
 - The list never costs a row, a strip, a group or a key line. It folds the
@@ -502,8 +536,14 @@ The view also states these under **s**:
   read.
 - Pod status keeps only the most recent exit per container, and `managedFields`
   keeps only the last write per manager. Earlier restarts and edits are not
-  timed: the `exits` row draws the one exit that is, and its text carries the
-  restart count.
+  timed: the `exits` row draws the one exit that is, counts the others beside
+  it and draws the stretch before it as not read. An earlier write by the
+  same manager is not counted by its source, so the `config` row cannot show
+  that one is missing.
+- Conditions and alerts are read as they stand at the capture. What ended
+  before it is not kept: with none now the page says so and draws nothing
+  before the capture as quiet, and with one now it draws that one from when
+  it began.
 - Failing status that carries no time is listed under **s** and is not placed
   in the order. Entries in the same second have no known order; the page
   lists them in the order the model does.

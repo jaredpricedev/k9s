@@ -5,29 +5,29 @@ Timeline  Deployment apps/checkout-api · last 15m · 12 of 16 entries          
                                          rev 2 rolled out 11:48              ▼
                                                                              ┊
   CHANGED                                                                    ┊
-  config       checkout-config updated by ku…  11:46            ····▲········┊····················································
-  rollouts     rev 2: image v1 → v2; env ~PA…  11:48            ·············▲····················································
+  config       checkout-config updated by…     11:46            ····▲········┊····················································
+  rollouts     rev 2: image v1 → v2; env…      11:48            ·············▲····················································
                                                                              ┊
   THEN WENT WRONG                                                            ┊
 > warnings     BackOff · pod x2x9q             11:50  14 times  ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁████████████████████████████████████████▁▁▁▁
-  alerts       CheckoutHighErrorRate (cri… +2  11:51  for 9m    ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁████████████████████████████████████████
-  autoscaler   ScalingActive=False FailedGet…  11:52  for 8m    ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████████████████████████████████████
-  exits        api Error (exit 1), restart c…  11:58            ·············┊···········································▲········
-  status       Progressing=False ProgressDea…  11:58  for 2m    ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████████
+  alerts       CheckoutHighErrorRate… +2       11:51  for 9m    ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁████████████████████████████████████████
+  autoscaler   ScalingActive=False…            11:52  for 8m    ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████████████████████████████████████
+  exits        api Error (exit 1) · pod x2x9q  11:58  6 times   ×××××××××××××××××××××××××××××××××××××××××××××××××××××××××▲········
+  status       Progressing=False…              11:58  for 2m    ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████████
                                                                              ┊
   ALSO IN THE WINDOW                                                         ┊
   annotations  ConfigMap apps/checkout-confi…  11:46            ····▲········┊····················································
-  events       ScalingReplicaSet · deploy… +1  11:48  8 times   ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁█████████████████████████████████████████████▁▁▁▁
+  events       ScalingReplicaSet… +1           11:48  8 times   ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁█████████████████████████████████████████████▁▁▁▁
                                                                 ────┬────────┯────────┬───────┬────────┬────────┬────────┬───────┬
   UTC                                                             11:46    11:48    11:50   11:52    11:54    11:56    11:58   12:00
 
-  QUIET  scaling · nodes
+  QUIET  scaling · nodes: none now
 
   WARNINGS  1 entry in the last 15m
 > 11:50:00  pod/checkout-api-7d9f8c6b5d-x2x9q  Warning BackOff x14: Back-off restarting failed container api in pod
             checkout-api-7d9f8c6b5d-x2x9q
             First failing signal that could be read. The fault may have begun earlier than the evidence shows.
             Reported by: kubelet | First 2026-11-17 11:50:00Z, last 2026-11-17 11:59:00Z, 14 occurrences
-            Time from: Event firstTimestamp/lastTimestamp, falling back to eventTime then creationTimestamp
+
   next  Enter open x2x9q    a full list
   ↑↓ row · ←→ time · 1-4 window, 0 all · s sources · n next entry · x mark · / filter · r re-read · Esc back

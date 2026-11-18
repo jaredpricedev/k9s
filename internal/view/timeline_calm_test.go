@@ -80,7 +80,7 @@ func timelineIncident(scope *timeline.Scope, short map[string]timeline.Coverage)
 		{At: ago(8 * time.Minute), Source: timeline.SourceAlert, Failing: true, Ref: pod, Summary: "KubePodCrashLooping (warning) began firing: Pod is crash looping."},
 		{At: ago(8 * time.Minute), Source: timeline.SourceAutoscaler, Failing: true, Ref: hpa, Summary: "ScalingActive=False FailedGetResourceMetric"},
 		{At: ago(7 * time.Minute), Source: timeline.SourceAlert, Failing: true, Ref: other, Summary: "KubePodNotReady (warning) began firing: Pod has been in a non-ready state for more than 15 minutes."},
-		{At: ago(2 * time.Minute), Source: timeline.SourceRestart, Failing: true, Ref: pod, Summary: "container api Error (exit 1), restart count 6",
+		{At: ago(2 * time.Minute), Source: timeline.SourceRestart, Failing: true, Ref: pod, Summary: "container api Error (exit 1), restart count 6", Earlier: 5,
 			Origin: "Pod status containerStatuses[].lastState.terminated.finishedAt",
 			Detail: []string{"Ran 41s (started 2026-11-17 11:57:19Z)", "Only the most recent exit is retained; 5 earlier restarts have no time."}},
 		{At: ago(2 * time.Minute), Source: timeline.SourceCondition, Failing: true, Ref: deployment, Summary: "Progressing=False ProgressDeadlineExceeded"},
@@ -284,9 +284,13 @@ func TestTimelineCalmPageStatesWhatHappenedInOrderAtEverySize(t *testing.T) {
 		wrong := strings.Index(frame, "\n  "+timelineThenLabel)
 		require.Less(t, changed, wrong, "%d columns", size[0])
 		require.Empty(t, timelineGaveUp(v, "rows of"), "%d columns: every row is on the page", size[0])
-		for _, row := range []string{"config", "rollouts", "warnings", "alerts", "autoscaler", "exits", "status"} {
+		for _, row := range []string{"config", "rollouts", "warnings", "alerts", "autoscaler", "status"} {
 			require.Regexp(t, `(?m)^[> ] `+row+` .*[·▲▁█┊]{20,}$`, frame, "%d columns: %s", size[0], row)
 		}
+		// The container restarted six times and retains the time of its
+		// last exit only: the stretch before that mark is not read, never
+		// quiet, and after it nothing more happened.
+		require.Regexp(t, `(?m)^[> ] exits .*  ×{10,}▲·+$`, frame, "%d columns", size[0])
 		require.Regexp(t, `(?m)^> warnings +BackOff`, frame, "the row cursor opens on the first failing signal")
 		// The change is marked over the strips by a sign, not only a colour.
 		require.Regexp(t, `(?m)^ +rev 2 .*▼$`, frame, "%d columns", size[0])
@@ -298,12 +302,16 @@ func TestTimelineCalmPageStatesWhatHappenedInOrderAtEverySize(t *testing.T) {
 			require.Contains(t, lines[0], "read 12:00 · 11 of 11 sources")
 			require.Contains(t, frame, "rev 2 rolled out 11:48")
 			require.Regexp(t, `(?m)^  warnings +BackOff · pod x2x9q +11:50  14 times +▁+┊▁+█+▁+$`, strings.Replace(frame, "> warnings", "  warnings", 1))
-			require.Regexp(t, `(?m)^  alerts +CheckoutHighErrorRate \(cri… \+2  11:51  for 9m +▁+┊▁+█+$`, frame)
-			require.Regexp(t, `(?m)^  exits +api Error \(exit 1\), restart c…  11:58 +·+┊·+▲·+$`, frame)
-			require.Regexp(t, `(?m)^  rollouts +rev 2: image v1 → v2; env ~PA…  11:48 +·+▲·+$`, frame, "the mark of the rollout stands where its guide is")
-			require.Regexp(t, `(?m)^  ALSO IN THE WINDOW +┊\n  annotations +ConfigMap apps/checkout-confi…  11:46 +·+▲·+┊·+\n  events +ScalingReplicaSet · deploy… \+1  11:48  8 times `, frame)
-			require.Contains(t, frame, "  QUIET  scaling · nodes\n")
-			require.Contains(t, frame, "  next  Enter open x2x9q    a full list\n")
+			// What a row is about ends between two words, and the count of
+			// its other entries stays after the cut.
+			require.Regexp(t, `(?m)^  alerts +CheckoutHighErrorRate… \+2 +11:51  for 9m +▁+┊▁+█+$`, frame)
+			require.Regexp(t, `(?m)^  exits +api Error \(exit 1\) · pod x2x9q  11:58  6 times +×+▲·+$`, frame,
+				"the exits are counted beside the text, which does not write the count again")
+			require.Regexp(t, `(?m)^  rollouts +rev 2: image v1 → v2; env… +11:48 +·+▲·+$`, frame, "the mark of the rollout stands where its guide is")
+			require.Regexp(t, `(?m)^  ALSO IN THE WINDOW +┊\n  annotations +ConfigMap apps/checkout-confi…  11:46 +·+▲·+┊·+\n  events +ScalingReplicaSet… \+1 +11:48  8 times `, frame)
+			require.Contains(t, frame, "  QUIET  scaling · nodes: none now\n")
+			// The keys do not stand directly on the list.
+			require.Contains(t, frame, "\n\n  next  Enter open x2x9q    a full list\n")
 			require.Contains(t, frame, "  ↑↓ row · ←→ time · 1-4 window, 0 all · s sources · n next entry · x mark · / filter · r re-read · Esc back\n")
 		case 80:
 			// Every row keeps its strip; what is neither a change nor a
@@ -312,14 +320,15 @@ func TestTimelineCalmPageStatesWhatHappenedInOrderAtEverySize(t *testing.T) {
 			// or the window does.
 			require.Equal(t, "Timeline  Deployment apps/checkout-api · last 15m  read 12:00 · 11 of 11 sources", lines[0])
 			require.Contains(t, frame, "  ALSO IN THE WINDOW  annotations 11:46 · events 11:48 8 times\n")
-			require.Contains(t, frame, "  QUIET  scaling · nodes\n")
+			require.Contains(t, frame, "  QUIET  scaling · nodes: none now\n")
 			require.Contains(t, v.dropped, "the second key line")
 			require.Contains(t, v.dropped, "what each number is compared with")
 			require.NotContains(t, frame, "not shown", "nothing is left out at 80x24")
 		case 60:
 			// What a row is about is cut; its time and its strip stay.
 			require.Contains(t, lines[0], "last 15m", "the window outlasts the count of entries in the title")
-			require.Regexp(t, `(?m)^> warnings +BackOff · pod x2…  11:50  ▁+┊▁+█+▁+$`, frame)
+			require.Regexp(t, `(?m)^> warnings +BackOff… +11:50  ▁+┊▁+█+▁+$`, frame, "a part of the Pod's name says less than none of it")
+			require.Regexp(t, `(?m)^  alerts +CheckoutHighE… \+2  11:51  `, frame, "the count of the other alerts outlasts the name of the first")
 			require.NotContains(t, frame, "not shown", "nothing is left out at 60x24")
 		}
 	}
@@ -364,7 +373,9 @@ func TestTimelineCalmRowsShareOneAxisAndTheChangeIsAGuide(t *testing.T) {
 		require.Equal(t, []int{guide}, timelineCols(lines[axisAt], "━┯"), "%d columns: heavy on the axis under the marker", size[0])
 		first := len([]rune(lines[axisAt])) - len([]rune(strings.TrimLeft(lines[axisAt], " ")))
 		end := len([]rune(lines[axisAt]))
-		for _, row := range []struct{ name, glyph string }{{"config", "┊"}, {"rollouts", "▲"}, {"warnings", "┊"}, {"alerts", "┊"}, {"autoscaler", "┊"}, {"exits", "┊"}, {"status", "┊"}} {
+		// The guide never stands over a column that was not read: the row of
+		// the exits is not read there.
+		for _, row := range []struct{ name, glyph string }{{"config", "┊"}, {"rollouts", "▲"}, {"warnings", "┊"}, {"alerts", "┊"}, {"autoscaler", "┊"}, {"exits", "×"}, {"status", "┊"}} {
 			line, _ := timelineLineWith(t, strings.ReplaceAll(frame, "\n> ", "\n  "), "  "+row.name+" ")
 			runes := []rune(line)
 			require.Len(t, runes, end, "%d columns: the strip of %s ends where the axis does", size[0], row.name)
@@ -494,13 +505,20 @@ func TestTimelineCalmListReachesEveryEntryOfTheWindow(t *testing.T) {
 	require.Equal(t, s.Onset, v.focused, "the keys act on the first failing signal when the page opens")
 	// The entry the keys act on is written in full where there is room:
 	// its text whole, how it stands to the first failing signal, what the
-	// model says of it and where its time is from.
-	require.Contains(t, frame, "  WARNINGS  1 entry in the last 15m\n"+
-		"> 11:50:00  pod/checkout-api-7d9f8c6b5d-x2x9q  Warning BackOff x14: Back-off restarting failed container api in pod\n"+
-		"            checkout-api-7d9f8c6b5d-x2x9q\n"+
-		"            First failing signal that could be read. The fault may have begun earlier than the evidence shows.\n"+
-		"            Reported by: kubelet | First 2026-11-17 11:50:00Z, last 2026-11-17 11:59:00Z, 14 occurrences\n"+
-		"            Time from: Event firstTimestamp/lastTimestamp, falling back to eventTime then creationTimestamp\n")
+	// model says of it and where its time is from. The keys never stand
+	// directly on a list of this length: in a terminal of 132x36 its last
+	// line, where the time is from, gives its row to the blank row over
+	// them, and a taller one has both.
+	written := "  WARNINGS  1 entry in the last 15m\n" +
+		"> 11:50:00  pod/checkout-api-7d9f8c6b5d-x2x9q  Warning BackOff x14: Back-off restarting failed container api in pod\n" +
+		"            checkout-api-7d9f8c6b5d-x2x9q\n" +
+		"            First failing signal that could be read. The fault may have begun earlier than the evidence shows.\n" +
+		"            Reported by: kubelet | First 2026-11-17 11:50:00Z, last 2026-11-17 11:59:00Z, 14 occurrences\n"
+	from := "            Time from: Event firstTimestamp/lastTimestamp, falling back to eventTime then creationTimestamp\n"
+	require.Contains(t, frame, written+"\n  next  Enter open x2x9q")
+	require.NotContains(t, frame, from)
+	require.Contains(t, drawnText(t, v, 132, 37), written+from+"\n  next  Enter open x2x9q")
+	frame = drawnText(t, v, 132, 33)
 	target := v.SelectedResource()
 	require.Equal(t, "v1/pods", target.GVR.String())
 	require.Equal(t, "apps/checkout-api-7d9f8c6b5d-x2x9q", target.Path())
@@ -508,12 +526,16 @@ func TestTimelineCalmListReachesEveryEntryOfTheWindow(t *testing.T) {
 	// A row of several entries lists them, oldest first.
 	v.moveRow(1)
 	frame = drawnText(t, v, 132, 33)
-	require.Contains(t, frame, "  ALERTS  3 entries in the last 15m\n"+
-		"> 11:51:00  deploy/checkout-api                CheckoutHighErrorRate (critical) began firing: checkout-api is answering more than\n"+
-		"            5% of requests with 5xx\n"+
-		"            Began 1m after the first failing signal.\n"+
-		"  11:52:00  pod/checkout-api-7d9f8c6b5d-x2x9q  KubePodCrashLooping (warning) began firing: Pod is crash looping.\n"+
-		"  11:53:00  pod/checkout-api-7d9f8c6b5d-p8wm   KubePodNotReady (warning) began firing: Pod has been in a non-ready state for more t…\n")
+	alerts := []string{"  ALERTS  3 entries in the last 15m\n" +
+		"> 11:51:00  deploy/checkout-api                CheckoutHighErrorRate (critical) began firing: checkout-api is answering more than\n" +
+		"            5% of requests with 5xx\n",
+		"            Began 1m after the first failing signal.\n",
+		"  11:52:00  pod/checkout-api-7d9f8c6b5d-x2x9q  KubePodCrashLooping (warning) began firing: Pod is crash looping.\n" +
+			"  11:53:00  pod/checkout-api-7d9f8c6b5d-p8wm   KubePodNotReady (warning) began firing: Pod has been in a non-ready state for more t…\n"}
+	// Every entry of the row outlasts what the list adds under the first.
+	require.Contains(t, frame, alerts[0]+alerts[2]+"\n  next  Enter open deploy/checkout-api")
+	require.Contains(t, drawnText(t, v, 132, 37), strings.Join(alerts, "")+"\n  next  Enter open deploy/checkout-api")
+	drawnText(t, v, 132, 33)
 	require.Equal(t, "apps/v1/deployments", v.SelectedResource().GVR.String())
 
 	// n from the first entry on: every entry of the window, in the order
@@ -575,9 +597,17 @@ func TestTimelineCalmListReachesEveryEntryOfTheWindow(t *testing.T) {
 	require.Regexp(t, `(?m)^ +your mark 11:46 .*▼$`, frame)
 	require.NotContains(t, frame, "rev 2 rolled out 11:48")
 	require.Contains(t, frame, "            Reference moment you chose; other entries are labelled before or after it.\n")
+	// x on the mark takes it away, and the key line says so while the keys
+	// act on it; on any other entry x moves the mark there.
+	require.Contains(t, frame, " · n next entry · x clear mark · / filter · ")
+	v.stepEntry(1)
+	require.Contains(t, drawnText(t, v, 132, 33), " · n next entry · x mark · / filter · ")
+	v.stepEntry(-1)
+	require.Contains(t, drawnText(t, v, 132, 33), " · x clear mark · ")
 	v.markReference()
 	frame = drawnText(t, v, 132, 33)
 	require.False(t, s.Chosen)
+	require.Contains(t, frame, " · n next entry · x mark · / filter · ")
 	require.Contains(t, frame, "  Rev 2 rolled out at 11:48, after 1 other change.\n")
 	require.Regexp(t, `(?m)^ +rev 2 rolled out 11:48 .*▼$`, frame)
 
@@ -592,8 +622,8 @@ func TestTimelineCalmListReachesEveryEntryOfTheWindow(t *testing.T) {
 	require.Contains(t, frame, "  Your mark is at 11:52: ScalingActive=False FailedGetResourceMetric on hpa/checkout-api.\n")
 	require.Contains(t, frame, "4 failing signals followed within 6m, the first in the same second: alert KubePodCrashLooping (warning).")
 	require.Contains(t, frame, "2 failing signals had begun before it.")
-	require.Regexp(t, `(?m)^  `+timelineThenLabel+` +[┊┆]\n> autoscaler +ScalingActive=False FailedGet…  11:52  for 8m .*\n  alerts +KubePodCrashLooping \(warni… \+1  11:52  for 8m `, frame)
-	require.Regexp(t, `(?m)^  `+timelineBeforeLabel+` +[┊┆]\n  warnings +BackOff · pod x2x9q .*\n  alerts +CheckoutHighErrorRate \(critic…  11:51  for 9m `, frame)
+	require.Regexp(t, `(?m)^  `+timelineThenLabel+` +[┊┆]\n> autoscaler +ScalingActive=False… +11:52  for 8m .*\n  alerts +KubePodCrashLooping… \+1 +11:52  for 8m `, frame)
+	require.Regexp(t, `(?m)^  `+timelineBeforeLabel+` +[┊┆]\n  warnings +BackOff · pod x2x9q .*\n  alerts +CheckoutHighErrorRate… +11:51  for 9m `, frame)
 }
 
 // A read that fell short is never drawn as quiet: its kinds are not on the
@@ -614,10 +644,10 @@ func TestTimelineCalmNeverDrawsAReadThatFellShortAsQuiet(t *testing.T) {
 	// A kind whose read fell short keeps the marks that were read, and is
 	// not-read everywhere else: an alert that began and ended in between is
 	// not known not to have happened.
-	require.Regexp(t, `(?m)^  alerts +CheckoutHighErrorRate \(cri… \+2  11:51  for 9m +×+█+$`, frame)
-	require.Regexp(t, `(?m)^  autoscaler +ScalingActive=False FailedGet…  11:52  for 8m +×+█+$`, frame)
+	require.Regexp(t, `(?m)^  alerts +CheckoutHighErrorRate… \+2 +11:51  for 9m +×+█+$`, frame)
+	require.Regexp(t, `(?m)^  autoscaler +ScalingActive=False… +11:52  for 8m +×+█+$`, frame)
 	// What was read in full is still drawn as read.
-	require.Regexp(t, `(?m)^  status +Progressing=False ProgressDea…  11:58  for 2m +▁+┊▁+█+$`, frame)
+	require.Regexp(t, `(?m)^  status +Progressing=False… +11:58  for 2m +▁+┊▁+█+$`, frame)
 	// Neither the nodes nor the autoscaler's scaling is quiet.
 	require.NotContains(t, frame, "QUIET", "every kind that was read in full has an entry here")
 	require.NotRegexp(t, `(?m)^  [a-z ·]*(nodes|scaling|alerts)[a-z ·]* +none retained`, frame)
@@ -647,7 +677,8 @@ func TestTimelineCalmNeverDrawsAReadThatFellShortAsQuiet(t *testing.T) {
 		return s
 	})
 	frame = drawnText(t, undeclared, 132, 33)
-	require.Contains(t, frame, "  warnings · exits · status · nodes ")
+	require.Regexp(t, `(?m)^  warnings · exits +none retained +·+$`, frame)
+	require.Regexp(t, `(?m)^  status · nodes +none now; what ended is not kept +×+·$`, frame)
 	require.NotContains(t, frame, "alerts")
 	require.NotContains(t, frame, "NOT READ")
 
@@ -662,13 +693,13 @@ func TestTimelineCalmNeverDrawsAReadThatFellShortAsQuiet(t *testing.T) {
 	hang := timelineCalmFixture(t, timelineHang)
 	hang.setWindow(6 * time.Hour)
 	frame = drawnText(t, hang, 132, 33)
-	require.Regexp(t, `(?m)^  warnings  none since 11:00; older events expired +×{40,}·+$`, frame)
+	require.Regexp(t, `(?m)^  warnings +none since 11:00; older expired +×{40,}·+$`, frame)
 	require.NotRegexp(t, `(?m)^  [a-z ·]*warnings[a-z ·]* +none retained`, frame)
 	// The oldest event that was read moves that edge back.
 	hang.snapshot.EventsRead, hang.snapshot.OldestEvent = 3, timelineAt.Add(-3*time.Hour)
 	hang.render()
 	frame = drawnText(t, hang, 132, 33)
-	require.Regexp(t, `(?m)^  warnings  none since 09:00; older events expired +×{20,}·{20,}$`, frame)
+	require.Regexp(t, `(?m)^  warnings +none since 09:00; older expired +×{20,}·{20,}$`, frame)
 }
 
 // When nothing happened in the window, or nothing was read, the page says
@@ -683,7 +714,12 @@ func TestTimelineCalmSaysWhenNothingHappenedOrNothingWasRead(t *testing.T) {
 	require.Contains(t, frame, "  Nothing that was read began in the last 1h. 0 shows all 2 entries read.")
 	require.Contains(t, frame, timelineNothingCaveat)
 	require.NotContains(t, frame, timelineOrderCaveat)
-	require.Regexp(t, `(?m)^  QUIET\n  rollouts · config · scaling +·+\n  warnings · exits · status · nodes · alerts +·+\n  annotations +·+$`, frame)
+	// What keeps a history for the hour is quiet. An abnormal status, a
+	// failing node condition and a firing alert are states of the capture:
+	// there is none now, and what ended before it is not kept, so the hour
+	// before the capture is not read, never quiet.
+	require.Regexp(t, `(?m)^  QUIET\n  rollouts · config · scaling +none retained +·+\n  warnings · exits +none retained +·+\n  annotations +none retained +·+\n`+
+		`  status · nodes · alerts +none now; what ended is not kept +×+·$`, frame)
 	require.Contains(t, frame, "  next  a full list\n")
 	require.NotContains(t, frame, "↑↓ row", "a page without rows names no cursor")
 	// 0 shows it: the one rollout, days ago, on an axis of days.
@@ -716,7 +752,11 @@ func TestTimelineCalmSaysWhenNothingHappenedOrNothingWasRead(t *testing.T) {
 	require.Contains(t, frame, "  Rev 2 rolled out at 11:48, after 1 other change. No failing signal was read after it.")
 	require.Contains(t, frame, timelineNothingCaveat)
 	require.NotContains(t, frame, timelineThenLabel)
-	require.Regexp(t, `(?m)^  warnings · exits · status · nodes · alerts +none retained +·+┊·+$`, frame)
+	require.Regexp(t, `(?m)^  warnings · exits +none retained +·+┊·+$`, frame)
+	// No failing signal was read: of the states of the capture that says
+	// that there is none now, and nothing of the minutes before it. The
+	// guide does not stand over what was not read.
+	require.Regexp(t, `(?m)^  status · nodes · alerts +none now; what ended is not kept +×+·$`, frame)
 
 	// Failing signals, and no change before them in the window.
 	wrong := timelineCalmFixture(t, func(scope *timeline.Scope) *timeline.Snapshot {
@@ -832,7 +872,7 @@ func TestTimelineDrawsTheStallsOfTheViewItWasOpenedFrom(t *testing.T) {
 	require.Len(t, timelineCols(axis, "R"), 1)
 	require.Equal(t, timelineCols(axis, "R"), timelineCols(marker, "┊"))
 	require.Contains(t, frame, "  R rev 2 rolled out 11:48 · image v1 → v2; env ~PAYMENT_TOKEN +FEATURE_FLAGS; limits.memory 512Mi → 256Mi\n")
-	require.Regexp(t, `(?m)^  rollouts +rev 2: image v1 → v2; env ~PA…  11:48 +·+▲·+$`, frame)
+	require.Regexp(t, `(?m)^  rollouts +rev 2: image v1 → v2; env… +11:48 +·+▲·+$`, frame)
 	// The bands are a background behind every row.
 	runes, back := drawnCells(t, v, 132, 33)
 	var cols []int
@@ -994,7 +1034,7 @@ func TestTimelineCalmFilterNarrowsTheRowsAndSaysSo(t *testing.T) {
 	require.Contains(t, strings.Split(frame, "\n")[0], "last 15m · filter config · 2 of 16 entries")
 	require.Contains(t, frame, "  Rev 2 rolled out at 11:48, after 1 other change.\n")
 	require.Contains(t, frame, `Filter "config": 2 of 12 entries in this window drawn; Esc clears it.`)
-	require.Regexp(t, `(?m)^> config +checkout-config updated by ku…  11:46 `, frame)
+	require.Regexp(t, `(?m)^> config +checkout-config updated by… +11:46 `, frame)
 	require.Regexp(t, `(?m)^  annotations +ConfigMap apps/checkout-confi…  11:46 `, frame)
 	require.NotRegexp(t, `(?m)^[> ] (warnings|alerts|rollouts) `, frame)
 	require.NotContains(t, frame, "QUIET", "what the filter hides is not quiet")
@@ -1003,7 +1043,7 @@ func TestTimelineCalmFilterNarrowsTheRowsAndSaysSo(t *testing.T) {
 	require.Contains(t, frame, `Filter "nothing-matches": 0 of 12 entries in this window drawn; Esc clears it.`)
 	require.NotContains(t, frame, "QUIET")
 	v.applyQuery("")
-	require.Contains(t, drawnText(t, v, 132, 33), "  QUIET  scaling · nodes\n")
+	require.Contains(t, drawnText(t, v, 132, 33), "  QUIET  scaling · nodes: none now\n")
 }
 
 // Every size a terminal can give the view: the page fits it in cells,

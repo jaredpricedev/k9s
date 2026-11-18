@@ -117,6 +117,11 @@ type Entry struct {
 	// Failing marks a failing signal. Change marks a change to desired state or
 	// configuration. Neither field states a cause.
 	Failing, Change bool
+	// Earlier counts the earlier occurrences that happened and carry no
+	// time: the restarts before the one exit a container status retains.
+	// They were before At, at moments nothing states, so a view that draws
+	// the entry on a time axis cannot draw the stretch before it as quiet.
+	Earlier int
 }
 
 // Coverage states use the investigation vocabulary in CONTEXT.md.

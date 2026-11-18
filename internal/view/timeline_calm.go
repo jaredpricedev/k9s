@@ -5,10 +5,13 @@ package view
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/derailed/k9s/internal/calm"
 	"github.com/derailed/k9s/internal/chart"
@@ -48,6 +51,18 @@ const (
 	// keeps its latest facts, not a history: nothing retained is not the
 	// same as nothing happened.
 	timelineQuietWords = "none retained"
+	// timelineNowWords is what the page says of the kinds that are a state
+	// read at the capture (an abnormal status, a failing node condition, a
+	// firing alert) when none was read. Their sources hold what is the
+	// case now and nothing of what ended before it: a Pod that was not
+	// Ready ten minutes ago and is Ready now leaves no entry. The line
+	// says that much and its strip is not drawn as quiet.
+	timelineNowWords = "none now; what ended is not kept"
+	timelineNowFold  = "none now"
+	// timelineLeadWidth is the widest names the kit sets in the first
+	// column of a quiet line (its maxLead). Longer names push the words
+	// after them off the column the other lines write theirs in.
+	timelineLeadWidth = 30
 
 	// timelineEventRetention is how long Kubernetes commonly keeps an
 	// event. An event row is not drawn as quiet further back than that,
@@ -191,10 +206,13 @@ type timelineStory struct {
 	partial  bool
 	// partialQuiet are the rows of the quiet group that are quiet only as
 	// far back as events are kept, and quietGroup the group they are in.
-	// Its first quietNames rows are lists of names.
+	// Its first quietNames rows are lists of names. nowRow is its row of
+	// the kinds that are a state of the capture and have none, or -1: the
+	// one column that is known of them is the last.
 	partialQuiet []timelineCalmRow
 	quietGroup   int
 	quietNames   int
+	nowRow       int
 }
 
 // oldestFirst turns entries, which the model keeps newest first, into the
@@ -210,7 +228,7 @@ func (st *timelineStory) oldestFirst(indexes []int) []int {
 //
 //nolint:gocyclo,funlen // One pass each for the window, the moment the answer starts from, the two sides of it, the rows and the episodes.
 func timelineStoryOf(s *timeline.Snapshot, window time.Duration, query string, episodes *graphEpisodes) *timelineStory {
-	st := &timelineStory{s: s, window: window, query: query, end: s.CapturedAt, start: s.CapturedAt.Add(-window), anchor: -1}
+	st := &timelineStory{s: s, window: window, query: query, end: s.CapturedAt, start: s.CapturedAt.Add(-window), anchor: -1, nowRow: -1}
 	// The window holds what began in it, as the list under a does, and what
 	// began before it and still held at the capture: a state that is the
 	// case all through the window belongs on its axis.
@@ -404,7 +422,7 @@ func (st *timelineStory) fact(e *timeline.Entry) string {
 	if e.Ref.Name == "" || strings.Contains(head, " on ") {
 		return head
 	}
-	return head + " · " + st.object(e)
+	return head + timelineObjectSep + st.object(e)
 }
 
 // brief names an entry in a sentence.
@@ -447,8 +465,10 @@ func (st *timelineStory) eventHorizon() time.Time {
 
 // strip draws the marks of a kind on the frame of the page. A column in
 // which nothing is known is drawn as not read, never as quiet: all of the
-// row when a read it comes from fell short, and for events the stretch
-// older than events are kept.
+// row when a read it comes from fell short, for events the stretch older
+// than events are kept, and the stretch before an entry that counts
+// earlier occurrences without a time (the restarts before the one exit a
+// container retains: they happened there, at moments nothing states).
 func (st *timelineStory) strip(kind *timelineKind, entries []int, f chart.Frame) calm.Strip {
 	if f.Width < 1 || !f.End.After(f.Start) {
 		return calm.Strip{}
@@ -458,7 +478,11 @@ func (st *timelineStory) strip(kind *timelineKind, entries []int, f chart.Frame)
 	// A span no wider than one column is a moment at this scale: it is
 	// drawn as one, so that the guide of the page never stands in its place.
 	moments := true
+	untimed := time.Time{}
 	for _, entry := range entries {
+		if e := &st.s.Entries[entry]; e.Earlier > 0 && e.At.After(untimed) {
+			untimed = e.At
+		}
 		mark := st.mark(kind, entry)
 		moments = moments && f.MarkedCount([]chart.Interval{mark}) <= 1
 		marks = append(marks, mark)
@@ -472,15 +496,15 @@ func (st *timelineStory) strip(kind *timelineKind, entries []int, f chart.Frame)
 	if kind.source == timeline.SourceEvent {
 		horizon = st.eventHorizon()
 	}
-	// known reports whether a column that ends at a time can be quiet.
-	known := func(to time.Time) bool {
-		return complete && (horizon.IsZero() || to.After(horizon))
+	// known reports whether a column can be quiet.
+	known := func(from, to time.Time) bool {
+		return complete && (horizon.IsZero() || to.After(horizon)) && !from.Before(untimed)
 	}
 	marked := f.Marked(marks)
 	var unknown []chart.Interval
 	for col := range f.Width {
 		from, to := f.ColumnSpan(col)
-		if marked[col] || known(to) {
+		if marked[col] || known(from, to) {
 			continue
 		}
 		// A run of columns is one stretch: its ends are column edges, so it
@@ -504,22 +528,66 @@ type timelineCalmRow struct {
 	kind    *timelineKind
 	entries []int
 	lead    int
+	// what is what the row is about, whole; the page cuts it to the column
+	// it is given once the columns are known.
+	what string
 	// group and index place the row on the page.
 	group, index int
 }
 
-// timelineWhat is what a row is about, cut so that the count of the other
-// entries of the row stays on it.
-func timelineWhat(text string, more int) string {
+// timelineWhat is what a row is about in a column of a width, with the
+// count of the other entries of the row. The count is never what gives
+// way: a row that names one alert of five says "+4" at every width, and
+// with noIcons too. A text that does not fit ends where the object it is
+// about begins, where that keeps a third of it, or between two words,
+// where that keeps half; the cut is marked.
+func timelineWhat(text string, more, width int, o calm.Options) string { //nolint:gocritic // Options are passed by value, as the kit takes them.
 	suffix := ""
 	if more > 0 {
 		suffix = fmt.Sprintf(" +%d", more)
 	}
-	if room := timelineWhatWidth - tviewCells(suffix); tviewCells(text) > room {
-		text = runewidth.Truncate(text, room, "…")
+	text = timelineWords(text, o)
+	room := width - tviewCells(suffix)
+	if tviewCells(text) <= room {
+		return text + suffix
 	}
-	return text + suffix
+	mark := timelineWords("…", o)
+	if room <= tviewCells(mark) {
+		// No room for both: the count says more than a letter of the text.
+		return runewidth.Truncate(strings.TrimSpace(suffix), width, "")
+	}
+	head := runewidth.Truncate(text, room-tviewCells(mark), "")
+	keeps := func(at, part int) bool { return at > 0 && part*tviewCells(head[:at]) >= tviewCells(head) }
+	switch object := strings.LastIndex(head, timelineWords(timelineObjectSep, o)); {
+	case keeps(object, 3):
+		// A part of the name of the object says less than none of it.
+		head = head[:object]
+	case timelineWordEnds(text[len(head):]):
+		// The cut is between two words already.
+	default:
+		if at := strings.LastIndex(head, " "); keeps(at, 2) {
+			head = head[:at]
+		}
+	}
+	return strings.TrimRight(head, " ,;:(|·") + mark + suffix
 }
+
+// timelineWordEnds reports whether what follows a cut does not continue
+// a word: a space or a sign follows, not a letter or a digit. A text that
+// was cut and lost the sign after its last word is cut at the same place
+// again in a column of exactly that width.
+func timelineWordEnds(rest string) bool {
+	r, _ := utf8.DecodeRuneInString(rest)
+	return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+}
+
+// timelineObjectSep stands between what an entry is and the object it is
+// about, on a row.
+const timelineObjectSep = " · "
+
+// timelineRestartCount is the restart count in the text of a container
+// exit. A row that counts the exits beside its text does not write it twice.
+var timelineRestartCount = regexp.MustCompile(`, restart count \d+`)
 
 // calmRow is a row of the story as the kit draws it: the kind, what its
 // lead entry is, when that began, and how often or for how long. The strip
@@ -530,7 +598,8 @@ func (st *timelineStory) calmRow(row *timelineStoryRow, o calm.Options) (calm.Ro
 	s := st.s
 	lead := st.lead(row)
 	e := &s.Entries[lead]
-	out := calm.Row{Subject: row.kind.name, What: timelineWhat(impactArrow(st.fact(e), o), len(row.entries)-1), Number: st.clock(e.At)}
+	what := impactArrow(st.fact(e), o)
+	out := calm.Row{Subject: row.kind.name, Number: st.clock(e.At)}
 	switch {
 	case row.kind.holds:
 		// How long the first of them has held, to the minute.
@@ -548,14 +617,27 @@ func (st *timelineStory) calmRow(row *timelineStoryRow, o calm.Options) (calm.Ro
 		if times > 1 {
 			out.Compare = slowTimes(times)
 		}
+	case row.kind.source == timeline.SourceRestart:
+		// A container retains its last exit only. The restarts before it
+		// are counted here and have no mark: the strip draws the stretch
+		// before the retained exit as not read.
+		times := 0
+		for _, entry := range row.entries {
+			times += 1 + s.Entries[entry].Earlier
+		}
+		if times > len(row.entries) {
+			out.Compare = slowTimes(times)
+			what = timelineRestartCount.ReplaceAllString(what, "")
+		}
 	}
+	out.What = timelineWhat(what, len(row.entries)-1, timelineWhatWidth, o)
 	switch row.kind.class {
 	case timelineChanged:
 		out.Color = o.Palette.Info
 	case timelineFailed:
 		out.Color = o.Palette.Fail
 	}
-	return out, timelineCalmRow{key: row.key, kind: row.kind, entries: row.entries, lead: lead}
+	return out, timelineCalmRow{key: row.key, kind: row.kind, entries: row.entries, lead: lead, what: what}
 }
 
 // timelineFold is what a row is called when its group is one line.
@@ -622,12 +704,18 @@ func (st *timelineStory) verdict() calm.Verdict {
 			sentence += ", after " + timelinePlural(earlier, "other change", "other changes")
 		}
 		say("%s.", sentence)
+		// Entries of one second have no order that is known: what began in
+		// the second of the moment did not follow it, it began with it.
 		switch n := len(st.after); {
 		case n == 0:
 			out.Caveat = timelineNothingCaveat
 			say("No failing signal was read after it.")
+		case s.Entries[st.after[n-1]].At.Sub(anchor.At) < time.Second && n == 1:
+			say("1 failing signal began in the same second: %s.", st.brief(&s.Entries[st.after[0]]))
+		case s.Entries[st.after[n-1]].At.Sub(anchor.At) < time.Second:
+			say("%d failing signals began in the same second, among them %s.", n, st.brief(&s.Entries[st.after[0]]))
 		case n == 1:
-			say("1 failing signal followed %s: %s.", timelineAfter(s.Entries[st.after[0]].At.Sub(anchor.At)), st.brief(&s.Entries[st.after[0]]))
+			say("1 failing signal followed after %s: %s.", timeline.Span(s.Entries[st.after[0]].At.Sub(anchor.At)), st.brief(&s.Entries[st.after[0]]))
 		default:
 			first, last := &s.Entries[st.after[0]], &s.Entries[st.after[n-1]]
 			say("%d failing signals followed within %s, the first %s: %s.", n, timeline.Span(last.At.Sub(anchor.At)),
@@ -834,12 +922,15 @@ func (st *timelineStory) calmGroups(o calm.Options) ([]calm.Group, [][]timelineC
 
 	// What was read and has nothing in the window is a dim line of names:
 	// the changes, the failing signals and the rest, one line each. A kind
-	// whose read fell short is never one of them.
+	// whose read fell short is never one of them, and neither is a kind
+	// that is a state of the capture: of those the page knows that there is
+	// none now, and nothing of the window before that.
 	var quiet, unread calm.Group
 	quiet = calm.Group{Label: timelineQuietLabel, Role: calm.QuietRole}
 	unread = calm.Group{Label: timelineNotReadLabel, Role: calm.NotReadRole, Color: p.Warn}
 	names := map[timelineClass][]string{}
 	var partial []timelineCalmRow
+	var now []string
 	horizon := st.eventHorizon()
 	for i := range timelineRowKinds {
 		kind := &timelineRowKinds[i]
@@ -851,9 +942,12 @@ func (st *timelineStory) calmGroups(o calm.Options) ([]calm.Group, [][]timelineC
 		case kind.source == timeline.SourceEvent && st.start.Before(horizon):
 			// Quiet as far back as events are kept, and unknown before: the
 			// row draws both and says where one ends.
-			quiet.Rows = append(quiet.Rows, calm.Row{Subject: kind.name, What: "none since " + st.clock(horizon) + "; older events expired"})
+			quiet.Rows = append(quiet.Rows, calm.Row{Subject: kind.name, What: "none since " + st.clock(horizon) + "; older expired"})
 			quiet.Summary = append(quiet.Summary, kind.name+" since "+st.clock(horizon))
-			partial = append(partial, timelineCalmRow{key: "quiet:" + kind.key, kind: kind, index: len(quiet.Rows) - 1})
+			// what is the same in fewer words, for a column too narrow.
+			partial = append(partial, timelineCalmRow{key: "quiet:" + kind.key, kind: kind, index: len(quiet.Rows) - 1, what: "since " + st.clock(horizon)})
+		case kind.holds:
+			now = append(now, kind.name)
 		default:
 			names[kind.class] = append(names[kind.class], kind.name)
 		}
@@ -865,6 +959,14 @@ func (st *timelineStory) calmGroups(o calm.Options) ([]calm.Group, [][]timelineC
 			named = append(named, calm.Row{Subject: strings.Join(list, " · "), What: timelineQuietWords, Strip: calm.Quiet()})
 			summary = append(summary, list...)
 		}
+	}
+	lines := len(named)
+	if len(now) > 0 {
+		// Its strip is drawn once the frame is known: not read all along,
+		// but for the column of the capture.
+		st.nowRow = len(named)
+		named = append(named, calm.Row{Subject: strings.Join(now, " · "), What: timelineNowWords})
+		summary = append(summary, strings.Join(now, ", ")+": "+timelineNowFold)
 	}
 	quiet.Rows, quiet.Summary = append(named, quiet.Rows...), append(summary, quiet.Summary...)
 	for i := range partial {
@@ -886,7 +988,7 @@ func (st *timelineStory) calmGroups(o calm.Options) ([]calm.Group, [][]timelineC
 		groups, metas = append(groups, quiet), append(metas, nil)
 		// The rows of event kinds that are quiet only in part are not rows
 		// the cursor stands on, but their strips are drawn on the frame.
-		st.partialQuiet, st.quietGroup, st.quietNames = partial, len(groups)-1, len(named)
+		st.partialQuiet, st.quietGroup, st.quietNames = partial, len(groups)-1, lines
 	}
 	if len(unread.Rows) > 0 {
 		groups, metas = append(groups, unread), append(metas, nil)

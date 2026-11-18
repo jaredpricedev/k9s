@@ -175,6 +175,18 @@ func TestCollectOrdersWorkloadEvidenceAndMarksWhatPrecededTheFault(t *testing.T)
 	require.True(t, now.Add(-time.Minute).Equal(onset.Last))
 	require.Equal(t, "FAULT BEGAN", s.RelationLabel(s.Onset))
 
+	// Only the last exit of a container is retained. The five restarts
+	// before it happened at moments nothing states: the entry counts them,
+	// so that a view cannot draw the stretch before it as quiet.
+	for index := range s.Entries {
+		want := 0
+		if s.Entries[index].Source == SourceRestart {
+			want = 5
+			require.Contains(t, strings.Join(s.Entries[index].Detail, " "), "5 earlier restarts have no time")
+		}
+		require.Equal(t, want, s.Entries[index].Earlier, s.Entries[index].Summary)
+	}
+
 	require.Equal(t, "2m after", s.RelationLabel(2))
 	require.Equal(t, "2m before", s.RelationLabel(5))
 	require.Equal(t, "4m before", s.RelationLabel(6))

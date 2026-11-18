@@ -64,12 +64,18 @@ func (st *timelineStory) bands(o calm.Options) (bands calm.Bands, labels []strin
 
 // timelineCalmKeys is the second key line, in the order every incident
 // view writes it. s is the sources and limits here, where the other views
-// have their queries; a is on the next line.
-func timelineCalmKeys(st *timelineStory) []string {
+// have their queries; a is on the next line. x sets the mark on the entry
+// the keys act on; on the entry that is the mark it takes the mark away,
+// and marked says the line names that.
+func timelineCalmKeys(st *timelineStory, marked bool) []string {
 	keys := calmKeyLine{Window: calmKeyWindow + ", 0 all", Reread: true, Own: []string{calm.QueriesKey + " sources"}}
 	if len(st.rows) > 0 {
+		mark := "x mark"
+		if marked {
+			mark = "x clear mark"
+		}
 		keys.Move, keys.Time = "↑↓ row", true
-		keys.Own = append(keys.Own, "n next entry", "x mark")
+		keys.Own = append(keys.Own, "n next entry", mark)
 	}
 	keys.Own = append(keys.Own, "/ filter")
 	return keys.parts()
@@ -114,7 +120,7 @@ func (v *timelineView) calmPage(st *timelineStory, o calm.Options) (page calm.Pa
 	page = calm.Page{Title: v.calmTitle(st), Verdict: st.verdict(), Frame: chart.Frame{Start: st.start, End: st.end}}
 	page.Groups, metas = st.calmGroups(o)
 	page.Bands, labels = st.bands(o)
-	page.Keys, page.Next = timelineCalmKeys(st), v.calmNext(st)
+	page.Keys, page.Next = timelineCalmKeys(st, false), v.calmNext(st)
 	return page, metas, labels
 }
 
@@ -158,37 +164,47 @@ func timelineDetailFits(page *calm.Page, base, next *calm.Plan, reasons bool) bo
 	return true
 }
 
+// timelineListSpare is the fewest rows of the list that give one of them
+// up for a blank row between the list and the keys.
+const timelineListSpare = 4
+
 // timelineCalmPlan plans the page and the rows of the list under its axis.
 // The list takes the rows it needs, as far as the page can spare them,
-// with a blank row beside it where there is one. It leaves the reasons of
-// the reads that fell short on the page when there is room for both, and
+// with a blank row over it (gap) and one under it (below) where the page
+// can spare those too. A list of four rows or more that would stand
+// directly on the keys gives its last row up for the blank row under it:
+// the keys are read apart from the entries. It leaves the reasons of the
+// reads that fell short on the page when there is room for both, and
 // folds them to one line, which still names each read and its state, when
 // that is the only way to list anything. A page that can spare no row has
 // no list, and a shows every entry.
 //
 //nolint:gocritic // Options are passed by value, as the kit takes them.
-func timelineCalmPlan(page *calm.Page, need, width, height int, o calm.Options) (plan calm.Plan, list int, gap bool) {
+func timelineCalmPlan(page *calm.Page, need, width, height int, o calm.Options) (plan calm.Plan, list int, gap, below bool) {
 	base := calm.Lay(page, width, height, o)
 	if need <= 0 || base.TooSmall {
-		return base, 0, false
+		return base, 0, false, false
 	}
 	for _, reasons := range []bool{true, false} {
 		for size := min(timelineDetailRows(height), need); size >= 1; size-- {
-			for _, blank := range []bool{true, false} {
-				room := height - size
-				if blank {
-					room--
-				}
+			for _, blanks := range []int{2, 1, 0} {
+				room := height - size - blanks
 				if room < 3 {
 					continue
 				}
-				if next := calm.Lay(page, width, room, o); timelineDetailFits(page, &base, &next, reasons) {
-					return next, size, blank
+				next := calm.Lay(page, width, room, o)
+				if !timelineDetailFits(page, &base, &next, reasons) {
+					continue
 				}
+				list, gap, below = size, blanks > 0, blanks > 1
+				if !below && size >= timelineListSpare {
+					list, below = size-1, true
+				}
+				return next, list, gap, below
 			}
 		}
 	}
-	return base, 0, false
+	return base, 0, false, false
 }
 
 // detailNeed is the most rows the list under the axis has a use for: its
@@ -250,7 +266,7 @@ func (v *timelineView) calmObservation(width, height int, o calm.Options) []stri
 	st := timelineStoryOf(v.snapshot, v.window, v.query, v.episodes)
 	v.story = st
 	page, metas, labels := v.calmPage(st, o)
-	plan, list, gap := timelineCalmPlan(&page, st.detailNeed(width, o), width, height, o)
+	plan, list, gap, below := timelineCalmPlan(&page, st.detailNeed(width, o), width, height, o)
 	strips := plan.Layout.Strip > 0 && !plan.TextRows && !plan.TooSmall
 	v.frame = chart.Frame{}
 	if strips {
@@ -266,6 +282,20 @@ func (v *timelineView) calmObservation(width, height int, o calm.Options) []stri
 	for _, row := range st.partialQuiet {
 		page.Groups[st.quietGroup].Rows[row.index].Strip = st.strip(row.kind, nil, plan.Frame)
 	}
+	if st.nowRow >= 0 {
+		page.Groups[st.quietGroup].Rows[st.nowRow].Strip = timelineNowStrip(plan.Frame)
+	}
+	if width := plan.WhatWidth(&page); width > 0 && !plan.TooSmall {
+		// What a row is about is cut to the column the plan gave it, here
+		// and not by the kit: the count of its other entries stays, also
+		// where the rows are written as text.
+		for g := range metas {
+			for r := range metas[g] {
+				row := &metas[g][r]
+				page.Groups[g].Rows[r].What = timelineWhat(row.what, len(row.entries)-1, min(width, timelineWhatWidth), o)
+			}
+		}
+	}
 	if strips {
 		// The words beside the marker move no column, so they are chosen
 		// once the columns are known; so are the names of the quiet line.
@@ -274,21 +304,7 @@ func (v *timelineView) calmObservation(width, height int, o calm.Options) []stri
 				break
 			}
 		}
-		// A line of names is cut between two names, and counts the rest.
-		// The words beside the names are written when every line has room
-		// for them whole: one line with them and one without reads as a
-		// difference between the two.
-		room, words := plan.Layout.StripCol-2-calm.Indent, true
-		for r := range st.quietNames {
-			row := &page.Groups[st.quietGroup].Rows[r]
-			if tviewCells(row.Subject) > room {
-				row.Subject = timelineFitNames(strings.Split(row.Subject, " · "), room)
-			}
-			words = words && tviewCells(row.Subject)+2+tviewCells(row.What) <= room
-		}
-		for r := 0; r < st.quietNames && !words; r++ {
-			page.Groups[st.quietGroup].Rows[r].What = ""
-		}
+		st.quietWords(&page, &plan)
 	}
 	if line := calm.TitleLine(page.Title, width, o); !strings.Contains(line, page.Title.Object) || !strings.Contains(line, v.windowLabel()) {
 		// A narrow title cuts the object and then leaves the window out.
@@ -316,10 +332,67 @@ func (v *timelineView) calmObservation(width, height int, o calm.Options) []stri
 		page.Groups[sel.group].Rows[sel.index].Selected = true
 	}
 	page.Next = v.calmNext(st)
+	page.Keys = timelineCalmKeys(st, v.snapshot.Chosen && v.focused >= 0 && v.focused == v.snapshot.Onset)
 	v.calmCursor(&page, st)
 	v.dropped = plan.Dropped
 	rendered := calm.Render(&page, &plan, o)
-	return calmInsert(rendered, v.calmDetail(st, sel, entries, width, list, o), gap, plan.TooSmall)
+	lines := calmInsert(rendered, v.calmDetail(st, sel, entries, width, list, o), gap, plan.TooSmall)
+	if below && !plan.TooSmall && len(rendered.Keys) > 0 {
+		// The row the list gave up stands between it and the keys, unless
+		// the page kept a blank row of its own there.
+		if at := slices.Index(lines, rendered.Keys[0]); at > 0 && lines[at-1] != "" {
+			lines = slices.Insert(lines, at, "")
+		}
+	}
+	return lines
+}
+
+// quietWords fits the quiet lines to the two columns the plan gives them:
+// the names, and what the line says of them. A line of names is cut
+// between two names, and counts the rest. What a line says starts in one
+// column on every line; where that column has no room for it the line says
+// it shorter, and the lines of names say "none retained" only when the
+// column holds it: one line with it and one without reads as a difference
+// between the two.
+func (st *timelineStory) quietWords(page *calm.Page, plan *calm.Plan) {
+	if st.quietNames == 0 && st.nowRow < 0 && len(st.partialQuiet) == 0 {
+		return
+	}
+	rows := page.Groups[st.quietGroup].Rows
+	area := plan.Layout.StripCol - 2 - calm.Indent
+	for r := range st.quietNames {
+		// Names wider than the kit's column for them would push the words
+		// of their line off the column of the other lines.
+		if lead := min(area, timelineLeadWidth); tviewCells(rows[r].Subject) > lead {
+			rows[r].Subject = timelineFitNames(strings.Split(rows[r].Subject, " · "), lead)
+		}
+	}
+	room := area - plan.Layout.Lead - 2
+	fits := func(text string) bool { return tviewCells(text) <= room }
+	for r := 0; r < st.quietNames && !fits(timelineQuietWords); r++ {
+		rows[r].What = ""
+	}
+	if st.nowRow >= 0 && !fits(rows[st.nowRow].What) {
+		rows[st.nowRow].What = timelineNowFold
+	}
+	for _, row := range st.partialQuiet {
+		if !fits(rows[row.index].What) {
+			rows[row.index].What = row.what
+		}
+	}
+}
+
+// timelineNowStrip is the strip of the kinds that are a state of the
+// capture and have none: the column of the capture is read and quiet, and
+// every column before it is not read. What was the case then and ended is
+// not kept by the source, and missing data is never drawn as quiet.
+func timelineNowStrip(f chart.Frame) calm.Strip {
+	strip := calm.Events()
+	if f.Width < 2 || !f.End.After(f.Start) {
+		return strip
+	}
+	last, _ := f.ColumnSpan(f.Width - 1)
+	return strip.Unknown(chart.Interval{Start: f.Start, End: last})
 }
 
 // calmSelect puts the row cursor on a row that is on the screen: the row

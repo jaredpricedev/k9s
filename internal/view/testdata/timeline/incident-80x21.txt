@@ -4,18 +4,18 @@ Timeline  Deployment apps/checkout-api · last 15m  read 12:00 · 11 of 11 sourc
   x2x9q.                                      Order in time, not proof of cause.
                               rev 2 rolled out 11:48      ▼
   CHANGED                                                 ┊
-  config      checkout-config updated by ku…  11:46  ·▲···┊·····················
-  rollouts    rev 2: image v1 → v2; env ~PA…  11:48  ·····▲·····················
+  config      checkout-config updated by…     11:46  ·▲···┊·····················
+  rollouts    rev 2: image v1 → v2; env…      11:48  ·····▲·····················
   THEN WENT WRONG                                         ┊
 > warnings    BackOff · pod x2x9q             11:50  ▁▁▁▁▁┊▁▁▁█████████████████▁
-  alerts      CheckoutHighErrorRate (cri… +2  11:51  ▁▁▁▁▁┊▁▁▁▁█████████████████
-  autoscaler  ScalingActive=False FailedGet…  11:52  ▁▁▁▁▁┊▁▁▁▁▁▁███████████████
-  exits       api Error (exit 1), restart c…  11:58  ·····┊·················▲···
-  status      Progressing=False ProgressDea…  11:58  ▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████
+  alerts      CheckoutHighErrorRate… +2       11:51  ▁▁▁▁▁┊▁▁▁▁█████████████████
+  autoscaler  ScalingActive=False…            11:52  ▁▁▁▁▁┊▁▁▁▁▁▁███████████████
+  exits       api Error (exit 1) · pod x2x9q  11:58  ×××××××××××××××××××××××▲···
+  status      Progressing=False…              11:58  ▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████
                                                      ┬────━───┬────────┬───────┬
   UTC                                              11:45    11:50    11:55
   ALSO IN THE WINDOW  annotations 11:46 · events 11:48 8 times
-  QUIET  scaling · nodes
+  QUIET  scaling · nodes: none now
   WARNINGS  1 entry in the last 15m
 > 11:50:00  pod/checkout-api-7d9f8c6b5d-x2x9q  Warning BackOff x14: Back-off re…
   next  Enter open x2x9q    a full list
