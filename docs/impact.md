@@ -29,7 +29,7 @@ Nothing is read until the view is opened. The view never refreshes on a timer.
 | `Enter` | Open `:graph` for the workload over the narrowest graph window that reaches back to the start of the before window, scrolled to the chart of the selected signal (memory signals and restarts: MEMORY; CPU signals: CPU). For a signal `:graph` does not draw (request rate, errors, latency, readiness) a message says so and the graph opens at the top |
 | `Shift-D` | Grafana hand-off for the workload, with the range from the start of the before window to the end of the after window ([grafana-handoff.md](grafana-handoff.md)) |
 | `Up` / `Down` | Select a signal: on the calm page a row, with all detail any signal of the table |
-| `s` | The rule, the sample counts and the exact queries of the selected signal, and the source, step, rate range and both windows of the comparison; press again to hide them |
+| `s` | The rule, the sample counts and the exact queries of the selected signal, the full diff of the revision, and the source, step, rate range and both windows of the comparison; press again to hide them |
 | `a` | All detail: the table of every signal with before, after, change, percent and verdict, and the pane of the selected one. Press again for the calm page |
 | `Esc` | Back |
 
@@ -38,44 +38,50 @@ Nothing is read until the view is opened. The view never refreshes on a timer.
 The view is laid out the calm way ([presentation.md](presentation.md#calm-layout-the-standard-for-incident-views)):
 
 ```text
-Impact  Deployment checkout-api · rev 2 (latest of 2)                                                  read 04:14 · 9 of 9 queries
+Impact  Deployment checkout-api · rev 2 (latest of 2)                                                  read 10:35 · 9 of 9 queries
 
-  After rev 2 (03:58): error ratio 0.2% → 22.3%, p99 500ms → 4s, restarts 0 → 6, memory at limit (limit 512Mi → 256Mi), ready
-  replicas 2 → 1.
-  rev 2 changed: image v1 → v2; limits.memory 512Mi → 256Mi; env ~PAYMENT_TOKEN +FEATURE_FLAGS
-  Order in time, not proof of cause.
+  7 signals got worse after rev 2 rolled out at 10:22: errors, latency, restarts, memory and ready replicas.
+  Rev 2 changed the image, the memory limit (512Mi → 256Mi) and 2 env vars.                     Order in time, not proof of cause.
 
-     rev 2 rolled out 03:58:22Z · 15m each side                                          ▼
+     rev 2 rolled out 10:22:54Z · 12m each side                                          ▼
                                                                                          ┊
   WORSE AFTER   before → after                                                           ┊
-> Error ratio   0.2% → 22.3%    +22.1pp  x112   ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁┊▅▅▅▅▆███████████████████████████████████
-  Latency p50   45.5ms → 117ms  +71.3ms  +157%  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄┊▄▄▅▅▆███████████████████████████████████
-  Latency p95   241ms → 1.98s   +1.74s  +723%   ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊▅▅▆▆▇███████████████████████████████████
-  Latency p99   500ms → 4s      +3.5s  +701%    ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊▆▆▆▇▇███████████████████████████████████
-  Restarts      0 → 6           +6  new         ·········································┊···▲···▲·····▲··▲···▲····▲··············
-  Memory/limit  36.7% → 96.1%   +59.3pp  +162%  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄┊▆▆██▅▆▆██▅▅▆██▅▅▆██▃▅▆███▅▆███▅▆▆██▅▆▆██
-  Ready (min)   2 → 1           -1  -50%        █████████████████████████████████████████┊█▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅
+> Error ratio     0.2% → 22.3%  +22.1pp  x112   ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁┊▃▄▅▅▅▅▆█████████████████████████████████
+  Latency p50   45.5ms → 116ms  +70.7ms  +155%  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄┊▄▄▄▅▅▅▅█████████████████████████████████
+  Latency p95    241ms → 1.98s  +1.74s   +723%  ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊▄▄▅▆▆▆▇█████████████████████████████████
+  Latency p99    500ms → 4s     +3.5s    +700%  ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊▅▅▆▆▆▇▇█████████████████████████████████
+  Restarts           0 → 6      +6       new    ·········································┊·····▲·····▲·····▲····▲·····▲·····▲·····
+  Memory/limit   36.7% → 99.2%  +62.5pp  +170%  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▃▃▃▃▃▃▃▃▃▃▃┊▅▆▇▇██▄▅▆▇██▄▄▅▇▇██▄▄▆▇▇██▄▅▆▇▇█▄▄▅▆▇██▃
+  Ready (min)        2 → 1      -1       -50%   █████████████████████████████████████████┊██▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅▅
                                                                                          ┊
   HIGHER OR LOWER AFTER                                                                  ┊
-  Memory peak   188Mi → 246Mi   +57.9Mi  +31%   ▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆┊▆▆██▅▆▆██▅▅▆██▅▅▆██▃▅▆███▅▆███▅▆▆██▅▆▆██
-  CPU usage     60m → 344m      +284m  +474%    ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊██████▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
-                                                ──────┬────────────┬────────────┬────────━───┬────────────┬────────────┬──────────
-  UTC                                               03:45        03:50        03:55        04:00        04:05        04:10
+  Memory peak    188Mi → 254Mi  +66Mi    +35%   ▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆▆┊▆▆▇▇██▄▅▆▇██▄▄▅▇▇██▄▄▆▇▇██▄▅▆▇▇█▄▄▅▆▇██▃
+  CPU usage        60m → 344m   +284m    +474%  ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊████████▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇
+                                                ──────────────┬────────────────┬─────────━──────┬───────────────┬────────────────┬
+  UTC                                                       10:15            10:20            10:25           10:30            10:35
 
   UNCHANGED  Request rate
   NOT AVAILABLE  CPU throttled
 
-  next  Enter graph this workload    a all 11 signals    s query and rule    t timeline
+  next  Enter graph the workload    a all 11 signals    s query and rule    t timeline
 
   ↑↓ signal · 1-5 window · n/N later/earlier rollout · D Grafana · r re-read · Esc back
 ```
 
-- **The answer** is [the summary line](#the-summary-line), bold, and what
-  the revision changed on a line of its own directly under it. A warning
-  that makes the page unsafe to read as it stands (the revision list was
-  cut, the context changed) comes before both.
-- **One row per signal that moved**: its name, before → after (`->` with `noIcons`), the change
-  in the signal's unit and in percent, and a strip over both windows.
+- **The answer** is two sentences, as a person would say them
+  ([the answer](#the-answer)): how many signals got worse after the rollout
+  and of which kinds, bold, then what the revision changed. It repeats no
+  before or after value: the rows directly under it carry every one. The
+  caveat is dim, at the right of the last line when it fits. A warning that makes the
+  page unsafe to read as it stands (the revision list was cut, the context
+  changed) comes before both.
+- **One row per signal that moved**: its name, before → after (`->` with
+  `noIcons`), the change in the signal's unit and its ratio, and a strip
+  over both windows. One kind of number is read down one column: the arrow
+  stands in one column on every row of the page, under the arrow of
+  `before → after` over it, and the change and the ratio each start in one.
+  Where before and after are too wide to be set in two columns they are
+  written as one text and nothing is cut for the sake of the column.
 - **The rollout is one column through every row**, at the split of the two
   windows: `▼` over the strips, a guide `┊` down through every line to the
   axis, where it is heavy, and the band shading behind it. What is left of
@@ -94,25 +100,182 @@ Impact  Deployment checkout-api · rev 2 (latest of 2)                          
   READ` (with the reason), `NOT AVAILABLE` and `TOO FEW SAMPLES` are one
   line each and are never left out. A missing signal is never a row with a
   zero.
-- The source, the step, the rate range, the exact windows and the rule,
-  samples and queries of a signal are under `s`; the table is under `a`.
+- The source, the step, the rate range, the exact windows, the full diff
+  of the revision and the rule, samples and queries of a signal are under
+  `s`; the table, with the sentence that lists the values
+  ([the summary line](#the-summary-line)), is under `a`.
+- **The keys**: the `next` line names what `Enter` graphs for the row under
+  the cursor (`graph restarts`, `graph memory/limit`, `graph memory peak`,
+  `graph CPU`; `graph the workload` for a signal `:graph` has no chart
+  of), then `a`, `s` and `t`. They are on that line because a short page
+  gives the second key line up. A line too narrow for all four says
+  `Enter graph` without what, which the marked row says, so that `a` and
+  `s` are named at 60 columns too; a key the line still has no room for is
+  named on the second line where the page has one (`a show every signal`,
+  `s queries`, `t timeline`), in the place every calm page has for it, and
+  there the keys of the rollouts are `n/N rollout` when the longer words do
+  not fit.
 
-What a smaller screen gives up, in order: in an 80x24 terminal every signal
-that is worse keeps its row and strip, the neutral signals fold to one line
-(`HIGHER OR LOWER AFTER  Memory peak 188Mi → 254Mi · CPU usage 60m →
-345m`) and the second key line goes; `a` is on the first. At 60 columns the
-change column goes, then the last rows of `WORSE AFTER` are left out and
-counted (`not shown (a shows all): 3 of 7 rows of WORSE AFTER`); the
-one-line groups stay. The group the cursor is in opens again when the cursor
-moves into it. With `s` open on a short screen the page keeps the row under
-the cursor and the block states the rule, the samples and the queries only.
+### In an 80x24 terminal
 
-A query under `s` is there to be read and run again, so one that is wider
-than the line is written on as many lines as it needs, broken after a comma
-where it can be. Only where that would cost the page its strips or its
-`next` line (60 columns in a 24-row terminal) is each query one line, cut
-where the line ends and marked with `…`; `a` on a taller screen shows them
-whole.
+```text
+Impact  Deployment checkout-api · rev 2 (latest of 2)                10:35 · 9/9
+  7 signals got worse after rev 2 rolled out at 10:22.
+  Rev 2 changed the image, the memory limit (512Mi → 256Mi) and 2 env vars.
+  Order in time, not proof of cause.
+
+     rev 2 rolled out 10:22:54Z · 12m each side                 ▼
+  WORSE AFTER   before → after                                  ┊
+> Error ratio     0.2% → 22.3%  +22.1pp  x112   ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁┊▅▅█████████████
+  Latency p50   45.5ms → 116ms  +70.7ms  +155%  ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄┊▅▅█████████████
+  Latency p95    241ms → 1.98s  +1.74s   +723%  ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊▆▆█████████████
+  Latency p99    500ms → 4s     +3.5s    +700%  ▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂▂┊▆▇█████████████
+  Restarts           0 → 6      +6       new    ················┊·▲·▲··▲·▲·▲·▲··
+  Memory/limit   36.7% → 99.2%  +62.5pp  +170%  ▄▄▄▄▄▄▄▄▄▄▄▄▃▃▃▃┊▇█▆█▅▇█▆██▇█▅▇█
+  Ready (min)        2 → 1      -1       -50%   ████████████████┊█▅▅▅▅▅▅▅▅▅▅▅▅▅▅
+                                                ─────┬──────┬───━─┬──────┬─────┬
+  UTC                                              10:15  10:20 10:25  10:30
+  HIGHER OR LOWER AFTER  Memory peak 188Mi → 254Mi · CPU usage 60m → 344m
+  UNCHANGED  Request rate
+  NOT AVAILABLE  CPU throttled
+  next  Enter graph the workload  a all 11 signals  s query and rule  t timeline
+```
+
+This is the page in the 20 rows the application leaves the view when it
+draws its line of crumbs; without that line the view has 21 and one more
+blank row stands over `next`.
+
+What a smaller screen gives up, in order:
+
+1. **The neutral rows fold first.** `HIGHER OR LOWER AFTER` becomes one
+   line that keeps both values of every signal (`HIGHER OR LOWER AFTER
+   Memory peak 188Mi → 254Mi · CPU usage 60m → 344m`) before the page gives
+   any blank row up: the answer does not rest on those rows, and the rows
+   that are worse read better set apart than beside two more. The group
+   opens again when the cursor moves into it: its rows are what the keys
+   then act on. In 20 rows the page pays for that with the blank row under
+   the answer and the last two rows of `WORSE AFTER`, which it counts
+   (`not shown at this size (a shows all): 2 of 7 rows of WORSE AFTER`),
+   and takes them back when the cursor leaves the group; in 21 rows it
+   pays with its blank rows alone. No column moves either way: the names
+   are one column as wide as the widest of all rows, so the arrows, the
+   strips, the rollout guide and the axis stand where they stood whichever
+   rows are drawn.
+2. Then the page follows [the order every calm page
+   follows](presentation.md#what-a-smaller-screen-gives-up): the blank rows
+   around the answer and the keys, the blank rows before the groups, the
+   second key line (`a` is on the first), and last the blank rows that set
+   the answer and the keys apart. With one row to spare the page keeps the
+   one under the answer and gives up the one over `next`.
+3. In an 80x24 terminal every signal that is worse keeps its row and its
+   strip, and nothing is left out, while the cursor is on one of those
+   rows. At 60 columns the change column goes as well, and `s` or `a` has
+   it; the folded line of the neutral signals then has room for the first
+   of them and counts the others (`Memory peak 188Mi → 254Mi +1 more`),
+   and the `next` line names `Enter graph`, `a` and `s`.
+4. A screen shorter than that leaves the last rows of `WORSE AFTER` out and
+   counts them (`not shown (a shows all): 2 of 7 rows of WORSE AFTER`); the
+   one-line groups stay, and the line of what was not read is never left
+   out.
+
+With `s` open on a short screen the page keeps the row under the cursor, and
+the block states the rule, the samples, the queries and the diff; the source
+and the windows are added from 28 rows.
+
+Every line under `s` is there to be read to its end, and a query to be run
+again, so a line that is wider than the screen is written on as many lines
+as it needs: a query broken after a comma where it can be, a sentence
+between its words, each under the text and not under its label. Where the
+page has no rows for all of it without losing its strips or its `next`
+line, it gives the lines up in this order, and marks every cut with `…`:
+
+1. The blank row beside the block.
+2. The rule, the samples, and on a tall screen what a strip draws, the
+   source and the windows are one line each.
+3. The diff becomes one line. `s` is the key of the query and the rule, so
+   the queries stay whole; the answer still says what kinds of thing the
+   revision changed.
+4. Where whole queries do not fit either, each query is one line and the
+   diff is whole again if it then fits.
+5. One line of each.
+
+The rows of the page give way before the block does: with `s` open a short
+page keeps the row under the cursor and counts the others (`not shown (a
+shows all): 6 of 7 rows of WORSE AFTER, …`).
+
+In the 20 rows of an 80x24 or a 60x24 terminal with the line of crumbs the
+two queries of the error ratio are whole and the diff of the example is one
+line, cut after `~PAYMENT_TOKEN` at 80 columns and after `env` at 60; in 21
+rows the diff is whole too, and from 23 rows so are the rule and the
+samples. A signal whose one query takes three lines (memory peak at 80
+columns) has one line of it in 20 rows, and the diff is then whole. A longer
+diff or longer queries need more rows in the same order. A taller or wider
+terminal shows what a cut left out; no key does at that size, because the
+table under `a` has the diff on one line of its header and its pane of the
+selected signal on one line too.
+
+## The answer
+
+```text
+  7 signals got worse after rev 2 rolled out at 10:22: errors, latency, restarts, memory and ready replicas.
+  Rev 2 changed the image, the memory limit (512Mi → 256Mi) and 2 env vars.                     Order in time, not proof of cause.
+```
+
+The first sentence counts the verdicts of the comparison and names their
+kinds: `errors`, `latency` (the three percentiles are one kind), `restarts`,
+`memory` (the share of the limit in use), `CPU throttling`, `ready
+replicas`. It adds no rule of its own and names no cause: "after" is order
+in time. The only numbers in it are the count, the revision and the time of
+the rollout (with the day when the read was on another one: `rolled out on
+Nov17 at 04:20`).
+
+| The comparison | The first sentence |
+| --- | --- |
+| Signals of several kinds are worse | `7 signals got worse after rev 2 rolled out at 04:20: errors, latency, restarts, memory and ready replicas.` |
+| Signals of one kind are worse | `Latency got worse after rev 2 rolled out at 04:20: p50, p95 and p99.` One percentile alone is named as its row is (`Latency p99 got worse after …`): one percentile is not "latency" |
+| None is worse | `No compared signal got worse after rev 2 rolled out at 04:20: 3 better, 2 higher or lower, 5 unchanged, 1 not compared.` Every signal is counted, so a quiet sentence is never read as health when signals are missing; signals that are only higher or lower are counted as that, never as worse or better |
+| Nothing could be compared | `No signal could be compared around rev 2, rolled out at 04:20: 2 not available, 9 with too few samples before or after.` |
+| Nothing was read | `Nothing was read around rev 2, rolled out at 04:20: denied (HTTP 403).` in the warning colour, with the caveat `Not read is not zero and not healthy.` |
+| No rollout time (a rollback), no controller | `No comparison: …` with the reason, and the caveat `No comparison is not a sign that nothing changed.` |
+
+The second sentence says what kinds of thing the revision changed and how
+many of each: `the image` or `2 images`, `the memory limit` with its two
+values, `the CPU limit` and the other resource settings, `2 env vars`, `the
+envFrom sources`, `the command`, `the containers (1 added)`. It is counted
+from [the list of changes](#what-changed), so it never says less than the
+list; an entry of a kind it has no word for is counted as `1 other setting`.
+The list itself, with the image tags and the names of the environment
+variables, is under `s`.
+
+A request rate that rose or fell by a factor of two or more limits what the
+comparison says, and is a sentence of its own between the two: `Request rate
+40/s → 120/s (+200%): error ratio and latency are not like-for-like.`
+
+How long the answer is:
+
+- **Each sentence is one line** wherever a form of it fits one, at any
+  width. The fullest form that fits is written. The first sentence leaves
+  the kinds out when they do not fit beside it (`7 signals got worse after
+  rev 2 rolled out at 10:22.`): the rows name them. The second leaves the
+  two values of the memory limit out: `s` has them. The sentence about the
+  request rate keeps the size of the change and leaves the two rates out
+  (`Request rate +200%: errors and latency are not like-for-like.`): its
+  row or its folded line has them. What was not compared, and why nothing
+  was read, is never left out; a sentence that fits no line in any form is
+  wrapped whole.
+- **The caveat** is at the right of the last line when it fits there, and a
+  line of its own when not.
+- **132 columns: two lines**, three with the sentence about the request
+  rate. **80 columns: three lines**, the caveat being the third. **60
+  columns: three lines**, without the kinds and without the two values of
+  the memory limit. The sentence about the request rate is one line more
+  at 80 columns and two at 60. A warning in front (the revision list was
+  cut, the context changed) is written whole at any width: one line more
+  at 132 columns, two at 80 and at 60. So the answer is at most three lines
+  at 132 columns unless a warning stands in front of it.
+
+The page writes each `->` as `→`, as every calm page writes a change, and as
+`->` again with `noIcons`.
 
 ## What is read
 
@@ -160,11 +323,25 @@ taken over: four steps, at least two minutes.
 
 ## What changed
 
-One line lists what the revision's pod template changed against the one it
-replaced: image tags, resource requests and limits, and environment variable
-*names* (`+` added, `-` removed, `~` changed). Values and command lines are
-never read into the view. This is the same comparison `:timeline` shows for a
-rollout entry. The earliest retained revision has nothing to compare with.
+The revision's pod template is compared with the one it replaced: image
+tags, resource requests and limits, and environment variable *names* (`+`
+added, `-` removed, `~` changed). Values and command lines are never read
+into the view. This is the same comparison `:timeline` shows for a rollout
+entry. The earliest retained revision has nothing to compare with, and the
+page says so.
+
+The answer says it in a sentence (`Rev 2 changed the image, the memory limit
+(512Mi → 256Mi) and 2 env vars.`). The list itself is under `s`, written
+whole on as many lines as it needs wherever the page has the rows for it
+beside the queries ([in an 80x24 terminal](#in-an-80x24-terminal) it is the
+first of the two to be cut, and the cut is marked):
+
+```text
+  changed  image v1 → v2; limits.memory 512Mi → 256Mi; env ~PAYMENT_TOKEN +FEATURE_FLAGS
+```
+
+The table under `a` has the same list on one line of its header, cut where
+that line ends, as it had before.
 
 ## Signals
 
@@ -273,9 +450,10 @@ A missing signal is never a zero and never counts as "unchanged".
 `After rev 2 (04:20): error ratio 0.2% -> 14.1%, p99 180ms -> 2.4s, memory at
 limit (limit 512Mi -> 256Mi).`
 
-The page writes each `->` of it as `→`, as every calm page writes a change,
-and as `->` again with `noIcons`; the table under `a` and the report keep
-`->`.
+This is the sentence that lists the values. It was the answer of the calm
+page until the rows carried every one of them; it is in the header of the
+table under `a`, with `->`, and the calm page has [the answer](#the-answer)
+instead.
 
 It lists the signals that are worse by the rule above, in a fixed order, with
 one latency figure (the highest percentile that moved). "memory at limit"

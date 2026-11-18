@@ -470,7 +470,9 @@ func TestImpactWarnsWhenTheRevisionListWasCut(t *testing.T) {
 			require.Contains(t, frame, "Only the first 200 ReplicaSets were read (limit 200)", "%dx%d", size[0], size[1])
 			require.Contains(t, frame, "Error ratio", "%dx%d", size[0], size[1])
 			if !detail {
-				require.Less(t, strings.Index(frame, "Only the first 200"), strings.Index(frame, "After rev 2"), "the warning comes before any number")
+				answer := strings.Index(frame, "7 signals got worse after rev 2")
+				require.Positive(t, answer, "%dx%d", size[0], size[1])
+				require.Less(t, strings.Index(frame, "Only the first 200"), answer, "the warning comes before the answer and any number")
 			}
 		}
 	}

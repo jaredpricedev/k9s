@@ -254,3 +254,29 @@ func TestMeasureKeepsTheColumnsOfAGroupThatReservesThem(t *testing.T) {
 	// A group without rows is one line under the axis and holds no column.
 	assert.Zero(t, Measure([]Group{{Label: "QUIET", Role: QuietRole, NumberWidth: 9, Summary: []string{"dns"}}}, 132, 0, false).Number)
 }
+
+// A view whose row cursor opens a folded group, or turns a row back in
+// that a short page left out, reserves the widest subject of all its rows:
+// the columns are measured from the rows that are drawn, and stay where
+// they are whichever of them that is.
+func TestMeasureKeepsTheSubjectColumnOfAGroupThatReservesIt(t *testing.T) {
+	rows := []Row{
+		{Subject: "Error ratio", Number: "0.2% -> 22%", Strip: Trend(nil)},
+		{Subject: "Memory/limit", Number: "37% -> 99%", Strip: Trend(nil)},
+	}
+	group := func(least, shown int) []Group {
+		return []Group{{Label: "WORSE AFTER", SubjectWidth: least, Rows: rows[:shown]}}
+	}
+	all := Measure(group(0, 2), 80, 0, false)
+	assert.Equal(t, 12, all.Subject)
+	short := Measure(group(0, 1), 80, 0, false)
+	assert.Equal(t, 11, short.Subject, "measured from the rows that are drawn")
+	assert.NotEqual(t, all.StripCol, short.StripCol, "so a strip moves when a row is left out")
+	assert.Equal(t, all, Measure(group(12, 1), 80, 0, false), "unless the group reserves the column")
+	// A subject wider than what was reserved still gets its room, and the
+	// column still gives way where the strips have none.
+	assert.Equal(t, 12, Measure(group(4, 2), 80, 0, false).Subject)
+	assert.Less(t, Measure(group(24, 2), 44, 0, false).Subject, 24)
+	// A group without rows is one line under the axis and holds no column.
+	assert.Zero(t, Measure([]Group{{Label: "QUIET", Role: QuietRole, SubjectWidth: 9, Summary: []string{"dns"}}}, 132, 0, false).Subject)
+}
