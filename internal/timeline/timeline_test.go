@@ -331,3 +331,28 @@ func TestAutoscalerDeliberatelyDisabledIsNotAFailingSignal(t *testing.T) {
 	require.False(t, entries[0].Failing)
 	require.True(t, entries[1].Failing)
 }
+
+// A view draws one row per kind of entry and may call a kind quiet only
+// when the reads it comes from were complete. Every read a source names is
+// one a collection reports, so a kind is never held against a read that
+// does not exist.
+func TestEverySourceNamesTheReadsACollectionReports(t *testing.T) {
+	r, _ := readers(t, incident()...)
+	s, err := Collect(context.Background(), r, deploymentScope(), now)
+	require.NoError(t, err)
+	reported := map[string]bool{sourceAlerts: true}
+	for _, coverage := range s.Coverage {
+		reported[coverage.Source] = true
+	}
+	for _, source := range []Source{SourceEvent, SourceRollout, SourceRestart, SourceConfig, SourceAutoscaler, SourceNode, SourceCondition, SourceAlert} {
+		reads := source.Reads()
+		require.NotEmpty(t, reads, source)
+		for _, read := range reads {
+			require.True(t, reported[read], "%s names the read %q, which no collection reports", source, read)
+		}
+	}
+	for index := range s.Entries {
+		require.NotEmpty(t, s.Entries[index].Source.Reads(), s.Entries[index].Source)
+	}
+	require.Empty(t, SourceAnnotation.Reads(), "the view reads annotations and names that read itself")
+}

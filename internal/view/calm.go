@@ -12,8 +12,8 @@ import (
 )
 
 // The incident views (:slow, :graph and its per-Pod page, :probe, :impact,
-// a drawn dashboard, :query) are laid out with the calm kit. Two keys
-// belong to that layout and mean the same in every one of them.
+// :timeline, a drawn dashboard, :query) are laid out with the calm kit. Two
+// keys belong to that layout and mean the same in every one of them.
 const (
 	// calmDetailKey shows all the detail the view had before the calm
 	// layout: every signal, the detail table. The calm layout is the

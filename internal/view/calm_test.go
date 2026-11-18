@@ -30,7 +30,9 @@ func TestCalmKeysAreFreeOrMeanTheSameInEveryIncidentView(t *testing.T) {
 	graph, _, _, _ := compareViewFixture(t, hangTarget)
 	dash := dashViewFixture(t, dashSpec{Board: true})
 	impactV := impactViewFixture(t)
-	views := map[string]*ui.KeyActions{"slow": slow.actions, "probe": probeV.actions, "graph": graph.actions, "dash": dash.actions, "impact": impactV.actions}
+	timelineV := timelineViewFixture(t)
+	views := map[string]*ui.KeyActions{"slow": slow.actions, "probe": probeV.actions, "graph": graph.actions, "dash": dash.actions, "impact": impactV.actions,
+		"timeline": timelineV.actions}
 
 	require.Equal(t, ui.KeyA, calmDetailKey)
 	require.Equal(t, ui.KeyN, calmNextChartKey)
@@ -49,15 +51,19 @@ func TestCalmKeysAreFreeOrMeanTheSameInEveryIncidentView(t *testing.T) {
 			assert.Contains(t, []string{calmNextChartLabel, "Next panel"}, got, "%s: Tab", name)
 		}
 	}
+	// The timeline is laid out the calm way: a is bound there, not merely
+	// free.
+	require.Equal(t, calmDetailLabel, walkKey(views["timeline"], calmDetailKey))
 	// n: the next of what the view steps through. That is the chart where
-	// a view steps through nothing else, and stays the episode in :slow
-	// and the rollout in :impact.
+	// a view steps through nothing else, and stays the episode in :slow,
+	// the rollout in :impact and the entry in :timeline.
 	for name, want := range map[string][]string{
-		"graph":  {calmNextChartLabel, "Next signal"},
-		"dash":   {calmNextChartLabel, ""},
-		"probe":  {""},
-		"slow":   {"Cursor to next episode"},
-		"impact": {"Next (later) rollout"},
+		"graph":    {calmNextChartLabel, "Next signal"},
+		"dash":     {calmNextChartLabel, ""},
+		"probe":    {""},
+		"slow":     {"Cursor to next episode"},
+		"impact":   {"Next (later) rollout"},
+		"timeline": {"Cursor to next entry"},
 	} {
 		assert.Contains(t, want, walkKey(views[name], calmNextChartKey), "%s: n", name)
 	}

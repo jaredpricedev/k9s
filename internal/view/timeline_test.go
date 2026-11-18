@@ -49,8 +49,19 @@ func timelineViewFixture(t *testing.T) *timelineView {
 	return v
 }
 
-func TestTimelineFramesMarkTheFaultAndWhatPrecededItAtEverySize(t *testing.T) {
+// timelineListFixture is the list this view had before the calm layout,
+// which a shows, over everything that was read, as it opened then.
+func timelineListFixture(t *testing.T) *timelineView {
+	t.Helper()
 	v := timelineViewFixture(t)
+	v.toggleDetail()
+	require.True(t, v.allDetail)
+	v.setWindow(0)
+	return v
+}
+
+func TestTimelineFramesMarkTheFaultAndWhatPrecededItAtEverySize(t *testing.T) {
+	v := timelineListFixture(t)
 	for _, size := range [][2]int{{120, 34}, {80, 24}, {60, 24}, {40, 12}, {40, 8}} {
 		frame := drawnText(t, v, size[0], size[1])
 		if size[1] < ui.MinTaskHeight {
@@ -99,7 +110,7 @@ func TestTimelineFramesMarkTheFaultAndWhatPrecededItAtEverySize(t *testing.T) {
 }
 
 func TestTimelineNoIconsUsesASCIIMarksOnly(t *testing.T) {
-	v := timelineViewFixture(t)
+	v := timelineListFixture(t)
 	v.app.Config.K9s.UI.NoIcons = true
 	v.render()
 	frame := drawnText(t, v, 80, 24)
@@ -115,6 +126,9 @@ func TestTimelineNoIconsUsesASCIIMarksOnly(t *testing.T) {
 func TestTimelineDetailStatesExactTimeSourceResourceAndOrderNotCause(t *testing.T) {
 	v := timelineViewFixture(t)
 	require.Equal(t, v.snapshot.Onset, v.focused, "opens on the first failing signal")
+	v.toggleDetail()
+	v.setWindow(0)
+	require.Equal(t, v.snapshot.Onset, v.focused, "a keeps the entry the keys act on")
 	require.Contains(t, v.detail.GetText(true), "2026-11-17 11:50:00Z  10m ago  Event  pod/checkout-api-7d9f8c6b5d-x2x9q",
 		"the identifying line shortens its wording rather than wrap at 80 columns")
 	require.Contains(t, v.detail.GetText(true), "First failing signal that could be read")
@@ -132,7 +146,7 @@ func TestTimelineDetailStatesExactTimeSourceResourceAndOrderNotCause(t *testing.
 }
 
 func TestTimelineWindowFilterAndReferenceNarrowWithoutReading(t *testing.T) {
-	v := timelineViewFixture(t)
+	v := timelineListFixture(t)
 	reads := 0
 	v.loader = func(context.Context) (*timeline.Snapshot, error) { reads++; return nil, errors.New("unexpected read") }
 
@@ -181,7 +195,14 @@ func TestTimelineRetainsObservationAcrossFailedRereadAndBack(t *testing.T) {
 	prior := v.snapshot
 	v.acceptSnapshot(nil, errors.New("events denied"))
 	require.Same(t, prior, v.snapshot)
+	// The calm page says it under its title, before the answer; the list
+	// under a says it where it did.
+	frame := drawnText(t, v, 80, 24)
+	require.Contains(t, strings.Split(frame, "\n")[1], "Re-read failed, the earlier observation is shown: events denied")
+	require.Contains(t, frame, "Rev 2 rolled out at 11:48", "the earlier observation is still the page")
+	v.toggleDetail()
 	require.Contains(t, v.header.GetText(true), "Re-read failed, earlier observation retained: events denied")
+	v.toggleDetail()
 	v.Stop()
 	v.Start()
 	require.Zero(t, reads, "returning to a retained timeline starts no read")
@@ -190,7 +211,15 @@ func TestTimelineRetainsObservationAcrossFailedRereadAndBack(t *testing.T) {
 	require.NoError(t, empty.Init(t.Context()))
 	t.Cleanup(empty.Stop)
 	empty.acceptSnapshot(nil, errors.New("Deployment apps/checkout-api: access denied"))
-	frame := drawnText(t, empty, 80, 24)
+	frame = drawnText(t, empty, 80, 24)
+	require.Contains(t, frame, "Timeline  Deployment apps/checkout-api")
+	require.Contains(t, frame, "not read")
+	require.Contains(t, frame, "  Nothing was read: Deployment apps/checkout-api: access denied.")
+	require.Contains(t, frame, "Not read is not healthy.")
+	require.Contains(t, frame, "  next  r read again")
+	require.NotContains(t, frame, "QUIET", "nothing read is never drawn as quiet")
+	empty.toggleDetail()
+	frame = drawnText(t, empty, 80, 24)
 	require.Contains(t, frame, "Unavailable · r retry · Deployment apps/checkout-api: access denied")
 	require.Contains(t, frame, "Nothing was read")
 }
@@ -277,7 +306,7 @@ func TestTimelineIsRegisteredInTheActionCatalog(t *testing.T) {
 }
 
 func TestTimelineDetailKeepsOrderSentenceAndChangeVisibleWhenNarrow(t *testing.T) {
-	v := timelineViewFixture(t)
+	v := timelineListFixture(t)
 	for index := range v.snapshot.Entries {
 		if strings.HasPrefix(v.snapshot.Entries[index].Summary, "rev 2") {
 			v.snapshot.Entries[index].Summary = "rev 2: image v1 -> v2; env ~PAYMENT_TOKEN +FEATURE_FLAGS; limits.memory 512Mi -> 256Mi"

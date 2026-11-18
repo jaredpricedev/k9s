@@ -36,14 +36,16 @@ func TestHangViewsShareOneKeyboard(t *testing.T) {
 	graph, _, _, _ := compareViewFixture(t, hangTarget)
 	dash := dashViewFixture(t, dashSpec{Board: true})
 	impactV := impactViewFixture(t)
-	views := map[string]*ui.KeyActions{"slow": slow.actions, "probe": probeV.actions, "graph": graph.actions, "dash": dash.actions, "impact": impactV.actions}
+	timelineV := timelineViewFixture(t)
+	views := map[string]*ui.KeyActions{"slow": slow.actions, "probe": probeV.actions, "graph": graph.actions, "dash": dash.actions, "impact": impactV.actions,
+		"timeline": timelineV.actions}
 
 	// The digits choose a window wherever there is one, the same four in
-	// :slow, :graph and a drawn dashboard. A probe has no window, so a
-	// digit does nothing there instead of meaning a count.
+	// :slow, :graph, a drawn dashboard and :timeline. A probe has no
+	// window, so a digit does nothing there instead of meaning a count.
 	for index, window := range graphWindows {
 		key := ui.Key1 + tcell.Key(index)
-		for _, name := range []string{"slow", "graph", "dash"} {
+		for _, name := range []string{"slow", "graph", "dash", "timeline"} {
 			require.Equal(t, "Window "+graphSpan(window), walkKey(views[name], key), name)
 		}
 		require.Empty(t, walkKey(views["probe"], key), "probe")
@@ -57,13 +59,14 @@ func TestHangViewsShareOneKeyboard(t *testing.T) {
 		word  string
 		views []string
 	}{
-		{ui.KeyM, "raph", []string{"slow", "probe"}},
+		{ui.KeyM, "raph", []string{"slow", "probe", "timeline"}},
 		{ui.KeyT, "imeline", []string{"slow", "probe", "impact"}},
-		{grafanaKey, grafanaKeyLabel, []string{"slow", "probe", "graph", "dash", "impact"}},
+		{grafanaKey, grafanaKeyLabel, []string{"slow", "probe", "graph", "dash", "impact", "timeline"}},
 		{probeKey, "Probe", []string{"slow", "graph"}},
 		{slowKey, "Slow requests", []string{"probe", "graph"}},
-		{ui.KeyR, "", []string{"slow", "probe", "graph", "dash", "impact"}},
+		{ui.KeyR, "", []string{"slow", "probe", "graph", "dash", "impact", "timeline"}},
 		{ui.KeyS, "Queries", []string{"slow", "graph", "dash"}},
+		{ui.KeyS, "Sources", []string{"timeline"}},
 	} {
 		for _, name := range want.views {
 			got := walkKey(views[name], want.key)
@@ -76,9 +79,9 @@ func TestHangViewsShareOneKeyboard(t *testing.T) {
 
 	// n and Shift-N step forward and back through what a view steps
 	// through: episodes, the chart at full size (the signal on the per-Pod
-	// page of :graph), rollouts.
+	// page of :graph), rollouts, the entries of a timeline.
 	for name, words := range map[string][2]string{"slow": {"next episode", "previous episode"}, "graph": {calmNextChartLabel, "Previous chart"},
-		"impact": {"Next (later) rollout", "Previous (earlier) rollout"}} {
+		"impact": {"Next (later) rollout", "Previous (earlier) rollout"}, "timeline": {"next entry", "previous entry"}} {
 		require.Contains(t, walkKey(views[name], ui.KeyN), words[0], name)
 		require.Contains(t, walkKey(views[name], ui.KeyShiftN), words[1], name)
 	}
@@ -112,7 +115,7 @@ func TestHangViewsShareOneKeyboard(t *testing.T) {
 
 	// The cursor moves with the arrows in every view that has one, and
 	// Home and End reach the ends of the window.
-	for _, name := range []string{"slow", "graph", "dash"} {
+	for _, name := range []string{"slow", "graph", "dash", "timeline"} {
 		for _, key := range []tcell.Key{tcell.KeyLeft, tcell.KeyRight, tcell.KeyHome, tcell.KeyEnd} {
 			require.NotEmpty(t, walkKey(views[name], key), "%s: %s", name, tcell.KeyNames[key])
 		}

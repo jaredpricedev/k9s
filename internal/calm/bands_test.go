@@ -79,6 +79,12 @@ func TestAxisLabels(t *testing.T) {
 			"  14:00     14:10    14:20 UTC"},
 		"a label that would leave the screen is left out": {hour, Layout{Width: 78, StripCol: 18, Strip: 60},
 			"  UTC           14:00     14:10     14:20     14:30     14:40     14:50"},
+		// A tick a day stands at midnight UTC: the clock would say 00:00
+		// under every one of them.
+		"a window of days names the day under each tick": {chart.Frame{Start: minute(-5 * 24 * 60), End: minute(0), Width: 60}, Layout{Width: 80, StripCol: 18, Strip: 60},
+			"  UTC                Nov13       Nov14       Nov15       Nov16       Nov17"},
+		"a window within a day keeps the clock": {chart.Frame{Start: minute(-24 * 60), End: minute(0), Width: 60}, Layout{Width: 80, StripCol: 18, Strip: 60},
+			"  UTC                     18:00          00:00          06:00          12:00"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			lines := AxisLines(Bands{}, c.frame, c.layout, plainOpts)

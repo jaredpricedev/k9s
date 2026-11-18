@@ -222,14 +222,219 @@ missing namespace is reported as not found instead of as a quiet timeline. When
 the namespace object cannot be read (for example, access denied) the timeline
 is still shown and the **s** page says its existence was not verified.
 
-The pane under the list cannot scroll. Its first line (exact time, age, source,
-resource) shortens its wording and then elides the middle of the name instead
-of wrapping, and below about 72 columns the order sentence shortens to
-"Preceded the first failing signal by 2m; order, not cause." so the full text
-of the change stays visible. A very long event message or change list can
-still be cut at the bottom of the pane.
+### The page
 
-It merges into one list, newest first:
+`:timeline` opens on a page laid out the calm way
+([presentation.md](presentation.md#calm-layout-the-standard-for-incident-views)):
+what happened in order first, then one row per kind of entry on one time axis,
+and under the axis the entries the cursor is on. The list this view had before
+is one key away (**a**), and **s** still shows sources and limits. This is the
+page its tests pin for a 132×36 terminal (invented data; the test session is
+in another namespace and declares neither Prometheus nor Grafana, so the
+namespace is written and `m` and `D` are not offered):
+
+```text
+Timeline  Deployment apps/checkout-api · last 15m · 12 of 16 entries                                 read 12:00 · 11 of 11 sources
+  Rev 2 rolled out at 11:48, after 1 other change.
+  7 failing signals followed within 10m, the first after 2m: BackOff on pod x2x9q.              Order in time, not proof of cause.
+
+                                         rev 2 rolled out 11:48              ▼
+                                                                             ┊
+  CHANGED                                                                    ┊
+  config       checkout-config updated by ku…  11:46            ····▲········┊····················································
+  rollouts     rev 2: image v1 → v2; env ~PA…  11:48            ·············▲····················································
+                                                                             ┊
+  THEN WENT WRONG                                                            ┊
+> warnings     BackOff · pod x2x9q             11:50  14 times  ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁████████████████████████████████████████▁▁▁▁
+  alerts       CheckoutHighErrorRate (cri… +2  11:51  for 9m    ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁████████████████████████████████████████
+  autoscaler   ScalingActive=False FailedGet…  11:52  for 8m    ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████████████████████████████████████
+  exits        api Error (exit 1), restart c…  11:58            ·············┊···········································▲········
+  status       Progressing=False ProgressDea…  11:58  for 2m    ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█████████
+                                                                             ┊
+  ALSO IN THE WINDOW                                                         ┊
+  annotations  ConfigMap apps/checkout-confi…  11:46            ····▲········┊····················································
+  events       ScalingReplicaSet · deploy… +1  11:48  8 times   ▁▁▁▁▁▁▁▁▁▁▁▁▁┊▁▁▁█████████████████████████████████████████████▁▁▁▁
+                                                                ────┬────────┯────────┬───────┬────────┬────────┬────────┬───────┬
+  UTC                                                             11:46    11:48    11:50   11:52    11:54    11:56    11:58   12:00
+
+  QUIET  scaling · nodes
+
+  WARNINGS  1 entry in the last 15m
+> 11:50:00  pod/checkout-api-7d9f8c6b5d-x2x9q  Warning BackOff x14: Back-off restarting failed container api in pod
+            checkout-api-7d9f8c6b5d-x2x9q
+            First failing signal that could be read. The fault may have begun earlier than the evidence shows.
+            Reported by: kubelet | First 2026-11-17 11:50:00Z, last 2026-11-17 11:59:00Z, 14 occurrences
+            Time from: Event firstTimestamp/lastTimestamp, falling back to eventTime then creationTimestamp
+  next  Enter open x2x9q    a full list
+  ↑↓ row · ←→ time · 1-4 window, 0 all · s sources · n next entry · x mark · / filter · r re-read · Esc back
+```
+
+**The answer** counts and orders what was read and claims nothing else. Its
+first sentence, in bold, is the moment the page starts from: `Rev 2 rolled out
+at 11:48`, with the other changes of the window that preceded it. The second
+says how many failing signals followed, within how long, and names the first.
+`Order in time, not proof of cause.` stands dim at its right. When failing
+signals began with no change before them in the window it says how many, when
+the first began, and `No change was read in this window.` When no failing
+signal followed a change it says `No failing signal was read after it.`, and
+when nothing that was read began in the window it says that, and how many
+entries **0** shows; the caveat of those two is `Nothing found is not proof
+of health.` A read that fell short adds `Not read: nodes denied.` to
+whichever answer it is.
+
+**The moment the answer starts from** is the last rollout at or before the
+first failing signal that began in the window, else the first change before
+it. It is one marker (`▼`) over the strips with its words beside it, a guide
+(`┊`) through every row, and a heavy tick on the axis, as the rollout is in
+`:impact`. **x** makes the entry the cursor is on that moment instead (`your
+mark 11:46`), and **x** on it again returns to the rollout: the earliest
+warning in a namespace may belong to an older, unrelated problem.
+
+**A row is one kind of entry.** It names the kind, what its first entry is
+(`+2` when the row has two more), when that began, how often a repeated event
+occurred or for how long a state has held, and its marks on the shared axis.
+The rows of a group are in the order they began.
+
+| Row | Entries | Drawn as |
+| --- | --- | --- |
+| `rollouts` | A Deployment revision, at the creation of its ReplicaSet, with what the pod template changed | a mark |
+| `config` | The last write of each field manager to a referenced ConfigMap or Secret | a mark |
+| `scaling` | The last scale time of an autoscaler | a mark |
+| `warnings` | Warning events, merged by reason and kind | a span from the first to the last occurrence; a single occurrence is a mark |
+| `exits` | The retained exit of a container that was not a clean completion | a mark |
+| `status` | An abnormal Deployment condition, an unschedulable Pod | a span from when it began to the capture |
+| `autoscaler` | An autoscaler condition that fails | a span to the capture |
+| `nodes` | An abnormal condition of a node the Pods run on | a span to the capture |
+| `alerts` | An alert Alertmanager holds as firing | a span from its start to the capture |
+| `events`, `clean exits`, `autoscaler ok`, `node conditions`, `muted alerts`, `annotations` | What is neither a change nor a failing signal: Normal events, clean exits, condition transitions that are not abnormal, silenced or inhibited alerts, Grafana annotations | marks; a repeated event, an annotated region and a held alert are spans |
+
+A state that was read at the capture (a condition, an alert) holds from when it
+began until then, so it is a span to the right edge of the axis. One that began
+before the window and still holds is on the page too, although the list under
+**a** counts only what began in the window: it does not vanish from a 15-minute
+page because it began an hour ago. A span no wider than one column is drawn as
+a mark.
+
+**The groups** say how a row stands to that moment, by time alone:
+
+- `CHANGED`: changes to desired state or configuration, in the colour of a
+  change.
+- `THEN WENT WRONG`: failing signals that began at or after it, in the colour
+  of a failure. It is `WENT WRONG` when the window holds no change and no mark
+  to start from.
+- `ALREADY WRONG BEFORE IT`: failing signals that began before it. The answer
+  counts them (`2 failing signals had begun before it.`), so that a change is
+  never read as the start of what was already there.
+- `ALSO IN THE WINDOW`: everything else, dim.
+- `QUIET`: the kinds whose reads were complete and that have no entry in the
+  window, as lines of names: the changes, the failing signals, the annotations.
+- `NOT READ`: every read that fell short, with its state and its reason
+  (`nodes  denied: access denied…`) and the gap glyph all along. A kind that
+  comes from such a read is never on a quiet line, and its row is drawn as not
+  read (`×`) wherever it holds no mark: an alert that began and ended between
+  two marks is not known not to have happened.
+- `NO TIME`: failing status that carries no time and cannot be placed; **s**
+  lists it.
+
+**An empty column says that nothing still retained began there**, not that
+nothing happened. Each source keeps its latest facts, not a history: the most
+recent exit of a container, the last write of a field manager, the alerts
+Alertmanager still holds. The quiet lines say `none retained` for that reason,
+and **s** lists what each source keeps. Events are the one source that is lost
+wholesale, so the page draws it: a window that reaches further back than
+Kubernetes commonly keeps events (an hour), or than the oldest event that was
+read when that is older, draws that stretch of an event row as not read, and
+a quiet `warnings` line then says `none since 11:00; older events expired`.
+
+**Under the axis** the page lists what the cursor is on, with the time, the
+object and the text the list under **a** has:
+
+- `↑` / `↓` select a row, and the list is the entries of that kind, oldest
+  first.
+- `←` / `→` (ten columns with `Shift`, `Home` / `End`) move a time cursor, and
+  the list is everything drawn in its column, of every kind, with the kind
+  named. The title states the time the column covers. A column in which
+  nothing is drawn says so and names the entries before and after it.
+- `n` / `Shift-N` step to the next or the previous entry in the order they
+  began and move both cursors to it. Every entry of the window is reached this
+  way, also one whose group is folded to one line.
+
+The entry the keys act on is marked `>` and written in full where there is
+room: the rest of a text that did not fit, how it stands to the first failing
+signal or to the mark (`This change preceded the first failing signal by 4m.
+Order is not cause.`), the detail the model carries, and the API field its
+time came from. **Enter** opens its object, **m** its graph, **x** marks it.
+The list has one height for a size of screen and neither cursor is drawn over
+anything, so no row and no column moves when a cursor does.
+
+**The window** a read opens on is the narrowest of 15m, 1h, 6h and 24h that
+holds the first failing signal and the change before it with a tenth to spare,
+so that the page opens on what its answer is about instead of on every day
+that was read. A change much older than the fault does not widen it; with
+nothing recent it is an hour. **1** to **4** choose a window and **0** shows
+everything read, from the oldest entry to the capture; over several days the
+axis has a tick a day and names the day under each (`Nov12`).
+A window the user chose stays through a re-read. The title counts the entries
+drawn of those read (`12 of 16 entries`).
+
+**Opened from `:slow`** (`t`) the page draws the stalls that were found there
+as shaded bands through every row, marked `▼` on the marker row and heavy on
+the axis, and opens on the window they were looked for in. The change is then
+a labelled moment beside them, as a rollout is on a Pod's graph: its key `R`
+on the axis, its guide through the rows, and one line that says what it was
+(`R rev 2 rolled out 11:48 · image v1 → v2; …`). The stalls were read by
+`:slow`; the timeline reads nothing for them. A window that reaches past the
+hour they were looked for in says so on a `NOT READ` line (`stalls  :slow
+looked for them 11:00–12:00 only`), and a window with no stall in it draws
+none.
+
+Keys, on the page's two lines in the words and the order of every incident
+view:
+
+| Key | Action |
+| --- | --- |
+| `Enter` | Open the object of the entry the cursor is on in its list; for an annotation, the dashboard it is attached to |
+| `a` | The list this view had before, and back |
+| `m` | `:graph` for that object, or for the timeline's own workload, over the timeline's window |
+| `Shift-D` | The Grafana dashboard for the timeline's scope with the timeline's window |
+| `↑` / `↓`, `←` / `→`, `n` / `Shift-N` | The row cursor, the time cursor, the next and previous entry |
+| `1` to `4`, `0` | Window 15m, 1h, 6h, 24h; everything read |
+| `s` | Sources and limits |
+| `x` | Mark the entry as the moment the answer starts from; again to return |
+| `/` | Filter by text. The rows and the list keep the entries that match; the answer stays about the window and says how many the filter left |
+| `r` | Read again |
+| `Esc` | Put the time cursor away, then clear the filter, then go back |
+
+Narrowing, filtering, marking, both cursors, **a** and **s** work on the
+retained observation and read nothing.
+
+What a smaller screen gives up, in the order of the calm layout:
+
+- 132×36 gives up the blank rows around the answer and folds `QUIET` to one
+  line, and the list under the axis takes the rows that frees: its heading,
+  the entries, and what it adds under the entry the keys act on.
+- 80×24 keeps every row with a strip of 27 columns. How often or for how long
+  leaves the rows, `ALSO IN THE WINDOW` and `QUIET` are one line each, the
+  second key line goes (`a` is on the first), and the list is one or two
+  lines: the entry the keys act on, under its heading where there is a row
+  for one. The count of entries leaves the title before the object or the
+  window does.
+- 60×24 cuts what a row is about to 16 cells, with strips of 20 columns, and
+  the list cuts the name of the object in its middle or leaves it out.
+- The list never costs a row, a strip, a group or a key line. It folds the
+  reasons of the reads that fell short to one line, which still names each
+  read and its state, only when that is the only way to list anything; a page
+  with no row to spare has no list, and **a** shows every entry.
+- At 40 columns there is no room for a strip beside the text: the rows are
+  written as text and the page names what it left out and the key that shows
+  it. Width is measured in terminal cells; with `noIcons` every sign is a
+  plain character (`v`, `|`, `^`, `#`, `x`).
+
+### The list under a
+
+**a** shows the list and the pane this view had before the calm layout, with
+the entry the keys act on selected, and **a** again returns. It lists what
+began in the window, newest first:
 
 - Events, Warning and Normal, merged by type, reason and kind, with a count and
   the first and last time. A merged event is placed at its first retained
@@ -261,43 +466,49 @@ container exit that is not a clean completion, an abnormal condition. A rule is
 drawn under it and every other entry is labelled as so long before or after.
 Changes are marked `◆` (`*`), other failing signals `!`. A change listed under
 the rule **preceded** the fault. That is an ordering. The view never says one
-entry caused another, and the earliest warning in a namespace may belong to an
-older, unrelated problem: **x** makes the selected entry the reference moment
-instead, and **x** on it again returns to the first failing signal. (The mark
-was on **m** before `:graph` existed; **m** is now the graph key in every view
-whose rows name an object.)
+entry caused another. **x** makes the selected entry the reference moment
+there too. (The mark was on **m** before `:graph` existed; **m** is now the
+graph key in every view whose rows name an object.)
 
-Keys: **Enter** opens the entry's resource in its list; **/** filters by text;
-**1**, **2**, **3**, **4** narrow the window to the last 15m, 1h, 6h or 24h
-before capture and **0** shows everything read; **s** shows sources and limits;
-**m** opens `:graph` for the focused entry's object, or for the timeline's
-own workload, over the timeline's window; **r** reads again; **Shift-D** opens the Grafana dashboard for the timeline's
-scope with the timeline's window; **Esc** clears the filter, then goes back. Narrowing,
-filtering and marking work on the retained observation and read nothing.
+The pane under the list cannot scroll. Its first line (exact time, age, source,
+resource) shortens its wording and then elides the middle of the name instead
+of wrapping, and below about 72 columns the order sentence shortens to
+"Preceded the first failing signal by 2m; order, not cause." so the full text
+of the change stays visible. A very long event message or change list can
+still be cut at the bottom of the pane. Below 72 columns the before/after
+column becomes a signed span (`-4m`, `+8m`, `FAULT`) and the resource name
+moves to the pane; the time, kind and text stay. Its key line names **a** at
+every width.
 
-Limits, which the view also states under **s**:
+### Limits
+
+The view also states these under **s**:
 
 - Reads happen when the view opens and on **r**, never on a refresh tick. There
   are five list reads (pods, events, ReplicaSets, Deployments, autoscalers; at
   most 500 events and 200 of each other kind, not paginated) and then at most 20
   ConfigMaps, 20 Secrets and 10 nodes. Each read has a 3s timeout inside a 12s
-  total. A truncated list is reported as incomplete.
-- A source that was denied, timed out or failed is named in the header as not
-  read. Its history is unknown, not empty. With no failing signal the header
-  says so and adds that this is not evidence of health.
+  total. A truncated list is reported as incomplete. The calm layout adds no
+  read: it draws what this one observation holds.
+- A source that was denied, timed out or failed is named on the page as not
+  read. Its history is unknown, not empty. With no failing signal the page
+  says so and adds that this is not proof of health.
 - Kubernetes expires events, commonly after an hour. The view reports the oldest
-  event it read and says older event history is unavailable.
+  event it read and says older event history is unavailable; the page draws
+  that stretch of its event rows as not read.
 - Rollout times are ReplicaSet creation times. A rollback reuses an older
   ReplicaSet, so its time is not shown. Revisions pruned by
   `revisionHistoryLimit` are gone. StatefulSet and DaemonSet revisions are not
   read.
 - Pod status keeps only the most recent exit per container, and `managedFields`
-  keeps only the last write per manager. Earlier restarts and edits are not timed.
+  keeps only the last write per manager. Earlier restarts and edits are not
+  timed: the `exits` row draws the one exit that is, and its text carries the
+  restart count.
 - Failing status that carries no time is listed under **s** and is not placed
-  in the order. Entries in the same second have no known order.
-- Below 72 columns the before/after column becomes a signed span (`-4m`, `+8m`,
-  `FAULT`) and the resource name moves to the detail pane; the time, kind and
-  text stay.
+  in the order. Entries in the same second have no known order; the page
+  lists them in the order the model does.
+- A row counts and draws entries; it does not say which Pod when a kind has
+  entries of several. The list under the axis and **a** name each object.
 
 `python3 scripts/operator-study-fixture.py` serves a synthetic incident for
 this view: a ConfigMap edit, then a second Deployment revision, then a crash.

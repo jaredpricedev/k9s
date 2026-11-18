@@ -1,0 +1,21 @@
+Timeline  Deployment apps/check... | last 15m  12:00 | 11/11
+  Rev 2 rolled out at 11:48, after 1 other change.
+  7 failing signals followed within 10m, the first after 2m:
+  BackOff on pod x2x9q.   Order in time, not proof of cause.
+                 rev 2 rolled out 11:48     v
+  CHANGED                                   |
+  config      checkout-confi...  11:46  .^..|...............
+  rollouts    rev 2: image v...  11:48  ....^...............
+  THEN WENT WRONG                           |
+> warnings    BackOff | pod ...  11:50  ____|_#############_
+  alerts      CheckoutHighEr...  11:51  ____|___############
+  autoscaler  ScalingActive=...  11:52  ____|____###########
+  exits       api Error (exi...  11:58  ....|............^..
+  status      Progressing=Fa...  11:58  ____|____________###
+                                        ----=-+------------+
+  UTC                                       11:50
+  ALSO IN THE WINDOW  annotations 11:46 +1 more
+  QUIET  scaling | nodes
+  WARNINGS  1 entry in the last 15m
+> 11:50:00  pod/checko...x2x9q  Warning BackOff x14: Back...
+  next  Enter open x2x9q    a full list
